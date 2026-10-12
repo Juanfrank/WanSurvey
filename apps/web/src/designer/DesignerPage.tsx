@@ -17,6 +17,7 @@ import { ItemEditor } from './ItemEditor.js';
 import { Outline, SETTINGS_ID } from './Outline.js';
 import { PublishDialog } from './PublishDialog.js';
 import { RoutingMap } from './RoutingMap.js';
+import { ComparePanel } from './ComparePanel.js';
 import { SettingsEditor } from './SettingsEditor.js';
 import type { Draft } from './tree.js';
 import { useDraft, type DraftApi } from './useDraft.js';
@@ -274,7 +275,12 @@ export function DesignerPage() {
           </Tabs.Content>
 
           <Tabs.Content value="versions">
-            <VersionsPanel projectId={projectId} qid={qid} canPublish={canPublish} />
+            <VersionsPanel
+              projectId={projectId}
+              qid={qid}
+              canPublish={canPublish}
+              draft={d.questionnaire}
+            />
           </Tabs.Content>
         </Tabs.Root>
 
@@ -394,10 +400,12 @@ function VersionsPanel({
   projectId,
   qid,
   canPublish,
+  draft,
 }: {
   projectId: string;
   qid: string;
   canPublish: boolean;
+  draft: DraftApi['questionnaire'];
 }) {
   const { t } = useTranslation();
   const versions = useVersions(projectId, qid);
@@ -469,6 +477,9 @@ function VersionsPanel({
           ))}
         </tbody>
       </table>
+      <div className="mt-6 border-t border-slate-200 pt-4">
+        <ComparePanel projectId={projectId} qid={qid} versions={versions.data} draft={draft} />
+      </div>
     </Card>
   );
 }

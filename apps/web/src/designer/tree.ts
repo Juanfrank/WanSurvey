@@ -108,6 +108,62 @@ export function outdent(draft: Draft, id: string): Draft {
   });
 }
 
+/** Whether `id` is `ancestorId` or lies inside it. */
+export function isWithin(draft: Draft, id: string, ancestorId: string): boolean {
+  let at = locate(draft, id);
+  while (at) {
+    if (at.node.id === ancestorId) return true;
+    at = at.parentId ? locate(draft, at.parentId) : null;
+  }
+  return false;
+}
+
+/**
+ * Whether `id` may be placed in `parentId` (null: the list of sections). Sections only sit at
+ * the top; items sit in a section, block or roster, never inside themselves.
+ */
+export function canMoveTo(draft: Draft, id: string, parentId: string | null): boolean {
+  const at = locate(draft, id);
+  if (!at) return false;
+  if (isSection(at.node)) return parentId === null;
+  if (parentId === null) return false;
+  const parent = locate(draft, parentId);
+  return !!parent && hasItems(parent.node) && !isWithin(draft, parentId, id);
+}
+
+export type DropZone = 'before' | 'after' | 'inside';
+
+/** Where a drop on row `overId` puts things: before or after it, or at the end of its items. */
+export function dropPlace(
+  draft: Draft,
+  overId: string,
+  zone: DropZone,
+): { parentId: string | null; index: number } | null {
+  const at = locate(draft, overId);
+  if (!at) return null;
+  if (zone === 'inside')
+    return hasItems(at.node) ? { parentId: overId, index: at.node.items.length } : null;
+  return { parentId: at.parentId, index: at.index + (zone === 'after' ? 1 : 0) };
+}
+
+/**
+ * Moves a node into `parentId` at `index`, counted in the target list as it is before the
+ * move (so dropping "before row 3" is index 3 wherever the node came from). Returns the draft
+ * unchanged when the move is not allowed.
+ */
+export function moveTo(draft: Draft, id: string, parentId: string | null, index: number): Draft {
+  if (!canMoveTo(draft, id, parentId)) return draft;
+  return edit(draft, (d) => {
+    const at = locate(d, id)!;
+    const target: TreeNode[] =
+      parentId === null ? d.sections : (locate(d, parentId)!.node as { items: TreeNode[] }).items;
+    let to = Math.max(0, Math.min(index, target.length));
+    if (target === at.siblings && at.index < to) to -= 1;
+    at.siblings.splice(at.index, 1);
+    target.splice(to, 0, at.node);
+  });
+}
+
 export function remove(draft: Draft, id: string): Draft {
   return edit(draft, (d) => {
     const at = locate(d, id);

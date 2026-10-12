@@ -86,3 +86,21 @@ export {
   type RoutingSkip,
   type RoutingCondition,
 } from './routingMap.js';
+export {
+  extractTexts,
+  applyTexts,
+  textsToCsv,
+  textsFromCsv,
+  parseCsv,
+  textsToXliff,
+  textsFromXliff,
+  type TextEntry,
+  type TextRow,
+  type ApplyResult,
+} from './translations.js';
+export {
+  compareVersions,
+  type VersionComparison,
+  type ItemComparison,
+  type FieldChange,
+} from './compareVersions.js';

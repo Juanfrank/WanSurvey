@@ -1,16 +1,19 @@
-import { render, screen, within } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { household } from '@wansurvey/fixtures';
 import { Questionnaire } from '@wansurvey/schema';
 import axe from 'axe-core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { ComparePanel } from '../src/designer/ComparePanel.js';
 import { ConditionBuilder } from '../src/designer/ConditionBuilder.js';
 import { ItemEditor } from '../src/designer/ItemEditor.js';
 import { Outline } from '../src/designer/Outline.js';
 import { RoutingMap } from '../src/designer/RoutingMap.js';
 import { useRouting } from '../src/designer/useRouting.js';
 import { SettingsEditor } from '../src/designer/SettingsEditor.js';
+import { TranslationsPanel } from '../src/designer/TranslationsPanel.js';
 import {
   duplicate,
   flatten,
@@ -18,6 +21,7 @@ import {
   insert,
   locate,
   move,
+  moveTo,
   outdent,
   remove,
   renameVariable,
@@ -84,6 +88,27 @@ describe('tree edits', () => {
     expect(locate(nested, 'B')!.parentId).toBe('BL');
     expect(locate(outdent(nested, 'B'), 'B')!.parentId).toBe('S1');
     expect(JSON.stringify(d)).toBe(before);
+  });
+
+  it('moves a node to any valid place, and refuses invalid ones', () => {
+    const d = draft();
+    // Index counts the target list as it is before the move.
+    expect(ids(moveTo(d, 'A', 'S1', 3))).toEqual(['S1', 'BL', 'B', 'A', 'C']);
+    expect(ids(moveTo(d, 'C', 'S1', 0))).toEqual(['S1', 'C', 'A', 'BL', 'B']);
+    const into = moveTo(d, 'B', 'BL', 0);
+    expect(locate(into, 'B')!.parentId).toBe('BL');
+    // Out of a block, to the end of the section.
+    expect(locate(moveTo(into, 'B', 'S1', 99), 'B')).toMatchObject({ parentId: 'S1', index: 3 });
+    // Not into itself, not into a question, sections stay at the top, items never at the top.
+    expect(moveTo(d, 'BL', 'BL', 0)).toBe(d);
+    expect(moveTo(d, 'B', 'A', 0)).toBe(d);
+    expect(moveTo(d, 'S1', 'BL', 0)).toBe(d);
+    expect(moveTo(d, 'A', null, 0)).toBe(d);
+    const two = insert(d, 'C', { kind: 'section' }).draft;
+    expect(moveTo(two, two.sections[1]!.id, null, 0).sections.map((x) => x.id)).toEqual([
+      two.sections[1]!.id,
+      'S1',
+    ]);
   });
 
   it('inserts with fresh names, duplicates and removes', () => {
@@ -170,6 +195,67 @@ describe('outline', () => {
     const added = flatten(changes.at(-1)!).find((x) => 'type' in x.node && x.node.type === 'multi');
     expect(added).toBeTruthy();
     expect(document.activeElement?.getAttribute('data-id')).toBe(added!.node.id);
+  });
+});
+
+describe('outline drag and drop', () => {
+  it('drops a row before another, and into a block', () => {
+    const changes: Draft[] = [];
+    const messages: string[] = [];
+    function H() {
+      const [d, setD] = useState(draft());
+      return (
+        <Outline
+          draft={d}
+          selected="A"
+          onSelect={() => {}}
+          change={(n) => {
+            setD(n);
+            changes.push(n);
+          }}
+          errorsById={new Map()}
+          lang="en"
+          readOnly={false}
+          onRename={() => {}}
+          onEnter={() => {}}
+          announce={(m) => messages.push(m)}
+        />
+      );
+    }
+    render(<H />);
+    // Every row is 20px high, starting at y = 0.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => ({ top: 0, height: 20, bottom: 20, left: 0, right: 100, width: 100 }) as DOMRect,
+    );
+    const row = (id: string) => document.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+    const dataTransfer = { setData: () => {}, effectAllowed: '', dropEffect: '' };
+    // jsdom has no DragEvent, so the pointer position is set on the event by hand.
+    const at = (kind: 'dragOver' | 'drop', el: HTMLElement, clientY: number) => {
+      const ev = createEvent[kind](el, { dataTransfer });
+      Object.defineProperty(ev, 'clientY', { value: clientY });
+      fireEvent(el, ev);
+    };
+
+    fireEvent.dragStart(row('C'), { dataTransfer });
+    at('dragOver', row('A'), 2);
+    expect(row('A').dataset.drop).toBe('before');
+    at('drop', row('A'), 2);
+    expect(ids(changes.at(-1)!)).toEqual(['S1', 'C', 'A', 'BL', 'B']);
+    expect(messages.at(-1)).toBe('Moved C');
+
+    fireEvent.dragStart(row('A'), { dataTransfer });
+    at('dragOver', row('BL'), 10);
+    expect(row('BL').dataset.drop).toBe('inside');
+    at('drop', row('BL'), 10);
+    expect(locate(changes.at(-1)!, 'A')!.parentId).toBe('BL');
+
+    // A block cannot be dropped into itself; a section cannot go inside an item.
+    fireEvent.dragStart(row('BL'), { dataTransfer });
+    at('dragOver', row('A'), 2);
+    expect(row('A').dataset.drop).toBeUndefined();
+    fireEvent.dragEnd(row('BL'), { dataTransfer });
+    expect(changes).toHaveLength(2);
+    vi.restoreAllMocks();
   });
 });
 
@@ -333,5 +419,73 @@ describe('routing', () => {
     expect(screen.getAllByTestId('logic-badges').length).toBeGreaterThan(3);
     expect(screen.getAllByRole('img', { name: /^Conditional: / }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('img', { name: /^Skips: / }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('translations panel', () => {
+  it('previews an imported CSV and applies it as one change', async () => {
+    const user = userEvent.setup();
+    const q = Questionnaire.parse(household);
+    const change = vi.fn();
+    const { container } = render(<TranslationsPanel draft={q} change={change} />);
+    const csv =
+      'key,context,es,fr\ntitle,Questionnaire title,Encuesta nueva,Enquête\nGONE.text,,x,\n';
+    await user.upload(
+      screen.getByLabelText('Import translations (.csv or .xlf)'),
+      new File([csv], 'texts.csv', { type: 'text/csv' }),
+    );
+    const preview = await screen.findByTestId('translation-preview');
+    expect(preview.textContent).toContain('1 text changes');
+    expect(preview.textContent).toContain('GONE.text');
+    expect(preview.textContent).toContain('skipped: fr');
+    expect(within(preview).getByRole('cell', { name: 'Encuesta nueva' })).toBeTruthy();
+    await expectAccessible(container);
+    await user.click(screen.getByRole('button', { name: 'Apply 1 change' }));
+    expect(change).toHaveBeenCalledTimes(1);
+    expect((change.mock.calls[0]![0] as Draft).title.es).toBe('Encuesta nueva');
+    expect(screen.getByText(/1 text updated/)).toBeTruthy();
+  });
+});
+
+describe('version comparison', () => {
+  it('lists what changed between v1 and the draft, side by side', async () => {
+    const v1 = Questionnaire.parse(household);
+    const draft = structuredClone(v1);
+    draft.sections[0]!.items = draft.sections[0]!.items.filter((n) => n.id !== 'A3');
+    const c5 = draft.sections[2]!.items.find((n) => n.id === 'C5') as { showIf: string };
+    c5.showIf = 'C4_WATER == 2';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ definition: v1 }), { status: 200 })),
+    );
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ComparePanel
+          projectId="p"
+          qid="q"
+          draft={draft}
+          versions={[
+            {
+              version: 1,
+              status: 'published',
+              hash: 'h',
+              hasMapping: false,
+              publishedAt: '2026-10-01T00:00:00Z',
+              publishedBy: null,
+              retiredAt: null,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    const summary = await screen.findByTestId('compare-summary');
+    expect(summary.textContent).toBe('0 added · 1 removed · 1 edited · 0 moved');
+    const c5Row = container.querySelector('[data-compare-item="C5"]')!;
+    expect(c5Row.textContent).toContain('Edited');
+    expect(c5Row.textContent).toContain('C4_WATER in (2, 3)');
+    expect(c5Row.textContent).toContain('C4_WATER == 2');
+    expect(container.querySelector('[data-compare-item="A3"]')!.textContent).toContain('Removed');
+    await expectAccessible(container);
+    vi.unstubAllGlobals();
   });
 });

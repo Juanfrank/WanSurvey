@@ -16,10 +16,15 @@ import {
   indent,
   insert,
   isSection,
+  locate,
+  canMoveTo,
+  dropPlace,
   move,
+  moveTo,
   outdent,
   remove,
   type Draft,
+  type DropZone,
   type NewKind,
   type TreeNode,
 } from './tree.js';
@@ -173,6 +178,26 @@ export function Outline({
     return () => ro?.disconnect();
   }, [arcs, rows]);
   const index = Math.max(0, ids.indexOf(selected));
+
+  // Drag and drop: the top or bottom quarter of a row drops before or after it, the middle of a
+  // section, block or roster drops at the end of its items. Invalid places show no marker.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; zone: DropZone } | null>(null);
+  const zoneFor = (e: { clientY: number; currentTarget: HTMLElement }, node: TreeNode) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const f = box.height ? (e.clientY - box.top) / box.height : 0;
+    if ('items' in node) return f < 0.25 ? 'before' : f > 0.75 ? 'after' : 'inside';
+    return f < 0.5 ? 'before' : 'after';
+  };
+  const placeFor = (id: string, zone: DropZone) => {
+    if (!dragId || dragId === id) return null;
+    const place = dropPlace(draft, id, zone);
+    return place && canMoveTo(draft, dragId, place.parentId) ? place : null;
+  };
+  const endDrag = () => {
+    setDragId(null);
+    setDropAt(null);
+  };
 
   // Keep keyboard focus on the selected row after it moves.
   useEffect(() => {
@@ -391,10 +416,37 @@ export function Outline({
                 tabIndex={selected === node.id ? 0 : -1}
                 data-id={node.id}
                 data-testid="outline-item"
-                className="flex cursor-pointer items-center gap-1.5 py-1 pr-2 aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+                className={`flex cursor-pointer items-center gap-1.5 py-1 pr-2 aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 data-[drop=after]:shadow-[inset_0_-2px_0_0_#4338ca] data-[drop=before]:shadow-[inset_0_2px_0_0_#4338ca] data-[drop=inside]:bg-indigo-50 data-[drop=inside]:ring-2 data-[drop=inside]:ring-inset data-[drop=inside]:ring-indigo-400 ${dragId === node.id ? 'opacity-50' : ''}`}
                 style={{ paddingLeft: `${0.5 + depth * 1.1}rem` }}
                 onClick={() => go(node.id)}
                 onFocus={() => selected !== node.id && onSelect(node.id)}
+                draggable={!readOnly}
+                title={readOnly ? undefined : t('designer.outline.drag', { name: nodeName(node) })}
+                data-drop={dropAt?.id === node.id ? dropAt.zone : undefined}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', node.id);
+                  setDragId(node.id);
+                }}
+                onDragOver={(e) => {
+                  const zone = zoneFor(e, node);
+                  if (!placeFor(node.id, zone)) return setDropAt(null);
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dropAt?.id !== node.id || dropAt.zone !== zone)
+                    setDropAt({ id: node.id, zone });
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const moving = dragId;
+                  const place = placeFor(node.id, zoneFor(e, node));
+                  endDrag();
+                  if (!moving || !place) return;
+                  const moved = locate(draft, moving)?.node;
+                  structural(moveTo(draft, moving, place.parentId, place.index), moving);
+                  if (moved) announce(t('designer.outline.moved', { name: nodeName(moved) }));
+                }}
+                onDragEnd={endDrag}
               >
                 {container ? (
                   <span aria-hidden className="w-3 text-slate-500">

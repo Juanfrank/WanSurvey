@@ -23,6 +23,7 @@ import {
 } from './fields.js';
 import { PIPE_EXAMPLES } from './i18n.js';
 import { OptionsEditor } from './OptionsEditor.js';
+import { TranslationsPanel } from './TranslationsPanel.js';
 import { flatten, isSection, type Draft } from './tree.js';
 import type { VarOption } from './vars.js';
 
@@ -180,6 +181,8 @@ export function SettingsEditor({
           onChange={(defaultLanguage) => set({ defaultLanguage })}
         />
       </Group>
+
+      <TranslationsPanel draft={draft} change={change} />
 
       <Group title={t('designer.settings.specials')}>
         <Hint>{t('designer.settings.specialsHelp')}</Hint>

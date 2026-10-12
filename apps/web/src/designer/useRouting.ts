@@ -5,6 +5,8 @@ import {
   type RoutingNode,
   type Value,
 } from '@wansurvey/logic';
+import type { Questionnaire } from '@wansurvey/schema';
+import type { TFunction } from 'i18next';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DraftApi } from './useDraft.js';
@@ -30,22 +32,27 @@ export function assignLanes(arcs: { from: number; to: number }[]): number[] {
  * The draft's routing (from `routingMap`) plus a plain-language describer, shared by the
  * Routing tab and the outline. Null when the draft does not parse.
  */
+/** Phrases a parsed condition in plain language, with the questionnaire's answer labels. */
+export function makeDescriber(q: Questionnaire, t: TFunction) {
+  const vars = new Map(variablesOf(q, q.defaultLanguage).map((v) => [v.name, v]));
+  return (ast: Node | null, src: string) =>
+    ast
+      ? describeCondition(ast, {
+          ref: (n) => n,
+          label: (n, c: Value) =>
+            vars.get(n)?.codes?.find((x) => String(x.code) === String(c))?.label || null,
+          t: (k, v) => t(k, { ...v, ns: 'renderer' }),
+        })
+      : src;
+}
+
 export function useRouting(d: Pick<DraftApi, 'questionnaire'>) {
   const { t } = useTranslation();
   const q = d.questionnaire;
   return useMemo(() => {
     if (!q) return null;
     const nodes = routingMap(q);
-    const vars = new Map(variablesOf(q, q.defaultLanguage).map((v) => [v.name, v]));
-    const describe = (ast: Node | null, src: string) =>
-      ast
-        ? describeCondition(ast, {
-            ref: (n) => n,
-            label: (n, c: Value) =>
-              vars.get(n)?.codes?.find((x) => String(x.code) === String(c))?.label || null,
-            t: (k, v) => t(k, { ...v, ns: 'renderer' }),
-          })
-        : src;
+    const describe = makeDescriber(q, t);
     const byId = new Map(nodes.map((n) => [n.id, n]));
     return { nodes, byId, describe };
   }, [q, t]);

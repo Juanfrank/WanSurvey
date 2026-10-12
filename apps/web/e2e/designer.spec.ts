@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, login, shot } from './helpers.js';
 
@@ -54,6 +55,7 @@ async function rename(page: Page, name: string) {
 test('design a questionnaire with the keyboard, preview it and publish v1 and v2', async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   await newQuestionnaire(page, 'Work module');
   // The outline starts on the first section.
   const section = outlineItem(page, 'SEC_A');
@@ -132,6 +134,53 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expect(dialog.getByRole('button', { name: 'Publish version 2' })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Publish version 2' }).click();
   await expect(page.getByTestId('versions').locator('[data-version="2"]')).toContainText('Yes');
+
+  // Compare: the draft equals v2; v1 differs in WORK's codes.
+  const compare = page.getByTestId('compare');
+  await expect(compare.getByTestId('compare-summary')).toHaveText('No differences.');
+  await compare.getByLabel('Compare').selectOption({ label: 'v1' });
+  await expect(compare.locator('[data-compare-item="WORK"]')).toContainText('Edited');
+  await expect(compare.locator('[data-compare-item="WORK"]')).toContainText('options[3].code');
+  await shot(page, 'designer-compare');
+  await expectAccessible(page);
+
+  // Drag HOURS above WORK in the outline; the comparison with v2 shows the move.
+  await page.getByRole('tab', { name: 'Design' }).click();
+  await outlineItem(page, 'HOURS').dragTo(outlineItem(page, 'WORK'), {
+    targetPosition: { x: 20, y: 2 },
+  });
+  await expect(page.getByRole('treeitem').nth(2)).toContainText('HOURS');
+  await saved(page);
+  await page.getByRole('tab', { name: 'Versions' }).click();
+  await compare.getByLabel('Compare').selectOption({ label: 'v2' });
+  await expect(compare.getByTestId('compare-summary')).toHaveText(
+    '0 added · 0 removed · 0 edited · 1 moved',
+  );
+
+  // Translations: export the CSV, change a Spanish text, import it back.
+  await page.getByRole('tab', { name: 'Design' }).click();
+  await page.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  const [csvFile] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export all texts (CSV)' }).click(),
+  ]);
+  const csv = readFileSync((await csvFile.path())!, 'utf8');
+  expect(csv).toContain('WORK.text');
+  await page.getByLabel('Import translations (.csv or .xlf)').setInputFiles({
+    name: 'texts.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv.replace('¿Trabaja?', '¿Trabaja usted?')),
+  });
+  const preview = page.getByTestId('translation-preview');
+  await expect(preview).toContainText('1 text changes');
+  await expect(preview).toContainText('¿Trabaja usted?');
+  await shot(page, 'designer-translations');
+  await expectAccessible(page);
+  await page.getByRole('button', { name: 'Apply 1 change' }).click();
+  await expect(page.getByText(/1 text updated/)).toBeVisible();
+  await outlineItem(page, 'WORK').click();
+  await expect(page.getByLabel('Question wording (es)')).toHaveValue('¿Trabaja usted?');
+  await saved(page);
 });
 
 test('a failing saved scenario blocks publishing', async ({ page }) => {
