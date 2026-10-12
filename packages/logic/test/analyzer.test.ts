@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Questionnaire, type ContainerItem } from '@wansurvey/schema';
 import { analyze } from '../src/analyzer.js';
 import { compile, CompileError } from '../src/compile.js';
-import { household } from './fixtures/household.js';
+import { household } from '@wansurvey/fixtures';
 import { en, num, q, single } from './builders.js';
 
 const codes = (qq: Questionnaire) =>

@@ -6,7 +6,7 @@ import { createInterview, type InterviewOptions } from '../src/engine.js';
 import { evaluate } from '../src/evaluator.js';
 import { parse } from '../src/parser.js';
 import type { Value } from '../src/values.js';
-import { household } from './fixtures/household.js';
+import { household } from '@wansurvey/fixtures';
 import { mapScope } from './helpers.js';
 
 // ---------------------------------------------------------------------------

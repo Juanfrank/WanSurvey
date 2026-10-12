@@ -34,3 +34,9 @@ export {
 } from './compile.js';
 export * from './engine.js';
 export { sha256, stableStringify, seededRandom } from './hash.js';
+export {
+  runScenario,
+  interviewOutcome,
+  type ScenarioResult,
+  type ScenarioCheck,
+} from './scenario.js';

@@ -23,6 +23,7 @@
     "@wansurvey/schema": "workspace:*"
   },
   "devDependencies": {
-    "fast-check": "^4.3.0"
+    "fast-check": "^4.3.0",
+    "@wansurvey/fixtures": "workspace:*"
   }
 }

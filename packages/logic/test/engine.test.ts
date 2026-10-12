@@ -7,7 +7,7 @@ import {
   type InterviewOptions,
   type InterviewSession,
 } from '../src/engine.js';
-import { household } from './fixtures/household.js';
+import { household } from '@wansurvey/fixtures';
 import { num, q, single } from './builders.js';
 
 const compiled = compile(household);
@@ -484,5 +484,24 @@ describe('server re-run', () => {
       'C5_DIST',
     ]);
     expect(wrongPath.unexpected).toEqual(['C5_DIST']);
+  });
+});
+
+describe('built-in validation messages', () => {
+  it('carry a rule id and parameters so clients can translate them', () => {
+    const s = start();
+    s.setAnswer('A1_CONSENT', 1);
+    s.setAnswer('A2_AGE', 130);
+    expect(s.validate('A2_AGE').errors).toEqual([
+      {
+        ruleId: 'max',
+        severity: 'error',
+        message: 'The maximum is 120',
+        builtIn: true,
+        params: { n: '120' },
+      },
+    ]);
+    s.setAnswer('A2_AGE', 99);
+    expect(s.validate('A2_AGE').warnings[0]).toMatchObject({ ruleId: 'old', builtIn: false });
   });
 });

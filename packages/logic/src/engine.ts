@@ -117,7 +117,11 @@ export interface ChangeResult {
 export interface ValidationMessage {
   ruleId: string;
   severity: 'error' | 'warning';
+  /** English text for built-in checks; localised, piped text for the questionnaire's own rules. */
   message: string;
+  /** Built-in check: clients translate it by `ruleId` with `params`. */
+  builtIn: boolean;
+  params?: Record<string, string | number>;
   confirmed?: boolean;
 }
 
@@ -461,13 +465,25 @@ export class InterviewSession {
     const q = node.def as Question;
     const value = this.getAnswer(key) as Value;
     const scope = new InterviewScope(this, entry.frames);
-    const error = (ruleId: string, message: string) =>
-      result.errors.push({ ruleId, severity: 'error', message });
+    const error = (
+      ruleId: string,
+      message: string,
+      builtIn: boolean,
+      params?: Record<string, string | number>,
+    ) =>
+      result.errors.push({
+        ruleId,
+        severity: 'error',
+        message,
+        builtIn,
+        ...(params ? { params } : {}),
+      });
 
     if (!isAnswered(value)) {
-      if (q.required !== false) error('required', DEFAULT_MESSAGES.required);
+      if (q.required !== false) error('required', DEFAULT_MESSAGES.required, true);
     } else {
-      for (const m of this.builtInChecks(node, entry.frames, value)) error(m.ruleId, m.message);
+      for (const m of this.builtInChecks(node, entry.frames, value))
+        error(m.ruleId, m.message, true, m.params);
       if (q.options?.some((o) => o.otherSpecify)) {
         const selected = Array.isArray(value) ? value : [value];
         const other = q.options.find(
@@ -475,16 +491,22 @@ export class InterviewSession {
         );
         const otherText = this.getAnswer(formatKey(entry.frames, `${q.name}_OTHER`));
         if (other && !isAnswered(otherText as Value))
-          error('other_specify', 'Please specify "other"');
+          error('other_specify', 'Please specify "other"', true);
       }
       for (const rule of node.validations) {
         if (!rule.expr.ast || !truthy(evaluate(rule.expr.ast, scope))) continue;
         const def = q.validations!.find((v) => v.id === rule.id)!;
         const message = this.renderText(def.message, entry.frames) ?? rule.id;
-        if (rule.severity === 'error') error(rule.id, message);
+        if (rule.severity === 'error') error(rule.id, message, false);
         else {
           const confirmed = (this.confirmations[key] ?? []).includes(rule.id);
-          result.warnings.push({ ruleId: rule.id, severity: 'warning', message, confirmed });
+          result.warnings.push({
+            ruleId: rule.id,
+            severity: 'warning',
+            message,
+            builtIn: false,
+            confirmed,
+          });
         }
       }
     }
@@ -1104,10 +1126,11 @@ export class InterviewSession {
     node: CompiledNode,
     frames: Frame[],
     value: Value,
-  ): { ruleId: string; message: string }[] {
+  ): { ruleId: string; message: string; params?: Record<string, string | number> }[] {
     const q = node.def as Question;
-    const out: { ruleId: string; message: string }[] = [];
-    const add = (ruleId: string, message: string) => out.push({ ruleId, message });
+    const out: { ruleId: string; message: string; params?: Record<string, string | number> }[] = [];
+    const add = (ruleId: string, message: string, params?: Record<string, string | number>) =>
+      out.push({ ruleId, message, ...(params ? { params } : {}) });
     if (isSpecial(value)) {
       if (!this.offeredSpecials(q).includes(value.$special))
         add('special', DEFAULT_MESSAGES.special);
@@ -1127,9 +1150,13 @@ export class InterviewSession {
         if (new Set(arr.map(String)).size !== arr.length)
           add('invalid_code', 'Each option can be selected once');
         if (q.minSelections !== undefined && arr.length < q.minSelections)
-          add('min_selections', DEFAULT_MESSAGES.minSel(q.minSelections));
+          add('min_selections', DEFAULT_MESSAGES.minSel(q.minSelections), {
+            n: String(q.minSelections),
+          });
         if (q.maxSelections !== undefined && arr.length > q.maxSelections)
-          add('max_selections', DEFAULT_MESSAGES.maxSel(q.maxSelections));
+          add('max_selections', DEFAULT_MESSAGES.maxSel(q.maxSelections), {
+            n: String(q.maxSelections),
+          });
         const exclusive = options.filter((o) => o.exclusive).map((o) => o.code);
         if (arr.length > 1 && arr.some((c) => exclusive.some((e) => looseEquals(e, c))))
           add('exclusive', DEFAULT_MESSAGES.exclusive);
@@ -1149,27 +1176,29 @@ export class InterviewSession {
           decimals > 0 &&
           Math.abs(Math.round(n * 10 ** decimals) - n * 10 ** decimals) > 1e-6
         ) {
-          add('decimals', DEFAULT_MESSAGES.decimals(decimals));
+          add('decimals', DEFAULT_MESSAGES.decimals(decimals), { n: String(decimals) });
         }
-        if (q.min !== undefined && n < q.min) add('min', DEFAULT_MESSAGES.min(q.min));
-        if (q.max !== undefined && n > q.max) add('max', DEFAULT_MESSAGES.max(q.max));
+        if (q.min !== undefined && n < q.min)
+          add('min', DEFAULT_MESSAGES.min(q.min), { n: String(q.min) });
+        if (q.max !== undefined && n > q.max)
+          add('max', DEFAULT_MESSAGES.max(q.max), { n: String(q.max) });
         break;
       }
       case 'scale': {
         const n = value as number;
         const min = q.scale?.min ?? q.min ?? (q.scale?.style === 'nps' ? 0 : undefined);
         const max = q.scale?.max ?? q.max ?? (q.scale?.style === 'nps' ? 10 : undefined);
-        if (min !== undefined && n < min) add('min', DEFAULT_MESSAGES.min(min));
-        if (max !== undefined && n > max) add('max', DEFAULT_MESSAGES.max(max));
+        if (min !== undefined && n < min) add('min', DEFAULT_MESSAGES.min(min), { n: String(min) });
+        if (max !== undefined && n > max) add('max', DEFAULT_MESSAGES.max(max), { n: String(max) });
         const step = q.scale?.step ?? 1;
         if (min !== undefined && Math.abs((n - min) / step - Math.round((n - min) / step)) > 1e-9)
-          add('step', `Use steps of ${step}`);
+          add('step', `Use steps of ${step}`, { n: String(step) });
         break;
       }
       case 'text': {
         const s = value as string;
         if (q.maxLength !== undefined && s.length > q.maxLength)
-          add('max_length', DEFAULT_MESSAGES.maxLength(q.maxLength));
+          add('max_length', DEFAULT_MESSAGES.maxLength(q.maxLength), { n: String(q.maxLength) });
         if (q.pattern !== undefined) {
           let re: RegExp | null = null;
           try {
@@ -1201,8 +1230,10 @@ export class InterviewSession {
         const max = bound(q.maxDate, node.maxDate, 'maxDate');
         const minMs = parseIsoDate(min);
         const maxMs = parseIsoDate(max);
-        if (minMs !== null && ms < minMs) add('min_date', DEFAULT_MESSAGES.min(min));
-        if (maxMs !== null && ms > maxMs) add('max_date', DEFAULT_MESSAGES.max(max));
+        if (minMs !== null && ms < minMs)
+          add('min_date', DEFAULT_MESSAGES.min(min), { n: String(min) });
+        if (maxMs !== null && ms > maxMs)
+          add('max_date', DEFAULT_MESSAGES.max(max), { n: String(max) });
         break;
       }
       case 'grid': {

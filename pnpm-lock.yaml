@@ -122,12 +122,21 @@ importers:
 
   apps/worker: {}
 
+  packages/fixtures:
+    dependencies:
+      '@wansurvey/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/logic:
     dependencies:
       '@wansurvey/schema':
         specifier: workspace:*
         version: link:../schema
     devDependencies:
+      '@wansurvey/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       fast-check:
         specifier: ^4.3.0
         version: 4.10.2
