@@ -13,3 +13,4 @@ export const SAMPLES: { id: string; title: string; questionnaire: QuestionnaireI
   },
   { id: 'all-types', title: 'Every question type', questionnaire: allTypes },
 ];
+export { sampleRows, sampleTable, toCsv, SAMPLE_HEADERS, type SampleRow } from './sample.js';

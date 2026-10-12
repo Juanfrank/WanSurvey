@@ -24,11 +24,20 @@ interface Ids {
   fresh(opts?: { publish?: boolean }): Promise<string>;
   /** Adds a scenario to a questionnaire and returns its id. */
   scenario(questionnaireId: string): Promise<string>;
+  /** A case of `project`. */
+  caseId: string;
+  /** An interviewer of the tenant (eligible for assignments). */
+  interviewerId: string;
+  /** A fresh assignment rule; returns its id. */
+  rule(): Promise<string>;
+  /** A fresh, uncommitted import with one staged row; returns its id. */
+  importId(): Promise<string>;
 }
 
 interface Endpoint {
   name: string;
-  permission: Permission;
+  /** Any one of these is enough. */
+  permission: Permission | Permission[];
   call(s: Session, ids: Ids): request.Test | Promise<request.Response>;
 }
 
@@ -216,6 +225,128 @@ const ENDPOINTS: Endpoint[] = [
         .set('x-csrf-token', s.csrf);
     },
   },
+  {
+    name: 'GET cases',
+    permission: ['cases.read_all', 'cases.read_assigned'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cases`),
+  },
+  {
+    name: 'PATCH case',
+    permission: 'cases.edit',
+    call: (s, ids) =>
+      s.agent
+        .patch(`/api/v1/projects/${ids.project}/cases/${ids.caseId}`)
+        .set('x-csrf-token', s.csrf)
+        .send({ priority: 1 }),
+  },
+  {
+    name: 'POST cases/assign',
+    permission: 'cases.assign',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/cases/assign`)
+        .set('x-csrf-token', s.csrf)
+        .send({ caseIds: [], userId: null }),
+  },
+  {
+    name: 'GET assignees',
+    permission: 'cases.assign',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/assignees`),
+  },
+  {
+    name: 'GET assignments',
+    permission: 'cases.assign',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/assignments`),
+  },
+  {
+    name: 'POST assignments',
+    permission: 'cases.assign',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/assignments`)
+        .set('x-csrf-token', s.csrf)
+        .send({ userId: ids.interviewerId, filter: 'case.region == 9', active: false }),
+  },
+  {
+    name: 'PATCH assignment',
+    permission: 'cases.assign',
+    call: async (s, ids) =>
+      s.agent
+        .patch(`/api/v1/projects/${ids.project}/assignments/${await ids.rule()}`)
+        .set('x-csrf-token', s.csrf)
+        .send({ quota: 3 }),
+  },
+  {
+    name: 'DELETE assignment',
+    permission: 'cases.assign',
+    call: async (s, ids) =>
+      s.agent
+        .delete(`/api/v1/projects/${ids.project}/assignments/${await ids.rule()}`)
+        .set('x-csrf-token', s.csrf),
+  },
+  {
+    name: 'POST assignments/preview',
+    permission: 'cases.assign',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/assignments/preview`)
+        .set('x-csrf-token', s.csrf)
+        .send({ filter: 'case.region == 1' }),
+  },
+  {
+    name: 'POST assignments/apply',
+    permission: 'cases.assign',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/assignments/apply`)
+        .set('x-csrf-token', s.csrf)
+        .send({}),
+  },
+  {
+    name: 'GET sample-fields',
+    permission: ['cases.read_all', 'cases.read_assigned', 'questionnaires.read'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/sample-fields`),
+  },
+  {
+    name: 'PUT sample-field',
+    permission: 'cases.edit',
+    call: (s, ids) =>
+      s.agent
+        .put(`/api/v1/projects/${ids.project}/sample-fields/region`)
+        .set('x-csrf-token', s.csrf)
+        .send({ label: 'Region' }),
+  },
+  {
+    name: 'POST imports',
+    permission: 'cases.import',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/imports`)
+        .set('x-csrf-token', s.csrf)
+        .attach('file', Buffer.from('id,region\nX1,1\n'), 'x.csv'),
+  },
+  {
+    name: 'GET imports',
+    permission: 'cases.import',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/imports`),
+  },
+  {
+    name: 'GET import',
+    permission: 'cases.import',
+    call: async (s, ids) =>
+      s.agent.get(`/api/v1/projects/${ids.project}/imports/${await ids.importId()}`),
+  },
+  {
+    name: 'PUT import mapping',
+    permission: 'cases.import',
+    call: async (s, ids) =>
+      s.agent
+        .put(`/api/v1/projects/${ids.project}/imports/${await ids.importId()}/mapping`)
+        .set('x-csrf-token', s.csrf)
+        .send({
+          columns: [{ kind: 'externalId' }, { kind: 'sample', field: 'region', type: 'number' }],
+        }),
+  },
 ];
 
 describe('role-based access control', () => {
@@ -224,6 +355,8 @@ describe('role-based access control', () => {
   let project: string;
   let otherProject: string;
   let questionnaire: string;
+  let caseId: string;
+  let interviewerId: string;
   const sessions = new Map<Role, Session>();
 
   beforeAll(async () => {
@@ -232,6 +365,12 @@ describe('role-based access control', () => {
     project = await createProject(t.admin, tenant.id);
     otherProject = await createProject(t.admin, tenant.id);
     questionnaire = await createQuestionnaire(t.admin, tenant.id, project, { publish: true });
+    caseId = uuidv7();
+    await t.admin`insert into cases (id, tenant_id, project_id, external_id, sample)
+                  values (${caseId}, ${tenant.id}, ${project}, 'C1', ${t.admin.json({ region: 1 })})`;
+    await t.admin`insert into sample_fields (id, tenant_id, project_id, name, type)
+                  values (${uuidv7()}, ${tenant.id}, ${project}, 'region', 'number')`;
+    interviewerId = (await createUser(t.admin, tenant.id, [{ role: 'interviewer' }])).id;
     for (const role of ROLES) {
       const user = await createUser(t.admin, tenant.id, [{ role }]);
       sessions.set(role, await login(t.app, user));
@@ -244,6 +383,22 @@ describe('role-based access control', () => {
     target,
     questionnaire,
     fresh: (opts) => createQuestionnaire(t.admin, tenant.id, project, opts),
+    caseId,
+    interviewerId,
+    async rule() {
+      const id = uuidv7();
+      await t.admin`insert into assignments (id, tenant_id, project_id, user_id, kind, filter, active)
+                    values (${id}, ${tenant.id}, ${project}, ${interviewerId}, 'rule', 'case.region == 9', false)`;
+      return id;
+    },
+    async importId() {
+      const id = uuidv7();
+      await t.admin`insert into sample_imports (id, tenant_id, project_id, file_name, size, sha256, headers, rows)
+                    values (${id}, ${tenant.id}, ${project}, 'x.csv', 10, 'x', ${t.admin.json(['id', 'region'])}, 1)`;
+      await t.admin`insert into sample_import_rows (tenant_id, import_id, row_no, data)
+                    values (${tenant.id}, ${id}, 1, ${t.admin.json(['X9', '2'])})`;
+      return id;
+    },
     async scenario(qid) {
       const sid = uuidv7();
       await t.admin`insert into questionnaire_scenarios (id, tenant_id, questionnaire_id, name, scenario)
@@ -257,7 +412,8 @@ describe('role-based access control', () => {
   it.each(cases)('$role → $endpoint.name', async ({ role, endpoint }) => {
     const target = await createUser(t.admin, tenant.id, [{ role: 'client_viewer' }]);
     const res = await endpoint.call(sessions.get(role)!, ids(target.id));
-    if (roleHasPermission(role, endpoint.permission)) {
+    const wanted = Array.isArray(endpoint.permission) ? endpoint.permission : [endpoint.permission];
+    if (wanted.some((p) => roleHasPermission(role, p))) {
       expect(res.status, JSON.stringify(res.body)).toBeLessThan(400);
     } else {
       expect(res.status).toBe(403);

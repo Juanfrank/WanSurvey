@@ -1,5 +1,5 @@
 import { pathToFileURL } from 'node:url';
-import { household } from '@wansurvey/fixtures';
+import { household, sampleRows } from '@wansurvey/fixtures';
 import { compile } from '@wansurvey/logic';
 import { Questionnaire, ROLES } from '@wansurvey/schema';
 import postgres from 'postgres';
@@ -9,7 +9,8 @@ import { hashPassword } from '../auth/auth.service.js';
 /**
  * Demo organisation "demo" with one user per role (password from SEED_PASSWORD) and a second
  * organisation "demo2" that the project manager also belongs to.
- * The demo project has the household questionnaire, published as version 1.
+ * The demo project has the household questionnaire, published as version 1, and 50 sample
+ * cases; a rule assigns the region 1 cases to the interviewer.
  * Owners and admins enrol TOTP on first login. Idempotent: does nothing if the tenant exists.
  */
 export async function seed(adminUrl: string, password: string): Promise<void> {
@@ -46,8 +47,10 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
           (id, tenant_id, questionnaire_id, version, definition, compiled, hash)
         values (${uuidv7()}, ${tenantId}, ${questionnaireId}, 1, ${tx.json(definition as never)},
                 ${tx.json(compiled as never)}, ${compiled.hash})`;
+      const userIds: Partial<Record<(typeof ROLES)[number], string>> = {};
       for (const role of ROLES) {
         const userId = uuidv7();
+        userIds[role] = userId;
         const email = `${role.replace('_', '.')}@demo.wansurvey.test`;
         await tx`
           insert into users (id, email, name, first_name, status, password_hash)
@@ -61,6 +64,34 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
         }
         console.log(`  ${role.padEnd(16)} ${email}`);
       }
+      // Sample dictionary and cases.
+      const fields: [string, string, boolean][] = [
+        ['first_name', 'text', true],
+        ['last_name', 'text', true],
+        ['region', 'number', false],
+        ['city', 'text', false],
+        ['age', 'number', false],
+      ];
+      for (const [i, [name, type, pii]] of fields.entries()) {
+        await tx`insert into sample_fields (id, tenant_id, project_id, name, type, pii, position)
+                 values (${uuidv7()}, ${tenantId}, ${projectId}, ${name}, ${type}, ${pii}, ${i})`;
+      }
+      const interviewer = userIds.interviewer!;
+      for (const r of sampleRows(50)) {
+        const caseId = uuidv7();
+        const mine = r.region === 1;
+        await tx`insert into cases (id, tenant_id, project_id, external_id, sample, status, priority, assigned_to)
+                 values (${caseId}, ${tenantId}, ${projectId}, ${r.id},
+                         ${tx.json({ first_name: r.first_name, last_name: r.last_name, region: r.region, city: r.city, age: r.age })},
+                         ${mine ? 'assigned' : 'fresh'}, ${r.priority}, ${mine ? interviewer : null})`;
+        await tx`insert into contacts (id, tenant_id, case_id, type, value, label)
+                 values (${uuidv7()}, ${tenantId}, ${caseId}, 'phone', ${'+51' + r.phone}, 'phone'),
+                        (${uuidv7()}, ${tenantId}, ${caseId}, 'email', ${r.email}, 'email')`;
+        await tx`insert into case_events (id, tenant_id, case_id, type, details)
+                 values (${uuidv7()}, ${tenantId}, ${caseId}, 'imported', ${tx.json({ seed: true })})`;
+      }
+      await tx`insert into assignments (id, tenant_id, project_id, user_id, kind, name, filter)
+               values (${uuidv7()}, ${tenantId}, ${projectId}, ${interviewer}, 'rule', 'Region 1', 'case.region == 1')`;
     });
     console.log(
       'Seeded organisations "demo" and "demo2" (log in with the e-mail and SEED_PASSWORD).',

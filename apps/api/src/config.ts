@@ -19,6 +19,9 @@ const Env = z.object({
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  /** Sample import limits. */
+  IMPORT_MAX_MB: z.coerce.number().positive().default(20),
+  IMPORT_MAX_ROWS: z.coerce.number().int().positive().default(200_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Optional: OpenTelemetry/Sentry are wired only when configured. */
   SENTRY_DSN: z.string().optional(),

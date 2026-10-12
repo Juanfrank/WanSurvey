@@ -26,7 +26,7 @@
     "react-i18next": "15.7.4"
   },
   "devDependencies": {
-    "@wansurvey/api": "workspace:*",
+    "@node-rs/argon2": "2.0.2",
     "@playwright/test": "1.56.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/react": "16.3.3",
@@ -34,12 +34,13 @@
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.2.0",
-    "jsdom": "26.1.0",
-    "tailwindcss": "4.3.3",
-    "vite": "7.3.6",
+    "@wansurvey/api": "workspace:*",
     "axe-core": "4.13.0",
+    "exceljs": "4.4.0",
+    "jsdom": "26.1.0",
     "postgres": "3.4.7",
-    "@node-rs/argon2": "2.0.2",
-    "uuidv7": "1.0.2"
+    "tailwindcss": "4.3.3",
+    "uuidv7": "1.0.2",
+    "vite": "7.3.6"
   }
 }

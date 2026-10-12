@@ -43,6 +43,13 @@
       "when": 1791821118121,
       "tag": "0005_questionnaires",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791826650910,
+      "tag": "0006_cases",
+      "breakpoints": true
     }
   ]
 }

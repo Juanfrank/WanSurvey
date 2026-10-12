@@ -31,7 +31,16 @@ export type AuditAction =
   | 'questionnaire.published'
   | 'questionnaire.version_retired'
   | 'questionnaire.scenario_saved'
-  | 'questionnaire.scenario_deleted';
+  | 'questionnaire.scenario_deleted'
+  | 'cases.import_uploaded'
+  | 'cases.imported'
+  | 'cases.assigned'
+  | 'case.updated'
+  | 'case.pii_viewed'
+  | 'sample_field.updated'
+  | 'assignment.created'
+  | 'assignment.updated'
+  | 'assignment.deleted';
 
 export interface AuditEntry {
   action: AuditAction;

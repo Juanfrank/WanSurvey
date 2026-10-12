@@ -7,7 +7,7 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Role } from '@wansurvey/schema';
+import type { Permission, Role } from '@wansurvey/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
   ALLOW_PENDING_MFA,
@@ -84,13 +84,11 @@ export class AuthGuard implements CanActivate {
       const param = requirement.projectParam ? req.params[requirement.projectParam] : undefined;
       const projectId = typeof param === 'string' ? param : undefined;
       if (requirement.projectParam && !isUuid(projectId)) throw new ForbiddenException('Forbidden');
-      if (
-        !can(
-          auth.memberships,
-          requirement.permission,
-          requirement.anyProject ? 'any' : (projectId ?? null),
-        )
-      ) {
+      const wanted: readonly Permission[] = Array.isArray(requirement.permission)
+        ? requirement.permission
+        : [requirement.permission as Permission];
+      const scope = requirement.anyProject ? 'any' : (projectId ?? null);
+      if (!wanted.some((p) => can(auth.memberships, p, scope))) {
         throw new ForbiddenException({
           code: 'FORBIDDEN',
           message: 'You do not have permission to do this',

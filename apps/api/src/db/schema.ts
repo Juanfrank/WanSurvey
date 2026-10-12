@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  primaryKey,
   jsonb,
   pgTable,
   text,
@@ -287,6 +288,155 @@ export const questionnaireScenarios = pgTable(
   (t) => [uniqueIndex('questionnaire_scenarios_name_uq').on(t.questionnaireId, t.name)],
 );
 
+/**
+ * The project's sample dictionary: the fields imported cases carry (`case.<name>` in logic and
+ * piping), their type, and whether they are personal data (masked without `pii.view`).
+ */
+export const sampleFields = pgTable(
+  'sample_fields',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    name: text('name').notNull(),
+    label: text('label'),
+    /** text | number | date | code */
+    type: text('type').notNull().default('text'),
+    pii: boolean('pii').notNull().default(false),
+    position: integer('position').notNull().default(0),
+  },
+  (t) => [uniqueIndex('sample_fields_uq').on(t.projectId, t.name)],
+);
+
+/** One unit to interview (spec §3): pre-loaded sample data plus status and assignment. */
+export const cases = pgTable(
+  'cases',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    externalId: text('external_id').notNull(),
+    sample: jsonb('sample').notNull().default({}),
+    /** fresh | assigned | in_progress | finalised | withdrawn */
+    status: text('status').notNull().default('fresh'),
+    disposition: text('disposition'),
+    priority: integer('priority').notNull().default(0),
+    modePreference: text('mode_preference'),
+    assignedTo: uuid('assigned_to').references(() => users.id),
+    importId: uuid('import_id'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('cases_external_uq').on(t.projectId, t.externalId),
+    index('cases_status_idx').on(t.projectId, t.status),
+    index('cases_assigned_idx').on(t.projectId, t.assignedTo),
+  ],
+);
+
+/** Phone numbers, e-mails and addresses of a case; several per case. */
+export const contacts = pgTable(
+  'contacts',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id),
+    /** phone | email | address */
+    type: text('type').notNull(),
+    value: text('value').notNull(),
+    label: text('label'),
+    consent: jsonb('consent').notNull().default({}),
+    valid: boolean('valid').notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index('contacts_case_idx').on(t.caseId)],
+);
+
+/** An uploaded sample file: its mapping, validation report and outcome. */
+export const sampleImports = pgTable('sample_imports', {
+  id: id(),
+  tenantId: tenantId().references(() => tenants.id),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id),
+  fileName: text('file_name').notNull(),
+  size: integer('size').notNull(),
+  sha256: text('sha256').notNull(),
+  headers: jsonb('headers').notNull().default([]),
+  mapping: jsonb('mapping'),
+  /** uploaded | validated | committed | failed */
+  status: text('status').notNull().default('uploaded'),
+  report: jsonb('report'),
+  rows: integer('rows').notNull().default(0),
+  uploadedBy: uuid('uploaded_by'),
+  createdAt: createdAt(),
+  committedAt: timestamp('committed_at', { withTimezone: true }),
+});
+
+/** Parsed rows of an import, kept until it is committed (or for 24 hours). */
+export const sampleImportRows = pgTable(
+  'sample_import_rows',
+  {
+    tenantId: tenantId().references(() => tenants.id),
+    importId: uuid('import_id')
+      .notNull()
+      .references(() => sampleImports.id),
+    rowNo: integer('row_no').notNull(),
+    data: jsonb('data').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.importId, t.rowNo] })],
+);
+
+/**
+ * Who works which cases: a fixed list (cases already assigned) or a rule, an expression over
+ * `case.*`, status and priority that picks up matching unassigned cases.
+ */
+export const assignments = pgTable(
+  'assignments',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** list | rule */
+    kind: text('kind').notNull(),
+    name: text('name'),
+    filter: text('filter'),
+    quota: integer('quota'),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('assignments_project_idx').on(t.projectId)],
+);
+
+/** Append-only history of a case (imports, assignments, edits, status changes). */
+export const caseEvents = pgTable(
+  'case_events',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id),
+    type: text('type').notNull(),
+    details: jsonb('details').notNull().default({}),
+    actorUserId: uuid('actor_user_id'),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('case_events_case_idx').on(t.caseId, t.at)],
+);
+
 /** Immutable audit trail (UPDATE/DELETE are blocked by trigger and privileges). */
 export const auditLog = pgTable(
   'audit_log',
@@ -318,5 +468,12 @@ export const TENANT_TABLES = [
   'questionnaires',
   'questionnaire_versions',
   'questionnaire_scenarios',
+  'sample_fields',
+  'cases',
+  'contacts',
+  'sample_imports',
+  'sample_import_rows',
+  'assignments',
+  'case_events',
   'audit_log',
 ] as const;

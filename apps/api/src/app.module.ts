@@ -7,6 +7,9 @@ import { AuditService } from './audit/audit.service.js';
 import { AuthController } from './auth/auth.controller.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthService } from './auth/auth.service.js';
+import { CasesController } from './cases/cases.controller.js';
+import { CasesService } from './cases/cases.service.js';
+import { ImportsController } from './cases/imports.controller.js';
 import { SsoController, SsoSettingsController } from './auth/sso.controller.js';
 import { SsoService } from './auth/sso.service.js';
 import { CONFIG, loadConfig } from './config.js';
@@ -51,6 +54,8 @@ export class AppModule {
         TenantsController,
         ProjectsController,
         QuestionnairesController,
+        CasesController,
+        ImportsController,
         AuditController,
       ],
       providers: [
@@ -65,6 +70,7 @@ export class AppModule {
         AuthService,
         SsoService,
         UsersService,
+        CasesService,
         // Order matters: rate limiting first, then authentication/authorisation.
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },

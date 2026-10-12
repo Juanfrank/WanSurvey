@@ -61,7 +61,8 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
 export const AllowPendingMfa = () => SetMetadata(ALLOW_PENDING_MFA, true);
 
 export interface PermissionRequirement {
-  permission: Permission;
+  /** One permission, or several of which any one is enough. */
+  permission: Permission | readonly Permission[];
   /** Route param holding the project id the permission is checked against. */
   projectParam?: string;
   /** Granted by a membership in any project (the handler then filters to those projects). */
@@ -69,7 +70,7 @@ export interface PermissionRequirement {
 }
 
 export const RequirePermission = (
-  permission: Permission,
+  permission: Permission | readonly Permission[],
   opts: { projectParam?: string; anyProject?: boolean } = {},
 ) => SetMetadata(REQUIRED_PERMISSION, { permission, ...opts } satisfies PermissionRequirement);
 
