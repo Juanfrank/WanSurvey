@@ -106,6 +106,12 @@ export class AuthService {
     }
     const tenants = await this.database.userTenants(user.id);
     if (tenants.length === 0) throw invalidCredentials();
+    // Organisations that require Microsoft sign-in accept a password only from their owners.
+    const enforced = new Set(
+      (await this.database.ssoEnforcedTenants(tenants.map((t) => t.id))).map((e) => e.tenantId),
+    );
+    const passwordAllowed = async (t: UserTenant) =>
+      !enforced.has(t.id) || (await this.isOwnerIn(t.id, user.id));
     let chosen: UserTenant | undefined;
     if (input.tenant) {
       const wanted = input.tenant.toLowerCase();
@@ -116,12 +122,17 @@ export class AuthService {
           message: 'You are not a member of that organisation',
         });
       }
+      if (!(await passwordAllowed(chosen))) throw this.ssoRequired(chosen);
     } else {
-      chosen = tenants.find((t) => t.id === user.lastTenantId) ?? tenants[0]!;
+      const usable: UserTenant[] = [];
+      for (const t of tenants) if (await passwordAllowed(t)) usable.push(t);
+      if (usable.length === 0) throw this.ssoRequired(tenants[0]!);
+      chosen = usable.find((t) => t.id === user.lastTenantId) ?? usable[0]!;
     }
     const session = await this.openSession(chosen.id, user.id, {
       totpEnabled: user.totpEnabled,
       mfaAlreadyVerified: false,
+      authMethod: 'password',
       action: 'auth.login',
       client,
     });
@@ -141,6 +152,14 @@ export class AuthService {
         code: 'NOT_A_MEMBER',
         message: 'You are not a member of that organisation',
       });
+    }
+    const [enforced] = await this.database.ssoEnforcedTenants([target.id]);
+    if (
+      enforced &&
+      !(ctx.authMethod === 'sso' && ctx.idpTenant === enforced.entraTenantId) &&
+      !(await this.isOwnerIn(target.id, ctx.userId))
+    ) {
+      throw this.ssoRequired(target);
     }
     const totpEnabled = await this.database.withTenant(
       ctx.tenantId,
@@ -169,18 +188,26 @@ export class AuthService {
       totpEnabled,
       // The code was already entered in this browser; switching does not ask again.
       mfaAlreadyVerified: ctx.mfaState === 'ok',
+      authMethod: ctx.authMethod,
+      idpTenant: ctx.idpTenant,
       action: 'auth.login',
       client,
     });
     return { ...session, tenant: summary(target), tenants: tenants.map(summary) };
   }
 
-  private async openSession(
+  /**
+   * Starts a session in one organisation. TOTP is skipped when it was already entered in this
+   * browser, or when Microsoft reports that it performed MFA (`mfaAlreadyVerified`).
+   */
+  async openSession(
     tenantId: string,
     userId: string,
     opts: {
       totpEnabled: boolean;
       mfaAlreadyVerified: boolean;
+      authMethod: 'password' | 'sso';
+      idpTenant?: string | null;
       action: AuditEntry['action'];
       client: ClientInfo;
     },
@@ -193,13 +220,13 @@ export class AuthService {
           .from(memberships)
           .where(eq(memberships.userId, userId));
         const needs2fa = roles.some((r) => ROLES_REQUIRING_2FA.includes(r.role as Role));
-        const mfaState: AuthContext['mfaState'] = opts.totpEnabled
-          ? opts.mfaAlreadyVerified
-            ? 'ok'
-            : 'pending'
-          : needs2fa
-            ? 'enroll'
-            : 'ok';
+        const mfaState: AuthContext['mfaState'] = opts.mfaAlreadyVerified
+          ? 'ok'
+          : opts.totpEnabled
+            ? 'pending'
+            : needs2fa
+              ? 'enroll'
+              : 'ok';
         const token = randomToken();
         const csrfToken = randomToken(24);
         await tx.insert(sessions).values({
@@ -208,6 +235,8 @@ export class AuthService {
           tokenHash: sha256Hex(token),
           csrfToken,
           mfaState,
+          authMethod: opts.authMethod,
+          idpTenant: opts.idpTenant ?? null,
           ip: opts.client.ip,
           userAgent: opts.client.userAgent,
           expiresAt: new Date(Date.now() + this.config.SESSION_ABSOLUTE_HOURS * 3600_000),
@@ -216,13 +245,28 @@ export class AuthService {
         await this.audit.record(tx, tenantId, {
           action: opts.action,
           actorUserId: userId,
-          details: { mfaState },
+          details: { mfaState, method: opts.authMethod },
           ...opts.client,
         });
         return { cookie: `${tenantId}.${token}`, csrfToken, mfaState };
       },
       userId,
     );
+  }
+
+  private async isOwnerIn(tenantId: string, userId: string): Promise<boolean> {
+    const roles = await this.database.withTenant(tenantId, (tx) =>
+      tx.select({ role: memberships.role }).from(memberships).where(eq(memberships.userId, userId)),
+    );
+    return roles.some((r) => r.role === 'owner');
+  }
+
+  private ssoRequired(t: { slug: string; name: string }) {
+    return new ForbiddenException({
+      code: 'SSO_REQUIRED',
+      message: `${t.name} requires signing in with Microsoft`,
+      ssoStartUrl: `${this.config.API_PUBLIC_URL}/api/v1/auth/sso/start?org=${encodeURIComponent(t.slug)}`,
+    });
   }
 
   /** Records an account-level event in every organisation the user belongs to. */
@@ -269,10 +313,20 @@ export class AuthService {
     const permissions = new Set<Permission>();
     for (const m of ctx.memberships)
       if (m.projectId === null) ROLE_PERMISSIONS[m.role].forEach((p) => permissions.add(p));
+    const tenants = await this.listTenants(ctx);
+    const orgName = tenants.find((t) => t.id === ctx.tenantId)?.name ?? 'this organisation';
     return {
       user,
       tenantId: ctx.tenantId,
-      tenants: await this.listTenants(ctx),
+      tenants,
+      // People created by a first Microsoft sign-in have no role until an admin assigns one.
+      access:
+        ctx.memberships.length === 0
+          ? {
+              state: 'no_role' as const,
+              message: `Your account is active, but no role has been assigned to you in ${orgName} yet. An administrator of ${orgName} has been notified and needs to give you access before you can work here.`,
+            }
+          : { state: 'ok' as const, message: null },
       mfaState: ctx.mfaState,
       csrfToken: ctx.csrfToken,
       memberships: ctx.memberships,

@@ -6,17 +6,18 @@ WanSurvey is a multi-tenant platform for survey data collection. A questionnaire
 
 The MVP is built in 13 vertical slices; two are done so far.
 
-| Slice | Scope                                                                                                                                                                    | State   |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| 1     | **Foundations**: monorepo, CI, Docker, Postgres with RLS, auth (Argon2id, cookie sessions, TOTP 2FA, CSRF, rate limiting), tenants, users and roles, projects, audit log | ✅      |
-| 2     | **Schema and logic engine**: Zod questionnaire schema, expression parser and evaluator, routing, validation, piping, static analysis                                     | ✅      |
-| 3–13  | Renderer, designer, cases, runtime and sync, CATI, CAPI, CAWI, PAPI, review, metrics, hardening                                                                          | planned |
+| Slice | Scope                                                                                                                                                                                                | State   |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1     | **Foundations**: monorepo, CI, Docker, Postgres with RLS, auth (Argon2id, cookie sessions, TOTP 2FA, CSRF, rate limiting, Microsoft Entra ID sign-in), tenants, users and roles, projects, audit log | ✅      |
+| 2     | **Schema and logic engine**: Zod questionnaire schema, expression parser and evaluator, routing, validation, piping, static analysis                                                                 | ✅      |
+| 3–13  | Renderer, designer, cases, runtime and sync, CATI, CAPI, CAWI, PAPI, review, metrics, hardening                                                                                                      | planned |
 
 Background reading:
 
 - [`docs/architecture.md`](docs/architecture.md): how the pieces fit together
 - [`docs/logic-language.md`](docs/logic-language.md): the expression language
 - [`docs/decisions.md`](docs/decisions.md): assumptions taken where the spec was ambiguous
+- [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
 
 ## Requirements
 

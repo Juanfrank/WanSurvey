@@ -61,6 +61,21 @@ const ENDPOINTS: Endpoint[] = [
         .send({ settings: { touched: true } }),
   },
   {
+    name: 'GET /tenant/sso',
+    permission: 'tenant.manage',
+    call: (s) => s.agent.get('/api/v1/tenant/sso'),
+  },
+  {
+    name: 'PUT /tenant/sso',
+    permission: 'tenant.manage',
+    call: (s) =>
+      s.agent.put('/api/v1/tenant/sso').set('x-csrf-token', s.csrf).send({
+        entraTenantId: '00000000-0000-4000-8000-000000000001',
+        clientId: '00000000-0000-4000-8000-000000000002',
+        enabled: false,
+      }),
+  },
+  {
     name: 'GET /projects',
     permission: 'projects.read',
     call: (s) => s.agent.get('/api/v1/projects'),

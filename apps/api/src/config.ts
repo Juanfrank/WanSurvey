@@ -12,6 +12,10 @@ const Env = z.object({
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'Must be 32 bytes, base64'),
   PUBLIC_WEB_URL: z.string().url().default('http://localhost:5173'),
+  /** Public base URL of this API; Microsoft redirects back to {API_PUBLIC_URL}/api/v1/auth/sso/callback. */
+  API_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
+  /** Microsoft identity platform host; overridable for tests or sovereign clouds. */
+  ENTRA_AUTHORITY_HOST: z.string().url().default('https://login.microsoftonline.com'),
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),

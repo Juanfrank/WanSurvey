@@ -144,6 +144,10 @@ export const sessions = pgTable(
     csrfToken: text('csrf_token').notNull(),
     /** ok | pending (TOTP code needed) | enroll (TOTP enrolment required) */
     mfaState: text('mfa_state').notNull(),
+    /** password | sso */
+    authMethod: text('auth_method').notNull().default('password'),
+    /** Entra tenant id that authenticated an SSO session. */
+    idpTenant: text('idp_tenant'),
     ip: text('ip'),
     userAgent: text('user_agent'),
     createdAt: createdAt(),
@@ -179,6 +183,46 @@ export const userTokens = pgTable(
   (t) => [uniqueIndex('user_tokens_hash_uq').on(t.tokenHash)],
 );
 
+/** Per-organisation Microsoft Entra ID (Azure AD) sign-in settings. */
+export const tenantSso = pgTable('tenant_sso', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id),
+  provider: text('provider').notNull().default('entra'),
+  entraTenantId: text('entra_tenant_id').notNull(),
+  clientId: text('client_id').notNull(),
+  /** AES-256-GCM encrypted client secret. */
+  clientSecretEnc: text('client_secret_enc'),
+  enabled: boolean('enabled').notNull().default(false),
+  /** When true, password sign-in is refused for this organisation (owners excepted). */
+  enforceSso: boolean('enforce_sso').notNull().default(false),
+  /** E-mail domains whose people may be linked or created on first Microsoft sign-in. */
+  allowedDomains: text('allowed_domains')
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Links a global account to an external identity (Entra `oid` within its issuer). */
+export const userIdentities = pgTable(
+  'user_identities',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    provider: text('provider').notNull(),
+    issuer: text('issuer').notNull(),
+    subject: text('subject').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('user_identities_subject_uq').on(t.issuer, t.subject),
+    index('user_identities_user_idx').on(t.userId),
+  ],
+);
+
 /** Immutable audit trail (UPDATE/DELETE are blocked by trigger and privileges). */
 export const auditLog = pgTable(
   'audit_log',
@@ -206,5 +250,6 @@ export const TENANT_TABLES = [
   'projects',
   'memberships',
   'sessions',
+  'tenant_sso',
   'audit_log',
 ] as const;

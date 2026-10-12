@@ -18,6 +18,14 @@ export interface AuthUserRow {
   lastTenantId: string | null;
 }
 
+export interface SsoPublicConfig {
+  tenantId: string;
+  slug: string;
+  entraTenantId: string;
+  clientId: string;
+  enabled: boolean;
+}
+
 export interface UserTenant {
   id: string;
   slug: string;
@@ -90,6 +98,29 @@ export class Database implements OnModuleDestroy {
   async userTenants(userId: string, includeInactive = false): Promise<UserTenant[]> {
     return this.client<UserTenant[]>`
       select id, slug, name, member_status as "memberStatus" from user_tenants(${userId}, ${includeInactive})`;
+  }
+
+  async ssoEnforcedTenants(
+    tenantIds: string[],
+  ): Promise<{ tenantId: string; entraTenantId: string }[]> {
+    if (tenantIds.length === 0) return [];
+    return this.client<{ tenantId: string; entraTenantId: string }[]>`
+      select tenant_id as "tenantId", entra_tenant_id as "entraTenantId"
+      from sso_enforced_tenants(${tenantIds}::uuid[])`;
+  }
+
+  /** Public Entra settings of an organisation (never the secret), for starting a sign-in. */
+  async ssoConfigBySlug(slug: string): Promise<SsoPublicConfig | null> {
+    const rows = await this.client<SsoPublicConfig[]>`
+      select tenant_id as "tenantId", slug, entra_tenant_id as "entraTenantId", client_id as "clientId", enabled
+      from sso_config_by_slug(${slug})`;
+    return rows[0] ?? null;
+  }
+
+  async ssoTenantsForDomain(domain: string): Promise<SsoPublicConfig[]> {
+    return this.client<SsoPublicConfig[]>`
+      select tenant_id as "tenantId", slug, entra_tenant_id as "entraTenantId", client_id as "clientId", enabled
+      from sso_tenants_for_domain(${domain})`;
   }
 
   /** Revokes the user's sessions in every organisation (password reset). */

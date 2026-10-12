@@ -145,6 +145,8 @@ export class AuthGuard implements CanActivate {
         email: user.email,
         memberships: grants.map((g) => ({ role: g.role as Role, projectId: g.projectId })),
         mfaState: session.mfaState as AuthContext['mfaState'],
+        authMethod: session.authMethod as AuthContext['authMethod'],
+        idpTenant: session.idpTenant,
         csrfToken: session.csrfToken,
         ip: req.ip ?? null,
         userAgent: req.headers['user-agent'] ?? null,

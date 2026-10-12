@@ -24,6 +24,7 @@
     "@wansurvey/schema": "workspace:*",
     "cookie-parser": "^1.4.7",
     "drizzle-orm": "^0.44.0",
+    "jose": "^6.2.12",
     "nestjs-pino": "^4.4.0",
     "pino": "^9.7.0",
     "pino-http": "^10.5.0",

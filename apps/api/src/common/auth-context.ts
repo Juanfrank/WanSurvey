@@ -15,6 +15,9 @@ export interface AuthContext {
   email: string;
   memberships: MembershipGrant[];
   mfaState: 'ok' | 'pending' | 'enroll';
+  authMethod: 'password' | 'sso';
+  /** Entra tenant that authenticated an SSO session. */
+  idpTenant: string | null;
   csrfToken: string;
   ip: string | null;
   userAgent: string | null;

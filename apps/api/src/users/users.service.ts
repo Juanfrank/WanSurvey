@@ -59,6 +59,8 @@ export class UsersService {
         memberships: grants
           .filter((g) => g.userId === u.id)
           .map((g) => ({ role: g.role, projectId: g.projectId })),
+        /** Signed in (e.g. with Microsoft) but no role assigned yet. */
+        awaitingRole: u.status === 'active' && !grants.some((g) => g.userId === u.id),
       }));
     });
   }
