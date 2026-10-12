@@ -84,4 +84,18 @@ The preview (`apps/web/src/preview`) validates, analyses and compiles questionna
 
 Changing the mode, date, case data or quotas rebuilds the session from its current state, so a single run can be checked in every mode.
 
-Each run is recorded as a **scenario**: the answers in order plus the resulting path, outcome and answers. `runScenario` (in `@wansurvey/logic`) replays it, and slice 4 will run every saved scenario on publish.
+Each run is recorded as a **scenario**: the answers in order plus the resulting path, outcome and answers. `runScenario` (in `@wansurvey/logic`) replays it; in the designer, scenarios are stored on the server and every one runs on publish.
+
+## Designer, drafts and versions
+
+```
+questionnaires (one per questionnaire)       questionnaire_versions (immutable)
+  draft (jsonb, may be invalid)                version 1, 2, … · definition · compiled · hash
+  draft_revision  ──optimistic lock──▶         mapping from the previous version (breaking changes)
+questionnaire_scenarios (saved test runs) ──run on every publish──┘
+```
+
+- **Draft.** The designer (`apps/web/src/designer`) edits the questionnaire JSON in memory: pure tree edits (`tree.ts`), undo/redo, and an autosave 1.5 s after the last change. Each save sends the revision it started from; if someone else saved in between, the API answers `409 DRAFT_CONFLICT` and the designer asks whether to keep theirs or overwrite. Diagnostics run in the browser on every change (the same `analyze` as the server).
+- **Condition builder.** Conditions are stored as expression text. `toRows` turns an expression into builder rows (variable, comparison, value; joined by all/any) when it fits, `fromRows` prints rows back through the precedence-aware `printExpr`. Anything else stays in the expression editor.
+- **Publish.** `POST …/publish-check` (dry run) and `POST …/publish` run the same checks: Zod format, analyzer errors, every saved scenario, and — against the last published version — `breakingChanges` (removed variables, type changes, removed codes, roster moves, removed grid rows), which must each have a `rename`, `recode` or `drop` mapping. Publishing locks the questionnaire row, compiles, and stores the definition, compiled form, hash and mapping. A trigger keeps versions immutable; only `published → retired` is allowed.
+- Interviews (slice 6) will bind to a version; exports (slice 12) apply the stored mappings to line up data across versions.
