@@ -18,6 +18,7 @@ import { HealthController } from './health/health.controller.js';
 import { ConsoleMailer, MAILER, MemoryMailer, type Mailer } from './mail/mailer.js';
 import { ProjectsController } from './projects/projects.controller.js';
 import { GeoController } from './geo/geo.controller.js';
+import { InterviewsController } from './interviews/interviews.controller.js';
 import { GEOCODER, NominatimGeocoder, type Geocoder } from './geo/geocoder.js';
 import { GeoService } from './geo/geo.service.js';
 import { LibraryController } from './library/library.controller.js';
@@ -64,6 +65,7 @@ export class AppModule {
         CollabController,
         LibraryController,
         GeoController,
+        InterviewsController,
         CasesController,
         ImportsController,
         AuditController,

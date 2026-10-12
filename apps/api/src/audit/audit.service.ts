@@ -40,6 +40,7 @@ export type AuditAction =
   | 'case.claimed'
   | 'case.released'
   | 'cases.geocoded'
+  | 'interview.submitted'
   | 'library_item.created'
   | 'library_item.deleted'
   | 'sample_field.updated'

@@ -226,6 +226,15 @@ const ENDPOINTS: Endpoint[] = [
     },
   },
   {
+    name: 'POST interviews/sync',
+    permission: 'interviews.conduct',
+    call: (s) =>
+      s.agent
+        .post('/api/v1/interviews/sync')
+        .set('x-csrf-token', s.csrf)
+        .send({ deviceId: 'device-rbac-0001', interviews: [] }),
+  },
+  {
     name: 'GET cases',
     permission: ['cases.read_all', 'cases.read_assigned'],
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cases`),

@@ -71,6 +71,13 @@
       "when": 1791835490151,
       "tag": "0009_contacts_geo_duplicates",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791836783105,
+      "tag": "0010_interviews",
+      "breakpoints": true
     }
   ]
 }

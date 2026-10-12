@@ -514,6 +514,112 @@ export const caseEvents = pgTable(
   (t) => [index('case_events_case_idx').on(t.caseId, t.at)],
 );
 
+/**
+ * One interview of a case (or, later, of an open CAWI link) on a published questionnaire
+ * version. The id comes from the client, so a device can start one before it is online.
+ */
+export const interviews = pgTable(
+  'interviews',
+  {
+    id: uuid('id').primaryKey(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    caseId: uuid('case_id').references(() => cases.id),
+    questionnaireVersionId: uuid('questionnaire_version_id')
+      .notNull()
+      .references(() => questionnaireVersions.id),
+    mode: text('mode').notNull(),
+    interviewerId: uuid('interviewer_id'),
+    /** in_progress | submitted (review statuses come with the review workflow) */
+    status: text('status').notNull().default('in_progress'),
+    disposition: text('disposition'),
+    language: text('language').notNull(),
+    /** The engine's snapshot (`InterviewSession.state()`), restored on resume. */
+    /** Case data the engine was given at start (as the interviewer saw it); reused to verify. */
+    context: jsonb('context').notNull().default({}),
+    state: jsonb('state').notNull().default({}),
+    answers: jsonb('answers').notNull().default({}),
+    position: text('position'),
+    /** The device writing this interview; others are refused until it is handed over. */
+    deviceId: text('device_id').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    activeMs: integer('active_ms').notNull().default(0),
+    totalMs: integer('total_ms').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('interviews_case_idx').on(t.caseId),
+    index('interviews_project_idx').on(t.tenantId, t.projectId, t.status),
+    uniqueIndex('interviews_one_open_per_case')
+      .on(t.caseId)
+      .where(sql`status = 'in_progress'`),
+  ],
+);
+
+/** The last change number acknowledged per interview and device. */
+export const interviewDevices = pgTable(
+  'interview_devices',
+  {
+    tenantId: tenantId().references(() => tenants.id),
+    interviewId: uuid('interview_id')
+      .notNull()
+      .references(() => interviews.id),
+    deviceId: text('device_id').notNull(),
+    lastSeq: integer('last_seq').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.interviewId, t.deviceId] })],
+);
+
+/** Every answer change, old and new value, in order (append-only). */
+export const interviewAnswerEvents = pgTable(
+  'interview_answer_events',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    interviewId: uuid('interview_id')
+      .notNull()
+      .references(() => interviews.id),
+    deviceId: text('device_id').notNull(),
+    seq: integer('seq').notNull(),
+    variable: text('variable').notNull(),
+    oldValue: jsonb('old_value'),
+    newValue: jsonb('new_value'),
+    at: timestamp('at', { withTimezone: true }).notNull(),
+    byUserId: uuid('by_user_id'),
+    /** interviewer | respondent | reviewer | system */
+    source: text('source').notNull(),
+    /** Why the engine changed it (path_change, prefill, …); null for a typed answer. */
+    reason: text('reason'),
+  },
+  (t) => [
+    uniqueIndex('interview_answer_events_uq').on(t.interviewId, t.deviceId, t.seq),
+    index('interview_answer_events_at_idx').on(t.interviewId, t.at),
+  ],
+);
+
+/** Timing and navigation events (paradata), append-only. */
+export const interviewParadata = pgTable(
+  'interview_paradata',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    interviewId: uuid('interview_id')
+      .notNull()
+      .references(() => interviews.id),
+    deviceId: text('device_id').notNull(),
+    seq: integer('seq').notNull(),
+    type: text('type').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull(),
+    monotonicMs: doublePrecision('monotonic_ms'),
+    payload: jsonb('payload').notNull().default({}),
+  },
+  (t) => [uniqueIndex('interview_paradata_uq').on(t.interviewId, t.deviceId, t.seq)],
+);
+
 /** Immutable audit trail (UPDATE/DELETE are blocked by trigger and privileges). */
 export const auditLog = pgTable(
   'audit_log',
@@ -555,5 +661,9 @@ export const TENANT_TABLES = [
   'sample_import_rows',
   'assignments',
   'case_events',
+  'interviews',
+  'interview_devices',
+  'interview_answer_events',
+  'interview_paradata',
   'audit_log',
 ] as const;
