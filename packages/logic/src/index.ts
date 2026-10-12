@@ -40,3 +40,22 @@ export {
   type ScenarioResult,
   type ScenarioCheck,
 } from './scenario.js';
+export { printExpr } from './print.js';
+export {
+  toRows,
+  fromRows,
+  rowComplete,
+  opArity,
+  CONDITION_OPS,
+  type ConditionOp,
+  type ConditionRow,
+  type ConditionRows,
+  type Literal,
+} from './conditionModel.js';
+export {
+  breakingChanges,
+  validateMapping,
+  type BreakingChange,
+  type BreakingKind,
+  type MappingProblem,
+} from './diff.js';

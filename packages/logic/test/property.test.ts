@@ -5,6 +5,7 @@ import { compile, type CompiledQuestionnaire } from '../src/compile.js';
 import { createInterview, type InterviewOptions } from '../src/engine.js';
 import { evaluate } from '../src/evaluator.js';
 import { parse } from '../src/parser.js';
+import { printExpr } from '../src/print.js';
 import type { Value } from '../src/values.js';
 import { household } from '@wansurvey/fixtures';
 import { mapScope } from './helpers.js';
@@ -222,6 +223,22 @@ describe('property: routing determinism', () => {
         },
       ),
       { numRuns: 300 },
+    );
+  });
+});
+
+describe('property: printer', () => {
+  const strip = (n: unknown): unknown =>
+    JSON.parse(JSON.stringify(n, (k, v) => (k === 'span' ? undefined : v)));
+
+  it('parse(printExpr(ast)) gives back the same tree', () => {
+    fc.assert(
+      fc.property(expr, (src) => {
+        const ast = parse(src);
+        const printed = printExpr(ast);
+        expect(strip(parse(printed))).toEqual(strip(ast));
+      }),
+      { numRuns: 1500 },
     );
   });
 });

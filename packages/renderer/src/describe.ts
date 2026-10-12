@@ -1,4 +1,4 @@
-import { NAMESPACES, type Node } from '@wansurvey/logic';
+import { NAMESPACES, printExpr, type Node } from '@wansurvey/logic';
 
 export interface DescribeContext {
   /** How a variable is referred to on paper, e.g. "Q5" (or the variable name). */
@@ -12,35 +12,8 @@ export interface DescribeContext {
 const NS = new Set<string>(NAMESPACES);
 const OPS: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=': '≥' };
 
-/** Compact source form of an expression, used when a condition has no plain-language form. */
-export function printExpr(n: Node): string {
-  switch (n.type) {
-    case 'num':
-      return String(n.value);
-    case 'str':
-      return JSON.stringify(n.value);
-    case 'bool':
-      return String(n.value);
-    case 'null':
-      return 'null';
-    case 'var':
-      return n.name;
-    case 'member':
-      return `${printExpr(n.object)}.${n.property}`;
-    case 'index':
-      return `${printExpr(n.object)}[${printExpr(n.index)}]`;
-    case 'call':
-      return `${n.name}(${n.args.map(printExpr).join(', ')})`;
-    case 'unary':
-      return n.op === 'not' ? `not ${printExpr(n.arg)}` : `-${printExpr(n.arg)}`;
-    case 'binary':
-      return `${printExpr(n.left)} ${n.op} ${printExpr(n.right)}`;
-    case 'in':
-      return `${printExpr(n.value)} ${n.negated ? 'not in' : 'in'} (${n.list.map(printExpr).join(', ')})`;
-    case 'between':
-      return `${printExpr(n.value)} between ${printExpr(n.low)} and ${printExpr(n.high)}`;
-  }
-}
+/** Source form of an expression, used when a condition has no plain-language form. */
+export { printExpr };
 
 function refOf(n: Node, ctx: DescribeContext): { text: string; name: string | null } | null {
   if (n.type === 'var' && !NS.has(n.name)) return { text: ctx.ref(n.name), name: n.name };
