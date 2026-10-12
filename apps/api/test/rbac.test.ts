@@ -109,7 +109,7 @@ describe('role-based access control', () => {
     otherProject = await createProject(t.admin, tenant.id);
     for (const role of ROLES) {
       const user = await createUser(t.admin, tenant.id, [{ role }]);
-      sessions.set(role, await login(t.app, tenant.slug, user));
+      sessions.set(role, await login(t.app, user));
     }
   });
   afterAll(() => t.close());
@@ -142,12 +142,10 @@ describe('role-based access control', () => {
     beforeAll(async () => {
       supervisor = await login(
         t.app,
-        tenant.slug,
         await createUser(t.admin, tenant.id, [{ role: 'supervisor', projectId: project }]),
       );
       manager = await login(
         t.app,
-        tenant.slug,
         await createUser(t.admin, tenant.id, [{ role: 'project_manager', projectId: project }]),
       );
     });
@@ -200,7 +198,7 @@ describe('role-based access control', () => {
   it('tenants never see each other through the API', async () => {
     const other = await createTenant(t.admin);
     const otherAdmin = await createUser(t.admin, other.id, [{ role: 'admin' }]);
-    const s = await login(t.app, other.slug, otherAdmin);
+    const s = await login(t.app, otherAdmin);
     expect((await s.agent.get(`/api/v1/projects/${project}`)).status).toBe(404);
     const users = await s.agent.get('/api/v1/users');
     expect(users.body.map((u: { id: string }) => u.id)).toEqual([otherAdmin.id]);
@@ -231,7 +229,7 @@ describe('rate limiting', () => {
       for (let i = 0; i < 5; i++) {
         const r = await request(t.app.getHttpServer())
           .post('/api/v1/auth/login')
-          .send({ tenant: tenant.slug, email: user.email, password: PASSWORD });
+          .send({ email: user.email, password: PASSWORD });
         statuses.push(r.status);
       }
       expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);

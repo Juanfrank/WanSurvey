@@ -10,20 +10,19 @@ import { CONFIG, loadConfig, type AppConfig } from '../config.js';
 import { AuthService, MIN_PASSWORD_LENGTH, type ClientInfo } from './auth.service.js';
 
 const LoginBody = z.object({
-  tenant: z.string().min(1).max(64),
   email: z.string().email().max(254),
   password: z.string().min(1).max(512),
+  /** Organisation slug or id; defaults to the one used last. */
+  tenant: z.string().min(1).max(64).optional(),
 });
+const SwitchBody = z.object({ tenantId: z.string().uuid() });
 const CodeBody = z.object({ code: z.string().regex(/^\d{6}$/) });
 const Password = z
   .string()
   .min(MIN_PASSWORD_LENGTH, `At least ${MIN_PASSWORD_LENGTH} characters`)
   .max(512);
 const TokenPasswordBody = z.object({ token: z.string().min(20).max(512), password: Password });
-const ForgotBody = z.object({
-  tenant: z.string().min(1).max(64),
-  email: z.string().email().max(254),
-});
+const ForgotBody = z.object({ email: z.string().email().max(254) });
 
 const authLimit = { default: { limit: () => loadConfig().LOGIN_RATE_LIMIT, ttl: 60_000 } };
 
@@ -51,7 +50,32 @@ export class AuthController {
   ) {
     const result = await this.auth.login(body, client(req));
     setSessionCookies(res, this.config, result.cookie, result.csrfToken);
-    return { mfaState: result.mfaState, csrfToken: result.csrfToken };
+    return {
+      mfaState: result.mfaState,
+      csrfToken: result.csrfToken,
+      tenant: result.tenant,
+      tenants: result.tenants,
+    };
+  }
+
+  @AllowPendingMfa()
+  @Get('tenants')
+  tenants(@Auth() ctx: AuthContext) {
+    return this.auth.listTenants(ctx);
+  }
+
+  @Post('switch-tenant')
+  @HttpCode(200)
+  @ApiBody({ schema: z.toJSONSchema(SwitchBody) as object })
+  async switchTenant(
+    @Auth() ctx: AuthContext,
+    @Body(new ZodPipe(SwitchBody)) body: z.infer<typeof SwitchBody>,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.auth.switchTenant(ctx, body.tenantId, client(req));
+    setSessionCookies(res, this.config, result.cookie, result.csrfToken);
+    return { mfaState: result.mfaState, csrfToken: result.csrfToken, tenant: result.tenant };
   }
 
   @AllowPendingMfa()

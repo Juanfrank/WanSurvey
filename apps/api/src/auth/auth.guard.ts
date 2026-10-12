@@ -22,7 +22,7 @@ import { CSRF_HEADER, SESSION_COOKIE } from '../common/cookies.js';
 import { safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isUuid } from '../db/database.js';
-import { memberships, sessions, users } from '../db/schema.js';
+import { memberships, sessions, tenantMembers, users } from '../db/schema.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOUCH_INTERVAL_MS = 60_000;
@@ -112,15 +112,19 @@ export class AuthGuard implements CanActivate {
         .select({
           session: sessions,
           user: { id: users.id, email: users.email, status: users.status },
+          memberStatus: tenantMembers.status,
         })
         .from(sessions)
         .innerJoin(users, eq(users.id, sessions.userId))
+        .innerJoin(tenantMembers, eq(tenantMembers.userId, sessions.userId))
         .where(and(eq(sessions.tokenHash, sha256Hex(cookie.token)), isNull(sessions.revokedAt)))
         .limit(1);
       if (!row) return null;
-      const { session, user } = row;
+      const { session, user, memberStatus } = row;
+      // The account must be active, and still an active member of this organisation.
       if (
         user.status !== 'active' ||
+        memberStatus !== 'active' ||
         session.expiresAt <= now ||
         now.getTime() - session.lastSeenAt.getTime() > idleMs
       ) {

@@ -15,6 +15,20 @@
       "when": 1791784720125,
       "tag": "0001_rls_and_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791813598365,
+      "tag": "0002_multi_org",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791813603058,
+      "tag": "0003_users_global",
+      "breakpoints": true
     }
   ]
 }

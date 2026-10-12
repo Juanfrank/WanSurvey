@@ -1,7 +1,16 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { totp } from '../src/common/crypto.js';
-import { bootstrap, createTenant, createUser, login, PASSWORD, type TestApp } from './harness.js';
+import {
+  bootstrap,
+  createProject,
+  createTenant,
+  createUser,
+  login,
+  PASSWORD,
+  type TestApp,
+} from './harness.js';
 
 describe('authentication', () => {
   let t: TestApp;
@@ -23,7 +32,7 @@ describe('authentication', () => {
     const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
     const res = await http()
       .post('/api/v1/auth/login')
-      .send({ tenant: tenant.slug, email: user.email.toUpperCase(), password: PASSWORD });
+      .send({ email: user.email.toUpperCase(), password: PASSWORD });
     expect(res.status).toBe(200);
     expect(res.body.mfaState).toBe('ok');
     const cookies = res.headers['set-cookie'] as unknown as string[];
@@ -36,24 +45,27 @@ describe('authentication', () => {
     const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
     const bad = await http()
       .post('/api/v1/auth/login')
-      .send({ tenant: tenant.slug, email: user.email, password: 'wrong password!' });
-    const noTenant = await http()
-      .post('/api/v1/auth/login')
-      .send({ tenant: 'nope', email: user.email, password: PASSWORD });
+      .send({ email: user.email, password: 'wrong password!' });
     const noUser = await http()
       .post('/api/v1/auth/login')
-      .send({ tenant: tenant.slug, email: 'x@example.org', password: PASSWORD });
-    for (const r of [bad, noTenant, noUser]) {
+      .send({ email: 'x@example.org', password: PASSWORD });
+    for (const r of [bad, noUser]) {
       expect(r.status).toBe(401);
       expect(r.body.code).toBe('INVALID_CREDENTIALS');
     }
     expect(await auditActions(user.id)).toContain('auth.login_failed');
+    // Correct password, organisation the person does not belong to.
+    const notMember = await http()
+      .post('/api/v1/auth/login')
+      .send({ tenant: 'nope', email: user.email, password: PASSWORD });
+    expect(notMember.status).toBe(403);
+    expect(notMember.body.code).toBe('NOT_A_MEMBER');
   });
 
   it('requires a session on protected routes and CSRF on writes', async () => {
     expect((await http().get('/api/v1/auth/me')).status).toBe(401);
     const user = await createUser(t.admin, tenant.id, [{ role: 'project_manager' }]);
-    const s = await login(t.app, tenant.slug, user);
+    const s = await login(t.app, user);
     expect((await s.agent.get('/api/v1/auth/me')).status).toBe(200);
     const noCsrf = await s.agent.post('/api/v1/projects').send({ name: 'P', code: 'NOCSRF' });
     expect(noCsrf.status).toBe(403);
@@ -67,7 +79,7 @@ describe('authentication', () => {
 
   it('logout revokes the session', async () => {
     const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
-    const s = await login(t.app, tenant.slug, user);
+    const s = await login(t.app, user);
     expect((await s.agent.post('/api/v1/auth/logout').set('x-csrf-token', s.csrf)).status).toBe(
       204,
     );
@@ -76,7 +88,7 @@ describe('authentication', () => {
 
   it('expires idle sessions', async () => {
     const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
-    const s = await login(t.app, tenant.slug, user);
+    const s = await login(t.app, user);
     await t.admin`update sessions set last_seen_at = now() - interval '2 hours' where user_id = ${user.id}`;
     const res = await s.agent.get('/api/v1/auth/me');
     expect(res.status).toBe(401);
@@ -88,7 +100,7 @@ describe('authentication', () => {
     const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
     const res = await http()
       .post('/api/v1/auth/login')
-      .send({ tenant: tenant.slug, email: user.email, password: PASSWORD });
+      .send({ email: user.email, password: PASSWORD });
     const sid = (res.headers['set-cookie'] as unknown as string[])
       .find((c) => c.startsWith('ws_sid='))!
       .split(';')[0]!
@@ -105,7 +117,7 @@ describe('authentication', () => {
       const agent = request.agent(t.app.getHttpServer());
       const res = await agent
         .post('/api/v1/auth/login')
-        .send({ tenant: tenant.slug, email: admin.email, password: PASSWORD });
+        .send({ email: admin.email, password: PASSWORD });
       expect(res.body.mfaState).toBe('enroll');
       const csrf = res.body.csrfToken;
       const blocked = await agent.get('/api/v1/users');
@@ -146,7 +158,7 @@ describe('authentication', () => {
       const agent = request.agent(t.app.getHttpServer());
       const res = await agent
         .post('/api/v1/auth/login')
-        .send({ tenant: tenant.slug, email: owner.email, password: PASSWORD });
+        .send({ email: owner.email, password: PASSWORD });
       expect(res.body.mfaState).toBe('pending');
       const csrf = res.body.csrfToken;
       const blocked = await agent.get('/api/v1/tenant');
@@ -177,7 +189,7 @@ describe('authentication', () => {
   describe('account lifecycle', () => {
     it('invitation → accept → login', async () => {
       const admin = await createUser(t.admin, tenant.id, [{ role: 'admin' }]);
-      const s = await login(t.app, tenant.slug, admin);
+      const s = await login(t.app, admin);
       const email = `new-${Date.now()}@example.org`;
       const inv = await s.agent
         .post('/api/v1/users/invite')
@@ -191,11 +203,11 @@ describe('authentication', () => {
       expect(inv.status).toBe(201);
       const mail = t.mailer.last(email)!;
       const token = decodeURIComponent(/token=([^\s]+)/.exec(mail.text)![1]!);
-      expect(token.startsWith(tenant.id)).toBe(true);
       const stored = (
         await t.admin`select token_hash from user_tokens where user_id = ${inv.body.id}`
       )[0]!;
-      expect(stored.token_hash).not.toContain(token.split('.')[1]); // only the hash is stored
+      expect(stored.token_hash).not.toBe(token); // only the hash is stored
+      expect(stored.token_hash).toBe(createHash('sha256').update(token).digest('hex'));
 
       expect(
         (await http().post('/api/v1/auth/invitations/accept').send({ token, password: 'short' }))
@@ -209,25 +221,18 @@ describe('authentication', () => {
         (await http().post('/api/v1/auth/invitations/accept').send({ token, password: PASSWORD }))
           .status,
       ).toBe(400); // single use
-      await login(t.app, tenant.slug, { id: inv.body.id, email, totpSecret: null });
+      await login(t.app, { id: inv.body.id, email, totpSecret: null });
     });
 
     it('password reset revokes existing sessions', async () => {
       const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
-      const s = await login(t.app, tenant.slug, user);
+      const s = await login(t.app, user);
       expect(
-        (
-          await http()
-            .post('/api/v1/auth/password/forgot')
-            .send({ tenant: tenant.slug, email: 'nobody@example.org' })
-        ).status,
+        (await http().post('/api/v1/auth/password/forgot').send({ email: 'nobody@example.org' }))
+          .status,
       ).toBe(204);
       expect(
-        (
-          await http()
-            .post('/api/v1/auth/password/forgot')
-            .send({ tenant: tenant.slug, email: user.email })
-        ).status,
+        (await http().post('/api/v1/auth/password/forgot').send({ email: user.email })).status,
       ).toBe(204);
       const token = decodeURIComponent(/token=([^\s]+)/.exec(t.mailer.last(user.email)!.text)![1]!);
       expect(
@@ -240,15 +245,15 @@ describe('authentication', () => {
       expect((await s.agent.get('/api/v1/auth/me')).status).toBe(401);
       const relog = await http()
         .post('/api/v1/auth/login')
-        .send({ tenant: tenant.slug, email: user.email, password: 'a brand new passphrase' });
+        .send({ email: user.email, password: 'a brand new passphrase' });
       expect(relog.status).toBe(200);
     });
 
     it('deactivation and forced logout', async () => {
       const admin = await createUser(t.admin, tenant.id, [{ role: 'admin' }]);
-      const a = await login(t.app, tenant.slug, admin);
+      const a = await login(t.app, admin);
       const victim = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
-      const v = await login(t.app, tenant.slug, victim);
+      const v = await login(t.app, victim);
 
       expect(
         (await a.agent.post(`/api/v1/users/${victim.id}/force-logout`).set('x-csrf-token', a.csrf))
@@ -256,7 +261,7 @@ describe('authentication', () => {
       ).toBe(204);
       expect((await v.agent.get('/api/v1/auth/me')).status).toBe(401);
 
-      const v2 = await login(t.app, tenant.slug, victim);
+      const v2 = await login(t.app, victim);
       expect(
         (await a.agent.post(`/api/v1/users/${victim.id}/deactivate`).set('x-csrf-token', a.csrf))
           .status,
@@ -264,10 +269,10 @@ describe('authentication', () => {
       expect((await v2.agent.get('/api/v1/auth/me')).status).toBe(401);
       const res = await http()
         .post('/api/v1/auth/login')
-        .send({ tenant: tenant.slug, email: victim.email, password: PASSWORD });
+        .send({ email: victim.email, password: PASSWORD });
       expect(res.status).toBe(401);
       const row = (
-        await t.admin`select status, deactivated_at from users where id = ${victim.id}`
+        await t.admin`select status, deactivated_at from tenant_members where user_id = ${victim.id} and tenant_id = ${tenant.id}`
       )[0]!;
       expect(row.status).toBe('deactivated'); // kept for attribution
       expect(await auditActions(victim.id)).toEqual(
@@ -277,7 +282,7 @@ describe('authentication', () => {
 
     it('role changes follow rank rules and are audited', async () => {
       const admin = await createUser(t.admin, tenant.id, [{ role: 'admin' }]);
-      const a = await login(t.app, tenant.slug, admin);
+      const a = await login(t.app, admin);
       const target = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
       const put = (id: string, memberships: unknown) =>
         a.agent
@@ -298,6 +303,149 @@ describe('authentication', () => {
         before: [{ role: 'interviewer' }],
         after: [{ role: 'supervisor' }],
       });
+    });
+  });
+
+  describe('accounts in several organisations', () => {
+    it('logs in with e-mail only, lists organisations and switches between them', async () => {
+      const other = await createTenant(t.admin);
+      const pA = await createProject(t.admin, tenant.id);
+      const pB = await createProject(t.admin, other.id);
+      const user = await createUser(t.admin, tenant.id, [{ role: 'project_manager' }]);
+      await createUser(t.admin, other.id, [{ role: 'supervisor' }], { existing: user });
+
+      // Explicit organisation, then the last-used one is the default.
+      const first = await login(t.app, user, other.slug);
+      expect(first.tenantId).toBe(other.id);
+      const s = await login(t.app, user);
+      expect(s.tenantId).toBe(other.id);
+
+      const tenants = await s.agent.get('/api/v1/auth/tenants');
+      expect(tenants.body.map((x: { id: string }) => x.id).sort()).toEqual(
+        [tenant.id, other.id].sort(),
+      );
+      const projectsIn = async (sess: { agent: typeof s.agent }) =>
+        (await sess.agent.get('/api/v1/projects')).body.map((p: { id: string }) => p.id);
+      expect(await projectsIn(s)).toEqual([pB]);
+
+      const sw = await s.agent
+        .post('/api/v1/auth/switch-tenant')
+        .set('x-csrf-token', s.csrf)
+        .send({ tenantId: tenant.id });
+      expect(sw.status).toBe(200);
+      expect(sw.body.tenant.id).toBe(tenant.id);
+      const switched = { agent: s.agent, csrf: sw.body.csrfToken as string };
+      expect(await projectsIn(switched)).toContain(pA);
+      expect(await projectsIn(switched)).not.toContain(pB);
+      // Roles follow the organisation: project manager here, supervisor there.
+      const me = await switched.agent.get('/api/v1/auth/me');
+      expect(me.body.memberships).toEqual([{ role: 'project_manager', projectId: null }]);
+
+      const stranger = await createTenant(t.admin);
+      const denied = await s.agent
+        .post('/api/v1/auth/switch-tenant')
+        .set('x-csrf-token', switched.csrf)
+        .send({ tenantId: stranger.id });
+      expect(denied.status).toBe(403);
+    });
+
+    it('2FA verified once carries over when switching organisation', async () => {
+      const other = await createTenant(t.admin);
+      const owner = await createUser(t.admin, tenant.id, [{ role: 'owner' }]);
+      await createUser(t.admin, other.id, [{ role: 'admin' }], { existing: owner });
+      const s = await login(t.app, owner, tenant.slug);
+      const sw = await s.agent
+        .post('/api/v1/auth/switch-tenant')
+        .set('x-csrf-token', s.csrf)
+        .send({ tenantId: other.id });
+      expect(sw.body.mfaState).toBe('ok');
+      expect((await s.agent.get('/api/v1/users')).status).toBe(200);
+    });
+
+    it('deactivation in one organisation leaves the others usable', async () => {
+      const other = await createTenant(t.admin);
+      const admin = await createUser(t.admin, tenant.id, [{ role: 'admin' }]);
+      const a = await login(t.app, admin, tenant.slug);
+      const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
+      await createUser(t.admin, other.id, [{ role: 'interviewer' }], { existing: user });
+      const inA = await login(t.app, user, tenant.slug);
+      expect(
+        (await a.agent.post(`/api/v1/users/${user.id}/deactivate`).set('x-csrf-token', a.csrf))
+          .status,
+      ).toBe(204);
+      expect((await inA.agent.get('/api/v1/auth/me')).status).toBe(401);
+      const res = await http()
+        .post('/api/v1/auth/login')
+        .send({ email: user.email, password: PASSWORD });
+      expect(res.status).toBe(200);
+      expect(res.body.tenant.id).toBe(other.id);
+      expect(res.body.tenants.map((x: { id: string }) => x.id)).toEqual([other.id]);
+    });
+
+    it('inviting an existing account links it after confirming the current password', async () => {
+      const other = await createTenant(t.admin);
+      const admin = await createUser(t.admin, other.id, [{ role: 'admin' }]);
+      const a = await login(t.app, admin, other.slug);
+      const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
+      const inv = await a.agent
+        .post('/api/v1/users/invite')
+        .set('x-csrf-token', a.csrf)
+        .send({
+          email: user.email.toUpperCase(),
+          name: 'Ignored',
+          memberships: [{ role: 'supervisor' }],
+        });
+      expect(inv.status).toBe(201);
+      expect(inv.body).toMatchObject({ id: user.id, existingAccount: true, status: 'invited' });
+      const again = await a.agent
+        .post('/api/v1/users/invite')
+        .set('x-csrf-token', a.csrf)
+        .send({ email: user.email, name: 'x', memberships: [{ role: 'supervisor' }] });
+      expect(again.status).toBe(409);
+
+      const token = decodeURIComponent(/token=([^\s]+)/.exec(t.mailer.last(user.email)!.text)![1]!);
+      const wrong = await http()
+        .post('/api/v1/auth/invitations/accept')
+        .send({ token, password: 'not my password' });
+      expect(wrong.status).toBe(401);
+      expect(
+        (await http().post('/api/v1/auth/invitations/accept').send({ token, password: PASSWORD }))
+          .status,
+      ).toBe(204);
+      // Password unchanged, and both organisations are now available.
+      const s = await login(t.app, user, other.slug);
+      expect(s.tenantId).toBe(other.id);
+    });
+
+    it('an e-mail belongs to one account across organisations', async () => {
+      const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
+      await expect(
+        createUser(t.admin, tenant.id, [], { email: user.email.toUpperCase() }),
+      ).rejects.toThrow(/users_email_uq/);
+    });
+
+    it('a password reset ends sessions in every organisation', async () => {
+      const other = await createTenant(t.admin);
+      const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
+      await createUser(t.admin, other.id, [{ role: 'interviewer' }], { existing: user });
+      const inA = await login(t.app, user, tenant.slug);
+      const inB = await login(t.app, user, other.slug);
+      await http().post('/api/v1/auth/password/forgot').send({ email: user.email });
+      const token = decodeURIComponent(/token=([^\s]+)/.exec(t.mailer.last(user.email)!.text)![1]!);
+      expect(
+        (
+          await http()
+            .post('/api/v1/auth/password/reset')
+            .send({ token, password: 'another long passphrase' })
+        ).status,
+      ).toBe(204);
+      expect((await inA.agent.get('/api/v1/auth/me')).status).toBe(401);
+      expect((await inB.agent.get('/api/v1/auth/me')).status).toBe(401);
+      for (const tid of [tenant.id, other.id]) {
+        const rows =
+          await t.admin`select 1 from audit_log where tenant_id = ${tid} and action = 'auth.password_reset' and target_id = ${user.id}`;
+        expect(rows).toHaveLength(1);
+      }
     });
   });
 

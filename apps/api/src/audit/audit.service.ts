@@ -8,6 +8,7 @@ export type AuditAction =
   | 'auth.login'
   | 'auth.login_failed'
   | 'auth.logout'
+  | 'auth.tenant_switched'
   | 'auth.mfa_enabled'
   | 'auth.mfa_verified'
   | 'auth.mfa_failed'
@@ -20,8 +21,7 @@ export type AuditAction =
   | 'user.forced_logout'
   | 'tenant.updated'
   | 'project.created'
-  | 'project.updated'
-  | 'audit.viewed';
+  | 'project.updated';
 
 export interface AuditEntry {
   action: AuditAction;

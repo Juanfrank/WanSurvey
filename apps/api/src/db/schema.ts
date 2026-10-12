@@ -34,32 +34,56 @@ export const tenants = pgTable(
   (t) => [uniqueIndex('tenants_slug_uq').on(t.slug)],
 );
 
+/**
+ * Global identity: one account per e-mail, which can belong to several organisations through
+ * `tenant_members`. Per-organisation fields (ID code, extension, deactivation) live there.
+ */
 export const users = pgTable(
   'users',
   {
     id: id(),
-    tenantId: tenantId().references(() => tenants.id),
     email: text('email').notNull(),
     name: text('name').notNull(),
     firstName: text('first_name'),
     phone: text('phone'),
-    /** Interviewer profile fields, available to piping and metrics. */
-    idCode: text('id_code'),
     languages: text('languages')
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    phoneExtension: text('phone_extension'),
-    /** invited | active | deactivated */
-    status: text('status').notNull().default('invited'),
+    /** pending (invited, no password yet) | active | disabled (platform-level) */
+    status: text('status').notNull().default('pending'),
     passwordHash: text('password_hash'),
     /** AES-256-GCM encrypted TOTP secret. */
     totpSecretEnc: text('totp_secret_enc'),
     totpEnabled: boolean('totp_enabled').notNull().default(false),
+    /** Organisation opened by default at the next login. */
+    lastTenantId: uuid('last_tenant_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('users_email_uq').on(sql`lower(${t.email})`)],
+);
+
+/** A user's membership of one organisation, with that organisation's profile fields. */
+export const tenantMembers = pgTable(
+  'tenant_members',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** invited | active | deactivated */
+    status: text('status').notNull().default('invited'),
+    /** Interviewer profile fields, available to piping and metrics. */
+    idCode: text('id_code'),
+    phoneExtension: text('phone_extension'),
     createdAt: createdAt(),
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
   },
-  (t) => [uniqueIndex('users_tenant_email_uq').on(t.tenantId, sql`lower(${t.email})`)],
+  (t) => [
+    uniqueIndex('tenant_members_uq').on(t.tenantId, t.userId),
+    index('tenant_members_user_idx').on(t.userId),
+  ],
 );
 
 export const projects = pgTable(
@@ -101,6 +125,7 @@ export const memberships = pgTable(
   (t) => [
     index('memberships_user_idx').on(t.userId),
     uniqueIndex('memberships_scope_uq').on(
+      t.tenantId,
       t.userId,
       sql`coalesce(${t.projectId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
     ),
@@ -132,12 +157,15 @@ export const sessions = pgTable(
   ],
 );
 
-/** Single-use, hashed tokens for invitations and password resets. */
+/**
+ * Single-use, hashed tokens for invitations and password resets. Global (no RLS): only hashes are
+ * stored, and `tenant_id` is set for invitations so acceptance knows which organisation to join.
+ */
 export const userTokens = pgTable(
   'user_tokens',
   {
     id: id(),
-    tenantId: tenantId().references(() => tenants.id),
+    tenantId: uuid('tenant_id').references(() => tenants.id),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id),
@@ -174,10 +202,9 @@ export const auditLog = pgTable(
 
 /** Tables protected by tenant row-level security. */
 export const TENANT_TABLES = [
-  'users',
+  'tenant_members',
   'projects',
   'memberships',
   'sessions',
-  'user_tokens',
   'audit_log',
 ] as const;

@@ -59,42 +59,53 @@ export interface TestUser {
   totpSecret: string | null;
 }
 
-/** Creates an active user; owners/admins get TOTP enrolled (as the policy requires). */
+/**
+ * Creates an active account and makes it an active member of `tenantId`. Pass `existing` to add
+ * another organisation to an account. Owners/admins get TOTP enrolled, as the policy requires.
+ */
 export async function createUser(
   admin: postgres.Sql,
   tenantId: string,
   grants: { role: Role; projectId?: string | null }[],
-  opts: { email?: string; totp?: boolean; status?: string } = {},
+  opts: { email?: string; totp?: boolean; memberStatus?: string; existing?: TestUser } = {},
 ): Promise<TestUser> {
-  const id = uuidv7();
-  const email = opts.email ?? `${unique('u')}@example.org`;
-  const needsTotp = opts.totp ?? grants.some((g) => g.role === 'owner' || g.role === 'admin');
-  const secret = needsTotp ? generateTotpSecret() : null;
-  const enc = secret ? encryptField(secret, process.env.APP_ENCRYPTION_KEY!) : null;
-  await admin`
-    insert into users (id, tenant_id, email, name, status, password_hash, totp_secret_enc, totp_enabled)
-    values (${id}, ${tenantId}, ${email}, ${email}, ${opts.status ?? 'active'}, ${await (passwordHash ??= hashPassword(PASSWORD))}, ${enc}, ${needsTotp})`;
-  for (const g of grants) {
-    await admin`insert into memberships (id, tenant_id, user_id, role, project_id) values (${uuidv7()}, ${tenantId}, ${id}, ${g.role}, ${g.projectId ?? null})`;
+  let user = opts.existing;
+  if (!user) {
+    const id = uuidv7();
+    const email = opts.email ?? `${unique('u')}@example.org`;
+    const needsTotp = opts.totp ?? grants.some((g) => g.role === 'owner' || g.role === 'admin');
+    const secret = needsTotp ? generateTotpSecret() : null;
+    const enc = secret ? encryptField(secret, process.env.APP_ENCRYPTION_KEY!) : null;
+    await admin`
+      insert into users (id, email, name, status, password_hash, totp_secret_enc, totp_enabled)
+      values (${id}, ${email}, ${email}, 'active', ${await (passwordHash ??= hashPassword(PASSWORD))}, ${enc}, ${needsTotp})`;
+    user = { id, email, totpSecret: secret };
   }
-  return { id, email, totpSecret: secret };
+  await admin`
+    insert into tenant_members (id, tenant_id, user_id, status)
+    values (${uuidv7()}, ${tenantId}, ${user.id}, ${opts.memberStatus ?? 'active'})`;
+  for (const g of grants) {
+    await admin`insert into memberships (id, tenant_id, user_id, role, project_id) values (${uuidv7()}, ${tenantId}, ${user.id}, ${g.role}, ${g.projectId ?? null})`;
+  }
+  return user;
 }
 
 export interface Session {
   agent: ReturnType<typeof request.agent>;
   csrf: string;
+  tenantId: string;
 }
 
 /** Logs in through the API (including the TOTP step when enrolled). */
 export async function login(
   app: INestApplication,
-  tenantSlug: string,
   user: TestUser,
+  tenant?: string,
 ): Promise<Session> {
   const agent = request.agent(app.getHttpServer());
   const res = await agent
     .post('/api/v1/auth/login')
-    .send({ tenant: tenantSlug, email: user.email, password: PASSWORD });
+    .send({ email: user.email, password: PASSWORD, ...(tenant ? { tenant } : {}) });
   if (res.status !== 200)
     throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
   const csrf = res.body.csrfToken as string;
@@ -105,5 +116,5 @@ export async function login(
       .send({ code: totp(user.totpSecret!) });
     if (v.status !== 204) throw new Error(`2fa failed: ${v.status} ${JSON.stringify(v.body)}`);
   }
-  return { agent, csrf };
+  return { agent, csrf, tenantId: res.body.tenant.id as string };
 }

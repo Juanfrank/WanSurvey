@@ -7,31 +7,33 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ROLE_RANK, type Role } from '@wansurvey/schema';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { AuthService } from '../auth/auth.service.js';
 import { tenantRank, type AuthContext, type MembershipGrant } from '../common/auth-context.js';
 import { sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, type Tx } from '../db/database.js';
-import { memberships, projects, sessions, users } from '../db/schema.js';
+import { memberships, projects, sessions, tenantMembers, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 
 const INVITATION_TTL_HOURS = 7 * 24;
 
-const publicUser = {
+/** A member as seen by their organisation: global identity plus this organisation's fields. */
+const memberColumns = {
   id: users.id,
   email: users.email,
   name: users.name,
   firstName: users.firstName,
   phone: users.phone,
-  idCode: users.idCode,
   languages: users.languages,
-  phoneExtension: users.phoneExtension,
-  status: users.status,
   totpEnabled: users.totpEnabled,
-  createdAt: users.createdAt,
-  deactivatedAt: users.deactivatedAt,
+  status: tenantMembers.status,
+  idCode: tenantMembers.idCode,
+  phoneExtension: tenantMembers.phoneExtension,
+  createdAt: tenantMembers.createdAt,
+  deactivatedAt: tenantMembers.deactivatedAt,
 };
 
 @Injectable()
@@ -46,7 +48,11 @@ export class UsersService {
 
   async list(ctx: AuthContext) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const rows = await tx.select(publicUser).from(users).orderBy(users.name);
+      const rows = await tx
+        .select(memberColumns)
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .orderBy(users.name);
       const grants = await tx.select().from(memberships);
       return rows.map((u) => ({
         ...u,
@@ -90,54 +96,76 @@ export class UsersService {
     },
   ) {
     this.assertCanGrant(ctx, input.memberships);
-    const { user, token } = await this.database.withTenant(ctx.tenantId, async (tx) => {
+    // Accounts are global: an e-mail that already has one is linked, not duplicated.
+    const existingId = await this.database.userIdByEmail(input.email);
+    const userId = existingId ?? uuidv7();
+    const result = await this.database.withTenant(ctx.tenantId, async (tx) => {
       await this.assertProjectsExist(tx, input.memberships);
-      const [existing] = await tx
-        .select({ id: users.id })
-        .from(users)
-        .where(sql`lower(${users.email}) = lower(${input.email})`);
-      if (existing) throw new ConflictException('A user with this e-mail already exists');
-      const [user] = await tx
-        .insert(users)
-        .values({
-          tenantId: ctx.tenantId,
+      if (existingId) {
+        const [member] = await tx
+          .select({ id: tenantMembers.id })
+          .from(tenantMembers)
+          .where(eq(tenantMembers.userId, existingId));
+        if (member) throw new ConflictException('This person is already a member');
+      } else {
+        // No RETURNING: the new row only becomes visible once the membership below exists.
+        await tx.insert(users).values({
+          id: userId,
           email: input.email,
           name: input.name,
           firstName: input.firstName ?? null,
-          idCode: input.idCode ?? null,
           languages: input.languages ?? [],
-          status: 'invited',
-        })
-        .returning(publicUser);
+          status: 'pending',
+        });
+      }
+      await tx.insert(tenantMembers).values({
+        tenantId: ctx.tenantId,
+        userId,
+        status: 'invited',
+        idCode: input.idCode ?? null,
+      });
       await tx
         .insert(memberships)
-        .values(input.memberships.map((m) => ({ tenantId: ctx.tenantId, userId: user!.id, ...m })));
-      const token = await this.auth.issueToken(
-        tx,
-        ctx.tenantId,
-        user!.id,
-        'invitation',
-        INVITATION_TTL_HOURS,
-      );
+        .values(input.memberships.map((m) => ({ tenantId: ctx.tenantId, userId, ...m })));
+      const token = await this.auth.issueToken(tx, {
+        tenantId: ctx.tenantId,
+        userId,
+        purpose: 'invitation',
+        ttlHours: INVITATION_TTL_HOURS,
+      });
       await this.audit.record(
         tx,
         ctx.tenantId,
         this.audit.fromContext(ctx, {
           action: 'user.invited',
           targetType: 'user',
-          targetId: user!.id,
-          details: { email: input.email, memberships: input.memberships },
+          targetId: userId,
+          details: {
+            email: input.email,
+            existingAccount: !!existingId,
+            memberships: input.memberships,
+          },
         }),
       );
-      return { user: user!, token };
+      const [member] = await tx
+        .select(memberColumns)
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(eq(tenantMembers.userId, userId));
+      return { member: member!, token };
     });
+    const link = `${this.config.PUBLIC_WEB_URL}/accept-invitation?token=${encodeURIComponent(result.token)}`;
     await this.mailer.send({
-      to: user.email,
-      subject: 'You have been invited to WanSurvey',
-      text: `Hello ${user.name},\n\nAccept your invitation within 7 days:\n${this.config.PUBLIC_WEB_URL}/accept-invitation?token=${encodeURIComponent(token)}`,
-      idempotencyKey: `invite:${sha256Hex(token)}`,
+      to: result.member.email,
+      subject: existingId
+        ? 'You have been added to an organisation on WanSurvey'
+        : 'You have been invited to WanSurvey',
+      text: existingId
+        ? `Hello ${result.member.name},\n\nYou have been added to another organisation. Confirm with your existing password within 7 days:\n${link}`
+        : `Hello ${result.member.name},\n\nAccept your invitation within 7 days:\n${link}`,
+      idempotencyKey: `invite:${sha256Hex(result.token)}`,
     });
-    return { ...user, memberships: input.memberships };
+    return { ...result.member, existingAccount: !!existingId, memberships: input.memberships };
   }
 
   async setMemberships(ctx: AuthContext, userId: string, grants: MembershipGrant[]) {
@@ -169,11 +197,12 @@ export class UsersService {
     if (userId === ctx.userId) throw new ForbiddenException('You cannot deactivate yourself');
     await this.database.withTenant(ctx.tenantId, async (tx) => {
       await this.loadTarget(tx, ctx, userId);
-      // The row is kept so historic interviews stay attributable.
+      // Only this organisation's membership ends; the account and its history are kept, so
+      // historic interviews stay attributable and other organisations are unaffected.
       await tx
-        .update(users)
+        .update(tenantMembers)
         .set({ status: 'deactivated', deactivatedAt: new Date() })
-        .where(eq(users.id, userId));
+        .where(eq(tenantMembers.userId, userId));
       await this.revokeSessions(tx, userId);
       await this.audit.record(
         tx,
@@ -206,8 +235,11 @@ export class UsersService {
 
   /** Loads the target's grants and refuses to act on someone who outranks the actor. */
   private async loadTarget(tx: Tx, ctx: AuthContext, userId: string): Promise<MembershipGrant[]> {
-    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId));
-    if (!user) throw new NotFoundException('User not found');
+    const [member] = await tx
+      .select({ id: tenantMembers.id })
+      .from(tenantMembers)
+      .where(eq(tenantMembers.userId, userId));
+    if (!member) throw new NotFoundException('User not found');
     const grants = (await tx.select().from(memberships).where(eq(memberships.userId, userId))).map(
       (g) => ({
         role: g.role as Role,

@@ -48,11 +48,11 @@ Background reading:
    cd apps/api
    set -a; . ./.env; set +a
    pnpm db:migrate
-   pnpm db:seed      # tenant "demo", one user per role, password = SEED_PASSWORD
+   pnpm db:seed      # organisations "demo" and "demo2", one user per role, password = SEED_PASSWORD
    pnpm dev          # http://localhost:3000/health, OpenAPI at /docs
    ```
 
-Seeded accounts use the organisation code `demo`, for example `project.manager@demo.wansurvey.test`. The owner and admin accounts must enrol TOTP on their first login.
+Seeded accounts log in with their e-mail only, for example `project.manager@demo.wansurvey.test`. That account belongs to two organisations, `demo` and `demo2`, and can switch between them. The owner and admin accounts must enrol TOTP on their first login.
 
 ## Checks
 

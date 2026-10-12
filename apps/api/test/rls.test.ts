@@ -32,11 +32,36 @@ describe('tenant isolation (Postgres RLS)', () => {
     }) as Promise<T>;
 
   it('sees only rows of the current tenant', async () => {
-    for (const table of ['users', 'projects', 'memberships', 'tenants']) {
+    for (const table of ['tenant_members', 'projects', 'memberships', 'tenants']) {
       const rows = await asTenant(a.id, (sql) => sql`select * from ${sql(table)}`);
       expect(rows.length).toBeGreaterThan(0);
       for (const r of rows) expect(r.tenant_id ?? r.id).toBe(a.id);
     }
+  });
+
+  it('global accounts are visible only to organisations they belong to, or to themselves', async () => {
+    const onlyB = await createUser(t.admin, b.id, [{ role: 'interviewer' }]);
+    const both = await createUser(t.admin, a.id, [{ role: 'interviewer' }]);
+    await createUser(t.admin, b.id, [{ role: 'interviewer' }], { existing: both });
+    const idsInA = (await asTenant(a.id, (sql) => sql`select id from users`)).map((r) => r.id);
+    expect(idsInA).toContain(both.id);
+    expect(idsInA).not.toContain(onlyB.id);
+    // With no organisation, a person still sees their own account.
+    const self = await appSql.begin(async (sql) => {
+      await sql`select set_config('app.user_id', ${onlyB.id}, true)`;
+      return sql`select id from users`;
+    });
+    expect(self.map((r) => r.id)).toEqual([onlyB.id]);
+  });
+
+  it('an organisation cannot change a shared account', async () => {
+    const both = await createUser(t.admin, a.id, [{ role: 'interviewer' }]);
+    await createUser(t.admin, b.id, [{ role: 'interviewer' }], { existing: both });
+    const updated = await asTenant(
+      a.id,
+      (sql) => sql`update users set password_hash = 'x' where id = ${both.id} returning id`,
+    );
+    expect(updated).toHaveLength(0);
   });
 
   it('sees nothing without a tenant context', async () => {

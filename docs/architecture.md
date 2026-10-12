@@ -6,7 +6,8 @@ packages/schema    Zod contracts shared by every client and the API (questionnai
 packages/logic     Pure TypeScript. No DOM or Node APIs (enforced by lint). Parser, evaluator,
                    type checker, piping, static analyzer, compiler and routing engine
 packages/renderer  (slice 3) React components that render a questionnaire per mode and device
-apps/api           NestJS API: auth, tenants, users and roles, projects, audit. Later: cases,
+apps/api           NestJS API: auth (global accounts, several organisations each), tenants,
+                   users and roles, projects, audit. Later: cases,
                    interviews, sync
 apps/web           (slice 3+) Staff app plus a lightweight respondent (CAWI) bundle; PWA for CAPI
 apps/worker        (slice 9+) BullMQ jobs: e-mail, reminders, exports, stats aggregation
