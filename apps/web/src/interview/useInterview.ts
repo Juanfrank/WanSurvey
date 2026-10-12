@@ -439,10 +439,13 @@ export function useInterview(id: string) {
     if (payload?.settings?.capi?.gps === 'start_end' && payload.interview.mode === 'CAPI')
       record([paradata('gps', { when: 'end', ...(await position()) })]);
     await r.writes;
-    for (let i = 0; i < 3; i++) {
+    const offline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+    // Everything must be acknowledged first; a send already under way is waited for.
+    for (let i = 0; i < 20 && !offline(); i++) {
       await sync({ force: true });
-      const local = await r.store.get(id);
-      if (local && local.seq <= local.acked && !local.start) break;
+      const now = await r.store.get(id);
+      if (now && now.seq <= now.acked && !now.start) break;
+      await new Promise((ok) => setTimeout(ok, 250));
     }
     const local = await r.store.get(id);
     const body = { seq: local?.seq ?? 0, path: r.session.pathKeys() };
@@ -453,7 +456,10 @@ export function useInterview(id: string) {
         await r.store.patchCase(local.meta.caseId, { status: 'queued', disposition });
       return { status: 'queued', disposition };
     };
-    if (local?.start || (local && local.seq > local.acked)) return queue();
+    // Only interviews on this device can wait to be sent by its next sync (D2).
+    const canQueue = !!local?.meta;
+    const unsent = !!local && (!!local.start || local.seq > local.acked);
+    if (canQueue && (offline() || unsent)) return queue();
     try {
       const res = await api<{ status: string; disposition: string }>(`/interviews/${id}/submit`, {
         method: 'POST',
@@ -467,7 +473,7 @@ export function useInterview(id: string) {
         });
       return res;
     } catch (e) {
-      if (isOffline(e)) return queue();
+      if (canQueue && isOffline(e)) return queue();
       throw e;
     }
   }, [id, sync, payload, record, paradata]);
