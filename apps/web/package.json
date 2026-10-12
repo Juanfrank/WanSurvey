@@ -1,0 +1,6 @@
+{
+  "name": "@wansurvey/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Staff and respondent web app (React + Vite). Planned for slice 3+."
+}

@@ -1,0 +1,6 @@
+{
+  "name": "@wansurvey/renderer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "React questionnaire renderer per mode/device. Planned for slice 3."
+}

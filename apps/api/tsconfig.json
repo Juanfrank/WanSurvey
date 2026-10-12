@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "isolatedModules": false,
+    "rootDir": ".",
+    "outDir": "dist"
+  },
+  "include": ["src", "test", "drizzle.config.ts", "vitest.config.ts"]
+}

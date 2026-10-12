@@ -1,0 +1,132 @@
+import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
+import { z } from 'zod';
+import { AllowPendingMfa, Auth, Public, type AuthContext } from '../common/auth-context.js';
+import { clearSessionCookies, setSessionCookies } from '../common/cookies.js';
+import { ZodPipe } from '../common/zod.js';
+import { CONFIG, loadConfig, type AppConfig } from '../config.js';
+import { AuthService, MIN_PASSWORD_LENGTH, type ClientInfo } from './auth.service.js';
+
+const LoginBody = z.object({
+  tenant: z.string().min(1).max(64),
+  email: z.string().email().max(254),
+  password: z.string().min(1).max(512),
+});
+const CodeBody = z.object({ code: z.string().regex(/^\d{6}$/) });
+const Password = z
+  .string()
+  .min(MIN_PASSWORD_LENGTH, `At least ${MIN_PASSWORD_LENGTH} characters`)
+  .max(512);
+const TokenPasswordBody = z.object({ token: z.string().min(20).max(512), password: Password });
+const ForgotBody = z.object({
+  tenant: z.string().min(1).max(64),
+  email: z.string().email().max(254),
+});
+
+const authLimit = { default: { limit: () => loadConfig().LOGIN_RATE_LIMIT, ttl: 60_000 } };
+
+function client(req: Request): ClientInfo {
+  return { ip: req.ip ?? null, userAgent: req.headers['user-agent'] ?? null };
+}
+
+@ApiTags('auth')
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private readonly auth: AuthService,
+    @Inject(CONFIG) private readonly config: AppConfig,
+  ) {}
+
+  @Public()
+  @Throttle(authLimit)
+  @Post('login')
+  @HttpCode(200)
+  @ApiBody({ schema: z.toJSONSchema(LoginBody) as object })
+  async login(
+    @Body(new ZodPipe(LoginBody)) body: z.infer<typeof LoginBody>,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.auth.login(body, client(req));
+    setSessionCookies(res, this.config, result.cookie, result.csrfToken);
+    return { mfaState: result.mfaState, csrfToken: result.csrfToken };
+  }
+
+  @AllowPendingMfa()
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@Auth() ctx: AuthContext, @Res({ passthrough: true }) res: Response) {
+    await this.auth.logout(ctx);
+    clearSessionCookies(res);
+  }
+
+  @AllowPendingMfa()
+  @Get('me')
+  me(@Auth() ctx: AuthContext) {
+    return this.auth.me(ctx);
+  }
+
+  @AllowPendingMfa()
+  @Post('2fa/setup')
+  @HttpCode(200)
+  setup2fa(@Auth() ctx: AuthContext) {
+    return this.auth.setupTotp(ctx);
+  }
+
+  @AllowPendingMfa()
+  @Throttle(authLimit)
+  @Post('2fa/enable')
+  @HttpCode(204)
+  async enable2fa(
+    @Auth() ctx: AuthContext,
+    @Body(new ZodPipe(CodeBody)) body: z.infer<typeof CodeBody>,
+  ) {
+    await this.auth.enableTotp(ctx, body.code);
+  }
+
+  @AllowPendingMfa()
+  @Throttle(authLimit)
+  @Post('2fa/verify')
+  @HttpCode(204)
+  async verify2fa(
+    @Auth() ctx: AuthContext,
+    @Body(new ZodPipe(CodeBody)) body: z.infer<typeof CodeBody>,
+  ) {
+    await this.auth.verifyTotp(ctx, body.code);
+  }
+
+  @Public()
+  @Throttle(authLimit)
+  @Post('invitations/accept')
+  @HttpCode(204)
+  async acceptInvitation(
+    @Body(new ZodPipe(TokenPasswordBody)) body: z.infer<typeof TokenPasswordBody>,
+    @Req() req: Request,
+  ) {
+    await this.auth.acceptInvitation(body, client(req));
+  }
+
+  @Public()
+  @Throttle(authLimit)
+  @Post('password/forgot')
+  @HttpCode(204)
+  async forgot(
+    @Body(new ZodPipe(ForgotBody)) body: z.infer<typeof ForgotBody>,
+    @Req() req: Request,
+  ) {
+    await this.auth.forgotPassword(body, client(req));
+  }
+
+  @Public()
+  @Throttle(authLimit)
+  @Post('password/reset')
+  @HttpCode(204)
+  async reset(
+    @Body(new ZodPipe(TokenPasswordBody)) body: z.infer<typeof TokenPasswordBody>,
+    @Req() req: Request,
+  ) {
+    await this.auth.resetPassword(body, client(req));
+  }
+}

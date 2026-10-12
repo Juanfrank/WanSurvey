@@ -1,0 +1,109 @@
+import type { INestApplication } from '@nestjs/common';
+import type { Role } from '@wansurvey/schema';
+import postgres from 'postgres';
+import request from 'supertest';
+import { uuidv7 } from 'uuidv7';
+import { createApp } from '../src/app.js';
+import { hashPassword } from '../src/auth/auth.service.js';
+import { encryptField, generateTotpSecret, totp } from '../src/common/crypto.js';
+import { MemoryMailer } from '../src/mail/mailer.js';
+
+export const PASSWORD = 'correct horse battery';
+let passwordHash: Promise<string> | null = null;
+
+export interface TestApp {
+  app: INestApplication;
+  mailer: MemoryMailer;
+  /** Superuser connection for fixtures (bypasses RLS). */
+  admin: postgres.Sql;
+  close(): Promise<void>;
+}
+
+export async function bootstrap(): Promise<TestApp> {
+  const mailer = new MemoryMailer();
+  const app = await createApp({ mailer });
+  await app.init();
+  const admin = postgres(process.env.DATABASE_ADMIN_URL!, { max: 2, onnotice: () => {} });
+  return {
+    app,
+    mailer,
+    admin,
+    async close() {
+      await app.close();
+      await admin.end();
+    },
+  };
+}
+
+let counter = 0;
+export function unique(prefix: string) {
+  counter++;
+  return `${prefix}-${Date.now().toString(36)}-${counter}`;
+}
+
+export async function createTenant(admin: postgres.Sql, slug = unique('t')) {
+  const id = uuidv7();
+  await admin`insert into tenants (id, name, slug) values (${id}, ${slug}, ${slug})`;
+  return { id, slug };
+}
+
+export async function createProject(admin: postgres.Sql, tenantId: string, code = unique('P')) {
+  const id = uuidv7();
+  await admin`insert into projects (id, tenant_id, name, code) values (${id}, ${tenantId}, ${code}, ${code})`;
+  return id;
+}
+
+export interface TestUser {
+  id: string;
+  email: string;
+  totpSecret: string | null;
+}
+
+/** Creates an active user; owners/admins get TOTP enrolled (as the policy requires). */
+export async function createUser(
+  admin: postgres.Sql,
+  tenantId: string,
+  grants: { role: Role; projectId?: string | null }[],
+  opts: { email?: string; totp?: boolean; status?: string } = {},
+): Promise<TestUser> {
+  const id = uuidv7();
+  const email = opts.email ?? `${unique('u')}@example.org`;
+  const needsTotp = opts.totp ?? grants.some((g) => g.role === 'owner' || g.role === 'admin');
+  const secret = needsTotp ? generateTotpSecret() : null;
+  const enc = secret ? encryptField(secret, process.env.APP_ENCRYPTION_KEY!) : null;
+  await admin`
+    insert into users (id, tenant_id, email, name, status, password_hash, totp_secret_enc, totp_enabled)
+    values (${id}, ${tenantId}, ${email}, ${email}, ${opts.status ?? 'active'}, ${await (passwordHash ??= hashPassword(PASSWORD))}, ${enc}, ${needsTotp})`;
+  for (const g of grants) {
+    await admin`insert into memberships (id, tenant_id, user_id, role, project_id) values (${uuidv7()}, ${tenantId}, ${id}, ${g.role}, ${g.projectId ?? null})`;
+  }
+  return { id, email, totpSecret: secret };
+}
+
+export interface Session {
+  agent: ReturnType<typeof request.agent>;
+  csrf: string;
+}
+
+/** Logs in through the API (including the TOTP step when enrolled). */
+export async function login(
+  app: INestApplication,
+  tenantSlug: string,
+  user: TestUser,
+): Promise<Session> {
+  const agent = request.agent(app.getHttpServer());
+  const res = await agent
+    .post('/api/v1/auth/login')
+    .send({ tenant: tenantSlug, email: user.email, password: PASSWORD });
+  if (res.status !== 200)
+    throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
+  const csrf = res.body.csrfToken as string;
+  if (res.body.mfaState === 'pending') {
+    const v = await agent
+      .post('/api/v1/auth/2fa/verify')
+      .set('x-csrf-token', csrf)
+      .send({ code: totp(user.totpSecret!) });
+    if (v.status !== 204) throw new Error(`2fa failed: ${v.status} ${JSON.stringify(v.body)}`);
+  }
+  return { agent, csrf };
+}
