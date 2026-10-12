@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { uuidv7 } from 'uuidv7';
 import { ROLES, roleHasPermission, type Permission, type Role } from '@wansurvey/schema';
 import { resetConfigCache } from '../src/config.js';
 import {
   bootstrap,
   createProject,
+  createQuestionnaire,
   createTenant,
   createUser,
   login,
@@ -13,10 +15,21 @@ import {
   type TestApp,
 } from './harness.js';
 
+interface Ids {
+  project: string;
+  target: string;
+  /** A questionnaire of `project` with v1 published and its draft unchanged. */
+  questionnaire: string;
+  /** A fresh questionnaire for calls that change it. */
+  fresh(opts?: { publish?: boolean }): Promise<string>;
+  /** Adds a scenario to a questionnaire and returns its id. */
+  scenario(questionnaireId: string): Promise<string>;
+}
+
 interface Endpoint {
   name: string;
   permission: Permission;
-  call(s: Session, ids: { project: string; target: string }): request.Test;
+  call(s: Session, ids: Ids): request.Test | Promise<request.Response>;
 }
 
 /** Every protected endpoint with the permission it requires. */
@@ -108,6 +121,101 @@ const ENDPOINTS: Endpoint[] = [
     permission: 'audit.read',
     call: (s) => s.agent.get('/api/v1/audit-log'),
   },
+  {
+    name: 'GET questionnaires',
+    permission: 'questionnaires.read',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/questionnaires`),
+  },
+  {
+    name: 'POST questionnaires',
+    permission: 'questionnaires.edit',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/questionnaires`)
+        .set('x-csrf-token', s.csrf)
+        .send({ name: 'New' }),
+  },
+  {
+    name: 'GET questionnaire',
+    permission: 'questionnaires.read',
+    call: (s, ids) =>
+      s.agent.get(`/api/v1/projects/${ids.project}/questionnaires/${ids.questionnaire}`),
+  },
+  {
+    name: 'PUT questionnaire draft',
+    permission: 'questionnaires.edit',
+    call: async (s, ids) =>
+      s.agent
+        .put(`/api/v1/projects/${ids.project}/questionnaires/${await ids.fresh()}/draft`)
+        .set('x-csrf-token', s.csrf)
+        .send({ definition: { id: 'X' }, baseRevision: 1 }),
+  },
+  {
+    name: 'GET questionnaire versions',
+    permission: 'questionnaires.read',
+    call: (s, ids) =>
+      s.agent.get(`/api/v1/projects/${ids.project}/questionnaires/${ids.questionnaire}/versions`),
+  },
+  {
+    name: 'GET questionnaire version',
+    permission: 'questionnaires.read',
+    call: (s, ids) =>
+      s.agent.get(`/api/v1/projects/${ids.project}/questionnaires/${ids.questionnaire}/versions/1`),
+  },
+  {
+    name: 'POST publish-check',
+    permission: 'questionnaires.publish',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/questionnaires/${ids.questionnaire}/publish-check`)
+        .set('x-csrf-token', s.csrf)
+        .send({}),
+  },
+  {
+    name: 'POST publish',
+    permission: 'questionnaires.publish',
+    call: async (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/questionnaires/${await ids.fresh()}/publish`)
+        .set('x-csrf-token', s.csrf)
+        .send({ baseRevision: 1 }),
+  },
+  {
+    name: 'POST retire version',
+    permission: 'questionnaires.publish',
+    call: async (s, ids) =>
+      s.agent
+        .post(
+          `/api/v1/projects/${ids.project}/questionnaires/${await ids.fresh({ publish: true })}/versions/1/retire`,
+        )
+        .set('x-csrf-token', s.csrf),
+  },
+  {
+    name: 'GET scenarios',
+    permission: 'questionnaires.read',
+    call: (s, ids) =>
+      s.agent.get(`/api/v1/projects/${ids.project}/questionnaires/${ids.questionnaire}/scenarios`),
+  },
+  {
+    name: 'PUT scenario',
+    permission: 'questionnaires.edit',
+    call: (s, ids) =>
+      s.agent
+        .put(`/api/v1/projects/${ids.project}/questionnaires/${ids.questionnaire}/scenarios`)
+        .set('x-csrf-token', s.csrf)
+        .send({ scenario: { name: 'rbac', mode: 'CATI', steps: [] } }),
+  },
+  {
+    name: 'DELETE scenario',
+    permission: 'questionnaires.edit',
+    call: async (s, ids) => {
+      const qid = await ids.fresh();
+      const sid = await ids.scenario(qid);
+      return s.agent
+        .delete(`/api/v1/projects/${ids.project}/questionnaires/${qid}/scenarios/${sid}`)
+        .set('x-csrf-token', s.csrf);
+    },
+  },
 ];
 
 describe('role-based access control', () => {
@@ -115,6 +223,7 @@ describe('role-based access control', () => {
   let tenant: { id: string; slug: string };
   let project: string;
   let otherProject: string;
+  let questionnaire: string;
   const sessions = new Map<Role, Session>();
 
   beforeAll(async () => {
@@ -122,6 +231,7 @@ describe('role-based access control', () => {
     tenant = await createTenant(t.admin);
     project = await createProject(t.admin, tenant.id);
     otherProject = await createProject(t.admin, tenant.id);
+    questionnaire = await createQuestionnaire(t.admin, tenant.id, project, { publish: true });
     for (const role of ROLES) {
       const user = await createUser(t.admin, tenant.id, [{ role }]);
       sessions.set(role, await login(t.app, user));
@@ -129,11 +239,24 @@ describe('role-based access control', () => {
   });
   afterAll(() => t.close());
 
+  const ids = (target: string): Ids => ({
+    project,
+    target,
+    questionnaire,
+    fresh: (opts) => createQuestionnaire(t.admin, tenant.id, project, opts),
+    async scenario(qid) {
+      const sid = uuidv7();
+      await t.admin`insert into questionnaire_scenarios (id, tenant_id, questionnaire_id, name, scenario)
+                    values (${sid}, ${tenant.id}, ${qid}, 'x', ${t.admin.json({ name: 'x', mode: 'CATI', steps: [] })})`;
+      return sid;
+    },
+  });
+
   const cases = ROLES.flatMap((role) => ENDPOINTS.map((e) => ({ role, endpoint: e })));
 
   it.each(cases)('$role → $endpoint.name', async ({ role, endpoint }) => {
     const target = await createUser(t.admin, tenant.id, [{ role: 'client_viewer' }]);
-    const res = await endpoint.call(sessions.get(role)!, { project, target: target.id });
+    const res = await endpoint.call(sessions.get(role)!, ids(target.id));
     if (roleHasPermission(role, endpoint.permission)) {
       expect(res.status, JSON.stringify(res.body)).toBeLessThan(400);
     } else {
@@ -145,7 +268,7 @@ describe('role-based access control', () => {
   it('every endpoint requires a session', async () => {
     const anon = { agent: request.agent(t.app.getHttpServer()), csrf: 'x' } as unknown as Session;
     for (const e of ENDPOINTS) {
-      const res = await e.call(anon, { project, target: project });
+      const res = await e.call(anon, ids(project));
       expect(res.status, e.name).toBe(401);
     }
   });

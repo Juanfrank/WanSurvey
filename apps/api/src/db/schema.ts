@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -223,6 +224,69 @@ export const userIdentities = pgTable(
   ],
 );
 
+/**
+ * A questionnaire of a project. Holds the working draft (saved even when invalid, with a revision
+ * number for optimistic locking); published versions live in `questionnaire_versions`.
+ */
+export const questionnaires = pgTable(
+  'questionnaires',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    name: text('name').notNull(),
+    draft: jsonb('draft').notNull(),
+    draftRevision: integer('draft_revision').notNull().default(1),
+    updatedBy: uuid('updated_by'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('questionnaires_project_idx').on(t.tenantId, t.projectId)],
+);
+
+/** Published versions: immutable except for retiring (enforced by trigger). */
+export const questionnaireVersions = pgTable(
+  'questionnaire_versions',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    questionnaireId: uuid('questionnaire_id')
+      .notNull()
+      .references(() => questionnaires.id),
+    version: integer('version').notNull(),
+    /** published | retired */
+    status: text('status').notNull().default('published'),
+    definition: jsonb('definition').notNull(),
+    compiled: jsonb('compiled').notNull(),
+    hash: text('hash').notNull(),
+    /** Breaking-change mapping from the previous version, when there was one. */
+    mapping: jsonb('mapping'),
+    publishedBy: uuid('published_by'),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('questionnaire_versions_uq').on(t.questionnaireId, t.version)],
+);
+
+/** Regression scenarios saved from the designer's test mode; all must pass to publish. */
+export const questionnaireScenarios = pgTable(
+  'questionnaire_scenarios',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    questionnaireId: uuid('questionnaire_id')
+      .notNull()
+      .references(() => questionnaires.id),
+    name: text('name').notNull(),
+    scenario: jsonb('scenario').notNull(),
+    createdBy: uuid('created_by'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('questionnaire_scenarios_name_uq').on(t.questionnaireId, t.name)],
+);
+
 /** Immutable audit trail (UPDATE/DELETE are blocked by trigger and privileges). */
 export const auditLog = pgTable(
   'audit_log',
@@ -251,5 +315,8 @@ export const TENANT_TABLES = [
   'memberships',
   'sessions',
   'tenant_sso',
+  'questionnaires',
+  'questionnaire_versions',
+  'questionnaire_scenarios',
   'audit_log',
 ] as const;

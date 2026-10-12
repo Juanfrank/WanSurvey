@@ -56,6 +56,9 @@ importers:
       '@node-rs/argon2':
         specifier: ^2.0.2
         version: 2.2.2
+      '@wansurvey/fixtures':
+        specifier: workspace:*
+        version: link:../../packages/fixtures
       '@wansurvey/logic':
         specifier: workspace:*
         version: link:../../packages/logic

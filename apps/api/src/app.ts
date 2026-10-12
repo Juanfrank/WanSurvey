@@ -11,7 +11,11 @@ import { AppModule, type AppModuleOptions } from './app.module.js';
 export async function createApp(opts: AppModuleOptions = {}): Promise<INestApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(opts), {
     bufferLogs: true,
+    bodyParser: false,
   });
+  // Questionnaire definitions can be large; everything else is small.
+  app.useBodyParser('json', { limit: '5mb' });
+  app.useBodyParser('urlencoded', { extended: false, limit: '100kb' });
   app.useLogger(app.get(Logger));
   app.set('trust proxy', 1);
   app.disable('x-powered-by');

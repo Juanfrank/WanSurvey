@@ -20,6 +20,7 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.4.0",
     "@node-rs/argon2": "^2.0.2",
+    "@wansurvey/fixtures": "workspace:*",
     "@wansurvey/logic": "workspace:*",
     "@wansurvey/schema": "workspace:*",
     "cookie-parser": "^1.4.7",

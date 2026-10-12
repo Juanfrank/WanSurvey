@@ -25,7 +25,13 @@ export type AuditAction =
   | 'user.forced_logout'
   | 'tenant.updated'
   | 'project.created'
-  | 'project.updated';
+  | 'project.updated'
+  | 'questionnaire.created'
+  | 'questionnaire.draft_saved'
+  | 'questionnaire.published'
+  | 'questionnaire.version_retired'
+  | 'questionnaire.scenario_saved'
+  | 'questionnaire.scenario_deleted';
 
 export interface AuditEntry {
   action: AuditAction;

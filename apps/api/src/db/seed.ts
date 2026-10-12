@@ -1,5 +1,7 @@
 import { pathToFileURL } from 'node:url';
-import { ROLES } from '@wansurvey/schema';
+import { household } from '@wansurvey/fixtures';
+import { compile } from '@wansurvey/logic';
+import { Questionnaire, ROLES } from '@wansurvey/schema';
 import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
@@ -7,6 +9,7 @@ import { hashPassword } from '../auth/auth.service.js';
 /**
  * Demo organisation "demo" with one user per role (password from SEED_PASSWORD) and a second
  * organisation "demo2" that the project manager also belongs to.
+ * The demo project has the household questionnaire, published as version 1.
  * Owners and admins enrol TOTP on first login. Idempotent: does nothing if the tenant exists.
  */
 export async function seed(adminUrl: string, password: string): Promise<void> {
@@ -31,6 +34,18 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
       await tx`
         insert into projects (id, tenant_id, name, code, status)
         values (${uuidv7()}, ${otherTenantId}, 'Business Panel', 'BIZ', 'active')`;
+      const questionnaireId = uuidv7();
+      const definition = Questionnaire.parse(household);
+      const compiled = compile(definition);
+      await tx`
+        insert into questionnaires (id, tenant_id, project_id, name, draft)
+        values (${questionnaireId}, ${tenantId}, ${projectId}, 'Household questionnaire',
+                ${tx.json(definition as never)})`;
+      await tx`
+        insert into questionnaire_versions
+          (id, tenant_id, questionnaire_id, version, definition, compiled, hash)
+        values (${uuidv7()}, ${tenantId}, ${questionnaireId}, 1, ${tx.json(definition as never)},
+                ${tx.json(compiled as never)}, ${compiled.hash})`;
       for (const role of ROLES) {
         const userId = uuidv7();
         const email = `${role.replace('_', '.')}@demo.wansurvey.test`;

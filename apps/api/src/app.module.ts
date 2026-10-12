@@ -14,6 +14,7 @@ import { Database } from './db/database.js';
 import { HealthController } from './health/health.controller.js';
 import { ConsoleMailer, MAILER, MemoryMailer, type Mailer } from './mail/mailer.js';
 import { ProjectsController } from './projects/projects.controller.js';
+import { QuestionnairesController } from './questionnaires/questionnaires.controller.js';
 import { TenantsController } from './tenants/tenants.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
@@ -49,6 +50,7 @@ export class AppModule {
         UsersController,
         TenantsController,
         ProjectsController,
+        QuestionnairesController,
         AuditController,
       ],
       providers: [

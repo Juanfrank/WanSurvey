@@ -1,5 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
-import type { Role } from '@wansurvey/schema';
+import { household } from '@wansurvey/fixtures';
+import { compile } from '@wansurvey/logic';
+import { Questionnaire, type Role } from '@wansurvey/schema';
 import postgres from 'postgres';
 import request from 'supertest';
 import { uuidv7 } from 'uuidv7';
@@ -117,4 +119,23 @@ export async function login(
     if (v.status !== 204) throw new Error(`2fa failed: ${v.status} ${JSON.stringify(v.body)}`);
   }
   return { agent, csrf, tenantId: res.body.tenant.id as string };
+}
+
+/** Inserts a questionnaire (the household sample by default), optionally published as v1. */
+export async function createQuestionnaire(
+  admin: postgres.Sql,
+  tenantId: string,
+  projectId: string,
+  opts: { publish?: boolean; definition?: unknown } = {},
+): Promise<string> {
+  const id = uuidv7();
+  const definition = (opts.definition ?? household) as Record<string, unknown>;
+  await admin`insert into questionnaires (id, tenant_id, project_id, name, draft)
+              values (${id}, ${tenantId}, ${projectId}, ${'Q ' + id.slice(-6)}, ${admin.json(definition as never)})`;
+  if (opts.publish) {
+    const compiled = compile(definition as never);
+    await admin`insert into questionnaire_versions (id, tenant_id, questionnaire_id, version, definition, compiled, hash)
+                values (${uuidv7()}, ${tenantId}, ${id}, 1, ${admin.json(Questionnaire.parse(definition) as never)}, ${admin.json(compiled as never)}, ${compiled.hash})`;
+  }
+  return id;
 }
