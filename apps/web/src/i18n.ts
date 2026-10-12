@@ -267,7 +267,8 @@ const es: Catalogue = {
   ...messagesEs,
 };
 
-export function initI18n(lng = 'en') {
+/** The interface is in Spanish unless the person picks another language (remembered). */
+export function initI18n(lng = 'es') {
   const saved = (() => {
     try {
       return localStorage.getItem('ws.lang');
@@ -275,9 +276,10 @@ export function initI18n(lng = 'en') {
       return null;
     }
   })();
+  if (typeof document !== 'undefined') document.documentElement.lang = saved ?? lng;
   return i18next.use(initReactI18next).init({
     lng: saved ?? lng,
-    fallbackLng: 'en',
+    fallbackLng: 'es',
     supportedLngs: LANGUAGES.map((l) => l.code),
     defaultNS: 'app',
     ns: ['app', 'renderer'],

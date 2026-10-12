@@ -1,5 +1,5 @@
 import type { LocalizedText } from '@wansurvey/schema';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 /** Input look without a width, for inline controls. */
@@ -232,6 +232,18 @@ export function SelectField<T extends string>({
 }
 
 /** One input per questionnaire language. Empty languages are dropped unless `keepEmpty`. */
+/**
+ * The questionnaire language being edited. Questionnaire texts are edited one language at a
+ * time: Spanish by default, and any added language through the switcher.
+ */
+export const EditingLanguageContext = createContext<string | null>(null);
+
+/** Of these languages, the one being edited (or all, outside the designer). */
+export function useShownLanguages(languages: string[]): string[] {
+  const lang = useContext(EditingLanguageContext);
+  return lang && languages.includes(lang) ? [lang] : languages;
+}
+
 export function LocalizedField({
   label,
   value,
@@ -260,15 +272,19 @@ export function LocalizedField({
     else next[lang] = text;
     onChange(Object.keys(next).length ? next : undefined);
   };
-  const missing = keepEmpty ? languages.filter((l) => !(value?.[l] ?? '').trim()) : [];
+  const shown = useShownLanguages(languages);
+  // Texts still missing in the other languages (the one shown is visibly empty anyway).
+  const missing = keepEmpty
+    ? languages.filter((l) => !shown.includes(l) && !(value?.[l] ?? '').trim())
+    : [];
   return (
     <fieldset
       className="flex min-w-0 flex-col gap-1"
       aria-describedby={hint ? `${id}-hint` : undefined}
     >
       <legend className="text-sm font-medium text-slate-700">{label}</legend>
-      <div className={`grid gap-2 ${languages.length > 1 ? 'sm:grid-cols-2' : ''}`}>
-        {languages.map((lang) => {
+      <div className={`grid gap-2 ${shown.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+        {shown.map((lang) => {
           const props = {
             id: `${id}-${lang}`,
             className: inputCls,
@@ -291,7 +307,7 @@ export function LocalizedField({
         })}
       </div>
       {hint ? <Hint id={`${id}-hint`}>{hint}</Hint> : null}
-      {missing.length && missing.length < languages.length ? (
+      {missing.length && (value?.[shown[0]!] ?? '').trim() ? (
         <Hint>{t('designer.missingTranslation', { langs: missing.join(', ') })}</Hint>
       ) : null}
     </fieldset>

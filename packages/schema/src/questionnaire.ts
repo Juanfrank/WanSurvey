@@ -41,9 +41,9 @@ export const SpecialCodes = z.strictObject({
 export type SpecialCodes = z.infer<typeof SpecialCodes>;
 
 export const DEFAULT_SPECIAL_CODES: SpecialCodes = {
-  DK: { code: -8, label: { en: "Don't know" }, offeredIn: ['CATI', 'CAPI', 'PAPI'] },
-  RF: { code: -9, label: { en: 'Refused' }, offeredIn: ['CATI', 'CAPI', 'PAPI'] },
-  NA: { code: -7, label: { en: 'Not applicable' }, offeredIn: [] },
+  DK: { code: -8, label: { es: 'No sabe' }, offeredIn: ['CATI', 'CAPI', 'PAPI'] },
+  RF: { code: -9, label: { es: 'No responde' }, offeredIn: ['CATI', 'CAPI', 'PAPI'] },
+  NA: { code: -7, label: { es: 'No aplica' }, offeredIn: [] },
 };
 
 // ---------------------------------------------------------------------------

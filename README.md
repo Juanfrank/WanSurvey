@@ -24,6 +24,8 @@ Background reading:
 - [`docs/decisions.md`](docs/decisions.md): assumptions taken where the spec was ambiguous
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
 
+Questionnaires are written and conducted in Spanish; other languages can be added and are edited one at a time. The interface is in Spanish by default, with English available.
+
 ## Requirements
 
 - Node 22

@@ -63,17 +63,13 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await addWithKeyboard(page, 0); // Single choice, inside the section
   await expect(outlineItem(page, 'Q1')).toBeFocused();
   await rename(page, 'WORK');
-  await page.getByLabel('Question wording (en)').fill('Do you work?');
   await page.getByLabel('Question wording (es)').fill('¿Trabaja?');
-  await page.getByLabel('Label of option 1 (en)').fill('Yes');
   await page.getByLabel('Label of option 1 (es)').fill('Sí');
-  await page.getByLabel('Label of option 2 (en)').fill('No');
   await page.getByLabel('Label of option 2 (es)').fill('No');
 
   await outlineItem(page, 'WORK').focus();
   await addWithKeyboard(page, 2); // Number
   await rename(page, 'HOURS');
-  await page.getByLabel('Question wording (en)').fill('How many hours a week?');
   await page.getByLabel('Question wording (es)').fill('¿Cuántas horas por semana?');
 
   // Skip HOURS when WORK is No, built with the condition rows.
@@ -181,17 +177,34 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await outlineItem(page, 'WORK').click();
   await expect(page.getByLabel('Question wording (es)')).toHaveValue('¿Trabaja usted?');
   await saved(page);
+
+  // Another language is added as such and edited on its own, one language at a time.
+  await page.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  const newLang = page.getByLabel('Add language');
+  await newLang.fill('en');
+  await newLang.locator('xpath=following::button[1]').click();
+  await page.getByLabel('Questionnaire language').selectOption('en');
+  await outlineItem(page, 'WORK').click();
+  await expect(page.getByLabel('Question wording (es)')).toHaveCount(0);
+  await page.getByLabel('Question wording (en)').fill('Do you work?');
+  await page.getByLabel('Label of option 1 (en)').fill('Yes');
+  await expect(page.getByLabel('Label of option 1 (es)')).toHaveCount(0);
+  await shot(page, 'designer-second-language');
+  await page.getByLabel('Questionnaire language').selectOption('es');
+  await expect(page.getByLabel('Question wording (es)')).toHaveValue('¿Trabaja usted?');
+  // The section title has no English yet: the Spanish view says so.
+  await outlineItem(page, 'SEC_A').click();
+  await expect(page.getByText('Missing translation: en').first()).toBeVisible();
+  await saved(page);
 });
 
 test('a failing saved scenario blocks publishing', async ({ page }) => {
   await newQuestionnaire(page, 'Scenario guard');
   await outlineItem(page, 'SEC_A').focus();
   await addWithKeyboard(page, 10); // Yes / No
-  await page.getByLabel('Question wording (en)').fill('Adult?');
   await page.getByLabel('Question wording (es)').fill('¿Adulto?');
   await outlineItem(page, 'Q1').focus();
   await addWithKeyboard(page, 3); // Text
-  await page.getByLabel('Question wording (en)').fill('Name?');
   await page.getByLabel('Question wording (es)').fill('¿Nombre?');
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Add condition' }).first().click();
@@ -236,15 +249,17 @@ test('two editors: edits to different parts merge; the same edit asks which to k
 
   // B retitles the questionnaire while A retitles the section: both survive.
   await b.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
-  await b.getByLabel('Title (en)').fill('Shared title from B');
+  await b.getByLabel('Title (es)').fill('Título compartido de B');
   await outlineItem(a, 'SEC_A').click();
-  await a.getByLabel('Title (en)').fill('Section from A');
+  await a.getByLabel('Title (es)').fill('Sección de A');
   await saved(b);
   await saved(a);
   await a.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
-  await expect(a.getByLabel('Title (en)')).toHaveValue('Shared title from B', { timeout: 15_000 });
+  await expect(a.getByLabel('Title (es)')).toHaveValue('Título compartido de B', {
+    timeout: 15_000,
+  });
   await outlineItem(b, 'SEC_A').click();
-  await expect(b.getByLabel('Title (en)')).toHaveValue('Section from A', { timeout: 15_000 });
+  await expect(b.getByLabel('Title (es)')).toHaveValue('Sección de A', { timeout: 15_000 });
   await expect(a.getByRole('dialog')).toHaveCount(0);
   await shot(a, 'designer-merged');
 
@@ -279,7 +294,7 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await outlineItem(pm, 'SEC_A').focus();
   await addWithKeyboard(pm, 0); // Single choice
   await rename(pm, 'CONSENT');
-  await pm.getByLabel('Question wording (en)').fill('Do you agree to take part?');
+  await pm.getByLabel('Question wording (es)').fill('¿Acepta participar?');
   await saved(pm);
 
   // A supervisor opens it: the editor sees them, on the item they look at.
@@ -292,7 +307,7 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await expect(outlineItem(pm, 'CONSENT').getByTestId('presence-marker')).toBeVisible();
 
   // The supervisor cannot edit but can comment.
-  await expect(sup.getByLabel('Question wording (en)')).toBeDisabled();
+  await expect(sup.getByLabel('Question wording (es)')).toBeDisabled();
   const comments = sup.getByTestId('comments');
   await comments.getByLabel('Add a comment').fill('Please add a "Prefer not to say" option.');
   await comments.getByRole('button', { name: 'Comment', exact: true }).click();
@@ -327,7 +342,7 @@ test('reviewers comment, editors see who is here, and items go to and from the l
     .getByRole('button', { name: /Consent question/ })
     .first()
     .click();
-  await expect(lib.getByTestId('library-preview')).toContainText('Do you agree to take part?');
+  await expect(lib.getByTestId('library-preview')).toContainText('¿Acepta participar?');
   await shot(pm, 'designer-library');
   await expectAccessible(pm, 'dialog');
   await lib.getByRole('button', { name: 'Insert Consent question' }).click();

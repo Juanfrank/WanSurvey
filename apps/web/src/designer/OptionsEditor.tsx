@@ -2,7 +2,7 @@ import type { AnswerOption, Code, LocalizedText } from '@wansurvey/schema';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toLiteral } from './ConditionBuilder.js';
-import { inputCls, smallBtn } from './fields.js';
+import { inputCls, smallBtn, useShownLanguages } from './fields.js';
 
 type Row = { code: Code; label: LocalizedText } & Partial<
   Pick<AnswerOption, 'exclusive' | 'otherSpecify' | 'fixedPosition'>
@@ -52,6 +52,7 @@ export function OptionsEditor({
         ?.focus();
     });
   };
+  const shown = useShownLanguages(languages);
   const add = () => {
     onChange([
       ...rows,
@@ -72,7 +73,7 @@ export function OptionsEditor({
               <th scope="col" className="w-20 pb-1 font-medium">
                 {t('designer.opt.code')}
               </th>
-              {languages.map((l) => (
+              {shown.map((l) => (
                 <th key={l} scope="col" className="pb-1 font-medium">
                   {t('designer.opt.label')} ({l})
                 </th>
@@ -110,7 +111,7 @@ export function OptionsEditor({
                     onChange={(e) => set(i, { code: toLiteral(e.target.value) })}
                   />
                 </td>
-                {languages.map((l, li) => (
+                {shown.map((l, li) => (
                   <td key={l} className="py-1 pr-2">
                     <input
                       type="text"
@@ -119,11 +120,7 @@ export function OptionsEditor({
                       value={r.label[l] ?? ''}
                       onChange={(e) => set(i, { label: { ...r.label, [l]: e.target.value } })}
                       onKeyDown={(e) => {
-                        if (
-                          e.key === 'Enter' &&
-                          i === rows.length - 1 &&
-                          li === languages.length - 1
-                        ) {
+                        if (e.key === 'Enter' && i === rows.length - 1 && li === shown.length - 1) {
                           e.preventDefault();
                           add();
                         }

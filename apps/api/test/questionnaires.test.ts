@@ -80,7 +80,12 @@ describe('questionnaires', () => {
     const blank = await post(pm, base, { name: 'Blank one' });
     expect(blank.status).toBe(201);
     expect(blank.body.draft.sections).toHaveLength(1);
-    expect(blank.body.draft.title).toEqual({ en: 'Blank one' });
+    // New questionnaires are in Spanish; other languages are added later.
+    expect(blank.body.draft).toMatchObject({
+      title: { es: 'Blank one' },
+      defaultLanguage: 'es',
+      languages: ['es'],
+    });
     expect(blank.body.draftRevision).toBe(1);
 
     const sample = await post(pm, base, {

@@ -44,7 +44,7 @@ describe('InterviewRunner (interviewer modes)', () => {
     expect(question()).toBe('A1_CONSENT');
     await user.keyboard('1{Enter}');
     expect(session.getAnswer('A1_CONSENT')).toBe(1);
-    expect(screen.getByText('Could you tell me your age, please?')).toBeTruthy(); // CATI wording
+    expect(screen.getByText('¿Podría decirme su edad, por favor?')).toBeTruthy(); // CATI wording
     expect(document.activeElement?.tagName).toBe('INPUT'); // focus moved to the new control
     await user.keyboard('40{Enter}');
     expect(session.getAnswer('A2_AGE')).toBe(40);
@@ -64,7 +64,7 @@ describe('InterviewRunner (interviewer modes)', () => {
     await user.clear(screen.getByRole('textbox'));
     await user.keyboard('40{Enter}');
     expect(screen.getByRole('note', { name: 'Interviewer instruction' }).textContent).toBe(
-      'RECORD WITHOUT ASKING IF OBVIOUS',
+      'REGISTRE SIN PREGUNTAR SI ES OBVIO',
     );
     expect(screen.getAllByText('1').length).toBeGreaterThan(0); // option codes visible
   });
@@ -127,7 +127,7 @@ describe('InterviewRunner (respondent mode)', () => {
     // No codes or DK/RF for respondents.
     expect(screen.queryByRole('button', { name: /Don't know/ })).toBeNull();
     const age = document.querySelector('[data-qkey="A2_AGE"]') as HTMLElement;
-    expect(within(age).getByText('How old are you?')).toBeTruthy();
+    expect(within(age).getByText('¿Cuántos años tiene?')).toBeTruthy();
     await user.click(
       within(document.querySelector('[data-qkey="A1_CONSENT"]') as HTMLElement).getByLabelText(
         'Yes',

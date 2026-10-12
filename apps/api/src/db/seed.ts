@@ -31,7 +31,7 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
       await tx`
         insert into projects (id, tenant_id, name, code, status, modes_enabled, timezone, languages)
         values (${projectId}, ${tenantId}, 'Household Survey 2026', 'HH2026', 'active',
-                ${['CATI', 'CAPI', 'CAWI', 'PAPI']}, 'America/Lima', ${['en', 'es']})`;
+                ${['CATI', 'CAPI', 'CAWI', 'PAPI']}, 'America/Lima', ${['es']})`;
       await tx`
         insert into projects (id, tenant_id, name, code, status)
         values (${uuidv7()}, ${otherTenantId}, 'Business Panel', 'BIZ', 'active')`;

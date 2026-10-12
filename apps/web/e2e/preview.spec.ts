@@ -24,14 +24,14 @@ test('a CATI interviewer completes the household survey with the keyboard only',
   await shot(page, 'preview-cati-start');
   await press(page, 'Enter'); // consent text
   await typeAndEnter(page, '1'); // A1 consent: Yes
-  await expect(current(page)).toContainText('Could you tell me your age, please?');
+  await expect(current(page)).toContainText('¿Podría decirme su edad, por favor?');
   await typeAndEnter(page, '40'); // A2
   await typeAndEnter(page, '2'); // A3 sex
   await typeAndEnter(page, '1'); // A4 married
-  await expect(current(page)).toContainText('your husband');
+  await expect(current(page)).toContainText('su esposo');
   await typeAndEnter(page, 'Pat'); // A4 spouse
   await typeAndEnter(page, 'Rosa'); // A5 name
-  await expect(current(page)).toContainText('Rosa, how many people live in this household');
+  await expect(current(page)).toContainText('Rosa, ¿cuántas personas viven en este hogar');
   await typeAndEnter(page, '3'); // B1
   await typeAndEnter(page, '1'); // B2 children
   await typeAndEnter(page, '1'); // B2 school kids
@@ -43,7 +43,7 @@ test('a CATI interviewer completes the household survey with the keyboard only',
   }
   await typeAndEnter(page, 'Kid');
   await typeAndEnter(page, '3'); // under 5: rest of the row skipped
-  await expect(current(page)).toContainText('Total household income: 1000');
+  await expect(current(page)).toContainText('Ingreso total del hogar: 1000');
   await press(page, 'Enter');
   for (const v of ['2', '300', '4', '1', '1']) await typeAndEnter(page, v); // C1 rented, rent, rooms, piped, electricity
   await press(page, '1', '2', 'Enter'); // C7 appliances: TV + fridge
@@ -56,7 +56,7 @@ test('a CATI interviewer completes the household survey with the keyboard only',
   await typeAndEnter(page, '1'); // E1 recontact
   await typeAndEnter(page, '5551234'); // E2 phone
   await typeAndEnter(page, '3'); // E3 any time → skip to region
-  await expect(current(page)).toContainText('Region (confirm)');
+  await expect(current(page)).toContainText('Región (confirme)');
   await press(page, 'Enter'); // E5 prefilled from case data
   await press(page, 'Enter'); // E6 comments are optional
   await expect(page.getByText('The interview is complete. Thank you.')).toBeVisible();
@@ -78,7 +78,7 @@ test('changing an earlier answer clears later ones, announces it, and the tracer
   await press(page, 'Enter');
   for (const v of ['1', '40', '2', '1', 'Pat']) await typeAndEnter(page, v);
   await press(page, 'Shift+Enter', 'Shift+Enter');
-  await expect(current(page)).toContainText('What is your marital status?');
+  await expect(current(page)).toContainText('¿Cuál es su estado civil?');
   await press(page, '2');
   await expect(page.getByRole('status')).toContainText(
     'removed 1 later answer that no longer applies: A4_SPOUSE',
@@ -99,18 +99,18 @@ test('respondents on a phone get one question per page; PAPI prints routing as i
   // No sideways scrolling at phone width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await expect(page.locator('[data-qkey]')).toContainText(
-    'Hello Rosa, we are conducting a survey in Lima.',
+    'Hola Rosa, estamos realizando una encuesta en Lima.',
   );
   await page.getByRole('button', { name: /Next/ }).click();
-  await expect(page.locator('[data-qkey]')).toContainText('Do you agree to take part?');
-  await page.getByLabel('Yes').check();
+  await expect(page.locator('[data-qkey]')).toContainText('¿Acepta participar?');
+  await page.getByLabel('Sí').check();
   await page.getByRole('button', { name: /Next/ }).click();
-  await expect(page.locator('[data-qkey]')).toContainText('How old are you?');
+  await expect(page.locator('[data-qkey]')).toContainText('¿Cuántos años tiene?');
   await shot(page, 'preview-cawi-phone');
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByTestId('mode').selectOption('PAPI');
-  await expect(page.getByText('If Q4 is not “Married” (1) → go to Q6')).toBeVisible();
+  await expect(page.getByText('If Q4 is not “Casado/a” (1) → go to Q6')).toBeVisible();
   await expect(page.getByText('If Q1 is “No” (2) → end the interview (REFUSAL)')).toBeVisible();
   await shot(page, 'preview-papi');
 });
@@ -132,20 +132,20 @@ test('the preview flags questionnaire problems and runs saved scenarios', async 
   await page.getByLabel('Paste JSON').fill(
     JSON.stringify({
       id: 'BROKEN',
-      title: { en: 'Broken' },
-      defaultLanguage: 'en',
-      languages: ['en'],
+      title: { es: 'Roto' },
+      defaultLanguage: 'es',
+      languages: ['es'],
       sections: [
         {
           id: 'S',
-          title: { en: 'S' },
+          title: { es: 'S' },
           items: [
             {
               kind: 'question',
               id: 'A',
               name: 'A',
               type: 'numeric',
-              text: { en: 'A' },
+              text: { es: 'A' },
               showIf: 'NOPE > 1',
             },
           ],

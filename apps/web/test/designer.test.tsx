@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ComparePanel } from '../src/designer/ComparePanel.js';
 import { ConditionBuilder } from '../src/designer/ConditionBuilder.js';
+import { EditingLanguageContext, LocalizedField } from '../src/designer/fields.js';
 import { ItemEditor } from '../src/designer/ItemEditor.js';
 import { Outline } from '../src/designer/Outline.js';
 import { RoutingMap } from '../src/designer/RoutingMap.js';
@@ -527,5 +528,28 @@ describe('version comparison', () => {
     expect(container.querySelector('[data-compare-item="A3"]')!.textContent).toContain('Removed');
     await expectAccessible(container);
     vi.unstubAllGlobals();
+  });
+});
+
+describe('editing one questionnaire language at a time', () => {
+  it('shows only the language picked in the designer, and notes what other languages lack', () => {
+    const value = { es: '¿Trabaja?', en: '' };
+    const field = (lang: string | null) => (
+      <EditingLanguageContext.Provider value={lang}>
+        <LocalizedField
+          label="Question wording"
+          value={value}
+          languages={['es', 'en']}
+          onChange={() => {}}
+        />
+      </EditingLanguageContext.Provider>
+    );
+    const { rerender } = render(field('es'));
+    expect(screen.getByLabelText('Question wording (es)')).toHaveProperty('value', '¿Trabaja?');
+    expect(screen.queryByLabelText('Question wording (en)')).toBeNull();
+    expect(screen.getByText('Missing translation: en')).toBeTruthy();
+    rerender(field('en'));
+    expect(screen.getByLabelText('Question wording (en)')).toHaveProperty('value', '');
+    expect(screen.queryByLabelText('Question wording (es)')).toBeNull();
   });
 });

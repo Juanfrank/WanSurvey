@@ -106,7 +106,7 @@ export const projects = pgTable(
     languages: text('languages')
       .array()
       .notNull()
-      .default(sql`'{en}'::text[]`),
+      .default(sql`'{es}'::text[]`),
     /** `ProjectSettings` from @wansurvey/schema; read through `projectSettings()` for defaults. */
     settings: jsonb('settings').notNull().default({}),
     createdAt: createdAt(),

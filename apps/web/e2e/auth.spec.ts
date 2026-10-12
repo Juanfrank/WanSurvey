@@ -50,3 +50,15 @@ test('Microsoft sign-in goes through the API and explains when it is not set up'
     'Microsoft sign-in is not set up for your organisation.',
   );
 });
+
+test.describe('a first visit', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('shows the interface in Spanish', async ({ page }) => {
+    await page.goto('/login');
+    await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
+    await expect(page.getByLabel('Correo electrónico')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.lang)).toBe('es');
+    await expectAccessible(page);
+  });
+});

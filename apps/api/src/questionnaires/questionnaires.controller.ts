@@ -131,7 +131,7 @@ export class QuestionnairesController {
     @Body(new ZodPipe(CreateBody)) body: z.infer<typeof CreateBody>,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const project = await this.project(tx, projectId);
+      await this.project(tx, projectId);
       let definition: Record<string, unknown>;
       const src = body.source;
       if (src.kind === 'sample') {
@@ -156,7 +156,7 @@ export class QuestionnairesController {
       } else if (src.kind === 'json') {
         definition = src.definition;
       } else {
-        definition = blankQuestionnaire(body.name, project.languages);
+        definition = blankQuestionnaire(body.name);
       }
       const [row] = await tx
         .insert(questionnaires)
@@ -638,15 +638,16 @@ function diagnosticsOf(definition: unknown) {
   return analyze(parsed.data).diagnostics;
 }
 
-/** A new questionnaire: one empty section in the project's languages. */
-export function blankQuestionnaire(name: string, languages: string[]): Record<string, unknown> {
-  const langs = languages.length ? languages : ['en'];
-  const text = (s: string) => Object.fromEntries(langs.map((l) => [l, s]));
+/**
+ * A new questionnaire: one empty section, in Spanish. Interviews are conducted in Spanish;
+ * other languages are added to the questionnaire when needed (L43).
+ */
+export function blankQuestionnaire(name: string): Record<string, unknown> {
   return {
     id: 'QUESTIONNAIRE',
-    title: text(name),
-    defaultLanguage: langs[0],
-    languages: langs,
-    sections: [{ id: 'SEC_A', title: text('Section A'), items: [] }],
+    title: { es: name },
+    defaultLanguage: 'es',
+    languages: ['es'],
+    sections: [{ id: 'SEC_A', title: { es: 'Sección A' }, items: [] }],
   };
 }

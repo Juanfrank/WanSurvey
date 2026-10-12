@@ -28,7 +28,7 @@ const ProjectFields = z.object({
 const ProjectBody = ProjectFields.extend({
   modesEnabled: ProjectFields.shape.modesEnabled.default([]),
   timezone: ProjectFields.shape.timezone.default('UTC'),
-  languages: ProjectFields.shape.languages.default(['en']),
+  languages: ProjectFields.shape.languages.default(['es']),
 });
 // No defaults here: fields left out of a PATCH keep their value.
 const ProjectPatch = ProjectFields.partial().extend({

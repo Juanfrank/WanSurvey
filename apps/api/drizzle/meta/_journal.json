@@ -78,6 +78,13 @@
       "when": 1791836783105,
       "tag": "0010_interviews",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791838470331,
+      "tag": "0011_projects_spanish_default",
+      "breakpoints": true
     }
   ]
 }

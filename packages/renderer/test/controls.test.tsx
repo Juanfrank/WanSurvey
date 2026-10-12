@@ -72,11 +72,11 @@ describe('answer controls', () => {
   it('multi choice handles exclusive options and other-specify', async () => {
     const { user, q, session } = setup('CAPI');
     await user.click(q('Q_MULTI').getByLabelText(/Bus$/));
-    await user.click(q('Q_MULTI').getByLabelText(/Other$/));
+    await user.click(q('Q_MULTI').getByLabelText(/Otro$/));
     expect(session.getAnswer('Q_MULTI')).toEqual([1, 4]);
     await user.type(q('Q_MULTI').getByLabelText('Please specify'), 'Boat');
     expect(session.getAnswer('Q_MULTI_OTHER')).toBe('Boat');
-    await user.click(q('Q_MULTI').getByLabelText(/None of these$/));
+    await user.click(q('Q_MULTI').getByLabelText(/Ninguno$/));
     expect(session.getAnswer('Q_MULTI')).toEqual([99]);
     expect(session.getAnswer('Q_MULTI_OTHER')).toBeNull(); // cleared with the "other" option
   });
@@ -104,12 +104,12 @@ describe('answer controls', () => {
 
   it('scales, grid and ranking', async () => {
     const { user, q, session } = setup('CATI');
-    await user.click(q('Q_NPS').getByLabelText('10 – Extremely likely'));
+    await user.click(q('Q_NPS').getByLabelText('10 – Muy probable'));
     expect(session.getAnswer('Q_NPS')).toBe(10);
-    await user.click(q('Q_GRID').getAllByLabelText(/Good$/)[0]!);
-    await user.click(q('Q_GRID').getAllByLabelText(/Poor$/)[1]!);
+    await user.click(q('Q_GRID').getAllByLabelText(/Bueno$/)[0]!);
+    await user.click(q('Q_GRID').getAllByLabelText(/Malo$/)[1]!);
     expect(session.getAnswer('Q_GRID')).toEqual({ water: 3, power: 1 });
-    await user.click(q('Q_RANK').getByRole('button', { name: 'Move Jobs up' }));
+    await user.click(q('Q_RANK').getByRole('button', { name: 'Move Empleo up' }));
     expect(session.getAnswer('Q_RANK')).toEqual([1, 3, 2]);
   });
 
@@ -130,7 +130,7 @@ describe('answer controls', () => {
   });
 
   it('shows the interviewer instruction only in interviewer modes', () => {
-    expect(setup('CATI').q('Q_SINGLE').getByRole('note').textContent).toBe('READ OPTIONS');
+    expect(setup('CATI').q('Q_SINGLE').getByRole('note').textContent).toBe('LEA LAS OPCIONES');
   });
 });
 
@@ -139,17 +139,13 @@ describe('PaperForm (PAPI)', () => {
     const { container } = render(<PaperForm compiled={compile(household)} lang="en" />);
     const q = (n: string) =>
       within(container.querySelector(`[data-paper-q="${n}"]`) as HTMLElement);
-    expect(q('Q1').getByText('Do you agree to take part?')).toBeTruthy();
+    expect(q('Q1').getByText('¿Acepta participar?')).toBeTruthy();
     expect(q('Q1').getByText('If Q1 is “No” (2) → end the interview (REFUSAL)')).toBeTruthy();
-    expect(q('Q4').getByText('If Q4 is not “Married” (1) → go to Q6')).toBeTruthy();
-    expect(
-      q('Q5').getByText(
-        'Name of [your wife / your husband]'.replace('Name of', 'What is the name of') + '?',
-      ),
-    ).toBeTruthy();
+    expect(q('Q4').getByText('If Q4 is not “Casado/a” (1) → go to Q6')).toBeTruthy();
+    expect(q('Q5').getByText('¿Cómo se llama [su esposa / su esposo]?')).toBeTruthy();
     expect(q('Q2').getByText('-8')).toBeTruthy(); // DK code printed
     expect(screen.getByText('Repeat for each row (up to 10)')).toBeTruthy();
-    expect(q('Q20').getByText('Ask only if Q19 is one of “Well” (2), “River” (3)')).toBeTruthy();
+    expect(q('Q20').getByText('Ask only if Q19 is one of “Pozo” (2), “Río” (3)')).toBeTruthy();
     expect(q('Q11').getByText('If Q11 < 5 → go to the next person')).toBeTruthy();
     await expectNoAxeViolations(container);
   });

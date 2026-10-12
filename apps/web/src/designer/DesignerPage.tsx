@@ -11,7 +11,7 @@ import { usePreview } from '../preview/usePreview.js';
 import { Button, Card } from '../routes/ui.js';
 import { TypeEnvContext } from './context.js';
 import { Dialog } from './Dialog.js';
-import { smallBtn } from './fields.js';
+import { EditingLanguageContext, smallBtn } from './fields.js';
 import { download, useApiScenarios, useCan, useRetire, useVersions } from './hooks.js';
 import { ItemEditor } from './ItemEditor.js';
 import { initials, Outline, SETTINGS_ID } from './Outline.js';
@@ -63,7 +63,10 @@ export function DesignerPage() {
   }, [editors]);
 
   const draft = d.draft;
-  const lang = draft?.defaultLanguage ?? 'en';
+  // Questionnaire texts are edited one language at a time; the default language first.
+  const [editLang, setEditLang] = useState<string | null>(null);
+  const lang =
+    editLang && draft?.languages.includes(editLang) ? editLang : (draft?.defaultLanguage ?? 'es');
   // The project's sample fields are offered as case.* in conditions.
   const sampleFields = useQuery({
     queryKey: ['sample-fields', projectId],
@@ -121,319 +124,340 @@ export function DesignerPage() {
 
   return (
     <TypeEnvContext.Provider value={typeVars}>
-      <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
-        <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-          <Link to="/projects" className="hover:underline">
-            {t('designer.projects')}
-          </Link>{' '}
-          /{' '}
-          <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
-            {t('designer.project')}
-          </Link>
-        </nav>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="sr-only">{d.name}</h1>
-          <label className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="sr-only">{t('designer.name')}</span>
-            <input
-              className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              value={d.name}
-              readOnly={!canEdit}
-              onChange={(e) => d.rename(e.target.value)}
-            />
-          </label>
-          <SaveStatus status={d.status} />
-          {canEdit ? (
-            <>
-              <button type="button" className={smallBtn} disabled={!d.canUndo} onClick={d.undo}>
-                {t('designer.undo')}
-              </button>
-              <button type="button" className={smallBtn} disabled={!d.canRedo} onClick={d.redo}>
-                {t('designer.redo')}
-              </button>
-            </>
-          ) : null}
-          {canPublish ? (
-            <Button
-              type="button"
-              onClick={() => setPublishing(true)}
-              disabled={d.status === 'conflict'}
-            >
-              {t('designer.publish.open')}
-            </Button>
-          ) : null}
-        </div>
-        {!canEdit ? (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            {t('designer.readOnly')}
-          </p>
-        ) : null}
-        <p role="status" aria-live="polite" className="sr-only">
-          {message}
-        </p>
-        {editors.length || notice ? (
-          <div
-            className="flex flex-wrap items-center gap-2 text-sm text-slate-700"
-            data-testid="presence"
-          >
-            {editors.length ? (
+      <EditingLanguageContext.Provider value={lang}>
+        <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
+          <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
+            <Link to="/projects" className="hover:underline">
+              {t('designer.projects')}
+            </Link>{' '}
+            /{' '}
+            <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
+              {t('designer.project')}
+            </Link>
+          </nav>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="sr-only">{d.name}</h1>
+            <label className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="sr-only">{t('designer.name')}</span>
+              <input
+                className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                value={d.name}
+                readOnly={!canEdit}
+                onChange={(e) => d.rename(e.target.value)}
+              />
+            </label>
+            {draft.languages.length > 1 ? (
+              <label className="flex items-center gap-2 text-sm">
+                <span>{t('designer.contentLanguage')}</span>
+                <select
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1"
+                  value={lang}
+                  onChange={(e) => setEditLang(e.target.value)}
+                >
+                  {draft.languages.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                      {l === draft.defaultLanguage ? ` (${t('designer.settings.default')})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <SaveStatus status={d.status} />
+            {canEdit ? (
               <>
-                <span>{t('designer.collab.others')}</span>
-                {editors.map((e) => (
-                  <span
-                    key={e.userId}
-                    className="flex items-center gap-1 rounded-full bg-sky-50 py-0.5 pl-0.5 pr-2"
-                  >
-                    <span
-                      aria-hidden
-                      className="rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-white"
-                    >
-                      {initials(e.name)}
-                    </span>
-                    {e.name}
-                    {e.itemId ? (
-                      <span className="text-xs text-slate-600">
-                        {t('designer.collab.on', { id: e.itemId })}
-                      </span>
-                    ) : null}
-                  </span>
-                ))}
+                <button type="button" className={smallBtn} disabled={!d.canUndo} onClick={d.undo}>
+                  {t('designer.undo')}
+                </button>
+                <button type="button" className={smallBtn} disabled={!d.canRedo} onClick={d.redo}>
+                  {t('designer.redo')}
+                </button>
               </>
             ) : null}
-            {notice ? <span className="text-xs text-slate-600">{notice}</span> : null}
-          </div>
-        ) : null}
-
-        <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
-          <Tabs.List
-            aria-label={t('designer.tabs')}
-            className="flex flex-wrap gap-1 border-b border-slate-200"
-          >
-            <Tabs.Trigger value="design" className={tabCls}>
-              {t('designer.tab.design')}
-            </Tabs.Trigger>
-            <Tabs.Trigger value="routing" className={tabCls}>
-              {t('designer.tab.routing')}
-            </Tabs.Trigger>
-            <Tabs.Trigger value="check" className={tabCls}>
-              {t('designer.tab.check')}
-              {errorCount ? (
-                <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-900">
-                  {errorCount}
-                </span>
-              ) : null}
-            </Tabs.Trigger>
-            <Tabs.Trigger value="preview" className={tabCls}>
-              {t('designer.tab.preview')}
-            </Tabs.Trigger>
-            <Tabs.Trigger value="scenarios" className={tabCls}>
-              {t('designer.tab.scenarios')}
-            </Tabs.Trigger>
-            <Tabs.Trigger value="versions" className={tabCls}>
-              {t('designer.tab.versions')}
-            </Tabs.Trigger>
-          </Tabs.List>
-
-          <Tabs.Content value="design" className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-            <Outline
-              draft={draft}
-              selected={selected}
-              onSelect={setSelected}
-              change={d.change}
-              errorsById={errorsById}
-              routing={routing}
-              lang={lang}
-              readOnly={!canEdit}
-              onRename={() => setRenameTick((n) => n + 1)}
-              onEnter={focusEditor}
-              announce={setMessage}
-              others={others}
-              commentCounts={commentCounts}
-              onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
-            />
-            <div className="flex min-w-0 flex-col gap-4">
-              <section
-                ref={editorRef}
-                tabIndex={-1}
-                aria-label={t('designer.editor')}
-                className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
+            {canPublish ? (
+              <Button
+                type="button"
+                onClick={() => setPublishing(true)}
+                disabled={d.status === 'conflict'}
               >
-                {others.get(selected)?.length ? (
-                  <p
-                    className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950"
-                    data-testid="same-item"
-                  >
-                    {t('designer.collab.sameItem', { who: others.get(selected)!.join(', ') })}
-                  </p>
-                ) : null}
-                {canEdit &&
-                selected !== SETTINGS_ID &&
-                !draft.sections.some((x) => x.id === selected) ? (
-                  <div className="mb-2 flex justify-end">
-                    <button
-                      type="button"
-                      className={smallBtn}
-                      onClick={() => setSavingToLibrary(true)}
+                {t('designer.publish.open')}
+              </Button>
+            ) : null}
+          </div>
+          {!canEdit ? (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {t('designer.readOnly')}
+            </p>
+          ) : null}
+          <p role="status" aria-live="polite" className="sr-only">
+            {message}
+          </p>
+          {editors.length || notice ? (
+            <div
+              className="flex flex-wrap items-center gap-2 text-sm text-slate-700"
+              data-testid="presence"
+            >
+              {editors.length ? (
+                <>
+                  <span>{t('designer.collab.others')}</span>
+                  {editors.map((e) => (
+                    <span
+                      key={e.userId}
+                      className="flex items-center gap-1 rounded-full bg-sky-50 py-0.5 pl-0.5 pr-2"
                     >
-                      {t('designer.library.save')}
-                    </button>
-                  </div>
-                ) : null}
-                <fieldset disabled={!canEdit} className="min-w-0">
-                  {selected === SETTINGS_ID ? (
-                    <SettingsEditor draft={draft} variables={variables} change={d.change} />
-                  ) : (
-                    <ItemEditor
-                      key={selected}
-                      draft={draft}
-                      id={selected}
-                      lang={lang}
-                      variables={variables}
-                      change={d.change}
-                      focusNameSignal={renameTick}
-                      select={setSelected}
-                    />
-                  )}
-                </fieldset>
-              </section>
-              <CommentsPanel
-                projectId={projectId}
-                qid={qid}
-                itemId={selected === SETTINGS_ID ? null : selected}
-                canWrite={canComment}
-                onGoTo={(id) => setSelected(id ?? SETTINGS_ID)}
-              />
+                      <span
+                        aria-hidden
+                        className="rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-white"
+                      >
+                        {initials(e.name)}
+                      </span>
+                      {e.name}
+                      {e.itemId ? (
+                        <span className="text-xs text-slate-600">
+                          {t('designer.collab.on', { id: e.itemId })}
+                        </span>
+                      ) : null}
+                    </span>
+                  ))}
+                </>
+              ) : null}
+              {notice ? <span className="text-xs text-slate-600">{notice}</span> : null}
             </div>
-          </Tabs.Content>
+          ) : null}
 
-          <Tabs.Content value="routing">
-            {routing ? (
-              <RoutingMap
+          <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
+            <Tabs.List
+              aria-label={t('designer.tabs')}
+              className="flex flex-wrap gap-1 border-b border-slate-200"
+            >
+              <Tabs.Trigger value="design" className={tabCls}>
+                {t('designer.tab.design')}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="routing" className={tabCls}>
+                {t('designer.tab.routing')}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="check" className={tabCls}>
+                {t('designer.tab.check')}
+                {errorCount ? (
+                  <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-900">
+                    {errorCount}
+                  </span>
+                ) : null}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="preview" className={tabCls}>
+                {t('designer.tab.preview')}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="scenarios" className={tabCls}>
+                {t('designer.tab.scenarios')}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="versions" className={tabCls}>
+                {t('designer.tab.versions')}
+              </Tabs.Trigger>
+            </Tabs.List>
+
+            <Tabs.Content value="design" className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+              <Outline
                 draft={draft}
+                selected={selected}
+                onSelect={setSelected}
+                change={d.change}
+                errorsById={errorsById}
                 routing={routing}
                 lang={lang}
-                onOpen={(id) => {
-                  setSelected(id);
-                  setTab('design');
-                  requestAnimationFrame(focusEditor);
-                }}
+                readOnly={!canEdit}
+                onRename={() => setRenameTick((n) => n + 1)}
+                onEnter={focusEditor}
+                announce={setMessage}
+                others={others}
+                commentCounts={commentCounts}
+                onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
               />
-            ) : (
-              <Card>{t('designer.routing.unavailable')}</Card>
-            )}
-          </Tabs.Content>
-
-          <Tabs.Content value="check">
-            <Card>
-              <DiagnosticsPanel diagnostics={d.diagnostics} />
-              <ul className="mt-4 flex flex-col gap-1 text-sm">
-                {d.diagnostics
-                  .filter((x) => x.itemId)
-                  .map((x, i) => (
-                    <li key={i}>
+              <div className="flex min-w-0 flex-col gap-4">
+                <section
+                  ref={editorRef}
+                  tabIndex={-1}
+                  aria-label={t('designer.editor')}
+                  className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
+                >
+                  {others.get(selected)?.length ? (
+                    <p
+                      className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950"
+                      data-testid="same-item"
+                    >
+                      {t('designer.collab.sameItem', { who: others.get(selected)!.join(', ') })}
+                    </p>
+                  ) : null}
+                  {canEdit &&
+                  selected !== SETTINGS_ID &&
+                  !draft.sections.some((x) => x.id === selected) ? (
+                    <div className="mb-2 flex justify-end">
                       <button
                         type="button"
-                        className="text-left text-indigo-700 underline"
-                        onClick={() => {
-                          setSelected(x.itemId!);
-                          setTab('design');
-                          requestAnimationFrame(focusEditor);
-                        }}
+                        className={smallBtn}
+                        onClick={() => setSavingToLibrary(true)}
                       >
-                        {t('designer.goTo', { id: x.itemId })}
-                      </button>{' '}
-                      <span className={x.severity === 'error' ? 'text-red-800' : 'text-amber-800'}>
-                        {localiseDiagnostic(t, x)}
-                      </span>
-                    </li>
-                  ))}
-              </ul>
-            </Card>
-          </Tabs.Content>
+                        {t('designer.library.save')}
+                      </button>
+                    </div>
+                  ) : null}
+                  <fieldset disabled={!canEdit} className="min-w-0">
+                    {selected === SETTINGS_ID ? (
+                      <SettingsEditor draft={draft} variables={variables} change={d.change} />
+                    ) : (
+                      <ItemEditor
+                        key={selected}
+                        draft={draft}
+                        id={selected}
+                        lang={lang}
+                        variables={variables}
+                        change={d.change}
+                        focusNameSignal={renameTick}
+                        select={setSelected}
+                      />
+                    )}
+                  </fieldset>
+                </section>
+                <CommentsPanel
+                  projectId={projectId}
+                  qid={qid}
+                  itemId={selected === SETTINGS_ID ? null : selected}
+                  canWrite={canComment}
+                  onGoTo={(id) => setSelected(id ?? SETTINGS_ID)}
+                />
+              </div>
+            </Tabs.Content>
 
-          <Tabs.Content value="preview">
-            <DraftPreview d={d} projectId={projectId} qid={qid} />
-          </Tabs.Content>
+            <Tabs.Content value="routing">
+              {routing ? (
+                <RoutingMap
+                  draft={draft}
+                  routing={routing}
+                  lang={lang}
+                  onOpen={(id) => {
+                    setSelected(id);
+                    setTab('design');
+                    requestAnimationFrame(focusEditor);
+                  }}
+                />
+              ) : (
+                <Card>{t('designer.routing.unavailable')}</Card>
+              )}
+            </Tabs.Content>
 
-          <Tabs.Content value="scenarios">
-            <ScenariosTab d={d} projectId={projectId} qid={qid} />
-          </Tabs.Content>
+            <Tabs.Content value="check">
+              <Card>
+                <DiagnosticsPanel diagnostics={d.diagnostics} />
+                <ul className="mt-4 flex flex-col gap-1 text-sm">
+                  {d.diagnostics
+                    .filter((x) => x.itemId)
+                    .map((x, i) => (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          className="text-left text-indigo-700 underline"
+                          onClick={() => {
+                            setSelected(x.itemId!);
+                            setTab('design');
+                            requestAnimationFrame(focusEditor);
+                          }}
+                        >
+                          {t('designer.goTo', { id: x.itemId })}
+                        </button>{' '}
+                        <span
+                          className={x.severity === 'error' ? 'text-red-800' : 'text-amber-800'}
+                        >
+                          {localiseDiagnostic(t, x)}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              </Card>
+            </Tabs.Content>
 
-          <Tabs.Content value="versions">
-            <VersionsPanel
+            <Tabs.Content value="preview">
+              <DraftPreview d={d} projectId={projectId} qid={qid} />
+            </Tabs.Content>
+
+            <Tabs.Content value="scenarios">
+              <ScenariosTab d={d} projectId={projectId} qid={qid} />
+            </Tabs.Content>
+
+            <Tabs.Content value="versions">
+              <VersionsPanel
+                projectId={projectId}
+                qid={qid}
+                canPublish={canPublish}
+                draft={d.questionnaire}
+              />
+            </Tabs.Content>
+          </Tabs.Root>
+
+          {publishing ? (
+            <PublishDialog
               projectId={projectId}
               qid={qid}
-              canPublish={canPublish}
-              draft={d.questionnaire}
+              draft={draft}
+              flush={d.flush}
+              onClose={() => setPublishing(false)}
+              onPublished={(v) => {
+                setPublishing(false);
+                setMessage(t('designer.publish.done', { version: v }));
+                setTab('versions');
+              }}
             />
-          </Tabs.Content>
-        </Tabs.Root>
-
-        {publishing ? (
-          <PublishDialog
-            projectId={projectId}
-            qid={qid}
-            draft={draft}
-            flush={d.flush}
-            onClose={() => setPublishing(false)}
-            onPublished={(v) => {
-              setPublishing(false);
-              setMessage(t('designer.publish.done', { version: v }));
-              setTab('versions');
-            }}
-          />
-        ) : null}
-        {libraryAt ? (
-          <InsertFromLibraryDialog
-            draft={draft}
-            afterId={libraryAt.after}
-            inside={libraryAt.inside}
-            onClose={() => setLibraryAt(null)}
-            onInsert={(next, newId, msg) => {
-              d.change(next);
-              setSelected(newId);
-              setLibraryAt(null);
-              setMessage(msg);
-              setNotice(msg);
-            }}
-          />
-        ) : null}
-        {savingToLibrary ? (
-          <SaveToLibraryDialog
-            draft={draft}
-            id={selected}
-            onClose={() => setSavingToLibrary(false)}
-            onSaved={(msg) => {
-              setSavingToLibrary(false);
-              setMessage(msg);
-              setNotice(msg);
-            }}
-          />
-        ) : null}
-        {d.conflict ? (
-          <Dialog title={t('designer.conflict.title')} onClose={() => undefined}>
-            <p className="mb-4 text-sm">
-              {t('designer.conflict.text', {
-                who: d.conflict.updatedBy ?? t('designer.conflict.someone'),
-                when: new Date(d.conflict.updatedAt).toLocaleTimeString(),
-              })}
-            </p>
-            {d.conflict.items?.length ? (
-              <p className="mb-4 text-sm" data-testid="conflict-items">
-                {t('designer.collab.conflictItems', { list: d.conflict.items.join(', ') })}
+          ) : null}
+          {libraryAt ? (
+            <InsertFromLibraryDialog
+              draft={draft}
+              afterId={libraryAt.after}
+              inside={libraryAt.inside}
+              onClose={() => setLibraryAt(null)}
+              onInsert={(next, newId, msg) => {
+                d.change(next);
+                setSelected(newId);
+                setLibraryAt(null);
+                setMessage(msg);
+                setNotice(msg);
+              }}
+            />
+          ) : null}
+          {savingToLibrary ? (
+            <SaveToLibraryDialog
+              draft={draft}
+              id={selected}
+              onClose={() => setSavingToLibrary(false)}
+              onSaved={(msg) => {
+                setSavingToLibrary(false);
+                setMessage(msg);
+                setNotice(msg);
+              }}
+            />
+          ) : null}
+          {d.conflict ? (
+            <Dialog title={t('designer.conflict.title')} onClose={() => undefined}>
+              <p className="mb-4 text-sm">
+                {t('designer.conflict.text', {
+                  who: d.conflict.updatedBy ?? t('designer.conflict.someone'),
+                  when: new Date(d.conflict.updatedAt).toLocaleTimeString(),
+                })}
               </p>
-            ) : null}
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="secondary" type="button" onClick={() => void d.reloadTheirs()}>
-                {t('designer.conflict.reload')}
-              </Button>
-              <Button type="button" onClick={() => void d.overwriteMine()}>
-                {t('designer.conflict.overwrite')}
-              </Button>
-            </div>
-          </Dialog>
-        ) : null}
-      </div>
+              {d.conflict.items?.length ? (
+                <p className="mb-4 text-sm" data-testid="conflict-items">
+                  {t('designer.collab.conflictItems', { list: d.conflict.items.join(', ') })}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="secondary" type="button" onClick={() => void d.reloadTheirs()}>
+                  {t('designer.conflict.reload')}
+                </Button>
+                <Button type="button" onClick={() => void d.overwriteMine()}>
+                  {t('designer.conflict.overwrite')}
+                </Button>
+              </div>
+            </Dialog>
+          ) : null}
+        </div>
+      </EditingLanguageContext.Provider>
     </TypeEnvContext.Provider>
   );
 }

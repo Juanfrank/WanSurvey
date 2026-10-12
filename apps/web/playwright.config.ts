@@ -23,6 +23,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'retain-on-failure',
+    // The interface defaults to Spanish; these tests use it in English (one test checks the default).
+    storageState: './e2e/english-ui.json',
     ...devices['Desktop Chrome'],
   },
   webServer: [

@@ -1,6 +1,7 @@
 import type { QuestionnaireInput } from '@wansurvey/schema';
 
-const t = (en: string, es?: string) => (es ? { en, es } : { en, es: en });
+/** A questionnaire text: interviews are in Spanish; other languages are added as such. */
+const es = (text: string) => ({ es: text });
 
 /**
  * Demo household survey: roster, 10+ skips, hard and soft checks, piping, mode variants,
@@ -8,21 +9,21 @@ const t = (en: string, es?: string) => (es ? { en, es } : { en, es: en });
  */
 export const household: QuestionnaireInput = {
   id: 'HOUSEHOLD_DEMO',
-  title: t('Household survey', 'Encuesta de hogares'),
-  defaultLanguage: 'en',
-  languages: ['en', 'es'],
+  title: es('Encuesta de hogares'),
+  defaultLanguage: 'es',
+  languages: ['es'],
   answerSets: {
     LIKERT5: [
-      { code: 1, label: t('Very poor', 'Muy malo') },
-      { code: 2, label: t('Poor', 'Malo') },
-      { code: 3, label: t('Fair', 'Regular') },
-      { code: 4, label: t('Good', 'Bueno') },
-      { code: 5, label: t('Very good', 'Muy bueno') },
+      { code: 1, label: es('Muy malo') },
+      { code: 2, label: es('Malo') },
+      { code: 3, label: es('Regular') },
+      { code: 4, label: es('Bueno') },
+      { code: 5, label: es('Muy bueno') },
     ],
     SEX: [
-      { code: 1, label: t('Male', 'Hombre') },
-      { code: 2, label: t('Female', 'Mujer') },
-      { code: 3, label: t('Other', 'Otro') },
+      { code: 1, label: es('Hombre') },
+      { code: 2, label: es('Mujer') },
+      { code: 3, label: es('Otro') },
     ],
   },
   quotas: [{ id: 'Q_FEMALE', name: 'Female respondents', when: 'A3_SEX == 2', max: 150 }],
@@ -31,8 +32,7 @@ export const household: QuestionnaireInput = {
       id: 'CATI_INTRO',
       anchor: { at: 'start' },
       modes: ['CATI'],
-      body: t(
-        'Good evening, may I speak with {{respondent.firstName}}? My name is {{interviewer.firstName}}.',
+      body: es(
         'Buenas noches, ¿puedo hablar con {{respondent.firstName}}? Mi nombre es {{interviewer.firstName}}.',
       ),
     },
@@ -40,20 +40,19 @@ export const household: QuestionnaireInput = {
       id: 'CLOSE',
       anchor: { at: 'end' },
       modes: ['CATI', 'CAPI'],
-      body: t('Thank you, {{A5_NAME}}.', 'Gracias, {{A5_NAME}}.'),
+      body: es('Gracias, {{A5_NAME}}.'),
     },
   ],
   sections: [
     {
       id: 'SEC_A',
-      title: t('Screener', 'Filtro'),
+      title: es('Filtro'),
       items: [
         {
           kind: 'static',
           id: 'A0_CONSENT_TEXT',
           role: 'consent',
-          text: t(
-            'Hello {{respondent.firstName}}, we are conducting a survey in {{case.city}}.',
+          text: es(
             'Hola {{respondent.firstName}}, estamos realizando una encuesta en {{case.city}}.',
           ),
         },
@@ -62,7 +61,7 @@ export const household: QuestionnaireInput = {
           id: 'A1',
           name: 'A1_CONSENT',
           type: 'yesno',
-          text: t('Do you agree to take part?', '¿Acepta participar?'),
+          text: es('¿Acepta participar?'),
           allowDK: false,
           endIf: [{ when: 'A1_CONSENT == 2', disposition: 'REFUSAL' }],
         },
@@ -73,19 +72,19 @@ export const household: QuestionnaireInput = {
           type: 'numeric',
           min: 0,
           max: 120,
-          text: t('What is your age?', '¿Cuál es su edad?'),
+          text: es('¿Cuál es su edad?'),
           variants: {
             CATI: {
-              text: t('Could you tell me your age, please?', '¿Podría decirme su edad, por favor?'),
+              text: es('¿Podría decirme su edad, por favor?'),
             },
-            CAWI: { text: t('How old are you?', '¿Cuántos años tiene?') },
+            CAWI: { text: es('¿Cuántos años tiene?') },
           },
           validations: [
             {
               id: 'old',
               severity: 'warning',
               when: 'A2_AGE > 95',
-              message: t('Age above 95, please confirm', 'Edad mayor de 95, confirme'),
+              message: es('Edad mayor de 95, confirme'),
             },
           ],
           endIf: [{ when: 'A2_AGE < 18', disposition: 'SCREENED_OUT' }],
@@ -96,13 +95,10 @@ export const household: QuestionnaireInput = {
           name: 'A3_SEX',
           type: 'single',
           answerSetId: 'SEX',
-          text: t('What is your sex?', '¿Cuál es su sexo?'),
+          text: es('¿Cuál es su sexo?'),
           variants: {
             CAPI: {
-              interviewerInstruction: t(
-                'RECORD WITHOUT ASKING IF OBVIOUS',
-                'REGISTRE SIN PREGUNTAR SI ES OBVIO',
-              ),
+              interviewerInstruction: es('REGISTRE SIN PREGUNTAR SI ES OBVIO'),
             },
           },
         },
@@ -112,11 +108,11 @@ export const household: QuestionnaireInput = {
           name: 'A4_MARITAL',
           type: 'single',
           options: [
-            { code: 1, label: t('Married', 'Casado/a') },
-            { code: 2, label: t('Single', 'Soltero/a') },
-            { code: 3, label: t('Widowed', 'Viudo/a') },
+            { code: 1, label: es('Casado/a') },
+            { code: 2, label: es('Soltero/a') },
+            { code: 3, label: es('Viudo/a') },
           ],
-          text: t('What is your marital status?', '¿Cuál es su estado civil?'),
+          text: es('¿Cuál es su estado civil?'),
           skips: [{ when: 'A4_MARITAL != 1', to: 'A5' }],
         },
         {
@@ -124,10 +120,7 @@ export const household: QuestionnaireInput = {
           id: 'A4B',
           name: 'A4_SPOUSE',
           type: 'text',
-          text: t(
-            'What is the name of {{#if A3_SEX == 1}}your wife{{else}}your husband{{/if}}?',
-            '¿Cómo se llama {{#if A3_SEX == 1}}su esposa{{else}}su esposo{{/if}}?',
-          ),
+          text: es('¿Cómo se llama {{#if A3_SEX == 1}}su esposa{{else}}su esposo{{/if}}?'),
           personal: true,
         },
         {
@@ -137,13 +130,13 @@ export const household: QuestionnaireInput = {
           type: 'text',
           maxLength: 60,
           personal: true,
-          text: t('And your first name?', '¿Y su nombre?'),
+          text: es('¿Y su nombre?'),
         },
       ],
     },
     {
       id: 'SEC_B',
-      title: t('Household', 'Hogar'),
+      title: es('Hogar'),
       items: [
         {
           kind: 'question',
@@ -152,16 +145,13 @@ export const household: QuestionnaireInput = {
           type: 'numeric',
           min: 1,
           max: 30,
-          text: t(
-            '{{A5_NAME}}, how many people live in this household, including you?',
-            '{{A5_NAME}}, ¿cuántas personas viven en este hogar, incluyéndole?',
-          ),
+          text: es('{{A5_NAME}}, ¿cuántas personas viven en este hogar, incluyéndole?'),
           validations: [
             {
               id: 'big',
               severity: 'warning',
               when: 'B1_HHSIZE > 15',
-              message: t('Large household, confirm', 'Hogar grande, confirme'),
+              message: es('Hogar grande, confirme'),
             },
           ],
         },
@@ -171,16 +161,13 @@ export const household: QuestionnaireInput = {
           name: 'B2_CHILDREN',
           type: 'numeric',
           min: 0,
-          text: t('How many of them are under 18?', '¿Cuántos son menores de 18?'),
+          text: es('¿Cuántos son menores de 18?'),
           validations: [
             {
               id: 'kids',
               severity: 'error',
               when: 'B2_CHILDREN >= B1_HHSIZE',
-              message: t(
-                'Children cannot exceed household size ({{B1_HHSIZE}})',
-                'Los niños no pueden superar el tamaño del hogar ({{B1_HHSIZE}})',
-              ),
+              message: es('Los niños no pueden superar el tamaño del hogar ({{B1_HHSIZE}})'),
             },
           ],
           skips: [{ when: 'B2_CHILDREN == 0', to: 'HH' }],
@@ -191,16 +178,13 @@ export const household: QuestionnaireInput = {
           name: 'B2_SCHOOLKIDS',
           type: 'numeric',
           min: 0,
-          text: t(
-            'How many of the {{B2_CHILDREN}} children attend school?',
-            '¿Cuántos de los {{B2_CHILDREN}} niños van a la escuela?',
-          ),
+          text: es('¿Cuántos de los {{B2_CHILDREN}} niños van a la escuela?'),
           validations: [
             {
               id: 'k',
               severity: 'error',
               when: 'B2_SCHOOLKIDS > B2_CHILDREN',
-              message: t('More than the number of children'),
+              message: es('Más que el número de hijos'),
             },
           ],
         },
@@ -208,7 +192,7 @@ export const household: QuestionnaireInput = {
           kind: 'roster',
           id: 'HH',
           name: 'HH',
-          title: t('Household members', 'Miembros del hogar'),
+          title: es('Miembros del hogar'),
           count: { type: 'expression', expr: 'B1_HHSIZE', max: 30 },
           rowLabel: 'M_NAME',
           items: [
@@ -217,7 +201,7 @@ export const household: QuestionnaireInput = {
               id: 'M1',
               name: 'M_NAME',
               type: 'text',
-              text: t('Name of person {{index}}', 'Nombre de la persona {{index}}'),
+              text: es('Nombre de la persona {{index}}'),
             },
             {
               kind: 'question',
@@ -226,7 +210,7 @@ export const household: QuestionnaireInput = {
               type: 'numeric',
               min: 0,
               max: 120,
-              text: t('How old is {{M_NAME}}?', '¿Qué edad tiene {{M_NAME}}?'),
+              text: es('¿Qué edad tiene {{M_NAME}}?'),
               skips: [{ when: 'M_AGE < 5', to: 'END_ROW' }],
             },
             {
@@ -235,7 +219,7 @@ export const household: QuestionnaireInput = {
               name: 'M_SEX',
               type: 'single',
               answerSetId: 'SEX',
-              text: t('Sex of {{M_NAME}}', 'Sexo de {{M_NAME}}'),
+              text: es('Sexo de {{M_NAME}}'),
             },
             {
               kind: 'question',
@@ -243,14 +227,14 @@ export const household: QuestionnaireInput = {
               name: 'M_SCHOOL',
               type: 'yesno',
               showIf: 'M_AGE <= 25',
-              text: t('Does {{M_NAME}} attend school?', '¿{{M_NAME}} asiste a la escuela?'),
+              text: es('¿{{M_NAME}} asiste a la escuela?'),
             },
             {
               kind: 'question',
               id: 'M5',
               name: 'M_WORK',
               type: 'yesno',
-              text: t('Does {{M_NAME}} work?', '¿{{M_NAME}} trabaja?'),
+              text: es('¿{{M_NAME}} trabaja?'),
             },
             {
               kind: 'question',
@@ -259,7 +243,7 @@ export const household: QuestionnaireInput = {
               type: 'numeric',
               min: 0,
               showIf: 'M_WORK == 1',
-              text: t('Monthly income of {{M_NAME}}', 'Ingreso mensual de {{M_NAME}}'),
+              text: es('Ingreso mensual de {{M_NAME}}'),
             },
           ],
         },
@@ -280,17 +264,14 @@ export const household: QuestionnaireInput = {
         {
           kind: 'static',
           id: 'B4',
-          text: t(
-            'Total household income: {{TOTAL_INCOME}}',
-            'Ingreso total del hogar: {{TOTAL_INCOME}}',
-          ),
+          text: es('Ingreso total del hogar: {{TOTAL_INCOME}}'),
           showIf: 'answered(TOTAL_INCOME)',
         },
       ],
     },
     {
       id: 'SEC_C',
-      title: t('Dwelling', 'Vivienda'),
+      title: es('Vivienda'),
       items: [
         {
           kind: 'question',
@@ -298,11 +279,11 @@ export const household: QuestionnaireInput = {
           name: 'C1_TENURE',
           type: 'single',
           options: [
-            { code: 1, label: t('Owned', 'Propia') },
-            { code: 2, label: t('Rented', 'Alquilada') },
-            { code: 3, label: t('Other', 'Otra'), otherSpecify: true },
+            { code: 1, label: es('Propia') },
+            { code: 2, label: es('Alquilada') },
+            { code: 3, label: es('Otra'), otherSpecify: true },
           ],
-          text: t('Is this dwelling…', '¿Esta vivienda es…'),
+          text: es('¿Esta vivienda es…'),
           skips: [{ when: 'C1_TENURE != 2', to: 'C3' }],
         },
         {
@@ -311,13 +292,13 @@ export const household: QuestionnaireInput = {
           name: 'C2_RENT',
           type: 'numeric',
           min: 0,
-          text: t('Monthly rent?', '¿Alquiler mensual?'),
+          text: es('¿Alquiler mensual?'),
           validations: [
             {
               id: 'rent',
               severity: 'warning',
               when: 'C2_RENT > 5000',
-              message: t('High rent, confirm'),
+              message: es('Alquiler alto, confirme'),
             },
           ],
         },
@@ -328,7 +309,7 @@ export const household: QuestionnaireInput = {
           type: 'numeric',
           min: 1,
           max: 50,
-          text: t('How many rooms?', '¿Cuántas habitaciones?'),
+          text: es('¿Cuántas habitaciones?'),
         },
         {
           kind: 'question',
@@ -336,11 +317,11 @@ export const household: QuestionnaireInput = {
           name: 'C4_WATER',
           type: 'single',
           options: [
-            { code: 1, label: t('Piped', 'Cañería') },
-            { code: 2, label: t('Well', 'Pozo') },
-            { code: 3, label: t('River', 'Río') },
+            { code: 1, label: es('Cañería') },
+            { code: 2, label: es('Pozo') },
+            { code: 3, label: es('Río') },
           ],
-          text: t('Main source of water?', '¿Fuente principal de agua?'),
+          text: es('¿Fuente principal de agua?'),
           skips: [{ when: 'C4_WATER == 1', to: 'C6' }],
         },
         {
@@ -351,14 +332,14 @@ export const household: QuestionnaireInput = {
           decimals: 1,
           min: 0,
           showIf: 'C4_WATER in (2, 3)',
-          text: t('Distance to water (km)?', '¿Distancia al agua (km)?'),
+          text: es('¿Distancia al agua (km)?'),
         },
         {
           kind: 'question',
           id: 'C6',
           name: 'C6_ELEC',
           type: 'yesno',
-          text: t('Does the dwelling have electricity?', '¿La vivienda tiene electricidad?'),
+          text: es('¿La vivienda tiene electricidad?'),
           skips: [{ when: 'C6_ELEC == 2', to: 'SEC_D' }],
         },
         {
@@ -367,13 +348,13 @@ export const household: QuestionnaireInput = {
           name: 'C7_APPL',
           type: 'multi',
           options: [
-            { code: 1, label: t('TV') },
-            { code: 2, label: t('Fridge', 'Refrigerador') },
-            { code: 3, label: t('Computer', 'Computadora') },
-            { code: 99, label: t('None', 'Ninguno'), exclusive: true, fixedPosition: true },
+            { code: 1, label: es('Televisor') },
+            { code: 2, label: es('Refrigerador') },
+            { code: 3, label: es('Computadora') },
+            { code: 99, label: es('Ninguno'), exclusive: true, fixedPosition: true },
           ],
           randomizeOptions: true,
-          text: t('Which appliances do you have?', '¿Qué aparatos tiene?'),
+          text: es('¿Qué aparatos tiene?'),
         },
         {
           kind: 'question',
@@ -382,20 +363,20 @@ export const household: QuestionnaireInput = {
           type: 'numeric',
           min: 0,
           showIf: 'contains(C7_APPL, 2)',
-          text: t('How old is the fridge (years)?', '¿Qué antigüedad tiene el refrigerador?'),
+          text: es('¿Qué antigüedad tiene el refrigerador?'),
         },
       ],
     },
     {
       id: 'SEC_D',
-      title: t('Health', 'Salud'),
+      title: es('Salud'),
       items: [
         {
           kind: 'question',
           id: 'D1',
           name: 'D1_INSURED',
           type: 'yesno',
-          text: t('Do you have health insurance?', '¿Tiene seguro de salud?'),
+          text: es('¿Tiene seguro de salud?'),
           skips: [{ when: 'D1_INSURED == 2', to: 'D3' }],
         },
         {
@@ -404,10 +385,10 @@ export const household: QuestionnaireInput = {
           name: 'D2_INSURER',
           type: 'single',
           options: [
-            { code: 1, label: t('Public', 'Público') },
-            { code: 2, label: t('Private', 'Privado') },
+            { code: 1, label: es('Público') },
+            { code: 2, label: es('Privado') },
           ],
-          text: t('Which insurer?', '¿Qué aseguradora?'),
+          text: es('¿Qué aseguradora?'),
         },
         {
           kind: 'question',
@@ -416,7 +397,7 @@ export const household: QuestionnaireInput = {
           type: 'numeric',
           min: 0,
           max: 365,
-          text: t('Doctor visits in the last year?', '¿Visitas al médico el último año?'),
+          text: es('¿Visitas al médico el último año?'),
           skips: [{ when: 'D3_VISITS == 0', to: 'D5' }],
         },
         {
@@ -425,7 +406,7 @@ export const household: QuestionnaireInput = {
           name: 'D4_LASTVISIT',
           type: 'date',
           maxDate: 'today()',
-          text: t('Date of the last visit?', '¿Fecha de la última visita?'),
+          text: es('¿Fecha de la última visita?'),
         },
         {
           kind: 'question',
@@ -436,10 +417,10 @@ export const household: QuestionnaireInput = {
             style: 'nps',
             min: 0,
             max: 10,
-            minLabel: t('Not at all likely'),
-            maxLabel: t('Extremely likely'),
+            minLabel: es('Nada probable'),
+            maxLabel: es('Muy probable'),
           },
-          text: t('How likely are you to recommend your clinic?', '¿Recomendaría su clínica?'),
+          text: es('¿Recomendaría su clínica?'),
         },
         {
           kind: 'question',
@@ -448,24 +429,24 @@ export const household: QuestionnaireInput = {
           type: 'grid',
           answerSetId: 'LIKERT5',
           rows: [
-            { code: 'a', label: t('Waiting time', 'Tiempo de espera') },
-            { code: 'b', label: t('Staff', 'Personal') },
-            { code: 'c', label: t('Cleanliness', 'Limpieza') },
+            { code: 'a', label: es('Tiempo de espera') },
+            { code: 'b', label: es('Personal') },
+            { code: 'c', label: es('Limpieza') },
           ],
-          text: t('Rate your clinic on…', 'Califique su clínica en…'),
+          text: es('Califique su clínica en…'),
         },
       ],
     },
     {
       id: 'SEC_E',
-      title: t('Closing', 'Cierre'),
+      title: es('Cierre'),
       items: [
         {
           kind: 'question',
           id: 'E1',
           name: 'E1_RECONTACT',
           type: 'yesno',
-          text: t('May we contact you again?', '¿Podemos volver a contactarle?'),
+          text: es('¿Podemos volver a contactarle?'),
           skips: [{ when: 'E1_RECONTACT == 2', to: 'END' }],
         },
         {
@@ -475,7 +456,7 @@ export const household: QuestionnaireInput = {
           type: 'text',
           pattern: '[0-9]{7,12}',
           personal: true,
-          text: t('Phone number?', '¿Número de teléfono?'),
+          text: es('¿Número de teléfono?'),
         },
         {
           kind: 'question',
@@ -483,11 +464,11 @@ export const household: QuestionnaireInput = {
           name: 'E3_WHEN',
           type: 'single',
           options: [
-            { code: 1, label: t('Morning', 'Mañana') },
-            { code: 2, label: t('Afternoon', 'Tarde') },
-            { code: 3, label: t('Any time', 'Cualquier hora') },
+            { code: 1, label: es('Mañana') },
+            { code: 2, label: es('Tarde') },
+            { code: 3, label: es('Cualquier hora') },
           ],
-          text: t('Best time to call?', '¿Mejor hora para llamar?'),
+          text: es('¿Mejor hora para llamar?'),
           skips: [{ when: 'E3_WHEN == 3', to: 'E5' }],
         },
         {
@@ -495,7 +476,7 @@ export const household: QuestionnaireInput = {
           id: 'E4',
           name: 'E4_TIME',
           type: 'time',
-          text: t('Exact time?', '¿Hora exacta?'),
+          text: es('¿Hora exacta?'),
         },
         {
           kind: 'question',
@@ -504,10 +485,10 @@ export const household: QuestionnaireInput = {
           type: 'single',
           prefill: 'case.region',
           options: [
-            { code: 1, label: t('North', 'Norte') },
-            { code: 2, label: t('South', 'Sur') },
+            { code: 1, label: es('Norte') },
+            { code: 2, label: es('Sur') },
           ],
-          text: t('Region (confirm)', 'Región (confirme)'),
+          text: es('Región (confirme)'),
         },
         {
           kind: 'question',
@@ -515,7 +496,7 @@ export const household: QuestionnaireInput = {
           name: 'E6_COMMENTS',
           type: 'text',
           required: false,
-          text: t('Any comments?', '¿Comentarios?'),
+          text: es('¿Comentarios?'),
         },
       ],
     },

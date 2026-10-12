@@ -266,7 +266,7 @@ describe('validation', () => {
     expect(nav.validation?.errors).toContainEqual(
       expect.objectContaining({
         ruleId: 'kids',
-        message: 'Children cannot exceed household size (3)',
+        message: 'Los niños no pueden superar el tamaño del hogar (3)',
       }),
     );
   });
@@ -337,30 +337,76 @@ describe('presentation', () => {
   it('uses mode variants and pipes', () => {
     const cati = start({ mode: 'CATI' });
     const cawi = start({ mode: 'CAWI' });
-    expect(cati.text('A2_AGE')).toBe('Could you tell me your age, please?');
-    expect(cawi.text('A2_AGE')).toBe('How old are you?');
+    expect(cati.text('A2_AGE')).toBe('¿Podría decirme su edad, por favor?');
+    expect(cawi.text('A2_AGE')).toBe('¿Cuántos años tiene?');
     expect(start().text('A0_CONSENT_TEXT')).toBe(
-      'Hello Rosa, we are conducting a survey in Quito.',
+      'Hola Rosa, estamos realizando una encuesta en Quito.',
     );
     expect(start().text('A3_SEX', 'interviewerInstruction')).toBe(
-      'RECORD WITHOUT ASKING IF OBVIOUS',
+      'REGISTRE SIN PREGUNTAR SI ES OBVIO',
     );
     expect(cati.text('A3_SEX', 'interviewerInstruction')).toBeNull();
   });
 
-  it('switches language mid-interview', () => {
-    const s = start();
-    drive(s, { A1_CONSENT: 1, A2_AGE: 40, A3_SEX: 1, A4_MARITAL: 1 });
-    expect(s.text('A4_SPOUSE')).toBe('What is the name of your wife?');
-    s.setLanguage('es');
-    expect(s.text('A4_SPOUSE')).toBe('¿Cómo se llama su esposa?');
+  it('switches to an added language mid-interview, one language at a time', () => {
+    // Questionnaires are written in Spanish; English is added as a language of its own.
+    const both = (es: string, en: string) => ({ es, en });
+    const bilingual = compile({
+      id: 'BI',
+      title: both('Prueba', 'Test'),
+      defaultLanguage: 'es',
+      languages: ['es', 'en'],
+      settings: {
+        specialCodes: {
+          DK: { code: -8, label: both('No sabe', "Don't know") },
+          RF: { code: -9, label: both('No responde', 'Refused') },
+          NA: { code: -7, label: both('No aplica', 'Not applicable'), offeredIn: [] },
+        },
+      },
+      sections: [
+        {
+          id: 'S',
+          title: both('Sección', 'Section'),
+          items: [
+            {
+              kind: 'question',
+              id: 'SEX',
+              name: 'SEX',
+              type: 'single',
+              text: both('Sexo', 'Sex'),
+              options: [
+                { code: 1, label: both('Hombre', 'Man') },
+                { code: 2, label: both('Mujer', 'Woman') },
+              ],
+            },
+            {
+              kind: 'question',
+              id: 'SPOUSE',
+              name: 'SPOUSE',
+              type: 'text',
+              text: both(
+                '¿Cómo se llama {{#if SEX == 1}}su esposa{{else}}su esposo{{/if}}?',
+                'What is the name of your {{#if SEX == 1}}wife{{else}}husband{{/if}}?',
+              ),
+            },
+          ],
+        },
+      ],
+    });
+    const s = createInterview(bilingual, { mode: 'CAPI' });
+    expect(s.state().language).toBe('es');
+    drive(s, { SEX: 1 });
+    expect(s.text('SPOUSE')).toBe('¿Cómo se llama su esposa?');
+    s.setLanguage('en');
+    expect(s.text('SPOUSE')).toBe('What is the name of your wife?');
+    expect(s.optionsFor('SEX').options.map((o) => o.label)).toEqual(['Man', 'Woman']);
   });
 
   it('pipes roster values per row', () => {
     const s = start();
     drive(s, base);
-    expect(s.text('HH[2].M_AGE')).toBe('How old is Pat?');
-    expect(s.text('HH[3].M_NAME')).toBe('Name of person 3');
+    expect(s.text('HH[2].M_AGE')).toBe('¿Qué edad tiene Pat?');
+    expect(s.text('HH[3].M_NAME')).toBe('Nombre de la persona 3');
   });
 
   it('randomises options deterministically per interview and keeps fixed options in place', () => {
