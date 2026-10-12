@@ -1,13 +1,14 @@
 import { own, type ChangeResult, type InterviewSession, type TraceEntry } from '@wansurvey/logic';
 import type { AnswerValue, Mode, Question, Roster, SpecialKind } from '@wansurvey/schema';
 import {
+  useMemo,
   useCallback,
   useEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { useTranslation } from 'react-i18next';
+import { I18nextProvider, useTranslation } from 'react-i18next';
 import { RENDERER_NS } from './i18n.js';
 import { isTypingTarget, matchTypedCode, TYPED_CODE_TIMEOUT_MS } from './keyboard.js';
 import { QuestionView } from './QuestionView.js';
@@ -86,6 +87,25 @@ function openRostersBefore(session: InterviewSession, key: string | null): Trace
  * respondents. Keyboard: digits pick codes, Enter = next, Shift+Enter / Alt+← = back, F7/F8 = DK/RF.
  */
 export function InterviewRunner(p: InterviewRunnerProps) {
+  const { i18n } = useTranslation(RENDERER_NS);
+  // Respondents (CAWI) see buttons and messages in the questionnaire's language; interviewers
+  // keep the interface language they chose.
+  const respondentI18n = useMemo(() => {
+    if (p.mode !== 'CAWI') return null;
+    const clone = i18n.cloneInstance({ lng: p.lang, initAsync: false });
+    void clone.changeLanguage(p.lang);
+    return clone;
+  }, [i18n, p.mode, p.lang]);
+  if (respondentI18n)
+    return (
+      <I18nextProvider i18n={respondentI18n}>
+        <Runner {...p} />
+      </I18nextProvider>
+    );
+  return <Runner {...p} />;
+}
+
+function Runner(p: InterviewRunnerProps) {
   const { t } = useTranslation(RENDERER_NS);
   const { session } = p;
   const [, setRev] = useState(0);

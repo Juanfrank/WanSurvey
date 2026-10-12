@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import i18next from 'i18next';
 import { describe, expect, it } from 'vitest';
@@ -136,6 +136,15 @@ describe('InterviewRunner (respondent mode)', () => {
     await user.click(screen.getByRole('button', { name: /Next/ }));
     expect(session.currentKey()).toBe('A2_AGE'); // stopped at the first unanswered required question
     expect(screen.getByRole('alert').textContent).not.toBe('');
+  });
+
+  it("uses the questionnaire's language for its buttons, while interviewers keep theirs", () => {
+    // The interface is in English here; the questionnaire is shown in Spanish.
+    setup('CAWI', { lang: 'es' });
+    expect(screen.getByRole('button', { name: /Siguiente/ })).toBeTruthy();
+    cleanup();
+    setup('CATI', { lang: 'es' });
+    expect(screen.getByRole('button', { name: /Next/ })).toBeTruthy();
   });
 
   it('shows one question per page on phones', () => {

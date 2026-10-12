@@ -101,10 +101,10 @@ test('respondents on a phone get one question per page; PAPI prints routing as i
   await expect(page.locator('[data-qkey]')).toContainText(
     'Hola Rosa, estamos realizando una encuesta en Lima.',
   );
-  await page.getByRole('button', { name: /Next/ }).click();
+  await page.getByRole('button', { name: /Siguiente/ }).click();
   await expect(page.locator('[data-qkey]')).toContainText('¿Acepta participar?');
   await page.getByLabel('Sí').check();
-  await page.getByRole('button', { name: /Next/ }).click();
+  await page.getByRole('button', { name: /Siguiente/ }).click();
   await expect(page.locator('[data-qkey]')).toContainText('¿Cuántos años tiene?');
   await shot(page, 'preview-cawi-phone');
 
