@@ -17,15 +17,18 @@ export function readCookie(name: string): string | null {
   return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
 }
 
-export async function api<T = unknown>(
+type ApiInit = {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  body?: unknown;
+  /** Lets the request finish while the page is closing (autosave on leave). */
+  keepalive?: boolean;
+};
+
+/** A request with its status and headers (for answers such as 204 with a reason header). */
+export async function apiFull<T = unknown>(
   path: string,
-  init: {
-    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-    body?: unknown;
-    /** Lets the request finish while the page is closing (autosave on leave). */
-    keepalive?: boolean;
-  } = {},
-): Promise<T> {
+  init: ApiInit = {},
+): Promise<{ status: number; headers: Headers; body: T | null }> {
   const method = init.method ?? 'GET';
   const headers: Record<string, string> = { accept: 'application/json' };
   if (init.body !== undefined) headers['content-type'] = 'application/json';
@@ -41,7 +44,11 @@ export async function api<T = unknown>(
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
   if (!res.ok) throw new ApiError(res.status, body ?? {});
-  return body as T;
+  return { status: res.status, headers: res.headers, body: body as T | null };
+}
+
+export async function api<T = unknown>(path: string, init: ApiInit = {}): Promise<T> {
+  return (await apiFull<T>(path, init)).body as T;
 }
 
 export interface TenantSummary {

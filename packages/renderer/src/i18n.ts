@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 export const RENDERER_NS = 'renderer';
 
 const en = {
+  script: { label: 'Read to the respondent' },
   nav: {
     next: 'Next',
     back: 'Back',
@@ -103,6 +104,7 @@ const en = {
 type Catalogue = typeof en;
 
 const es: Catalogue = {
+  script: { label: 'Leer al entrevistado' },
   nav: {
     next: 'Siguiente',
     back: 'Atrás',

@@ -239,6 +239,14 @@ interface WalkState {
  * One interview: answers, routing, validation and navigation. Pure and synchronous; persistence
  * (IndexedDB, sync, server) wraps it. The same class runs in browsers, offline PWAs and on the server.
  */
+/** Where scripts are wanted; `item` takes the answer key on screen. */
+export type ScriptQuery =
+  | { at: 'start' }
+  | { at: 'end' }
+  | { at: 'section'; sectionId: string }
+  | { at: 'item'; key: string }
+  | { at: 'callOutcome'; outcome: string };
+
 export class InterviewSession {
   readonly mode: Mode;
   readonly context: InterviewContext;
@@ -621,6 +629,29 @@ export class InterviewSession {
     const variant = def.variants?.[this.mode];
     const source = variant?.[field] ?? (field === 'text' ? def.text : undefined);
     return source ? this.renderText(source, entry.frames) : null;
+  }
+
+  /**
+   * Interviewer scripts for this mode at an anchor (start, end, a section, an item or a call
+   * outcome), piped in the current language. Respondent mode (CAWI) has none.
+   */
+  scriptsFor(anchor: ScriptQuery): { id: string; text: string }[] {
+    const frames =
+      anchor.at === 'item' ? (this.activeKeys.get(anchor.key)?.frames ?? []) : ([] as Frame[]);
+    const itemId = anchor.at === 'item' ? this.activeKeys.get(anchor.key)?.id : undefined;
+    return (this.compiled.questionnaire.scripts ?? [])
+      .filter((sc) => (sc.modes as string[]).includes(this.mode))
+      .filter((sc) => {
+        const a = sc.anchor;
+        if (a.at !== anchor.at) return false;
+        if (a.at === 'section') return anchor.at === 'section' && a.sectionId === anchor.sectionId;
+        if (a.at === 'item') return a.itemId === itemId;
+        if (a.at === 'callOutcome')
+          return anchor.at === 'callOutcome' && a.outcome === anchor.outcome;
+        return true;
+      })
+      .map((sc) => ({ id: sc.id, text: this.renderText(sc.body, frames) ?? '' }))
+      .filter((sc) => sc.text);
   }
 
   renderText(

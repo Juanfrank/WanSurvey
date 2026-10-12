@@ -395,11 +395,22 @@ export const cases = pgTable(
     modePreference: text('mode_preference'),
     assignedTo: uuid('assigned_to').references(() => users.id),
     importId: uuid('import_id'),
+    // CATI (slice 7)
+    attempts: integer('attempts').notNull().default(0),
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    /** A callback, appointment or retry: not called before this time. */
+    nextContactAt: timestamp('next_contact_at', { withTimezone: true }),
+    /** Who the callback is for; null means the case holder or, in pool mode, anyone. */
+    callbackUserId: uuid('callback_user_id'),
+    /** On the phone with one interviewer until the lock expires. */
+    callLockUserId: uuid('call_lock_user_id'),
+    callLockUntil: timestamp('call_lock_until', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('cases_external_uq').on(t.projectId, t.externalId),
+    index('cases_next_contact_idx').on(t.projectId, t.nextContactAt),
     index('cases_status_idx').on(t.projectId, t.status),
     index('cases_assigned_idx').on(t.projectId, t.assignedTo),
   ],
@@ -546,6 +557,8 @@ export const interviews = pgTable(
     deviceId: text('device_id').notNull(),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
+    /** PAPI double entry: 1 for the first keying, 2 for the second. */
+    entryPass: integer('entry_pass').notNull().default(1),
     activeMs: integer('active_ms').notNull().default(0),
     totalMs: integer('total_ms').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -620,6 +633,39 @@ export const interviewParadata = pgTable(
   (t) => [uniqueIndex('interview_paradata_uq').on(t.interviewId, t.deviceId, t.seq)],
 );
 
+/** One phone call on a case (CATI): who called which number, how it went, what comes next. */
+export const callAttempts = pgTable(
+  'call_attempts',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id),
+    interviewerId: uuid('interviewer_id').notNull(),
+    contactId: uuid('contact_id'),
+    /** Last digits only, so the history never repeats the number. */
+    numberMasked: text('number_masked'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    connectedMs: integer('connected_ms'),
+    wrapUpMs: integer('wrap_up_ms'),
+    /** answered | no_answer | busy | voicemail | wrong_number | disconnected | refusal | callback | appointment; null while dialling */
+    outcome: text('outcome'),
+    disposition: text('disposition'),
+    callbackAt: timestamp('callback_at', { withTimezone: true }),
+    note: text('note'),
+    interviewId: uuid('interview_id'),
+  },
+  (t) => [
+    index('call_attempts_case_idx').on(t.caseId, t.startedAt),
+    index('call_attempts_interviewer_idx').on(t.tenantId, t.interviewerId, t.startedAt),
+  ],
+);
+
 /** Immutable audit trail (UPDATE/DELETE are blocked by trigger and privileges). */
 export const auditLog = pgTable(
   'audit_log',
@@ -665,5 +711,6 @@ export const TENANT_TABLES = [
   'interview_devices',
   'interview_answer_events',
   'interview_paradata',
+  'call_attempts',
   'audit_log',
 ] as const;

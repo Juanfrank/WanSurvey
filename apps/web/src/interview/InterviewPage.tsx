@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { own, type InterviewSession } from '@wansurvey/logic';
-import { InterviewRunner } from '@wansurvey/renderer';
+import { InterviewRunner, ScriptBox } from '@wansurvey/renderer';
 import type { LocalizedText } from '@wansurvey/schema';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -145,12 +145,22 @@ export function InterviewPage() {
     }
   };
 
+  /** Back to the project; telephone interviews go back to the calls workspace. */
+  const leave = (done = false) =>
+    payload.interview.mode === 'CATI'
+      ? navigate({
+          to: '/projects/$projectId',
+          params: { projectId },
+          search: { tab: 'calls', ...(done ? { notice: 'interview_done' } : {}) },
+        })
+      : navigate({ to: '/projects/$projectId', params: { projectId } });
+
   const submit = async () => {
     setSubmitting(true);
     setMessage('');
     try {
       await iv.submit();
-      await navigate({ to: '/projects/$projectId', params: { projectId } });
+      await leave(true);
     } catch (e) {
       setMessage(localiseError(t, e));
     } finally {
@@ -317,6 +327,7 @@ export function InterviewPage() {
           )}
           {finished ? (
             <div className="mt-4 flex flex-col items-start gap-2 border-t border-slate-200 pt-4">
+              <ScriptBox scripts={session.scriptsFor({ at: 'end' })} />
               <p>{t('interview.ready')}</p>
               <Button type="button" disabled={submitting} onClick={() => void submit()}>
                 {t('interview.submit')}
@@ -351,7 +362,7 @@ export function InterviewPage() {
           className={smallBtn}
           onClick={async () => {
             await iv.sync({ force: true });
-            await navigate({ to: '/projects/$projectId', params: { projectId } });
+            await leave();
           }}
         >
           {t('interview.suspend')}

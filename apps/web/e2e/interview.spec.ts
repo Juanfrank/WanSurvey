@@ -41,6 +41,8 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await page.getByRole('tab', { name: 'My cases' }).click();
   await page.getByRole('combobox', { name: /^Status/ }).selectOption('assigned');
   const row = page.getByTestId('cases-table').locator('tbody tr').first();
+  // Wait for the filtered list (earlier tests finish some of these cases).
+  await expect(row).toContainText('Assigned');
   const caseId = (await row.getAttribute('data-case'))!;
   await row.getByRole('button', { name: `Open case ${caseId}` }).click();
   const drawer = page.getByRole('dialog', { name: `Case ${caseId}` });

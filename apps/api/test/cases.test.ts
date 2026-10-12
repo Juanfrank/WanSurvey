@@ -378,7 +378,7 @@ describe('cases API', () => {
   it('shows interviewers the personal data of their cases, recording the first view of each', async () => {
     await t.admin`update projects set languages = '{en,es}', timezone = 'America/Lima' where id = ${project}`;
     const project0 = await pm.agent.get(`/api/v1/projects/${project}`);
-    expect(project0.body.settings).toEqual({
+    expect(project0.body.settings).toMatchObject({
       revealToInterviewers: true,
       assignmentMode: 'assigned',
     });
@@ -408,7 +408,10 @@ describe('cases API', () => {
     expect((await patchProject(supervisor, { revealToInterviewers: false })).status).toBe(403);
     expect((await patchProject(pm, { revealAll: true })).status).toBe(400);
     const off = await patchProject(pm, { revealToInterviewers: false });
-    expect(off.body.settings).toEqual({ revealToInterviewers: false, assignmentMode: 'assigned' });
+    expect(off.body.settings).toMatchObject({
+      revealToInterviewers: false,
+      assignmentMode: 'assigned',
+    });
     // Other project fields are left alone.
     expect(off.body).toMatchObject({ languages: ['en', 'es'], timezone: 'America/Lima' });
     const masked = await interviewerS.agent.get(`${base}/cases/${id}`);

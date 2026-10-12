@@ -1,6 +1,6 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { SAMPLES } from '@wansurvey/fixtures';
 import type { ProjectSettings } from '@wansurvey/schema';
 import { useState } from 'react';
@@ -13,6 +13,7 @@ import { AssignmentsTab } from '../cases/AssignmentsTab.js';
 import { CasesTab } from '../cases/CasesTab.js';
 import { ImportTab } from '../cases/ImportTab.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
+import { CallsTab } from '../cati/CallsTab.js';
 import { inputCls } from './fields.js';
 import { useCan } from './hooks.js';
 
@@ -241,11 +242,12 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
 const tabCls =
   '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
 
-type ProjectTab = 'questionnaires' | 'cases' | 'import' | 'assignments' | 'settings';
+type ProjectTab = 'questionnaires' | 'cases' | 'calls' | 'import' | 'assignments' | 'settings';
 
 /** A project: its questionnaires, cases, sample import and assignments, as allowed by role. */
 export function ProjectPage() {
   const { projectId } = useParams({ strict: false }) as { projectId: string };
+  const search = useSearch({ strict: false }) as { tab?: string; notice?: string };
   const { t } = useTranslation();
   const project = useQuery({
     queryKey: ['project', projectId],
@@ -257,14 +259,18 @@ export function ProjectPage() {
   const canImport = useCan('cases.import', projectId);
   const canAssign = useCan('cases.assign', projectId);
   const canSettings = useCan('projects.update', projectId);
+  const canCall =
+    useCan('interviews.conduct', projectId) &&
+    (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CATI'));
   const tabs: ProjectTab[] = [
     ...(canQuestionnaires ? (['questionnaires'] as const) : []),
     ...(canCasesAll || canCasesOwn ? (['cases'] as const) : []),
+    ...(canCall ? (['calls'] as const) : []),
     ...(canImport ? (['import'] as const) : []),
     ...(canAssign ? (['assignments'] as const) : []),
     ...(canSettings ? (['settings'] as const) : []),
   ];
-  const [tab, setTab] = useState<ProjectTab | null>(null);
+  const [tab, setTab] = useState<ProjectTab | null>((search.tab as ProjectTab) ?? null);
   const current = tab && tabs.includes(tab) ? tab : (tabs[0] ?? null);
 
   return (
@@ -296,6 +302,9 @@ export function ProjectPage() {
           </Tabs.Content>
           <Tabs.Content value="cases">
             <CasesTab projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="calls">
+            <CallsTab projectId={projectId} notice={search.notice} />
           </Tabs.Content>
           <Tabs.Content value="import">
             <ImportTab projectId={projectId} onDone={() => setTab('cases')} />

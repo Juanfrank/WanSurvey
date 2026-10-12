@@ -3,10 +3,14 @@ import { projectSettings } from '../src/index.js';
 
 describe('project settings', () => {
   it('fills in defaults', () => {
-    expect(projectSettings({})).toEqual({ revealToInterviewers: true, assignmentMode: 'assigned' });
-    expect(projectSettings(null)).toEqual({
+    expect(projectSettings({})).toMatchObject({
       revealToInterviewers: true,
       assignmentMode: 'assigned',
+    });
+    expect(projectSettings(null).cati).toEqual({
+      callingHours: { from: '09:00', to: '21:00' },
+      maxAttempts: 8,
+      retryMinutes: { no_answer: 120, busy: 15, voicemail: 240 },
     });
   });
 

@@ -13,6 +13,7 @@ import { RENDERER_NS } from './i18n.js';
 import { isTypingTarget, matchTypedCode, TYPED_CODE_TIMEOUT_MS } from './keyboard.js';
 import { QuestionView } from './QuestionView.js';
 import { pick } from './text.js';
+import { ScriptBox, scriptsAt } from './scripts.js';
 
 export interface InterviewRunnerProps {
   session: InterviewSession;
@@ -403,6 +404,9 @@ function Runner(p: InterviewRunnerProps) {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
+          {!respondent && currentKey ? (
+            <ScriptBox scripts={scriptsAt(session, currentKey)} />
+          ) : null}
           {entries.map((entry) => (
             <QuestionView
               key={entry.key}

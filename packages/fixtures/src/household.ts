@@ -33,8 +33,32 @@ export const household: QuestionnaireInput = {
       anchor: { at: 'start' },
       modes: ['CATI'],
       body: es(
-        'Buenas noches, ¿puedo hablar con {{respondent.firstName}}? Mi nombre es {{interviewer.firstName}}.',
+        'Buenos días, ¿puedo hablar con {{respondent.firstName}}? Mi nombre es {{interviewer.firstName}} y llamo por la Encuesta de hogares 2026.',
       ),
+    },
+    {
+      id: 'CATI_CALLBACK',
+      anchor: { at: 'callOutcome', outcome: 'callback' },
+      modes: ['CATI'],
+      body: es('¿Qué día y a qué hora sería un buen momento para volver a llamarle?'),
+    },
+    {
+      id: 'CATI_REFUSAL',
+      anchor: { at: 'callOutcome', outcome: 'refusal' },
+      modes: ['CATI'],
+      body: es('Entiendo. Muchas gracias por su tiempo y que tenga un buen día.'),
+    },
+    {
+      id: 'SEC_B_INTRO',
+      anchor: { at: 'section', sectionId: 'SEC_B' },
+      modes: ['CATI', 'CAPI'],
+      body: es('Ahora le haré algunas preguntas sobre las personas que viven en su hogar.'),
+    },
+    {
+      id: 'CATI_VOICEMAIL',
+      anchor: { at: 'callOutcome', outcome: 'voicemail' },
+      modes: ['CATI'],
+      body: es('No deje mensaje: el caso se volverá a llamar más tarde.'),
     },
     {
       id: 'CLOSE',

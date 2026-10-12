@@ -49,20 +49,12 @@ export type SaveState = 'saved' | 'saving' | 'local' | 'error';
 
 const SYNC_EVERY_MS = 3000;
 
-/** Starts (or resumes) an interview on a case and keeps a copy on this device. */
-export async function startInterview(
-  projectId: string,
-  body: { caseId: string; questionnaireId: string; mode: Mode },
-): Promise<InterviewPayload> {
-  const store = await InterviewStore.open();
+/** Keeps a copy on this device of an interview the server has just started or resumed. */
+export async function keepOnDevice(p: InterviewPayload, store?: InterviewStore) {
+  const own = store ?? (await InterviewStore.open());
   try {
-    const deviceId = await store.deviceId();
-    const p = await api<InterviewPayload>(`/projects/${projectId}/interviews`, {
-      method: 'POST',
-      body: { ...body, id: crypto.randomUUID(), deviceId },
-    });
-    if (!(await store.get(p.interview.id)))
-      await store.adopt(p.interview.id, {
+    if (!(await own.get(p.interview.id)))
+      await own.adopt(p.interview.id, {
         seq: p.lastSeq,
         acked: p.lastSeq,
         state: p.interview.state,
@@ -70,6 +62,34 @@ export async function startInterview(
         activeMs: p.interview.activeMs,
         totalMs: p.interview.totalMs,
       });
+  } finally {
+    if (!store) own.close();
+  }
+}
+
+/** This device's id (made on first use). */
+export async function deviceId() {
+  const store = await InterviewStore.open();
+  try {
+    return await store.deviceId();
+  } finally {
+    store.close();
+  }
+}
+
+/** Starts (or resumes) an interview on a case and keeps a copy on this device. */
+export async function startInterview(
+  projectId: string,
+  body: { caseId: string; questionnaireId: string; mode: Mode },
+): Promise<InterviewPayload> {
+  const store = await InterviewStore.open();
+  try {
+    const device = await store.deviceId();
+    const p = await api<InterviewPayload>(`/projects/${projectId}/interviews`, {
+      method: 'POST',
+      body: { ...body, id: crypto.randomUUID(), deviceId: device },
+    });
+    await keepOnDevice(p, store);
     return p;
   } finally {
     store.close();

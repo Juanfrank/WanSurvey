@@ -5,3 +5,4 @@ export { describeCondition, printExpr, type DescribeContext } from './describe.j
 export { matchTypedCode, isTypingTarget } from './keyboard.js';
 export { rendererResources, messageText, RENDERER_NS } from './i18n.js';
 export { pick, keyId } from './text.js';
+export { ScriptBox, scriptsAt, scriptText } from './scripts.js';

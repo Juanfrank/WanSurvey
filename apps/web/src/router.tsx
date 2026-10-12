@@ -55,6 +55,10 @@ const projectRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/projects/$projectId',
   component: lazyRouteComponent(() => import('./designer/ProjectPages.js'), 'ProjectPage'),
+  validateSearch: (s: Record<string, unknown>): { tab?: string; notice?: string } => ({
+    ...(typeof s.tab === 'string' ? { tab: s.tab } : {}),
+    ...(typeof s.notice === 'string' ? { notice: s.notice } : {}),
+  }),
 });
 const designerRoute = createRoute({
   getParentRoute: () => appRoute,

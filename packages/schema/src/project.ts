@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CatiSettings } from './cati.js';
 
 /** How cases reach interviewers: handed out by a supervisor or rules, or claimed from a pool. */
 export const ASSIGNMENT_MODES = ['assigned', 'pool'] as const;
@@ -13,6 +14,8 @@ export const ProjectSettings = z.object({
   revealToInterviewers: z.boolean().default(true),
   /** `pool`: unassigned cases are open to every interviewer, and the first to claim one holds it. */
   assignmentMode: z.enum(ASSIGNMENT_MODES).default('assigned'),
+  /** Telephone interviewing: calling hours, attempts and retry delays. */
+  cati: CatiSettings.default(CatiSettings.parse({})),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

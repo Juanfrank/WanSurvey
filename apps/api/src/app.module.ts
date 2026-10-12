@@ -7,6 +7,8 @@ import { AuditService } from './audit/audit.service.js';
 import { AuthController } from './auth/auth.controller.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthService } from './auth/auth.service.js';
+import { CatiController } from './cati/cati.controller.js';
+import { CatiService } from './cati/cati.service.js';
 import { CasesController } from './cases/cases.controller.js';
 import { CasesService } from './cases/cases.service.js';
 import { ImportsController } from './cases/imports.controller.js';
@@ -19,6 +21,7 @@ import { ConsoleMailer, MAILER, MemoryMailer, type Mailer } from './mail/mailer.
 import { ProjectsController } from './projects/projects.controller.js';
 import { GeoController } from './geo/geo.controller.js';
 import { InterviewsController } from './interviews/interviews.controller.js';
+import { InterviewsService } from './interviews/interviews.service.js';
 import { GEOCODER, NominatimGeocoder, type Geocoder } from './geo/geocoder.js';
 import { GeoService } from './geo/geo.service.js';
 import { LibraryController } from './library/library.controller.js';
@@ -66,6 +69,7 @@ export class AppModule {
         LibraryController,
         GeoController,
         InterviewsController,
+        CatiController,
         CasesController,
         ImportsController,
         AuditController,
@@ -84,6 +88,8 @@ export class AppModule {
         UsersService,
         CasesService,
         GeoService,
+        InterviewsService,
+        CatiService,
         {
           provide: GEOCODER,
           useValue:

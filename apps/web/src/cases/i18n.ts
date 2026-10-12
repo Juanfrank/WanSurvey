@@ -6,6 +6,7 @@ export const casesEn = {
     cases: 'Cases',
     import: 'Import sample',
     assignments: 'Assignments',
+    calls: 'Phone calls',
     settings: 'Settings',
   },
   list: {
@@ -254,6 +255,7 @@ export const casesEs: CasesCatalogue = {
     cases: 'Casos',
     import: 'Importar muestra',
     assignments: 'Asignaciones',
+    calls: 'Llamadas',
     settings: 'Configuración',
   },
   list: {

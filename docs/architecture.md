@@ -136,3 +136,19 @@ InterviewRunner ─ change ─▶ useInterview ─▶ IndexedDB (snapshot + numb
 - **Every change** in the runner is drained from the session (`drainEvents`), stamped with the interview clock and written to IndexedDB together with the engine snapshot, in one transaction, before the screen reports it. Navigation adds paradata (enter/leave question with time spent, back moves, pauses, focus, notes, language).
 - **Sync** (`apps/web/src/interview/sync.ts`): every 3 s, when back online, and on hide/leave with `keepalive`; failures back off up to a minute. The server applies the run of changes that follows the last acknowledged number, stores answer events and paradata (append-only), and keeps the snapshot only when nothing was missed.
 - **Submit**: once everything is acknowledged, the server replays the answers with the engine and finalises the case. The case drawer shows every answer change with who, when and why (path changes included).
+
+## Telephone interviewing (slice 7)
+
+```
+Phone calls tab ─ N ─▶ POST /projects/:id/cati/next ─▶ queue (K1) ─▶ lock + open call ─▶ case, numbers, scripts
+      │ 1–9, Ctrl+Enter
+      ▼
+POST /cati/attempts/:id/outcome ─┬─ answered ─▶ start CATI interview ─▶ interviewer screen ─▶ submit ─▶ hook closes the call
+                                 ├─ final ─────▶ case finalised
+                                 ├─ retry ─────▶ next_contact_at = now + delay
+                                 └─ callback ──▶ next_contact_at = booked time (inside calling hours, respondent's zone)
+```
+
+- The shared interview runtime moved into `InterviewsService` (`apps/api/src/interviews/interviews.service.ts`): start, numbered sync, submit and case finalisation. Modes build on it; `onSubmitted` hooks let CATI close the call (and, later, CAWI mark the invitation and PAPI compare entries).
+- Calls are stored in `call_attempts`; cases carry `attempts`, `last_attempt_at`, `next_contact_at`, `callback_user_id` and the call lock. Settings (`projects.settings.cati`): calling hours, attempts per case and retry delays, edited in the Settings tab.
+- Scripts: `session.scriptsFor(anchor)` returns the questionnaire's scripts for the mode at an anchor (start, end, section, item, call outcome), piped with the case, respondent and interviewer. The calls tab shows the introduction and outcome scripts; the runner shows start, section and item scripts above the question in interviewer modes; the closing script appears before submitting.

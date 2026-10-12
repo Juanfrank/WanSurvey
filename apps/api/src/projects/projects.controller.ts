@@ -9,7 +9,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { ASSIGNMENT_MODES, Mode, projectSettings } from '@wansurvey/schema';
+import { ASSIGNMENT_MODES, CatiSettings, Mode, projectSettings } from '@wansurvey/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
@@ -38,6 +38,7 @@ const ProjectPatch = ProjectFields.partial().extend({
     .object({
       revealToInterviewers: z.boolean(),
       assignmentMode: z.enum(ASSIGNMENT_MODES),
+      cati: CatiSettings,
     })
     .partial()
     .strict()

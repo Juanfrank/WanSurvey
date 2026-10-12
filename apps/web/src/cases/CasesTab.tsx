@@ -10,7 +10,7 @@ import { useCan } from '../designer/hooks.js';
 import { caseVariables } from '../designer/vars.js';
 import { Button } from '../routes/ui.js';
 import { CaseMap } from './CaseMap.js';
-import { InterviewHistory, StartInterview } from './CaseInterviews.js';
+import { CallHistory, InterviewHistory, StartInterview } from './CaseInterviews.js';
 import { useMe } from '../routes/AppLayout.js';
 import { qs, STATUSES, useAssignees, type CaseList, type CaseRow } from './hooks.js';
 
@@ -689,6 +689,7 @@ function CaseDrawer({
             </div>
           ) : null}
           <InterviewHistory projectId={projectId} caseId={caseId} />
+          <CallHistory projectId={projectId} caseId={caseId} />
           <section aria-labelledby="cd-history">
             <h3 id="cd-history" className="mb-1 font-semibold">
               {t('cases.detail.history')}

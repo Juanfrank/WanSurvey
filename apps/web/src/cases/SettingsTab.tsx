@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
+import { controlCls } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 
@@ -72,6 +73,73 @@ export function SettingsTab({ project }: { project: Project }) {
         <p id="settings-mode-help" className="ml-6 text-slate-600">
           {t('cases.settings.poolHelp')}
         </p>
+      </fieldset>
+      <fieldset className="flex flex-col gap-3" data-testid="cati-settings">
+        <legend className="mb-1 font-medium">{t('cati.settings.title')}</legend>
+        <div className="flex flex-wrap gap-4">
+          {(['from', 'to'] as const).map((k) => (
+            <label key={k} className="flex flex-col gap-1">
+              <span>
+                {k === 'from' ? t('cati.settings.hoursFrom') : t('cati.settings.hoursTo')}
+              </span>
+              <input
+                type="time"
+                className={`${controlCls} w-auto`}
+                aria-describedby="settings-hours-help"
+                value={form.cati.callingHours[k]}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    cati: {
+                      ...form.cati,
+                      callingHours: { ...form.cati.callingHours, [k]: e.target.value },
+                    },
+                  })
+                }
+              />
+            </label>
+          ))}
+          <label className="flex flex-col gap-1">
+            <span>{t('cati.settings.maxAttempts')}</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              className={`${controlCls} w-24`}
+              value={form.cati.maxAttempts}
+              onChange={(e) =>
+                setForm({ ...form, cati: { ...form.cati, maxAttempts: Number(e.target.value) } })
+              }
+            />
+          </label>
+        </div>
+        <p id="settings-hours-help" className="text-slate-600">
+          {t('cati.settings.hoursHelp')}
+        </p>
+        <fieldset className="flex flex-wrap gap-4">
+          <legend className="mb-1">{t('cati.settings.retry')}</legend>
+          {(['no_answer', 'busy', 'voicemail'] as const).map((k) => (
+            <label key={k} className="flex flex-col gap-1">
+              <span>{t(`cati.settings.${k}`)}</span>
+              <input
+                type="number"
+                min={1}
+                max={10080}
+                className={`${controlCls} w-24`}
+                value={form.cati.retryMinutes[k]}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    cati: {
+                      ...form.cati,
+                      retryMinutes: { ...form.cati.retryMinutes, [k]: Number(e.target.value) },
+                    },
+                  })
+                }
+              />
+            </label>
+          ))}
+        </fieldset>
       </fieldset>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={save.isPending}>

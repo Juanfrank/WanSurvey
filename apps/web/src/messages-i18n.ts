@@ -84,6 +84,12 @@ export const messagesEn = {
     not_a_code: '{{to}} is not a code of this question',
   },
   apiError: {
+    OUTSIDE_CALLING_HOURS: 'That time is outside calling hours in the respondent’s time zone.',
+    CALLBACK_PAST: 'That time has already passed.',
+    CALLBACK_TIME: 'Choose when to call back.',
+    CALL_CLOSED: 'This call has already been recorded.',
+    LOCK_LOST: 'Someone else is calling this case now.',
+    CALL_ANSWERED: 'An answered call can only end as a callback or a refusal.',
     DRAFT_CONFLICT: 'Someone else saved this questionnaire in the meantime.',
     NOTHING_TO_PUBLISH: 'Nothing changed since the last version.',
     PUBLISH_BLOCKED: 'The questionnaire cannot be published yet.',
@@ -184,6 +190,13 @@ export const messagesEs: MessagesCatalogue = {
     not_a_code: '{{to}} no es un código de esta pregunta',
   },
   apiError: {
+    OUTSIDE_CALLING_HOURS:
+      'Esa hora está fuera del horario de llamadas en la zona horaria del entrevistado.',
+    CALLBACK_PAST: 'Esa hora ya pasó.',
+    CALLBACK_TIME: 'Elija cuándo volver a llamar.',
+    CALL_CLOSED: 'Esta llamada ya fue registrada.',
+    LOCK_LOST: 'Otra persona está llamando a este caso ahora.',
+    CALL_ANSWERED: 'Una llamada contestada solo puede terminar como rellamada o rechazo.',
     DRAFT_CONFLICT: 'Otra persona guardó este cuestionario mientras tanto.',
     NOTHING_TO_PUBLISH: 'Nada cambió desde la última versión.',
     PUBLISH_BLOCKED: 'El cuestionario aún no se puede publicar.',

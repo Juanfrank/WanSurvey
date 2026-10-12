@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import axe from 'axe-core';
+import { CatiSettings } from '@wansurvey/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CasesTab } from '../src/cases/CasesTab.js';
 import { CaseMap } from '../src/cases/CaseMap.js';
@@ -114,7 +115,11 @@ describe('project settings', () => {
       status: 'active',
       languages: ['en'],
       modesEnabled: [],
-      settings: { revealToInterviewers: true, assignmentMode: 'assigned' as const },
+      settings: {
+        revealToInterviewers: true,
+        assignmentMode: 'assigned' as const,
+        cati: CatiSettings.parse({}),
+      },
     };
     const { container } = render(
       <QueryClientProvider client={new QueryClient()}>
@@ -130,7 +135,11 @@ describe('project settings', () => {
     const patch = calls.find((c) => c.init?.method === 'PATCH')!;
     expect(patch.url).toMatch(/\/projects\/p$/);
     expect(JSON.parse(String(patch.init!.body))).toEqual({
-      settings: { revealToInterviewers: false, assignmentMode: 'pool' },
+      settings: {
+        revealToInterviewers: false,
+        assignmentMode: 'pool',
+        cati: CatiSettings.parse({}),
+      },
     });
     const result = await axe.run(container, {
       rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },

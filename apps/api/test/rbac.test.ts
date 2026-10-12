@@ -227,12 +227,26 @@ const ENDPOINTS: Endpoint[] = [
   },
   {
     name: 'POST interviews/sync',
-    permission: 'interviews.conduct',
+    permission: ['interviews.conduct', 'dataentry.key'],
     call: (s) =>
       s.agent
         .post('/api/v1/interviews/sync')
         .set('x-csrf-token', s.csrf)
         .send({ deviceId: 'device-rbac-0001', interviews: [] }),
+  },
+  {
+    name: 'POST cati/next',
+    permission: 'interviews.conduct',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/cati/next`)
+        .set('x-csrf-token', s.csrf)
+        .send({}),
+  },
+  {
+    name: 'GET cati/callbacks',
+    permission: 'interviews.conduct',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cati/callbacks`),
   },
   {
     name: 'GET cases',

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
+import { CallList, type CallRow } from '../cati/CallsTab.js';
 import { startInterview } from '../interview/useInterview.js';
 import { Button } from '../routes/ui.js';
 
@@ -219,6 +220,24 @@ export function InterviewHistory({ projectId, caseId }: { projectId: string; cas
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** The case's phone calls, newest first. */
+export function CallHistory({ projectId, caseId }: { projectId: string; caseId: string }) {
+  const { t } = useTranslation();
+  const rows = useQuery({
+    queryKey: ['case-calls', caseId],
+    queryFn: () => api<CallRow[]>(`/projects/${projectId}/cases/${caseId}/calls`),
+  });
+  if (!rows.data?.length) return null;
+  return (
+    <section aria-labelledby="cd-calls" data-testid="case-calls">
+      <h3 id="cd-calls" className="mb-1 font-semibold">
+        {t('cati.drawer.title')}
+      </h3>
+      <CallList rows={rows.data} />
     </section>
   );
 }

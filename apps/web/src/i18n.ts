@@ -2,6 +2,7 @@ import { rendererResources } from '@wansurvey/renderer';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { casesEn, casesEs } from './cases/i18n.js';
+import { catiEn, catiEs } from './cati/i18n.js';
 import { interviewEn, interviewEs } from './interview/i18n.js';
 import { designerEn, designerEs } from './designer/i18n.js';
 import { messagesEn, messagesEs } from './messages-i18n.js';
@@ -134,6 +135,7 @@ const en = {
   designer: designerEn,
   cases: casesEn,
   interview: interviewEn,
+  cati: catiEn,
   ...messagesEn,
 };
 
@@ -264,6 +266,7 @@ const es: Catalogue = {
   designer: designerEs,
   cases: casesEs,
   interview: interviewEs,
+  cati: catiEs,
   ...messagesEs,
 };
 
