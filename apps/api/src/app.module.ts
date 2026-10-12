@@ -7,6 +7,8 @@ import { AuditService } from './audit/audit.service.js';
 import { AuthController } from './auth/auth.controller.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthService } from './auth/auth.service.js';
+import { CapiController } from './capi/capi.controller.js';
+import { CapiService } from './capi/capi.service.js';
 import { CatiController } from './cati/cati.controller.js';
 import { CatiService } from './cati/cati.service.js';
 import { CasesController } from './cases/cases.controller.js';
@@ -70,6 +72,7 @@ export class AppModule {
         GeoController,
         InterviewsController,
         CatiController,
+        CapiController,
         CasesController,
         ImportsController,
         AuditController,
@@ -90,6 +93,7 @@ export class AppModule {
         GeoService,
         InterviewsService,
         CatiService,
+        CapiService,
         {
           provide: GEOCODER,
           useValue:

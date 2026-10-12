@@ -269,6 +269,7 @@ export class CasesController {
         canRelease:
           c.status === 'assigned' &&
           (c.assignedTo === ctx.userId || can(ctx.memberships, 'cases.assign', projectId)),
+        canForceRelease: !!c.checkedOutAt && can(ctx.memberships, 'cases.assign', projectId),
       };
     });
   }
@@ -724,6 +725,7 @@ export class CasesController {
         modePreference: cases.modePreference,
         assignedTo: cases.assignedTo,
         assignedName: users.name,
+        checkedOutAt: cases.checkedOutAt,
         updatedAt: cases.updatedAt,
       })
       .from(cases)

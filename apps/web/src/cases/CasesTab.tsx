@@ -464,6 +464,8 @@ interface CaseDetail extends CaseRow {
   pii: { masked: boolean; canReveal: boolean; auto: boolean };
   canClaim: boolean;
   canRelease: boolean;
+  canForceRelease?: boolean;
+  checkedOutAt?: string | null;
 }
 
 function CaseDrawer({
@@ -499,10 +501,18 @@ function CaseDrawer({
     await qc.invalidateQueries({ queryKey: ['cases', projectId] });
   };
   const hand = useMutation({
-    mutationFn: (action: 'claim' | 'release') =>
+    mutationFn: (action: 'claim' | 'release' | 'force-release') =>
       api(`/projects/${projectId}/cases/${caseId}/${action}`, { method: 'POST' }),
     onSuccess: async (_r, action) => {
-      setNote(t(action === 'claim' ? 'cases.detail.claimed' : 'cases.detail.released'));
+      setNote(
+        t(
+          action === 'claim'
+            ? 'cases.detail.claimed'
+            : action === 'release'
+              ? 'cases.detail.released'
+              : 'cases.detail.deviceReleased',
+        ),
+      );
       await refresh();
     },
     onError: async (e) => {
@@ -547,6 +557,26 @@ function CaseDrawer({
               <span className="ml-auto text-slate-600">{t('cases.detail.autoShown')}</span>
             ) : null}
           </div>
+          {c.checkedOutAt ? (
+            <p
+              className="flex flex-wrap items-center gap-2 text-slate-700"
+              data-testid="checked-out"
+            >
+              {t('cases.detail.onDevice', {
+                time: new Date(c.checkedOutAt).toLocaleString(),
+              })}
+              {c.canForceRelease ? (
+                <button
+                  type="button"
+                  className={smallBtn}
+                  disabled={hand.isPending}
+                  onClick={() => hand.mutate('force-release')}
+                >
+                  {t('cases.detail.forceRelease')}
+                </button>
+              ) : null}
+            </p>
+          ) : null}
           {c.canClaim || c.canRelease || note ? (
             <div className="flex flex-wrap items-center gap-2">
               {c.canClaim ? (

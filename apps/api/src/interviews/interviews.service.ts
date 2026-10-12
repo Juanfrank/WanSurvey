@@ -62,6 +62,14 @@ export class InterviewsService {
     private readonly cases: CasesService,
   ) {}
 
+  /** Set by the CAPI module: creates an interview a device started offline (D2). */
+  createOffline?: (
+    tx: Tx,
+    ctx: AuthContext,
+    deviceId: string,
+    item: SyncItem,
+  ) => Promise<InterviewRow | string>;
+
   /** Other modules react to submissions (close a call, mark an invitation, compare entries). */
   onSubmitted(hook: SubmitHook) {
     this.hooks.push(hook);
@@ -89,6 +97,11 @@ export class InterviewsService {
       throw new ConflictException({
         code: 'CASE_CLOSED',
         message: 'This case is finished or withdrawn',
+      });
+    if (c.checkedOutDevice && c.checkedOutDevice !== body.deviceId)
+      throw new ConflictException({
+        code: 'CHECKED_OUT_ELSEWHERE',
+        message: 'This case is downloaded to another device',
       });
     // C10: in pool mode, starting on a free case takes it.
     if (!c.assignedTo && settings.assignmentMode === 'pool') {
@@ -494,6 +507,7 @@ export class InterviewsService {
       },
       context: row.context,
       compiled: v!.compiled,
+      settings: { capi: (await this.cases.settings(tx, row.projectId)).capi },
       lastSeq: dev?.lastSeq ?? 0,
       serverTime: new Date().toISOString(),
     };

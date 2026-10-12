@@ -92,6 +92,13 @@
       "when": 1791844046719,
       "tag": "0012_cati",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791846310777,
+      "tag": "0013_capi_checkout",
+      "breakpoints": true
     }
   ]
 }

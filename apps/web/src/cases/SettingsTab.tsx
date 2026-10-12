@@ -141,6 +141,34 @@ export function SettingsTab({ project }: { project: Project }) {
           ))}
         </fieldset>
       </fieldset>
+      <fieldset className="flex flex-col gap-2" data-testid="capi-settings">
+        <legend className="mb-1 font-medium">{t('cases.settings.capiTitle')}</legend>
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.capi.gps === 'start_end'}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                capi: { ...form.capi, gps: e.target.checked ? 'start_end' : 'off' },
+              })
+            }
+          />
+          {t('cases.settings.gps')}
+        </label>
+        <label className="flex flex-col gap-1">
+          <span>{t('cases.settings.gpsNotice')}</span>
+          <textarea
+            className={`${controlCls} min-h-[3rem]`}
+            value={form.capi.gpsNotice}
+            maxLength={1000}
+            onChange={(e) =>
+              setForm({ ...form, capi: { ...form.capi, gpsNotice: e.target.value } })
+            }
+          />
+        </label>
+      </fieldset>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={save.isPending}>
           {t('cases.settings.save')}

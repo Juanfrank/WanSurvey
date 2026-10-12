@@ -53,7 +53,7 @@ export class Syncer {
       [];
     for (const id of ids) {
       const local = await this.store.get(id);
-      if (!local || local.seq <= local.acked) continue;
+      if (!local || (local.seq <= local.acked && !local.start)) continue;
       items.push({ local, ops: await this.store.pending(id, BATCH) });
     }
     if (!items.length) return null;
@@ -66,6 +66,7 @@ export class Syncer {
             const all = ops.length && ops[ops.length - 1]!.seq === local.seq;
             return {
               id: local.id,
+              ...(local.start ? { start: local.start } : {}),
               ops,
               ...(all
                 ? {
@@ -80,7 +81,12 @@ export class Syncer {
         },
         keepalive,
       );
-      for (const [id, upto] of Object.entries(res.acks)) await this.store.acknowledge(id, upto);
+      for (const [id, upto] of Object.entries(res.acks)) {
+        await this.store.acknowledge(id, upto);
+        // The server has created it: the start need not be sent again.
+        const local = items.find((x) => x.local.id === id)?.local;
+        if (local?.start) await this.store.patch(id, { start: undefined });
+      }
       for (const id of ids) this.problems.delete(id);
       for (const [id, code] of Object.entries(res.errors)) this.problems.set(id, code);
       this.failures = 0;

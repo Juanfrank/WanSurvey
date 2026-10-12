@@ -8,7 +8,8 @@ import type { Mode } from '@wansurvey/schema';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { InterviewClock } from './paradata.js';
-import { InterviewStore, lowOnSpace, type NewOp } from './store.js';
+import { isOffline } from './device.js';
+import { InterviewStore, lowOnSpace, type LocalInterview, type NewOp } from './store.js';
 import { Syncer } from './sync.js';
 
 export interface InterviewPayload {
@@ -35,8 +36,11 @@ export interface InterviewPayload {
     contacts?: { type: string; value: string; label: string | null }[];
   };
   compiled: CompiledQuestionnaire;
+  settings?: { capi?: { gps: 'off' | 'start_end'; gpsNotice: string } };
   lastSeq: number;
   serverTime: string;
+  /** Opened from this device's copy, with no connection. */
+  offline?: boolean;
 }
 
 /**
@@ -99,6 +103,61 @@ export async function startInterview(
 const hasState = (s: unknown): s is Partial<InterviewState> =>
   !!s && typeof s === 'object' && Object.keys(s).length > 0;
 
+/** The interview as this device has it, for opening with no connection (D2). */
+async function localPayload(
+  store: InterviewStore,
+  local: LocalInterview,
+): Promise<InterviewPayload | null> {
+  const m = local.meta;
+  if (!m) return null;
+  const v = await store.getVersion(m.questionnaireVersionId);
+  const c = await store.getCase(m.caseId);
+  if (!v) return null;
+  return {
+    interview: {
+      id: local.id,
+      projectId: m.projectId,
+      caseId: m.caseId,
+      questionnaireId: '',
+      version: v.version,
+      mode: m.mode as Mode,
+      language: m.language,
+      status: 'in_progress',
+      disposition: null,
+      startedAt: m.startedAt,
+      state: (local.state ?? {}) as Partial<InterviewState>,
+      activeMs: local.activeMs,
+      totalMs: local.totalMs,
+      deviceId: await store.deviceId(),
+      interviewer: null,
+    },
+    context: m.context as InterviewPayload['context'],
+    compiled: v.compiled as CompiledQuestionnaire,
+    ...(c ? { settings: { capi: c.capi } } : {}),
+    lastSeq: local.acked,
+    serverTime: new Date().toISOString(),
+    offline: true,
+  };
+}
+
+/** The device's position, or why it could not be read (`gps` paradata, D4). */
+function position(): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation)
+      return resolve({ error: 'unavailable' });
+    navigator.geolocation.getCurrentPosition(
+      (p) =>
+        resolve({
+          lat: Math.round(p.coords.latitude * 1e6) / 1e6,
+          lng: Math.round(p.coords.longitude * 1e6) / 1e6,
+          accuracy: Math.round(p.coords.accuracy),
+        }),
+      (e) => resolve({ error: e.code === 1 ? 'denied' : 'unavailable' }),
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    );
+  });
+}
+
 /**
  * The interview on screen: the engine session, its copy on this device, the sync loop and the
  * timing. Every change is written to the device first, then sent; "Saved" means the server
@@ -111,6 +170,8 @@ export function useInterview(id: string) {
   const [save, setSave] = useState<SaveState>('saved');
   const [problem, setProblem] = useState<string | null>(null);
   const [lowSpace, setLowSpace] = useState(false);
+  /** The case is downloaded to this device (offline work). */
+  const [onDevice, setOnDevice] = useState(false);
   const [, setTick] = useState(0);
   const ref = useRef<{
     store: InterviewStore;
@@ -193,8 +254,19 @@ export function useInterview(id: string) {
       try {
         store = await InterviewStore.open();
         const deviceId = await store.deviceId();
-        const p = await api<InterviewPayload>(`/interviews/${id}`);
         let local = await store.get(id);
+        let p: InterviewPayload;
+        // Started on this device and not yet on the server, or no connection: the device copy.
+        const fromDevice = local?.start ? await localPayload(store, local) : null;
+        if (fromDevice) p = fromDevice;
+        else
+          try {
+            p = await api<InterviewPayload>(`/interviews/${id}`);
+          } catch (e) {
+            const copy = local && isOffline(e) ? await localPayload(store, local) : null;
+            if (!copy) throw e;
+            p = copy;
+          }
         if (!local || local.seq < p.lastSeq) {
           await store.adopt(id, {
             seq: p.lastSeq,
@@ -230,9 +302,13 @@ export function useInterview(id: string) {
           writes: Promise.resolve(),
         };
         clock.enter(s.currentKey());
+        setOnDevice(!!local?.meta);
         setPayload(p);
         setSession(s);
-        record([paradata('enter_question', { key: s.currentKey(), resumed: true })]);
+        const fresh = !hasState(state);
+        record([paradata('enter_question', { key: s.currentKey(), resumed: !fresh })]);
+        if (fresh && p.settings?.capi?.gps === 'start_end' && p.interview.mode === 'CAPI')
+          void position().then((at) => record([paradata('gps', { when: 'start', ...at })]));
         setLowSpace(await lowOnSpace());
       } catch (e) {
         if (!cancelled) setError(e);
@@ -341,26 +417,48 @@ export function useInterview(id: string) {
     [record, paradata],
   );
 
-  /** Sends everything, then submits; the server re-checks the path. */
-  const submit = useCallback(async () => {
+  /**
+   * Sends everything, then submits; the server re-checks the path. With no connection (or an
+   * interview the server has not seen yet) the submission waits on the device and is sent by
+   * the next sync: `queued`.
+   */
+  const submit = useCallback(async (): Promise<{ status: string; disposition: string | null }> => {
     const r = ref.current!;
+    if (payload?.settings?.capi?.gps === 'start_end' && payload.interview.mode === 'CAPI')
+      record([paradata('gps', { when: 'end', ...(await position()) })]);
+    await r.writes;
     for (let i = 0; i < 3; i++) {
       await sync({ force: true });
       const local = await r.store.get(id);
-      if (local && local.seq <= local.acked) break;
+      if (local && local.seq <= local.acked && !local.start) break;
     }
     const local = await r.store.get(id);
-    const res = await api<{ status: string; disposition: string }>(`/interviews/${id}/submit`, {
-      method: 'POST',
-      body: {
-        deviceId: await r.store.deviceId(),
-        seq: local?.seq ?? 0,
-        path: r.session.pathKeys(),
-      },
-    });
-    await r.store.remove(id);
-    return res;
-  }, [id, sync]);
+    const body = { seq: local?.seq ?? 0, path: r.session.pathKeys() };
+    const disposition = r.session.status().disposition ?? 'COMPLETE';
+    const queue = async () => {
+      await r.store.patch(id, { submit: body });
+      if (local?.meta)
+        await r.store.patchCase(local.meta.caseId, { status: 'queued', disposition });
+      return { status: 'queued', disposition };
+    };
+    if (local?.start || (local && local.seq > local.acked)) return queue();
+    try {
+      const res = await api<{ status: string; disposition: string }>(`/interviews/${id}/submit`, {
+        method: 'POST',
+        body: { deviceId: await r.store.deviceId(), ...body },
+      });
+      await r.store.remove(id);
+      if (local?.meta)
+        await r.store.patchCase(local.meta.caseId, {
+          status: 'done',
+          disposition: res.disposition,
+        });
+      return res;
+    } catch (e) {
+      if (isOffline(e)) return queue();
+      throw e;
+    }
+  }, [id, sync, payload, record, paradata]);
 
   return {
     payload,
@@ -369,6 +467,7 @@ export function useInterview(id: string) {
     save,
     problem,
     lowSpace,
+    onDevice,
     clock: ref.current?.clock ?? null,
     onChange,
     pause,

@@ -91,6 +91,62 @@ describe('sync loop', () => {
   });
 });
 
+describe('offline work', () => {
+  it('keeps downloaded cases and versions, and sends an offline start until the server has it', async () => {
+    const store = await freshStore();
+    await store.putVersion({ id: 'v1', version: 1, compiled: { hash: 'h' } });
+    await store.putCase({
+      caseId: 'c1',
+      projectId: 'p',
+      projectName: 'P',
+      externalId: 'HH1',
+      context: {},
+      questionnaireVersionId: 'v1',
+      interviewId: null,
+      status: 'ready',
+      disposition: null,
+      problem: null,
+      downloadedAt: '2026-10-12T10:00:00.000Z',
+      capi: { gps: 'off', gpsNotice: '' },
+    });
+    expect((await store.cases('p')).map((c) => c.externalId)).toEqual(['HH1']);
+    expect(await store.getVersion('v1')).toMatchObject({ version: 1 });
+    await store.adopt('i1', {
+      seq: 0,
+      acked: 0,
+      state: null,
+      position: null,
+      activeMs: 0,
+      totalMs: 0,
+    });
+    const start = {
+      caseId: 'c1',
+      questionnaireVersionId: 'v1',
+      mode: 'CAPI' as const,
+      language: 'es',
+      startedAt: '2026-10-12T10:00:00.000Z',
+    };
+    await store.patch('i1', { start });
+    // Not started on the server yet: it counts as unsynced even with no changes.
+    expect(await store.unsynced()).toEqual(['i1']);
+    await store.record('i1', [answer('A', 1)], snap(1));
+    const bodies: { interviews: { start?: unknown }[] }[] = [];
+    const send = vi.fn(async (body: unknown) => {
+      bodies.push(body as (typeof bodies)[number]);
+      return { acks: { i1: 1 }, errors: {}, serverTime: '' } as SyncResult;
+    });
+    const syncer = new Syncer(store, 'dev', send);
+    await syncer.flush(['i1']);
+    expect(bodies[0]!.interviews[0]!.start).toEqual(start);
+    // Created on the server: the start is not sent again.
+    expect((await store.get('i1'))!.start).toBeUndefined();
+    await store.record('i1', [answer('A', 2)], snap(2));
+    await syncer.flush(['i1']);
+    expect(bodies[1]!.interviews[0]!.start).toBeUndefined();
+    store.close();
+  });
+});
+
 describe('interview clock', () => {
   it('counts active time without pauses and long hidden periods, on the server clock', () => {
     let now = 1000;

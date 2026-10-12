@@ -5,6 +5,14 @@ import { CatiSettings } from './cati.js';
 export const ASSIGNMENT_MODES = ['assigned', 'pool'] as const;
 export type AssignmentMode = (typeof ASSIGNMENT_MODES)[number];
 
+export const CapiSettings = z.object({
+  /** Record the device's location at the start and end of each interview. */
+  gps: z.enum(['off', 'start_end']).default('off'),
+  /** Shown to interviewers before the location is recorded. */
+  gpsNotice: z.string().max(1000).default(''),
+});
+export type CapiSettings = z.infer<typeof CapiSettings>;
+
 /** Per-project settings, stored as jsonb on `projects.settings`. Missing keys take defaults. */
 export const ProjectSettings = z.object({
   /**
@@ -16,6 +24,8 @@ export const ProjectSettings = z.object({
   assignmentMode: z.enum(ASSIGNMENT_MODES).default('assigned'),
   /** Telephone interviewing: calling hours, attempts and retry delays. */
   cati: CatiSettings.default(CatiSettings.parse({})),
+  /** Face-to-face interviewing on devices. */
+  capi: CapiSettings.default(CapiSettings.parse({})),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

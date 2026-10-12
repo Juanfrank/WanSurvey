@@ -405,6 +405,10 @@ export const cases = pgTable(
     /** On the phone with one interviewer until the lock expires. */
     callLockUserId: uuid('call_lock_user_id'),
     callLockUntil: timestamp('call_lock_until', { withTimezone: true }),
+    // CAPI offline (slice 8): downloaded to one device until checked in.
+    checkedOutDevice: text('checked_out_device'),
+    checkedOutBy: uuid('checked_out_by'),
+    checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

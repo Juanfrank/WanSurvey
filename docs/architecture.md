@@ -152,3 +152,18 @@ POST /cati/attempts/:id/outcome ─┬─ answered ─▶ start CATI interview �
 - The shared interview runtime moved into `InterviewsService` (`apps/api/src/interviews/interviews.service.ts`): start, numbered sync, submit and case finalisation. Modes build on it; `onSubmitted` hooks let CATI close the call (and, later, CAWI mark the invitation and PAPI compare entries).
 - Calls are stored in `call_attempts`; cases carry `attempts`, `last_attempt_at`, `next_contact_at`, `callback_user_id` and the call lock. Settings (`projects.settings.cati`): calling hours, attempts per case and retry delays, edited in the Settings tab.
 - Scripts: `session.scriptsFor(anchor)` returns the questionnaire's scripts for the mode at an anchor (start, end, section, item, call outcome), piped with the case, respondent and interviewer. The calls tab shows the introduction and outcome scripts; the runner shows start, section and item scripts above the question in interviewer modes; the closing script appears before submitting.
+
+## Offline face-to-face interviewing (slice 8)
+
+```
+My device page ─ download ─▶ POST /projects/:id/capi/checkout ─▶ IndexedDB: versions, cases, interviews
+     │ offline: start / continue / submit (queued)                         │
+     ▼                                                                     ▼
+interviewer screen (device copy) ─▶ numbered outbox ─ online ─▶ POST /interviews/sync (start creates the interview)
+                                                             └▶ POST /interviews/:id/submit ─▶ POST …/capi/checkin
+```
+
+- IndexedDB (`apps/web/src/interview/store.ts`, version 2) adds `versions` (compiled questionnaires by version id) and `cases` (downloaded cases with their state: ready, started, queued, done). A local interview can carry `meta` (what is needed to open it offline), `start` (sent until the server has created it) and `submit` (a queued submission).
+- `apps/web/src/interview/device.ts`: download, start on the device, sync everything (changes, then queued submissions, then check-in of finished cases), give back.
+- The My device page (`/projects/$projectId/device`) syncs on arrival, every 30 seconds and when the connection returns, and shows the connection, the last sync and what is waiting.
+- The service worker is generated at build time by a small Vite plugin and registered in production builds only.

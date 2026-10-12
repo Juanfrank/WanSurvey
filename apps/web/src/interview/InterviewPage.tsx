@@ -145,22 +145,31 @@ export function InterviewPage() {
     }
   };
 
-  /** Back to the project; telephone interviews go back to the calls workspace. */
-  const leave = (done = false) =>
-    payload.interview.mode === 'CATI'
+  /**
+   * Back to the project; telephone interviews go back to the calls workspace, and interviews
+   * of cases downloaded to this device go back to the device page.
+   */
+  const leave = (done = false, queued = false) =>
+    iv.onDevice
       ? navigate({
-          to: '/projects/$projectId',
+          to: '/projects/$projectId/device',
           params: { projectId },
-          search: { tab: 'calls', ...(done ? { notice: 'interview_done' } : {}) },
+          search: queued ? { notice: 'queued' } : {},
         })
-      : navigate({ to: '/projects/$projectId', params: { projectId } });
+      : payload.interview.mode === 'CATI'
+        ? navigate({
+            to: '/projects/$projectId',
+            params: { projectId },
+            search: { tab: 'calls', ...(done ? { notice: 'interview_done' } : {}) },
+          })
+        : navigate({ to: '/projects/$projectId', params: { projectId } });
 
   const submit = async () => {
     setSubmitting(true);
     setMessage('');
     try {
-      await iv.submit();
-      await leave(true);
+      const r = await iv.submit();
+      await leave(true, r.status === 'queued');
     } catch (e) {
       setMessage(localiseError(t, e));
     } finally {
@@ -207,6 +216,16 @@ export function InterviewPage() {
               ))}
             </select>
           </label>
+        ) : null}
+        {payload.offline ? (
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+            {t('device.offlineCopy')}
+          </span>
+        ) : null}
+        {payload.settings?.capi?.gps === 'start_end' && payload.interview.mode === 'CAPI' ? (
+          <span className="text-xs text-slate-600" title={payload.settings.capi.gpsNotice}>
+            {t('device.gpsOn')}
+          </span>
         ) : null}
         <SaveBadge state={iv.save} />
       </header>

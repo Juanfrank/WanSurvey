@@ -72,6 +72,15 @@ const interviewRoute = createRoute({
   component: lazyRouteComponent(() => import('./interview/InterviewPage.js'), 'InterviewPage'),
 });
 
+// Offline work on a device (CAPI): loads from the service worker's cache with no connection.
+const deviceRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId/device',
+  component: lazyRouteComponent(() => import('./device/DevicePage.js'), 'DevicePage'),
+  validateSearch: (s: Record<string, unknown>): { notice?: string } =>
+    typeof s.notice === 'string' ? { notice: s.notice } : {},
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
@@ -84,6 +93,7 @@ const routeTree = rootRoute.addChildren([
     projectRoute,
     designerRoute,
     interviewRoute,
+    deviceRoute,
   ]),
 ]);
 

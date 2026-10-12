@@ -97,6 +97,10 @@ export const PARADATA_TYPES = [
   'warning_confirmed',
   'answers_cleared',
   'note_added',
+  /** Device location at the start or end (projects with `capi.gps`). */
+  'gps',
+  /** Paper form date and duration as written on it (PAPI entry). */
+  'paper_meta',
 ] as const;
 export const ParadataType = z.enum(PARADATA_TYPES);
 

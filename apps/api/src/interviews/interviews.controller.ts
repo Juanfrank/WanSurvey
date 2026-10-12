@@ -97,7 +97,9 @@ export class InterviewsController {
         body.deviceId,
         body.interviews,
         (row) => (row.interviewerId === ctx.userId ? null : 'NOT_FOUND'),
-        this.offlineStart ? (item) => this.offlineStart!(tx, ctx, body.deviceId, item) : undefined,
+        this.runtime.createOffline
+          ? (item) => this.runtime.createOffline!(tx, ctx, body.deviceId, item)
+          : undefined,
       ),
     );
   }
@@ -124,14 +126,6 @@ export class InterviewsController {
       });
     });
   }
-
-  /** Set by the CAPI module: creates interviews started offline (slice 8). */
-  offlineStart?: (
-    tx: Tx,
-    ctx: AuthContext,
-    deviceId: string,
-    item: z.infer<typeof SyncBody>['interviews'][number],
-  ) => Promise<typeof interviews.$inferSelect | string>;
 
   /** A case's interviews with their answer history, oldest change first. */
   @Get('projects/:projectId/cases/:caseId/interviews')

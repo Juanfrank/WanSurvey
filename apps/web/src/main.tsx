@@ -12,6 +12,10 @@ const queryClient = new QueryClient({
 
 await initI18n();
 
+// The app shell works offline once installed (D3); development stays uncached.
+if (import.meta.env.PROD && 'serviceWorker' in navigator)
+  void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

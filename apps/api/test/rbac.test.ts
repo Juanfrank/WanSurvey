@@ -249,6 +249,32 @@ const ENDPOINTS: Endpoint[] = [
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cati/callbacks`),
   },
   {
+    name: 'POST capi/checkout',
+    permission: 'interviews.conduct',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/capi/checkout`)
+        .set('x-csrf-token', s.csrf)
+        .send({ deviceId: 'device-rbac-0001', caseIds: [ids.caseId] }),
+  },
+  {
+    name: 'POST capi/checkin',
+    permission: 'interviews.conduct',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/capi/checkin`)
+        .set('x-csrf-token', s.csrf)
+        .send({ deviceId: 'device-rbac-0001', caseIds: [ids.caseId] }),
+  },
+  {
+    name: 'POST force-release',
+    permission: 'cases.assign',
+    call: (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/cases/${ids.caseId}/force-release`)
+        .set('x-csrf-token', s.csrf),
+  },
+  {
     name: 'GET cases',
     permission: ['cases.read_all', 'cases.read_assigned'],
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cases`),

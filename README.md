@@ -4,7 +4,7 @@ WanSurvey is a multi-tenant platform for survey data collection. A questionnaire
 
 ## Status
 
-The MVP is built in 13 vertical slices; seven are done so far.
+The MVP is built in 13 vertical slices; eight are done so far.
 
 | Slice | Scope                                                                                                                                                                                                                                                                                                                                                                                                                 | State   |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -16,7 +16,8 @@ The MVP is built in 13 vertical slices; seven are done so far.
 | +     | **Review round additions**: drag-and-drop outline, translation export/import (CSV, XLIFF 2.0), version comparison, comments on items, question library, light co-editing (presence and three-way merge), per-project settings (automatic personal data for interviewers, open pool of cases), geocoding with OpenStreetMap and a case map, duplicate detection across projects, translated engine and server messages | ✅      |
 | 6     | **Interview runtime and autosave**: interviewer screen (case details, section navigator, notes, pause, keyboard shortcuts), answers kept on the device in IndexedDB and synced in numbered batches, "Saved" only when the server has them, timing and navigation paradata, server-checked submission, and the full answer history per case                                                                            | ✅      |
 | 7     | **CATI**: call queue with callbacks first, locks so no case is served twice, calling hours in the respondent's time zone, outcomes mapped to AAPOR dispositions with retries, callbacks and appointments, scripts, and a keyboard-first Phone calls workspace with timers and the case's call history                                                                                                                 | ✅      |
-| 8–13  | CAPI offline, CAWI, PAPI, review, metrics, hardening                                                                                                                                                                                                                                                                                                                                                                  | planned |
+| 8     | **CAPI offline**: installable app with a service worker, cases downloaded to one device, interviews started, continued and submitted with no connection and sent automatically when back online, optional location at start and end, and supervisor release of a lost device                                                                                                                                          | ✅      |
+| 9–13  | CAWI, PAPI, review, metrics, hardening                                                                                                                                                                                                                                                                                                                                                                                | planned |
 
 Background reading:
 

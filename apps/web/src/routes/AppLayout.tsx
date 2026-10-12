@@ -5,8 +5,48 @@ import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, type Me } from '../api.js';
 import { LANGUAGES, setLanguage } from '../i18n.js';
 
+const ME_KEY = 'wansurvey.me';
+
+/**
+ * The signed-in person. The last answer is kept on the device so the app still opens with no
+ * connection (offline interviewing); the server decides again as soon as it is reachable.
+ */
 export function useMe() {
-  return useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/auth/me') });
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      try {
+        const me = await api<Me>('/auth/me');
+        try {
+          localStorage.setItem(ME_KEY, JSON.stringify(me));
+        } catch {
+          // Storage may be unavailable; the app still works online.
+        }
+        return me;
+      } catch (e) {
+        const cached = !(e instanceof ApiError) ? readCachedMe() : null;
+        if (cached) return cached;
+        throw e;
+      }
+    },
+  });
+}
+
+function readCachedMe(): Me | null {
+  try {
+    const raw = localStorage.getItem(ME_KEY);
+    return raw ? (JSON.parse(raw) as Me) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetCachedMe() {
+  try {
+    localStorage.removeItem(ME_KEY);
+  } catch {
+    // Nothing kept.
+  }
 }
 
 /** Signed-in area: organisation switcher, language, sign out. Sends people where their session needs them. */
@@ -32,6 +72,7 @@ export function AppLayout() {
   };
   const logout = async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
+    forgetCachedMe();
     queryClient.clear();
     await navigate({ to: '/login' });
   };

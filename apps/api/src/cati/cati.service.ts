@@ -176,7 +176,8 @@ export class CatiService implements OnModuleInit {
           ),
           sql`exists (select 1 from contacts ct where ct.case_id = ${cases.id}
                 and ct.type = 'phone' and ct.valid)`,
-          // A case being interviewed face to face (or keyed) is not called.
+          // A case downloaded to a device, or being interviewed face to face, is not called.
+          isNull(cases.checkedOutDevice),
           sql`not exists (select 1 from interviews iv where iv.case_id = ${cases.id}
                 and iv.status = 'in_progress' and iv.mode <> 'CATI')`,
         ),

@@ -27,6 +27,57 @@ export type Op =
 /** An op before it gets its number. */
 export type NewOp = Op extends infer O ? (O extends Op ? Omit<O, 'seq'> : never) : never;
 
+/** How an interview started on this device without the server: sent with its first sync. */
+export interface OfflineStart {
+  caseId: string;
+  questionnaireVersionId: string;
+  mode: 'CAPI';
+  language: string;
+  startedAt: string;
+}
+
+/** What is needed to open an interview with no connection. */
+export interface InterviewMeta {
+  projectId: string;
+  caseId: string;
+  externalId: string;
+  questionnaireVersionId: string;
+  mode: string;
+  language: string;
+  startedAt: string;
+  context: Record<string, unknown>;
+}
+
+/** A submission waiting for the connection: sent once everything is acknowledged. */
+export interface PendingSubmit {
+  seq: number;
+  path: string[];
+}
+
+/** A compiled questionnaire version kept on the device. */
+export interface DeviceVersion {
+  id: string;
+  version: number;
+  compiled: unknown;
+}
+
+/** A case downloaded to this device. */
+export interface DeviceCase {
+  caseId: string;
+  projectId: string;
+  projectName: string;
+  externalId: string;
+  context: Record<string, unknown>;
+  questionnaireVersionId: string;
+  interviewId: string | null;
+  /** ready: not started; started; queued: submitted, waiting to be sent; done. */
+  status: 'ready' | 'started' | 'queued' | 'done';
+  disposition: string | null;
+  problem: string | null;
+  downloadedAt: string;
+  capi: { gps: 'off' | 'start_end'; gpsNotice: string };
+}
+
 export interface LocalInterview {
   id: string;
   /** The last change number given out on this device. */
@@ -38,10 +89,13 @@ export interface LocalInterview {
   activeMs: number;
   totalMs: number;
   updatedAt: string;
+  meta?: InterviewMeta;
+  start?: OfflineStart;
+  submit?: PendingSubmit;
 }
 
 const DB = 'wansurvey';
-const VERSION = 1;
+const VERSION = 2;
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -64,11 +118,18 @@ export class InterviewStore {
   static async open(name = DB): Promise<InterviewStore> {
     if (typeof indexedDB === 'undefined') throw new Error('This browser cannot store data offline');
     const open = indexedDB.open(name, VERSION);
-    open.onupgradeneeded = () => {
+    open.onupgradeneeded = (e) => {
       const db = open.result;
-      db.createObjectStore('meta');
-      db.createObjectStore('interviews', { keyPath: 'id' });
-      db.createObjectStore('outbox', { keyPath: ['interviewId', 'seq'] });
+      if (e.oldVersion < 1) {
+        db.createObjectStore('meta');
+        db.createObjectStore('interviews', { keyPath: 'id' });
+        db.createObjectStore('outbox', { keyPath: ['interviewId', 'seq'] });
+      }
+      if (e.oldVersion < 2) {
+        // Offline work (slice 8): compiled versions and downloaded cases.
+        db.createObjectStore('versions', { keyPath: 'id' });
+        db.createObjectStore('cases', { keyPath: 'caseId' }).createIndex('project', 'projectId');
+      }
     };
     return new InterviewStore(await req(open));
   }
@@ -100,7 +161,88 @@ export class InterviewStore {
   /** Starts (or re-aligns) the local copy with what the server has acknowledged. */
   async adopt(id: string, base: Omit<LocalInterview, 'id' | 'updatedAt'>): Promise<void> {
     const tx = this.db.transaction('interviews', 'readwrite');
-    tx.objectStore('interviews').put({ id, ...base, updatedAt: new Date().toISOString() });
+    const store = tx.objectStore('interviews');
+    const cur = (await req(store.get(id))) as LocalInterview | undefined;
+    store.put({
+      ...(cur?.meta ? { meta: cur.meta } : {}),
+      id,
+      ...base,
+      updatedAt: new Date().toISOString(),
+    });
+    await done(tx);
+  }
+
+  /** Changes fields of the local copy (start sent, submission queued…). */
+  async patch(id: string, fields: Partial<Omit<LocalInterview, 'id'>>): Promise<void> {
+    const tx = this.db.transaction('interviews', 'readwrite');
+    const store = tx.objectStore('interviews');
+    const cur = (await req(store.get(id))) as LocalInterview | undefined;
+    if (cur) {
+      const next: Record<string, unknown> = { ...cur, ...fields };
+      for (const [k, v] of Object.entries(fields)) if (v === undefined) delete next[k];
+      store.put(next);
+    }
+    await done(tx);
+  }
+
+  async all(): Promise<LocalInterview[]> {
+    const tx = this.db.transaction('interviews', 'readonly');
+    return (await req(tx.objectStore('interviews').getAll())) as LocalInterview[];
+  }
+
+  async putVersion(v: DeviceVersion): Promise<void> {
+    const tx = this.db.transaction('versions', 'readwrite');
+    tx.objectStore('versions').put(v);
+    await done(tx);
+  }
+
+  async getVersion(id: string): Promise<DeviceVersion | null> {
+    const tx = this.db.transaction('versions', 'readonly');
+    return ((await req(tx.objectStore('versions').get(id))) as DeviceVersion | undefined) ?? null;
+  }
+
+  async putCase(c: DeviceCase): Promise<void> {
+    const tx = this.db.transaction('cases', 'readwrite');
+    tx.objectStore('cases').put(c);
+    await done(tx);
+  }
+
+  async getCase(id: string): Promise<DeviceCase | null> {
+    const tx = this.db.transaction('cases', 'readonly');
+    return ((await req(tx.objectStore('cases').get(id))) as DeviceCase | undefined) ?? null;
+  }
+
+  async patchCase(id: string, fields: Partial<DeviceCase>): Promise<void> {
+    const tx = this.db.transaction('cases', 'readwrite');
+    const store = tx.objectStore('cases');
+    const cur = (await req(store.get(id))) as DeviceCase | undefined;
+    if (cur) store.put({ ...cur, ...fields });
+    await done(tx);
+  }
+
+  async cases(projectId: string): Promise<DeviceCase[]> {
+    const tx = this.db.transaction('cases', 'readonly');
+    const rows = (await req(
+      tx.objectStore('cases').index('project').getAll(projectId),
+    )) as DeviceCase[];
+    return rows.sort((a, b) => a.externalId.localeCompare(b.externalId));
+  }
+
+  async removeCase(id: string): Promise<void> {
+    const tx = this.db.transaction('cases', 'readwrite');
+    tx.objectStore('cases').delete(id);
+    await done(tx);
+  }
+
+  /** The device's meta values (last sync time…). */
+  async getMeta<T>(key: string): Promise<T | null> {
+    const tx = this.db.transaction('meta', 'readonly');
+    return ((await req(tx.objectStore('meta').get(key))) as T | undefined) ?? null;
+  }
+
+  async setMeta(key: string, value: unknown): Promise<void> {
+    const tx = this.db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').put(value, key);
     await done(tx);
   }
 
@@ -153,11 +295,11 @@ export class InterviewStore {
     await done(tx);
   }
 
-  /** Interviews with changes still to send. */
+  /** Interviews with changes still to send (or not yet created on the server). */
   async unsynced(): Promise<string[]> {
     const tx = this.db.transaction('interviews', 'readonly');
     const all = (await req(tx.objectStore('interviews').getAll())) as LocalInterview[];
-    return all.filter((i) => i.seq > i.acked).map((i) => i.id);
+    return all.filter((i) => i.seq > i.acked || i.start).map((i) => i.id);
   }
 
   /** Forgets a submitted interview. */

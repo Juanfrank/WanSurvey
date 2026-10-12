@@ -9,5 +9,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": false
   },
-  "include": ["src", "test", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "test", "e2e", "vite.config.ts", "service-worker.ts", "playwright.config.ts"]
 }

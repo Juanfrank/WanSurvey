@@ -259,6 +259,9 @@ export function ProjectPage() {
   const canImport = useCan('cases.import', projectId);
   const canAssign = useCan('cases.assign', projectId);
   const canSettings = useCan('projects.update', projectId);
+  const canDevice =
+    useCan('interviews.conduct', projectId) &&
+    (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CAPI'));
   const canCall =
     useCan('interviews.conduct', projectId) &&
     (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CATI'));
@@ -280,7 +283,18 @@ export function ProjectPage() {
           {t('designer.projects')}
         </Link>
       </nav>
-      <h1 className="text-2xl font-semibold">{project.data?.name ?? '…'}</h1>
+      <div className="flex flex-wrap items-center gap-4">
+        <h1 className="text-2xl font-semibold">{project.data?.name ?? '…'}</h1>
+        {canDevice ? (
+          <Link
+            to="/projects/$projectId/device"
+            params={{ projectId }}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+          >
+            {t('device.link')}
+          </Link>
+        ) : null}
+      </div>
       {current ? (
         <Tabs.Root
           value={current}
