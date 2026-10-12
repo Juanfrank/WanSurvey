@@ -104,7 +104,7 @@ questionnaire_scenarios (saved test runs) ──run on every publish──┘
 - **Translations** (`translations.ts` in logic) key every text by item id and field, option code, check id or mode, export CSV or XLIFF 2.0, and apply imports with a preview as one undoable change.
 - **Version comparison** (`compareVersions` in logic) matches items by id and reports added, removed, edited and minimally moved items, field by field.
 - **Question library** (`library_items`, per organisation) stores an item, block or roster with the answer sets it uses. `insertFromLibrary` gives clashing ids and names fresh ones (updating references inside the entry) and reuses or renames answer sets.
-- Interviews (slice 6) will bind to a version; exports (slice 12) apply the stored mappings to line up data across versions.
+- Interviews bind to a version (see _Interview runtime_); exports (slice 12) apply the stored mappings to line up data across versions.
 
 ## Cases, sample import and assignments
 
@@ -123,3 +123,16 @@ upload (CSV/XLSX) ─▶ sample_imports + staged rows ─▶ mapping ─▶ vali
 - **Project settings** (`projects.settings`, typed by `ProjectSettings`): whether interviewers see their own cases' personal data automatically (first view audited per case), and whether cases are assigned or taken from an open pool (`POST …/cases/:id/claim` with a conditional update, so concurrent claims cannot both win). Assignment rules run through `AssignmentStrategy` (`strategies.ts`), selected by `assignments.kind`.
 - **Duplicates across projects:** validation looks up the file's normalised phones and e-mails in the organisation's other projects (index on `contacts(tenant_id, type, value)`) and adds a non-blocking `duplicate_elsewhere` issue with project names and row counts; the case drawer lists the other projects for people with `cases.read_all`. No matching value is ever returned.
 - **Geocoding:** a `Geocoder` port (`apps/api/src/geo`) with a Nominatim adapter (identifying User-Agent, one request a second, cache by normalised address), chosen by `GEOCODER`. `POST …/geocode` geocodes the project's address contacts in the background (in this process for now) and records `cases.geocoded`; `GET …/geocode/status` reports progress. Coordinates sit on the contact and are masked with it. `GET …/cases-map` returns points (case id, status, coordinates) for the cases the caller may see; the web map uses Leaflet (bundled, loaded on demand) with OpenStreetMap tiles, plus the same points as a table.
+
+## Interview runtime (slice 6)
+
+```
+InterviewRunner ─ change ─▶ useInterview ─▶ IndexedDB (snapshot + numbered outbox) ─▶ POST /interviews/sync
+      ▲                          │                                                     │ acks per device
+      └── session (logic) ◀──────┘ resume: server state, or the device copy if newer ◀──┘
+```
+
+- **Start** (`POST /projects/:id/interviews`): the device sends an id it made; the server binds the latest published version, stores the case data given to the engine, moves the case to _in progress_ (taking it in pool mode) and returns the compiled version and the server time.
+- **Every change** in the runner is drained from the session (`drainEvents`), stamped with the interview clock and written to IndexedDB together with the engine snapshot, in one transaction, before the screen reports it. Navigation adds paradata (enter/leave question with time spent, back moves, pauses, focus, notes, language).
+- **Sync** (`apps/web/src/interview/sync.ts`): every 3 s, when back online, and on hide/leave with `keepalive`; failures back off up to a minute. The server applies the run of changes that follows the last acknowledged number, stores answer events and paradata (append-only), and keeps the snapshot only when nothing was missed.
+- **Submit**: once everything is acknowledged, the server replays the answers with the engine and finalises the case. The case drawer shows every answer change with who, when and why (path changes included).

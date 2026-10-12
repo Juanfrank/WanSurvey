@@ -39,6 +39,7 @@
     "@wansurvey/api": "workspace:*",
     "axe-core": "4.13.0",
     "exceljs": "4.4.0",
+    "fake-indexeddb": "6.2.5",
     "jsdom": "26.1.0",
     "postgres": "3.4.7",
     "tailwindcss": "4.3.3",

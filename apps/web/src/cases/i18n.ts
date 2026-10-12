@@ -98,6 +98,8 @@ export const casesEn = {
       status_changed: 'Status changed',
       claimed: 'Taken from the pool',
       released: 'Given back',
+      interview_started: 'Interview started',
+      interview_submitted: 'Interview submitted',
     },
   },
   map: {
@@ -345,6 +347,8 @@ export const casesEs: CasesCatalogue = {
       status_changed: 'Cambio de estado',
       claimed: 'Tomado de los disponibles',
       released: 'Devuelto',
+      interview_started: 'Entrevista iniciada',
+      interview_submitted: 'Entrevista enviada',
     },
   },
   map: {

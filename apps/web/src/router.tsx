@@ -62,6 +62,12 @@ const designerRoute = createRoute({
   component: lazyRouteComponent(() => import('./designer/DesignerPage.js'), 'DesignerPage'),
 });
 
+const interviewRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId/interviews/$interviewId',
+  component: lazyRouteComponent(() => import('./interview/InterviewPage.js'), 'InterviewPage'),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
@@ -73,6 +79,7 @@ const routeTree = rootRoute.addChildren([
     projectsRoute,
     projectRoute,
     designerRoute,
+    interviewRoute,
   ]),
 ]);
 

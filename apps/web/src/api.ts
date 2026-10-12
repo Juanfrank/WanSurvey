@@ -19,7 +19,12 @@ export function readCookie(name: string): string | null {
 
 export async function api<T = unknown>(
   path: string,
-  init: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown } = {},
+  init: {
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    body?: unknown;
+    /** Lets the request finish while the page is closing (autosave on leave). */
+    keepalive?: boolean;
+  } = {},
 ): Promise<T> {
   const method = init.method ?? 'GET';
   const headers: Record<string, string> = { accept: 'application/json' };
@@ -30,6 +35,7 @@ export async function api<T = unknown>(
     method,
     headers,
     credentials: 'include',
+    ...(init.keepalive ? { keepalive: true } : {}),
     ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
   });
   const text = await res.text();

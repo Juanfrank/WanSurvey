@@ -10,6 +10,8 @@ import { useCan } from '../designer/hooks.js';
 import { caseVariables } from '../designer/vars.js';
 import { Button } from '../routes/ui.js';
 import { CaseMap } from './CaseMap.js';
+import { InterviewHistory, StartInterview } from './CaseInterviews.js';
+import { useMe } from '../routes/AppLayout.js';
 import { qs, STATUSES, useAssignees, type CaseList, type CaseRow } from './hooks.js';
 
 const MAX_FIELD_COLUMNS = 4;
@@ -476,6 +478,8 @@ function CaseDrawer({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const canEdit = useCan('cases.edit', projectId);
+  const canConduct = useCan('interviews.conduct', projectId);
+  const me = useMe();
   const [reveal, setReveal] = useState(false);
   const detail = useQuery({
     queryKey: ['case', caseId, reveal],
@@ -569,6 +573,16 @@ function CaseDrawer({
                 {note}
               </p>
             </div>
+          ) : null}
+          {canConduct &&
+          (c.status === 'assigned' || c.status === 'in_progress' || c.canClaim) &&
+          (c.assignedTo === me.data?.user.id || c.canClaim) ? (
+            <StartInterview
+              projectId={projectId}
+              caseId={caseId}
+              externalId={c.externalId}
+              resume={c.status === 'in_progress'}
+            />
           ) : null}
           <section aria-labelledby="cd-sample">
             <h3 id="cd-sample" className="mb-1 font-semibold">
@@ -674,6 +688,7 @@ function CaseDrawer({
               ) : null}
             </div>
           ) : null}
+          <InterviewHistory projectId={projectId} caseId={caseId} />
           <section aria-labelledby="cd-history">
             <h3 id="cd-history" className="mb-1 font-semibold">
               {t('cases.detail.history')}
