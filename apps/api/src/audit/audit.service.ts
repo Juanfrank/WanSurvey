@@ -39,6 +39,8 @@ export type AuditAction =
   | 'case.pii_viewed'
   | 'case.claimed'
   | 'case.released'
+  | 'library_item.created'
+  | 'library_item.deleted'
   | 'sample_field.updated'
   | 'assignment.created'
   | 'assignment.updated'

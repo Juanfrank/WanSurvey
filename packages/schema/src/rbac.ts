@@ -27,6 +27,8 @@ export const PERMISSIONS = [
   'questionnaires.read',
   'questionnaires.edit',
   'questionnaires.publish',
+  /** Comment on questionnaire items (review rounds); editors can comment too. */
+  'questionnaires.comment',
   'cases.read_all',
   'cases.read_assigned',
   'cases.import',
@@ -69,6 +71,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'questionnaires.read',
     'questionnaires.edit',
     'questionnaires.publish',
+    'questionnaires.comment',
     'cases.read_all',
     'cases.import',
     'cases.assign',
@@ -85,6 +88,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'users.read',
     'projects.read',
     'questionnaires.read',
+    'questionnaires.comment',
     'cases.read_all',
     'cases.assign',
     'interviews.read_all',
@@ -99,6 +103,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'tenant.read',
     'projects.read',
     'questionnaires.read',
+    'questionnaires.comment',
     'interviews.read_all',
     'interviews.review',
     'interviews.approve',
@@ -120,7 +125,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'cases.read_assigned',
     'dataentry.key',
   ],
-  client_viewer: ['tenant.read', 'projects.read', 'dashboards.read'],
+  client_viewer: [
+    'tenant.read',
+    'projects.read',
+    'dashboards.read',
+    // Clients review questionnaires and comment on them.
+    'questionnaires.read',
+    'questionnaires.comment',
+  ],
 };
 
 /** Roles that must enrol TOTP before using the app. */

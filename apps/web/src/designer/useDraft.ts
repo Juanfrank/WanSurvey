@@ -3,6 +3,7 @@ import { analyze, type Diagnostic } from '@wansurvey/logic';
 import { Questionnaire } from '@wansurvey/schema';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api.js';
+import { mergeDrafts } from './merge.js';
 import type { Draft } from './tree.js';
 
 export interface QuestionnaireDoc {
@@ -22,7 +23,12 @@ export interface Conflict {
   currentRevision: number;
   updatedBy: string | null;
   updatedAt: string;
+  /** Items (or `questionnaire.<part>`) both sides changed differently, when known. */
+  items?: string[];
 }
+
+/** What happened when a newer server draft came in. */
+export type SyncOutcome = 'none' | 'loaded' | 'merged' | 'conflict';
 
 const AUTOSAVE_MS = 1500;
 const HISTORY = 200;
@@ -51,7 +57,9 @@ export function diagnose(draft: unknown): {
 
 /**
  * The questionnaire being designed: local draft with undo/redo, autosave after a pause, and
- * optimistic locking — if someone else saved first, the save stops and `conflict` is set.
+ * optimistic locking. When someone else saved first, their draft is merged with the local
+ * edits (three-way, against the draft both started from); only edits to the same item stop
+ * the save and set `conflict`.
  */
 export function useDraft(projectId: string, qid: string) {
   const queryClient = useQueryClient();
@@ -74,6 +82,10 @@ export function useDraft(projectId: string, qid: string) {
   const lastCoalesce = useRef<{ key: string; at: number } | null>(null);
   const inFlight = useRef<Promise<boolean> | null>(null);
   const latest = useRef<{ draft: Draft; name: string } | null>(null);
+  /** The server draft the local one is based on: the common ancestor for merges. */
+  const base = useRef<{ draft: Draft; name: string } | null>(null);
+  const statusRef = useRef<SaveStatus>('saved');
+  statusRef.current = status;
 
   // Take the server copy on first load and when someone else's revision is loaded; our own
   // saves only bump the cached revision and must not reset the local draft.
@@ -83,6 +95,7 @@ export function useDraft(projectId: string, qid: string) {
     if (loaded.current && query.data.draftRevision === revision.current) return;
     loaded.current = true;
     revision.current = query.data.draftRevision;
+    base.current = { draft: query.data.draft, name: query.data.name };
     setState({ draft: query.data.draft, name: query.data.name, past: [], future: [] });
     setStatus('saved');
     setConflict(null);
@@ -155,6 +168,7 @@ export function useDraft(projectId: string, qid: string) {
           },
         );
         revision.current = res.draftRevision;
+        base.current = sent;
         queryClient.setQueryData<QuestionnaireDoc>(questionnaireKey(projectId, qid), (old) =>
           old ? { ...old, draftRevision: res.draftRevision, updatedAt: res.updatedAt } : old,
         );
@@ -164,12 +178,13 @@ export function useDraft(projectId: string, qid: string) {
         return true;
       } catch (e) {
         if (e instanceof ApiError && e.code === 'DRAFT_CONFLICT') {
-          setConflict({
-            currentRevision: e.body.currentRevision as number,
-            updatedBy: (e.body.updatedBy as string | null) ?? null,
-            updatedAt: e.body.updatedAt as string,
-          });
-          setStatus('conflict');
+          // Someone saved first: merge their draft in; a clean merge autosaves again.
+          inFlight.current = null;
+          try {
+            await syncRef.current();
+          } catch {
+            setStatus('error');
+          }
         } else {
           setStatus('error');
         }
@@ -181,6 +196,54 @@ export function useDraft(projectId: string, qid: string) {
     inFlight.current = run;
     return run;
   }, [projectId, qid, queryClient]);
+
+  /**
+   * Brings in a newer server draft: loaded as is when there are no local edits, merged with
+   * them otherwise. Undo history is cleared, since older steps lack the other person's edits.
+   */
+  const sync = useCallback(async (): Promise<SyncOutcome> => {
+    if (inFlight.current || !latest.current || !base.current) return 'none';
+    const doc = await api<QuestionnaireDoc>(`/projects/${projectId}/questionnaires/${qid}`);
+    if (doc.draftRevision <= revision.current || inFlight.current) return 'none';
+    const local = latest.current;
+    const unchanged =
+      statusRef.current === 'saved' &&
+      local.draft === base.current.draft &&
+      local.name === base.current.name;
+    let draft = doc.draft;
+    let name = doc.name;
+    let outcome: SyncOutcome = 'loaded';
+    if (!unchanged) {
+      const merged = mergeDrafts(base.current.draft, local.draft, doc.draft);
+      const was = base.current.name;
+      if (local.name !== was && doc.name !== was && local.name !== doc.name)
+        merged.conflicts.push('name');
+      if (!merged.draft || merged.conflicts.length) {
+        setConflict({
+          currentRevision: doc.draftRevision,
+          updatedBy: doc.updatedBy,
+          updatedAt: doc.updatedAt,
+          items: merged.conflicts,
+        });
+        setStatus('conflict');
+        return 'conflict';
+      }
+      draft = merged.draft;
+      name = local.name !== base.current.name ? local.name : doc.name;
+      outcome = 'merged';
+    }
+    revision.current = doc.draftRevision;
+    base.current = { draft: doc.draft, name: doc.name };
+    queryClient.setQueryData<QuestionnaireDoc>(questionnaireKey(projectId, qid), doc);
+    lastCoalesce.current = null;
+    latest.current = { draft, name };
+    setState({ draft, name, past: [], future: [] });
+    setConflict(null);
+    setStatus(outcome === 'merged' ? 'dirty' : 'saved');
+    return outcome;
+  }, [projectId, qid, queryClient]);
+  const syncRef = useRef(sync);
+  syncRef.current = sync;
 
   useEffect(() => {
     if (status !== 'dirty' && status !== 'error') return;
@@ -243,6 +306,7 @@ export function useDraft(projectId: string, qid: string) {
     flush,
     reloadTheirs,
     overwriteMine,
+    sync,
   };
 }
 

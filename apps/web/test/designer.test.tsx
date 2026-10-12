@@ -19,6 +19,8 @@ import {
   flatten,
   indent,
   insert,
+  insertFromLibrary,
+  libraryContentOf,
   locate,
   move,
   moveTo,
@@ -126,6 +128,44 @@ describe('tree edits', () => {
     expect(ids(remove(d, 'S1'))).toEqual(ids(d));
     const sec = insert(d, 'B', { kind: 'section' });
     expect(sec.draft.sections.map((s) => s.id)).toEqual(['S1', sec.newId]);
+  });
+
+  it('inserts library entries with fresh names and merged answer sets', () => {
+    const d = draft();
+    const content = libraryContentOf(d, 'A')!;
+    const r = insertFromLibrary(d, 'C', content);
+    expect(r.newId).toBe('A_2');
+    expect(r.renamed).toEqual({ A: 'A_2' });
+    const copy = locate(r.draft, 'A_2')!.node as { skips: { when: string; to: string }[] };
+    // References inside the entry follow the rename; the skip target outside stays.
+    expect(copy.skips).toEqual([{ when: 'A_2 == 2', to: 'C' }]);
+    expect(ids(r.draft).slice(-1)).toEqual(['A_2']);
+    // Into an empty questionnaire area with no clash, names are kept.
+    const fresh = insertFromLibrary(remove(d, 'A'), 'BL', content, { inside: true });
+    expect(fresh.newId).toBe('A');
+    expect(locate(fresh.draft, 'A')!.parentId).toBe('BL');
+
+    const yes = [{ code: 1, label: { en: 'Yes' } }];
+    const withSet = {
+      node: {
+        kind: 'question' as const,
+        id: 'Z',
+        name: 'Z',
+        type: 'single' as const,
+        text: { en: 'Z?' },
+        answerSetId: 'yn',
+      },
+      answerSets: { yn: yes },
+    };
+    const same = insertFromLibrary({ ...d, answerSets: { yn: yes } }, 'C', withSet);
+    expect(Object.keys(same.draft.answerSets)).toEqual(['yn']);
+    const other = insertFromLibrary(
+      { ...d, answerSets: { yn: [{ code: 9, label: { en: 'Other' } }] } },
+      'C',
+      withSet,
+    );
+    expect(Object.keys(other.draft.answerSets)).toEqual(['yn', 'yn_2']);
+    expect((locate(other.draft, 'Z')!.node as { answerSetId: string }).answerSetId).toBe('yn_2');
   });
 
   it('renames a variable everywhere it is used', () => {

@@ -222,9 +222,10 @@ test('a failing saved scenario blocks publishing', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Publish version 1' })).toBeDisabled();
 });
 
-test('a second editor saving first gets a conflict dialog, not a silent overwrite', async ({
+test('two editors: edits to different parts merge; the same edit asks which to keep', async ({
   browser,
 }) => {
+  test.setTimeout(90_000);
   const a = await browser.newPage();
   const url = await newQuestionnaire(a, 'Shared draft');
   const b = await browser.newPage();
@@ -233,16 +234,106 @@ test('a second editor saving first gets a conflict dialog, not a silent overwrit
   await b.goto(url);
   await expect(b.getByRole('tree', { name: 'Outline' })).toBeVisible();
 
-  await b.getByLabel('Questionnaire name').fill('Shared draft (B)');
+  // B retitles the questionnaire while A retitles the section: both survive.
+  await b.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  await b.getByLabel('Title (en)').fill('Shared title from B');
+  await outlineItem(a, 'SEC_A').click();
+  await a.getByLabel('Title (en)').fill('Section from A');
   await saved(b);
+  await saved(a);
+  await a.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  await expect(a.getByLabel('Title (en)')).toHaveValue('Shared title from B', { timeout: 15_000 });
+  await outlineItem(b, 'SEC_A').click();
+  await expect(b.getByLabel('Title (en)')).toHaveValue('Section from A', { timeout: 15_000 });
+  await expect(a.getByRole('dialog')).toHaveCount(0);
+  await shot(a, 'designer-merged');
 
+  // Both rename the questionnaire: whoever saves second is asked.
+  await b.getByLabel('Questionnaire name').fill('Shared draft (B)');
   await a.getByLabel('Questionnaire name').fill('Shared draft (A)');
-  const dialog = a.getByRole('dialog', { name: 'Someone else changed this questionnaire' });
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
-  await shot(a, 'designer-conflict');
+  const title = 'Someone else changed this questionnaire';
+  await expect
+    .poll(
+      async () =>
+        (await a.getByRole('dialog', { name: title }).count()) +
+        (await b.getByRole('dialog', { name: title }).count()),
+      { timeout: 15_000 },
+    )
+    .toBe(1);
+  const asked = (await a.getByRole('dialog', { name: title }).count()) ? a : b;
+  const other = asked === a ? 'Shared draft (B)' : 'Shared draft (A)';
+  const dialog = asked.getByRole('dialog', { name: title });
+  await expect(dialog.getByTestId('conflict-items')).toContainText('name');
+  await shot(asked, 'designer-conflict');
   await dialog.getByRole('button', { name: 'Discard mine and load theirs' }).click();
-  await expect(a.getByLabel('Questionnaire name')).toHaveValue('Shared draft (B)');
+  await expect(asked.getByLabel('Questionnaire name')).toHaveValue(other);
   await expect(dialog).toBeHidden();
+});
+
+test('reviewers comment, editors see who is here, and items go to and from the library', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const pm = await browser.newPage();
+  const url = await newQuestionnaire(pm, 'Review round');
+  await outlineItem(pm, 'SEC_A').focus();
+  await addWithKeyboard(pm, 0); // Single choice
+  await rename(pm, 'CONSENT');
+  await pm.getByLabel('Question wording (en)').fill('Do you agree to take part?');
+  await saved(pm);
+
+  // A supervisor opens it: the editor sees them, on the item they look at.
+  const sup = await browser.newPage();
+  await login(sup, 'supervisor@demo.wansurvey.test');
+  await sup.waitForURL((u) => !u.pathname.startsWith('/login'));
+  await sup.goto(url);
+  await outlineItem(sup, 'CONSENT').click();
+  await expect(pm.getByTestId('presence')).toContainText('Demo supervisor', { timeout: 15_000 });
+  await expect(outlineItem(pm, 'CONSENT').getByTestId('presence-marker')).toBeVisible();
+
+  // The supervisor cannot edit but can comment.
+  await expect(sup.getByLabel('Question wording (en)')).toBeDisabled();
+  const comments = sup.getByTestId('comments');
+  await comments.getByLabel('Add a comment').fill('Please add a "Prefer not to say" option.');
+  await comments.getByRole('button', { name: 'Comment', exact: true }).click();
+  await expect(comments.locator('[data-thread]')).toContainText('Prefer not to say');
+  await expectAccessible(sup);
+
+  await pm.reload();
+  await expect(outlineItem(pm, 'CONSENT').getByTestId('comment-badge')).toContainText('1');
+  await outlineItem(pm, 'CONSENT').click();
+  const thread = pm.getByTestId('comments').locator('[data-thread]');
+  await thread.getByRole('button', { name: 'Reply' }).click();
+  await thread.getByLabel(/Reply to/).fill('Done.');
+  await thread.getByRole('button', { name: 'Reply' }).click();
+  await expect(thread).toContainText('Done.');
+  await shot(pm, 'designer-comments');
+  await thread.getByRole('button', { name: 'Resolve' }).click();
+  await expect(outlineItem(pm, 'CONSENT').getByTestId('comment-badge')).toHaveCount(0);
+
+  // Save the question to the library, then insert it again: it gets a fresh name.
+  await pm.getByRole('button', { name: 'Save to library' }).click();
+  const save = pm.getByRole('dialog', { name: /Save CONSENT to the question library/ });
+  await save.getByLabel('Name').fill('Consent question');
+  await save.getByLabel('Tags (comma separated)').fill('consent, core');
+  await save.getByRole('button', { name: 'Save to library' }).click();
+  await expect(pm.getByTestId('presence')).toContainText('Saved to the library.');
+  await outlineItem(pm, 'CONSENT').focus();
+  await pm.keyboard.press('Insert');
+  await pm.getByRole('button', { name: 'From the library…' }).click();
+  const lib = pm.getByRole('dialog', { name: 'Insert from the question library' });
+  await lib.getByLabel('Search the library').fill('Consent');
+  await lib
+    .getByRole('button', { name: /Consent question/ })
+    .first()
+    .click();
+  await expect(lib.getByTestId('library-preview')).toContainText('Do you agree to take part?');
+  await shot(pm, 'designer-library');
+  await expectAccessible(pm, 'dialog');
+  await lib.getByRole('button', { name: 'Insert Consent question' }).click();
+  await expect(outlineItem(pm, 'CONSENT_2')).toBeVisible();
+  await expect(pm.getByTestId('presence')).toContainText('CONSENT → CONSENT_2');
+  await saved(pm);
 });
 
 test('the routing map, outline arcs and nested condition builder on the household survey', async ({

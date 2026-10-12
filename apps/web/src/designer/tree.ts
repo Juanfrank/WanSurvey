@@ -1,4 +1,5 @@
 import type {
+  AnswerOption,
   ContainerItem,
   LocalizedText,
   Questionnaire,
@@ -361,3 +362,99 @@ export const EXPRESSION_KEYS = new Set([
   'expr',
   'rowLabel',
 ]);
+
+/** What the question library stores: one item, block or roster and the answer sets it uses. */
+export interface LibraryContent {
+  node: ContainerItem;
+  answerSets: Record<string, AnswerOption[]>;
+}
+
+/** The answer sets a node (and its children) refers to. */
+export function libraryContentOf(draft: Draft, id: string): LibraryContent | null {
+  const at = locate(draft, id);
+  if (!at || isSection(at.node)) return null;
+  const node = structuredClone(at.node) as ContainerItem;
+  const sets: Record<string, AnswerOption[]> = {};
+  const walk = (n: TreeNode) => {
+    const set = (n as { answerSetId?: string }).answerSetId;
+    if (set && draft.answerSets?.[set]) sets[set] = draft.answerSets[set]!;
+    if (hasItems(n)) n.items.forEach(walk);
+  };
+  walk(node);
+  return { node, answerSets: sets };
+}
+
+/**
+ * Inserts a library entry after `afterId` (or inside it). Ids and variable names already used
+ * in the draft get fresh ones, with references inside the entry updated; answer sets are
+ * reused when identical and renamed when a different set has the name.
+ */
+export function insertFromLibrary(
+  draft: Draft,
+  afterId: string | null,
+  content: LibraryContent,
+  opts: { inside?: boolean } = {},
+): { draft: Draft; newId: string; renamed: Record<string, string> } {
+  const used = usedNames(draft);
+  const renamed: Record<string, string> = {};
+  // Work on a scratch questionnaire holding only the entry, so renames stay inside it.
+  let scratch = {
+    ...draft,
+    answerSets: {},
+    sections: [{ id: '__library', title: {}, items: [structuredClone(content.node)] }],
+  } as Draft;
+  for (const { node } of flatten(scratch)) {
+    if (node.id === '__library') continue;
+    const name = 'name' in node && typeof node.name === 'string' ? node.name : null;
+    if (!used.has(node.id) && (!name || !used.has(name))) {
+      used.add(node.id);
+      if (name) used.add(name);
+      continue;
+    }
+    const fresh = freshName(used, name ?? node.id);
+    used.add(fresh);
+    renamed[name ?? node.id] = fresh;
+    if (name && name === node.id) scratch = renameVariable(scratch, node.id, fresh);
+    else if (name) {
+      scratch = renameVariable(scratch, node.id, fresh);
+      if (used.has(node.id)) {
+        const id = freshName(used, node.id);
+        used.add(id);
+        scratch = updateNode(scratch, node.id, (n) => ({ ...n, id }));
+      }
+    } else scratch = updateNode(scratch, node.id, (n) => ({ ...n, id: fresh }));
+  }
+  let node = scratch.sections[0]!.items[0]!;
+
+  // Answer sets: same name and content reuses it; a different set with the name is renamed.
+  const sets = { ...(draft.answerSets ?? {}) };
+  const setNames: Record<string, string> = {};
+  for (const [name, options] of Object.entries(content.answerSets ?? {})) {
+    const existing = sets[name];
+    if (existing && JSON.stringify(existing) === JSON.stringify(options)) continue;
+    const target = existing ? freshName(new Set(Object.keys(sets)), name) : name;
+    sets[target] = options;
+    if (target !== name) setNames[name] = target;
+  }
+  if (Object.keys(setNames).length)
+    node = JSON.parse(
+      JSON.stringify(node, (k, v: unknown) =>
+        k === 'answerSetId' && typeof v === 'string' && setNames[v] ? setNames[v] : v,
+      ),
+    ) as ContainerItem;
+
+  const placed = edit({ ...draft, answerSets: sets }, (d) => {
+    const at = afterId ? locate(d, afterId) : null;
+    if (!at) {
+      (d.sections[d.sections.length - 1]!.items as TreeNode[]).push(node);
+      return;
+    }
+    if (hasItems(at.node) && (opts.inside || isSection(at.node))) {
+      (at.node.items as TreeNode[]).unshift(node);
+      return;
+    }
+    if (isSection(at.node)) return;
+    at.siblings.splice(at.index + 1, 0, node);
+  });
+  return { draft: placed, newId: node.id, renamed };
+}

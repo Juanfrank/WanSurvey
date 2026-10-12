@@ -291,6 +291,70 @@ export const questionnaireScenarios = pgTable(
 );
 
 /**
+ * Review comments on a questionnaire, on one item or on the whole questionnaire (`item_id`
+ * null). Replies point to their thread's first comment; only threads are resolved.
+ */
+export const questionnaireComments = pgTable(
+  'questionnaire_comments',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    questionnaireId: uuid('questionnaire_id')
+      .notNull()
+      .references(() => questionnaires.id),
+    itemId: text('item_id'),
+    parentId: uuid('parent_id'),
+    authorId: uuid('author_id').notNull(),
+    body: text('body').notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolvedBy: uuid('resolved_by'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('questionnaire_comments_q_idx').on(t.questionnaireId, t.createdAt)],
+);
+
+/** Who has a questionnaire open, and on which item; rows older than a minute are stale. */
+export const questionnairePresence = pgTable(
+  'questionnaire_presence',
+  {
+    tenantId: tenantId().references(() => tenants.id),
+    questionnaireId: uuid('questionnaire_id')
+      .notNull()
+      .references(() => questionnaires.id),
+    userId: uuid('user_id').notNull(),
+    itemId: text('item_id'),
+    lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.questionnaireId, t.userId] })],
+);
+
+/**
+ * The organisation's question library: an item, block or roster with the answer sets it uses,
+ * ready to insert into any questionnaire.
+ */
+export const libraryItems = pgTable(
+  'library_items',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    name: text('name').notNull(),
+    description: text('description'),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /** `{ node: ContainerItem, answerSets: Record<string, AnswerOption[]> }` */
+    content: jsonb('content').notNull(),
+    languages: text('languages').array().notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('library_items_tenant_idx').on(t.tenantId, t.name)],
+);
+
+/**
  * The project's sample dictionary: the fields imported cases carry (`case.<name>` in logic and
  * piping), their type, and whether they are personal data (masked without `pii.view`).
  */
@@ -470,6 +534,9 @@ export const TENANT_TABLES = [
   'questionnaires',
   'questionnaire_versions',
   'questionnaire_scenarios',
+  'questionnaire_comments',
+  'questionnaire_presence',
+  'library_items',
   'sample_fields',
   'cases',
   'contacts',

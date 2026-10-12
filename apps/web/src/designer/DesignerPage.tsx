@@ -14,10 +14,13 @@ import { Dialog } from './Dialog.js';
 import { smallBtn } from './fields.js';
 import { download, useApiScenarios, useCan, useRetire, useVersions } from './hooks.js';
 import { ItemEditor } from './ItemEditor.js';
-import { Outline, SETTINGS_ID } from './Outline.js';
+import { initials, Outline, SETTINGS_ID } from './Outline.js';
 import { PublishDialog } from './PublishDialog.js';
 import { RoutingMap } from './RoutingMap.js';
+import { CommentsPanel, openCounts, useComments } from './CommentsPanel.js';
 import { ComparePanel } from './ComparePanel.js';
+import { InsertFromLibraryDialog, SaveToLibraryDialog } from './LibraryDialogs.js';
+import { useCollab } from './useCollab.js';
 import { SettingsEditor } from './SettingsEditor.js';
 import type { Draft } from './tree.js';
 import { useDraft, type DraftApi } from './useDraft.js';
@@ -40,7 +43,24 @@ export function DesignerPage() {
   const [renameTick, setRenameTick] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [message, setMessage] = useState('');
+  const [notice, setNotice] = useState('');
+  const [libraryAt, setLibraryAt] = useState<{ after: string | null; inside: boolean } | null>(
+    null,
+  );
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
   const editorRef = useRef<HTMLElement>(null);
+  const canComment = useCan('questionnaires.comment', projectId) || canEdit;
+  const comments = useComments(projectId, qid);
+  const commentCounts = useMemo(() => openCounts(comments.data), [comments.data]);
+  const editors = useCollab(projectId, qid, d, selected === SETTINGS_ID ? null : selected, (m) => {
+    setMessage(m);
+    setNotice(m);
+  });
+  const others = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const e of editors) if (e.itemId) m.set(e.itemId, [...(m.get(e.itemId) ?? []), e.name]);
+    return m;
+  }, [editors]);
 
   const draft = d.draft;
   const lang = draft?.defaultLanguage ?? 'en';
@@ -151,6 +171,38 @@ export function DesignerPage() {
         <p role="status" aria-live="polite" className="sr-only">
           {message}
         </p>
+        {editors.length || notice ? (
+          <div
+            className="flex flex-wrap items-center gap-2 text-sm text-slate-700"
+            data-testid="presence"
+          >
+            {editors.length ? (
+              <>
+                <span>{t('designer.collab.others')}</span>
+                {editors.map((e) => (
+                  <span
+                    key={e.userId}
+                    className="flex items-center gap-1 rounded-full bg-sky-50 py-0.5 pl-0.5 pr-2"
+                  >
+                    <span
+                      aria-hidden
+                      className="rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-white"
+                    >
+                      {initials(e.name)}
+                    </span>
+                    {e.name}
+                    {e.itemId ? (
+                      <span className="text-xs text-slate-600">
+                        {t('designer.collab.on', { id: e.itemId })}
+                      </span>
+                    ) : null}
+                  </span>
+                ))}
+              </>
+            ) : null}
+            {notice ? <span className="text-xs text-slate-600">{notice}</span> : null}
+          </div>
+        ) : null}
 
         <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
           <Tabs.List
@@ -195,30 +247,63 @@ export function DesignerPage() {
               onRename={() => setRenameTick((n) => n + 1)}
               onEnter={focusEditor}
               announce={setMessage}
+              others={others}
+              commentCounts={commentCounts}
+              onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
             />
-            <section
-              ref={editorRef}
-              tabIndex={-1}
-              aria-label={t('designer.editor')}
-              className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
-            >
-              <fieldset disabled={!canEdit} className="min-w-0">
-                {selected === SETTINGS_ID ? (
-                  <SettingsEditor draft={draft} variables={variables} change={d.change} />
-                ) : (
-                  <ItemEditor
-                    key={selected}
-                    draft={draft}
-                    id={selected}
-                    lang={lang}
-                    variables={variables}
-                    change={d.change}
-                    focusNameSignal={renameTick}
-                    select={setSelected}
-                  />
-                )}
-              </fieldset>
-            </section>
+            <div className="flex min-w-0 flex-col gap-4">
+              <section
+                ref={editorRef}
+                tabIndex={-1}
+                aria-label={t('designer.editor')}
+                className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
+              >
+                {others.get(selected)?.length ? (
+                  <p
+                    className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950"
+                    data-testid="same-item"
+                  >
+                    {t('designer.collab.sameItem', { who: others.get(selected)!.join(', ') })}
+                  </p>
+                ) : null}
+                {canEdit &&
+                selected !== SETTINGS_ID &&
+                !draft.sections.some((x) => x.id === selected) ? (
+                  <div className="mb-2 flex justify-end">
+                    <button
+                      type="button"
+                      className={smallBtn}
+                      onClick={() => setSavingToLibrary(true)}
+                    >
+                      {t('designer.library.save')}
+                    </button>
+                  </div>
+                ) : null}
+                <fieldset disabled={!canEdit} className="min-w-0">
+                  {selected === SETTINGS_ID ? (
+                    <SettingsEditor draft={draft} variables={variables} change={d.change} />
+                  ) : (
+                    <ItemEditor
+                      key={selected}
+                      draft={draft}
+                      id={selected}
+                      lang={lang}
+                      variables={variables}
+                      change={d.change}
+                      focusNameSignal={renameTick}
+                      select={setSelected}
+                    />
+                  )}
+                </fieldset>
+              </section>
+              <CommentsPanel
+                projectId={projectId}
+                qid={qid}
+                itemId={selected === SETTINGS_ID ? null : selected}
+                canWrite={canComment}
+                onGoTo={(id) => setSelected(id ?? SETTINGS_ID)}
+              />
+            </div>
           </Tabs.Content>
 
           <Tabs.Content value="routing">
@@ -298,6 +383,33 @@ export function DesignerPage() {
             }}
           />
         ) : null}
+        {libraryAt ? (
+          <InsertFromLibraryDialog
+            draft={draft}
+            afterId={libraryAt.after}
+            inside={libraryAt.inside}
+            onClose={() => setLibraryAt(null)}
+            onInsert={(next, newId, msg) => {
+              d.change(next);
+              setSelected(newId);
+              setLibraryAt(null);
+              setMessage(msg);
+              setNotice(msg);
+            }}
+          />
+        ) : null}
+        {savingToLibrary ? (
+          <SaveToLibraryDialog
+            draft={draft}
+            id={selected}
+            onClose={() => setSavingToLibrary(false)}
+            onSaved={(msg) => {
+              setSavingToLibrary(false);
+              setMessage(msg);
+              setNotice(msg);
+            }}
+          />
+        ) : null}
         {d.conflict ? (
           <Dialog title={t('designer.conflict.title')} onClose={() => undefined}>
             <p className="mb-4 text-sm">
@@ -306,6 +418,11 @@ export function DesignerPage() {
                 when: new Date(d.conflict.updatedAt).toLocaleTimeString(),
               })}
             </p>
+            {d.conflict.items?.length ? (
+              <p className="mb-4 text-sm" data-testid="conflict-items">
+                {t('designer.collab.conflictItems', { list: d.conflict.items.join(', ') })}
+              </p>
+            ) : null}
             <div className="flex flex-wrap justify-end gap-2">
               <Button variant="secondary" type="button" onClick={() => void d.reloadTheirs()}>
                 {t('designer.conflict.reload')}

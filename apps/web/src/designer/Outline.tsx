@@ -95,6 +95,9 @@ export function Outline({
   onRename,
   onEnter,
   announce,
+  others,
+  commentCounts,
+  onInsertFromLibrary,
 }: {
   draft: Draft;
   selected: string;
@@ -108,6 +111,12 @@ export function Outline({
   onRename(): void;
   onEnter(): void;
   announce(message: string): void;
+  /** Other editors per item id, for presence markers. */
+  others?: ReadonlyMap<string, string[]>;
+  /** Open comment threads per item id. */
+  commentCounts?: ReadonlyMap<string, number>;
+  /** Opens the question library to insert after (or inside) a row. */
+  onInsertFromLibrary?(afterId: string | null, inside: boolean): void;
 }) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -222,8 +231,7 @@ export function Outline({
     setFocusTick((n) => n + 1);
   };
 
-  const add = (what: NewKind) => {
-    setPicker(false);
+  const target = () => {
     const after = selected === SETTINGS_ID ? null : selected;
     const row = rows.find((r) => r.node.id === after);
     const inside =
@@ -231,6 +239,12 @@ export function Outline({
       !isSection(row.node) &&
       (row.node.kind === 'block' || row.node.kind === 'roster') &&
       !collapsed.has(row.node.id);
+    return { after, inside };
+  };
+
+  const add = (what: NewKind) => {
+    setPicker(false);
+    const { after, inside } = target();
     const r = insert(draft, after, what, { inside });
     structural(r.draft, r.newId);
     announce(t('designer.outline.added', { name: r.newId }));
@@ -328,6 +342,19 @@ export function Outline({
               {t(kindKey(k))}
             </button>
           ))}
+          {onInsertFromLibrary ? (
+            <button
+              type="button"
+              className="col-span-2 rounded border-t border-slate-200 px-2 py-1 text-left text-sm font-medium hover:bg-indigo-50 focus:bg-indigo-50"
+              onClick={() => {
+                setPicker(false);
+                const { after, inside } = target();
+                onInsertFromLibrary(after, inside);
+              }}
+            >
+              {t('designer.library.insert')}
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div
@@ -463,6 +490,31 @@ export function Outline({
                 </span>
                 <span className="truncate text-slate-600">{label}</span>
                 <LogicBadges id={node.id} routing={routing} />
+                {others?.get(node.id)?.length ? (
+                  <span
+                    role="img"
+                    aria-label={others.get(node.id)!.join(', ')}
+                    title={others.get(node.id)!.join(', ')}
+                    className="shrink-0 rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-white"
+                    data-testid="presence-marker"
+                  >
+                    {others
+                      .get(node.id)!
+                      .map((n) => initials(n))
+                      .join(' ')}
+                  </span>
+                ) : null}
+                {commentCounts?.get(node.id) ? (
+                  <span
+                    role="img"
+                    aria-label={t('designer.comments.badge', { count: commentCounts.get(node.id) })}
+                    title={t('designer.comments.badge', { count: commentCounts.get(node.id) })}
+                    className="shrink-0 rounded bg-amber-100 px-1 text-xs text-amber-900"
+                    data-testid="comment-badge"
+                  >
+                    💬{commentCounts.get(node.id)}
+                  </span>
+                ) : null}
                 {errors ? (
                   <span className="ml-auto shrink-0 rounded bg-red-100 px-1.5 text-xs text-red-900">
                     {t('designer.outline.errors', { count: errors })}
@@ -477,6 +529,18 @@ export function Outline({
         {readOnly ? t('designer.outline.keysReadOnly') : t('designer.outline.keys')}
       </p>
     </div>
+  );
+}
+
+/** "Ana María" → "AM". */
+export function initials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]!.toUpperCase())
+      .join('') || '?'
   );
 }
 
