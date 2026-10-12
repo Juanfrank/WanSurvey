@@ -1,3 +1,4 @@
+import * as Tabs from '@radix-ui/react-tabs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { SAMPLES } from '@wansurvey/fixtures';
@@ -6,6 +7,9 @@ import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import { AssignmentsTab } from '../cases/AssignmentsTab.js';
+import { CasesTab } from '../cases/CasesTab.js';
+import { ImportTab } from '../cases/ImportTab.js';
 import { inputCls } from './fields.js';
 import { useCan } from './hooks.js';
 
@@ -66,16 +70,11 @@ export function ProjectsPage() {
 
 type SourceKind = 'blank' | 'sample' | 'json';
 
-export function ProjectPage() {
-  const { projectId } = useParams({ strict: false }) as { projectId: string };
+function QuestionnairesSection({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const canEdit = useCan('questionnaires.edit', projectId);
-  const project = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => api<Project>(`/projects/${projectId}`),
-  });
   const list = useQuery({
     queryKey: ['questionnaires', projectId],
     queryFn: () => api<QuestionnaireRow[]>(`/projects/${projectId}/questionnaires`),
@@ -113,12 +112,6 @@ export function ProjectPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-        <Link to="/projects" className="hover:underline">
-          {t('designer.projects')}
-        </Link>
-      </nav>
-      <h1 className="text-2xl font-semibold">{project.data?.name ?? '…'}</h1>
       <Card>
         <h2 className="mb-3 text-lg font-semibold">{t('designer.questionnaires')}</h2>
         {list.data?.length ? (
@@ -237,6 +230,75 @@ export function ProjectPage() {
             </div>
           </form>
         </Card>
+      ) : null}
+    </div>
+  );
+}
+
+const tabCls =
+  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
+
+type ProjectTab = 'questionnaires' | 'cases' | 'import' | 'assignments';
+
+/** A project: its questionnaires, cases, sample import and assignments, as allowed by role. */
+export function ProjectPage() {
+  const { projectId } = useParams({ strict: false }) as { projectId: string };
+  const { t } = useTranslation();
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<Project>(`/projects/${projectId}`),
+  });
+  const canQuestionnaires = useCan('questionnaires.read', projectId);
+  const canCasesAll = useCan('cases.read_all', projectId);
+  const canCasesOwn = useCan('cases.read_assigned', projectId);
+  const canImport = useCan('cases.import', projectId);
+  const canAssign = useCan('cases.assign', projectId);
+  const tabs: ProjectTab[] = [
+    ...(canQuestionnaires ? (['questionnaires'] as const) : []),
+    ...(canCasesAll || canCasesOwn ? (['cases'] as const) : []),
+    ...(canImport ? (['import'] as const) : []),
+    ...(canAssign ? (['assignments'] as const) : []),
+  ];
+  const [tab, setTab] = useState<ProjectTab | null>(null);
+  const current = tab && tabs.includes(tab) ? tab : (tabs[0] ?? null);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
+        <Link to="/projects" className="hover:underline">
+          {t('designer.projects')}
+        </Link>
+      </nav>
+      <h1 className="text-2xl font-semibold">{project.data?.name ?? '…'}</h1>
+      {current ? (
+        <Tabs.Root
+          value={current}
+          onValueChange={(v) => setTab(v as ProjectTab)}
+          className="flex flex-col gap-4"
+        >
+          <Tabs.List
+            aria-label={t('cases.tabs.label')}
+            className="flex flex-wrap gap-1 border-b border-slate-200"
+          >
+            {tabs.map((x) => (
+              <Tabs.Trigger key={x} value={x} className={tabCls}>
+                {x === 'cases' && !canCasesAll ? t('cases.list.mine') : t(`cases.tabs.${x}`)}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+          <Tabs.Content value="questionnaires">
+            <QuestionnairesSection projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="cases">
+            <CasesTab projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="import">
+            <ImportTab projectId={projectId} onDone={() => setTab('cases')} />
+          </Tabs.Content>
+          <Tabs.Content value="assignments">
+            <AssignmentsTab projectId={projectId} />
+          </Tabs.Content>
+        </Tabs.Root>
       ) : null}
     </div>
   );

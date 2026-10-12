@@ -4,7 +4,7 @@ WanSurvey is a multi-tenant platform for survey data collection. A questionnaire
 
 ## Status
 
-The MVP is built in 13 vertical slices; four are done so far.
+The MVP is built in 13 vertical slices; five are done so far.
 
 | Slice | Scope                                                                                                                                                                                                                                                                                                        | State   |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
@@ -12,7 +12,8 @@ The MVP is built in 13 vertical slices; four are done so far.
 | 2     | **Schema and logic engine**: Zod questionnaire schema, expression parser and evaluator, routing, validation, piping, static analysis                                                                                                                                                                         | ✅      |
 | 3     | **Renderer and test mode**: every question type in all four modes (PAPI as a print-style paper form), keyboard operation, English/Spanish, web app with sign-in (password and Microsoft), organisation switcher, waiting-for-access page, and the designer preview with path tracer and saved test scenarios | ✅      |
 | 4     | **Questionnaire designer**: projects and questionnaires, keyboard-driven outline, editors for every item type, mode variants, scripts, quotas, visual condition builder, autosaved drafts with conflict detection, publish checks (errors, saved scenarios, breaking-change mapping) and immutable versions  | ✅      |
-| 5–13  | Cases, runtime and sync, CATI, CAPI, CAWI, PAPI, review, metrics, hardening                                                                                                                                                                                                                                  | planned |
+| 5     | **Cases and assignments**: CSV/XLSX sample import with column mapping and a validation report, the case list with filters, bulk assignment, assignment rules with quotas, case history, and personal data masked with audited reveal                                                                         | ✅      |
+| 6–13  | Runtime and sync, CATI, CAPI, CAWI, PAPI, review, metrics, hardening                                                                                                                                                                                                                                         | planned |
 
 Background reading:
 
@@ -61,7 +62,7 @@ Background reading:
    pnpm --filter @wansurvey/web dev   # http://localhost:5173
    ```
 
-   Sign in, then open **Projects → Household Survey 2026** to edit the seeded questionnaire in the designer, or **Questionnaire preview** to run the samples (or your own JSON) in any mode.
+   Sign in, then open **Projects → Household Survey 2026**. Its tabs hold the questionnaires, the 50 seeded cases, **Import sample** (CSV or Excel with one row per case) and **Assignments**. Open a questionnaire to edit the seeded questionnaire in the designer, or **Questionnaire preview** to run the samples (or your own JSON) in any mode.
 
 Seeded accounts log in with their e-mail only, for example `project.manager@demo.wansurvey.test`. That account belongs to two organisations, `demo` and `demo2`, and can switch between them. The owner and admin accounts must enrol TOTP on their first login.
 

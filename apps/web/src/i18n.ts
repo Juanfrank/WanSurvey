@@ -1,6 +1,7 @@
 import { rendererResources } from '@wansurvey/renderer';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { casesEn, casesEs } from './cases/i18n.js';
 import { designerEn, designerEs } from './designer/i18n.js';
 
 export const LANGUAGES = [
@@ -129,6 +130,7 @@ const en = {
     printPaper: 'Print the paper form',
   },
   designer: designerEn,
+  cases: casesEn,
 };
 
 type Catalogue = typeof en;
@@ -256,6 +258,7 @@ const es: Catalogue = {
     printPaper: 'Imprimir el formulario en papel',
   },
   designer: designerEs,
+  cases: casesEs,
 };
 
 export function initI18n(lng = 'en') {

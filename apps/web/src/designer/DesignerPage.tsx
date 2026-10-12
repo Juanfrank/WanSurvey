@@ -21,7 +21,7 @@ import { SettingsEditor } from './SettingsEditor.js';
 import type { Draft } from './tree.js';
 import { useDraft, type DraftApi } from './useDraft.js';
 import { useRouting } from './useRouting.js';
-import { variablesOf } from './vars.js';
+import { caseVariables, variablesOf, type SampleField } from './vars.js';
 
 const tabCls =
   '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
@@ -42,7 +42,16 @@ export function DesignerPage() {
 
   const draft = d.draft;
   const lang = draft?.defaultLanguage ?? 'en';
-  const variables = useMemo(() => (draft ? variablesOf(draft, lang) : []), [draft, lang]);
+  // The project's sample fields are offered as case.* in conditions.
+  const sampleFields = useQuery({
+    queryKey: ['sample-fields', projectId],
+    queryFn: () => api<SampleField[]>(`/projects/${projectId}/sample-fields`),
+    retry: false,
+  });
+  const variables = useMemo(
+    () => (draft ? [...variablesOf(draft, lang), ...caseVariables(sampleFields.data ?? [])] : []),
+    [draft, lang, sampleFields.data],
+  );
   const routing = useRouting(d);
   const typeVars = useMemo(
     () => (d.questionnaire ? buildModel(d.questionnaire).vars : null),

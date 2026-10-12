@@ -7,7 +7,7 @@ export interface VarOption {
   name: string;
   /** Item id (equal to the name for questions created in the designer). */
   id: string;
-  kind: 'question' | 'computed' | 'roster';
+  kind: 'question' | 'computed' | 'roster' | 'case';
   questionType?: Question['type'];
   /** Short text to recognise it by. */
   text: string;
@@ -81,4 +81,23 @@ export function nodeLabel(node: TreeNode, lang: string): string {
 /** Display name: variable name for data items, id otherwise. */
 export function nodeName(node: TreeNode): string {
   return 'name' in node && typeof node.name === 'string' ? node.name : node.id;
+}
+
+export interface SampleField {
+  name: string;
+  label: string | null;
+  type: 'text' | 'number' | 'date' | 'code';
+  pii: boolean;
+}
+
+/** The project's sample fields as `case.<name>` variables for condition editors. */
+export function caseVariables(fields: SampleField[]): VarOption[] {
+  return fields.map((f) => ({
+    name: `case.${f.name}`,
+    id: `case.${f.name}`,
+    kind: 'case',
+    ...(f.type === 'date' ? { questionType: 'date' as const } : {}),
+    text: f.label ?? f.name,
+    numeric: f.type === 'number',
+  }));
 }

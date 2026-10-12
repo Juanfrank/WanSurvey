@@ -72,3 +72,20 @@ export function nextRouteFor(me: Pick<Me, 'mfaState' | 'access'>): string | null
 export function ssoStartUrl(email: string, returnTo = '/'): string {
   return `/api/v1/auth/sso/start?${new URLSearchParams({ email, returnTo }).toString()}`;
 }
+
+/** Multipart upload (sample files); same cookies and CSRF header as `api`. */
+export async function upload<T = unknown>(path: string, form: FormData): Promise<T> {
+  const headers: Record<string, string> = { accept: 'application/json' };
+  const csrf = readCookie('ws_csrf');
+  if (csrf) headers['x-csrf-token'] = csrf;
+  const res = await fetch(`/api/v1${path}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: form,
+  });
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new ApiError(res.status, body ?? {});
+  return body as T;
+}

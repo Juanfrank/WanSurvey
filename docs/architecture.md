@@ -100,3 +100,18 @@ questionnaire_scenarios (saved test runs) ──run on every publish──┘
 - **Routing map.** `routingMap()` derives, per item, its show-if, skips (resolved targets), end rules, checks, roster loop and which items read its variable. The Routing tab draws it as a spine with skip arrows; the outline shows the same as badges and arcs.
 - **Publish.** `POST …/publish-check` (dry run) and `POST …/publish` run the same checks: Zod format, analyzer errors, every saved scenario, and — against the last published version — `breakingChanges` (removed variables, type changes, removed codes, roster moves, removed grid rows), which must each have a `rename`, `recode` or `drop` mapping. Publishing locks the questionnaire row, compiles, and stores the definition, compiled form, hash and mapping. A trigger keeps versions immutable; only `published → retired` is allowed.
 - Interviews (slice 6) will bind to a version; exports (slice 12) apply the stored mappings to line up data across versions.
+
+## Cases, sample import and assignments
+
+```
+upload (CSV/XLSX) ─▶ sample_imports + staged rows ─▶ mapping ─▶ validation report ─▶ commit
+                                                                                       │
+             sample_fields (case.* dictionary, PII flags) ◀── created/updated ─────────┤
+             cases + contacts + case_events ◀── inserted / updated in one transaction ─┤
+             assignments (rules) ──── applied to the new unassigned cases ─────────────┘
+```
+
+- **Import** (`apps/api/src/cases`): `parseSampleFile` reads CSV (UTF-8 or Windows-1252, delimiter sniffed) or the first XLSX sheet; rows are staged in `sample_import_rows`. `suggestMapping` guesses the id, contact, priority and mode columns and the type and PII flag of other columns; `validateRows` checks ids (missing, repeated, already existing), e-mails, phones (normalised to E.164 with an optional default country code), numbers, dates, priorities and modes. Commit re-validates, creates or updates cases and contacts in batches, records `case_events`, applies the assignment rules and deletes the staged rows.
+- **Cases API:** `GET /projects/:id/cases` pages, sorts, searches and filters (including rule expressions evaluated by the logic engine). People with `cases.read_assigned` only see cases assigned to them. Lists always mask personal sample fields; `GET …/cases/:caseId?reveal=pii` returns clear values to `pii.view` holders and writes `case.pii_viewed` to the audit log.
+- **Assignment:** bulk assignment by list or filter to active members whose role can conduct interviews or key data; rules (`case.region == 1` → a person, with an optional quota) run oldest first on import and on demand.
+- The designer offers the project's sample fields as `case.*` in conditions.

@@ -1,0 +1,102 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
+import axe from 'axe-core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CasesTab } from '../src/cases/CasesTab.js';
+
+const me = {
+  user: { id: 'u1', email: 'pm@x', name: 'PM', firstName: 'PM', totpEnabled: false },
+  tenantId: 't1',
+  tenants: [],
+  mfaState: 'ok',
+  memberships: [{ role: 'project_manager', projectId: null }],
+  permissions: [],
+  access: { state: 'ok', message: null },
+};
+const rows = Array.from({ length: 5 }, (_, i) => ({
+  id: `c${i}`,
+  externalId: `HH${i}`,
+  sample: { first_name: '•••', region: (i % 3) + 1 },
+  status: 'fresh',
+  disposition: null,
+  priority: 0,
+  modePreference: null,
+  assignedTo: null,
+  assignedName: null,
+  updatedAt: '2026-10-12T00:00:00Z',
+}));
+
+function mockFetch() {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      const path = url.replace('/api/v1', '');
+      let body: unknown = {};
+      if (path === '/auth/me') body = me;
+      else if (path.startsWith('/projects/p/cases/assign')) body = { changed: 2, skipped: 0 };
+      else if (path.startsWith('/projects/p/cases'))
+        body = {
+          total: 5,
+          page: 1,
+          limit: 25,
+          counts: { fresh: 5 },
+          fields: [
+            { name: 'first_name', label: null, type: 'text', pii: true },
+            { name: 'region', label: null, type: 'number', pii: false },
+          ],
+          piiMasked: true,
+          canReveal: true,
+          rows,
+        };
+      else if (path === '/projects/p/assignees')
+        body = [{ userId: 'i1', name: 'Ines', email: 'i@x', roles: ['interviewer'], workload: {} }];
+      return new Response(JSON.stringify(body), { status: 200 });
+    }),
+  );
+  return calls;
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('cases grid', () => {
+  it('shows masked personal fields, selects ranges with Shift and assigns', async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    const { container } = render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <CasesTab projectId="p" />
+      </QueryClientProvider>,
+    );
+    const table = await screen.findByTestId('cases-table');
+    await waitFor(() => expect(within(table).getAllByText('•••')).toHaveLength(5));
+    expect(screen.getByText(/Personal fields are hidden/)).toBeTruthy();
+
+    await user.click(screen.getByLabelText('Select case HH1'));
+    await user.keyboard('{Shift>}');
+    await user.click(screen.getByLabelText('Select case HH3'));
+    await user.keyboard('{/Shift}');
+    expect(screen.getByText('3 selected')).toBeTruthy();
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: 'Ines' }).length).toBeGreaterThan(0),
+    );
+    await user.selectOptions(screen.getByLabelText('Assign selected to'), 'i1');
+    await user.click(screen.getByRole('button', { name: 'Assign' }));
+    await screen.findByText('2 cases assigned.');
+    const post = calls.find((c) => c.url.endsWith('/cases/assign'))!;
+    expect(JSON.parse(String(post.init!.body))).toEqual({
+      caseIds: ['c1', 'c2', 'c3'],
+      userId: 'i1',
+    });
+
+    const result = await axe.run(container, {
+      rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
+    });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+});
