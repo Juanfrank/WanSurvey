@@ -24,21 +24,21 @@
   "dependencies": {
     "@wansurvey/logic": "workspace:*",
     "@wansurvey/schema": "workspace:*",
-    "i18next": "^25.5.0",
-    "react-i18next": "^15.7.0"
+    "i18next": "25.10.10",
+    "react-i18next": "15.7.4"
   },
   "peerDependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/react": "^18.3.23",
-    "@types/react-dom": "^18.3.7",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
     "@wansurvey/fixtures": "workspace:*",
-    "axe-core": "^4.10.3",
-    "jsdom": "^26.1.0",
+    "axe-core": "4.13.0",
+    "jsdom": "26.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   }

@@ -4,13 +4,14 @@ WanSurvey is a multi-tenant platform for survey data collection. A questionnaire
 
 ## Status
 
-The MVP is built in 13 vertical slices; two are done so far.
+The MVP is built in 13 vertical slices; three are done so far.
 
-| Slice | Scope                                                                                                                                                                                                | State   |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| 1     | **Foundations**: monorepo, CI, Docker, Postgres with RLS, auth (Argon2id, cookie sessions, TOTP 2FA, CSRF, rate limiting, Microsoft Entra ID sign-in), tenants, users and roles, projects, audit log | ✅      |
-| 2     | **Schema and logic engine**: Zod questionnaire schema, expression parser and evaluator, routing, validation, piping, static analysis                                                                 | ✅      |
-| 3–13  | Renderer, designer, cases, runtime and sync, CATI, CAPI, CAWI, PAPI, review, metrics, hardening                                                                                                      | planned |
+| Slice | Scope                                                                                                                                                                                                                                                                                                        | State   |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| 1     | **Foundations**: monorepo, CI, Docker, Postgres with RLS, auth (Argon2id, cookie sessions, TOTP 2FA, CSRF, rate limiting, Microsoft Entra ID sign-in), tenants, users and roles, projects, audit log                                                                                                         | ✅      |
+| 2     | **Schema and logic engine**: Zod questionnaire schema, expression parser and evaluator, routing, validation, piping, static analysis                                                                                                                                                                         | ✅      |
+| 3     | **Renderer and test mode**: every question type in all four modes (PAPI as a print-style paper form), keyboard operation, English/Spanish, web app with sign-in (password and Microsoft), organisation switcher, waiting-for-access page, and the designer preview with path tracer and saved test scenarios | ✅      |
+| 4–13  | Designer, cases, runtime and sync, CATI, CAPI, CAWI, PAPI, review, metrics, hardening                                                                                                                                                                                                                        | planned |
 
 Background reading:
 
@@ -53,6 +54,14 @@ Background reading:
    pnpm dev          # http://localhost:3000/health, OpenAPI at /docs
    ```
 
+4. In another terminal, start the web app (it proxies `/api` to port 3000):
+
+   ```bash
+   pnpm --filter @wansurvey/web dev   # http://localhost:5173
+   ```
+
+   Sign in, then open **Questionnaire preview** to run the sample questionnaires (or your own JSON) in any mode.
+
 Seeded accounts log in with their e-mail only, for example `project.manager@demo.wansurvey.test`. That account belongs to two organisations, `demo` and `demo2`, and can switch between them. The owner and admin accounts must enrol TOTP on their first login.
 
 ## Checks
@@ -63,12 +72,30 @@ pnpm typecheck
 pnpm test
 ```
 
-`pnpm test` runs three suites:
+`pnpm test` runs the unit suites:
 
-| Package           | What it covers                                                                                                                                                                   |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/schema` | Schema validation                                                                                                                                                                |
-| `packages/logic`  | Unit tests, fast-check properties, and a performance test on a 500-item questionnaire                                                                                            |
-| `apps/api`        | Runs against the `wansurvey_test` database, which the suite recreates on each run. Covers RLS isolation, auth and 2FA, the full role × endpoint denial matrix, and the audit log |
+| Package             | What it covers                                                                                                                                                                   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/schema`   | Schema validation                                                                                                                                                                |
+| `packages/logic`    | Unit tests, fast-check properties, and a performance test on a 500-item questionnaire                                                                                            |
+| `packages/renderer` | Every control and layout in each mode, keyboard behaviour, Spanish, the paper form; axe-core accessibility checks                                                                |
+| `apps/web`          | API client, sign-in redirects and the waiting page                                                                                                                               |
+| `apps/api`          | Runs against the `wansurvey_test` database, which the suite recreates on each run. Covers RLS isolation, auth and 2FA, the full role × endpoint denial matrix, and the audit log |
 
 The API tests connect as `postgres://wansurvey_app:wansurvey_app@localhost:5432/wansurvey_test`. To use another database, set `TEST_DATABASE_URL` and `TEST_DATABASE_ADMIN_URL`.
+
+End-to-end tests (Playwright, Chromium) run the built API and web app against a fresh `wansurvey_e2e` database:
+
+```bash
+pnpm build && pnpm e2e
+```
+
+They cover:
+
+- a CATI interview completed with the keyboard only;
+- path changes and the tracer;
+- CAWI at phone width and the PAPI form;
+- saved scenarios;
+- sign-in, organisation switching and the waiting page;
+- Microsoft sign-in redirects;
+- browser accessibility checks, including colour contrast.

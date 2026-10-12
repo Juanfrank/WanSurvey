@@ -5,3 +5,6 @@ onlyBuiltDependencies:
   - '@swc/core'
   - '@node-rs/argon2'
   - esbuild
+overrides:
+  # One Vite for the app and Vitest, pinned to a release at least two weeks old.
+  vite: 7.3.6

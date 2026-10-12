@@ -427,7 +427,7 @@ export function InterviewRunner(p: InterviewRunnerProps) {
             onClick={next}
           >
             {t('nav.next')}
-            <span className="ml-2 text-xs text-indigo-200">Enter</span>
+            <span className="ml-2 text-xs text-indigo-100">Enter</span>
           </button>
         </div>
       ) : null}

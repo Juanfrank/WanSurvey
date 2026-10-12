@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+
+/* Renderer components ship Tailwind classes; scan them too. */
+@source '../../../packages/renderer/src';
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-indigo-600);
+    outline-offset: 2px;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}

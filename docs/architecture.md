@@ -5,11 +5,15 @@ packages/schema    Zod contracts shared by every client and the API (questionnai
                    interview, paradata, dispositions, RBAC matrix)
 packages/logic     Pure TypeScript. No DOM or Node APIs (enforced by lint). Parser, evaluator,
                    type checker, piping, static analyzer, compiler and routing engine
-packages/renderer  (slice 3) React components that render a questionnaire per mode and device
+packages/fixtures  Sample questionnaires shared by tests, the preview and seeds
+packages/renderer  React: a control per question type, InterviewRunner (modes, keyboard,
+                   announcements), PaperForm (PAPI print layout); English and Spanish
 apps/api           NestJS API: auth (global accounts, several organisations each), tenants,
                    users and roles, projects, audit. Later: cases,
                    interviews, sync
-apps/web           (slice 3+) Staff app plus a lightweight respondent (CAWI) bundle; PWA for CAPI
+apps/web           Vite SPA: sign-in (password, TOTP, Microsoft), organisation switcher,
+                   waiting page, designer preview with path tracer and test scenarios.
+                   Later: respondent (CAWI) bundle, CAPI PWA
 apps/worker        (slice 9+) BullMQ jobs: e-mail, reminders, exports, stats aggregation
 ```
 
@@ -67,3 +71,17 @@ The database is split into two roles:
 - Dispositions carry AAPOR codes, so response-rate metrics (slice 12) can be computed directly.
 - `QuotaProvider` lets the server supply live quota-cell state.
 - `TraceEntry.reason` feeds the designer's path tracer (slice 3).
+
+## Renderer and test mode
+
+The renderer draws from a live `InterviewSession`. Wording, options and validation come from the session, so what the preview shows is exactly what the engine decides.
+
+- **Interviewer modes (CATI, CAPI):** one question per screen.
+- **CAWI:** pages split at page breaks and sections on wide screens, one question per page on phones.
+- **PAPI:** `PaperForm` lays the compiled questionnaire out as a paper form, and `describeCondition` turns routing into instructions such as "If Q4 is not “Married” (1) → go to Q6".
+
+The preview (`apps/web/src/preview`) validates, analyses and compiles questionnaires in the browser, so no server round trip is needed.
+
+Changing the mode, date, case data or quotas rebuilds the session from its current state, so a single run can be checked in every mode.
+
+Each run is recorded as a **scenario**: the answers in order plus the resulting path, outcome and answers. `runScenario` (in `@wansurvey/logic`) replays it, and slice 4 will run every saved scenario on publish.

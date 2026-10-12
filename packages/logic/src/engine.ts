@@ -410,7 +410,7 @@ export class InterviewSession {
   }
 
   /** Adds a row to an open roster ("add another"). Returns the new 1-based row number. */
-  addRosterRow(rosterKey: string): number {
+  addRosterRow(rosterKey: string, source: AnswerSourceKind = 'interviewer'): number {
     const { frames, node } = this.rosterAt(rosterKey);
     const r = node.def as Roster;
     if (r.count.type !== 'open') throw new EngineError(`Roster ${r.name} does not accept new rows`);
@@ -419,6 +419,13 @@ export class InterviewSession {
     if (rows.length >= (r.count.max ?? MAX_ROWS)) throw new EngineError(`Roster ${r.name} is full`);
     rows.push({} as AnswerValue);
     container[r.name] = rows as AnswerValue;
+    this.events.push({
+      key: `${rosterKey}[${rows.length}]`,
+      oldValue: null,
+      newValue: {} as AnswerValue,
+      source,
+      reason: 'roster_resized',
+    });
     this.invalidate(r.name);
     this.rewalk();
     return rows.length;
