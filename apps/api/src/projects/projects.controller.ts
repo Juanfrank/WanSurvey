@@ -13,6 +13,7 @@ import {
   ASSIGNMENT_MODES,
   CapiSettings,
   CatiSettings,
+  CawiSettings,
   Mode,
   projectSettings,
 } from '@wansurvey/schema';
@@ -46,6 +47,7 @@ const ProjectPatch = ProjectFields.partial().extend({
       assignmentMode: z.enum(ASSIGNMENT_MODES),
       cati: CatiSettings,
       capi: CapiSettings,
+      cawi: CawiSettings,
     })
     .partial()
     .strict()

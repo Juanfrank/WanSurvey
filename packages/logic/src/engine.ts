@@ -1425,3 +1425,15 @@ function jsonEqual(a: unknown, b: unknown): boolean {
 function structuredCloneJson<T>(v: T): T {
   return v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T);
 }
+
+/**
+ * `respondent.*` for piping, from the case's name fields (English or Spanish names). Masked
+ * values are left out.
+ */
+export function respondentFromCase(sample: Record<string, unknown>): Record<string, unknown> {
+  const str = (v: unknown) => (typeof v === 'string' && v && v !== '•••' ? v : undefined);
+  return {
+    firstName: str(sample.first_name) ?? str(sample.nombre) ?? '',
+    lastName: str(sample.last_name) ?? str(sample.apellido) ?? '',
+  };
+}

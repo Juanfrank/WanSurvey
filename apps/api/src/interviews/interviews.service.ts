@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   createInterview,
+  respondentFromCase,
   verifySubmission,
   type CompiledQuestionnaire,
   type InterviewOptions,
@@ -462,7 +463,7 @@ export class InterviewsService {
       language: row.language,
       seed: row.id,
       now: () => row.startedAt,
-      context: { case: context.case ?? {} },
+      context: { case: context.case ?? {}, respondent: respondentFromCase(context.case ?? {}) },
     };
   }
 

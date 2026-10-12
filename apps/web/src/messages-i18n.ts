@@ -84,6 +84,10 @@ export const messagesEn = {
     not_a_code: '{{to}} is not a code of this question',
   },
   apiError: {
+    NO_LAWFUL_BASIS: 'Declare the lawful basis for e-mailing this sample first.',
+    TEMPLATE_INVALID:
+      'The wording uses unknown placeholders, or lacks the survey link or the unsubscribe link.',
+    WAVE_SENT: 'This wave has already been sent.',
     OUTSIDE_CALLING_HOURS: 'That time is outside calling hours in the respondent’s time zone.',
     CALLBACK_PAST: 'That time has already passed.',
     CALLBACK_TIME: 'Choose when to call back.',
@@ -190,6 +194,10 @@ export const messagesEs: MessagesCatalogue = {
     not_a_code: '{{to}} no es un código de esta pregunta',
   },
   apiError: {
+    NO_LAWFUL_BASIS: 'Primero declare la base legal para escribir por correo a esta muestra.',
+    TEMPLATE_INVALID:
+      'El texto usa marcadores desconocidos, o le falta el enlace a la encuesta o el de baja.',
+    WAVE_SENT: 'Esta ola ya se envió.',
     OUTSIDE_CALLING_HOURS:
       'Esa hora está fuera del horario de llamadas en la zona horaria del entrevistado.',
     CALLBACK_PAST: 'Esa hora ya pasó.',

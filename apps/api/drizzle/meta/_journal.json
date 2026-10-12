@@ -99,6 +99,13 @@
       "when": 1791846310777,
       "tag": "0013_capi_checkout",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791847090515,
+      "tag": "0014_cawi",
+      "breakpoints": true
     }
   ]
 }

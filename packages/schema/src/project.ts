@@ -13,6 +13,21 @@ export const CapiSettings = z.object({
 });
 export type CapiSettings = z.infer<typeof CapiSettings>;
 
+/** Legal grounds for e-mailing a sample (W4); nothing is sent until one is declared. */
+export const LAWFUL_BASES = ['consent', 'legitimate_interest', 'contract', 'public_task'] as const;
+export type LawfulBasis = (typeof LAWFUL_BASES)[number];
+
+export const CawiSettings = z.object({
+  lawfulBasis: z.enum(LAWFUL_BASES).nullable().default(null),
+  /** Shown as the sender of invitations ("Encuesta de hogares <…>"). */
+  senderName: z.string().max(100).default(''),
+  /** Shown when a respondent finishes; a default message when empty. */
+  completionMessage: z.string().max(2000).default(''),
+  /** Where respondents go after finishing (optional). */
+  redirectUrl: z.union([z.literal(''), z.url()]).default(''),
+});
+export type CawiSettings = z.infer<typeof CawiSettings>;
+
 /** Per-project settings, stored as jsonb on `projects.settings`. Missing keys take defaults. */
 export const ProjectSettings = z.object({
   /**
@@ -26,6 +41,8 @@ export const ProjectSettings = z.object({
   cati: CatiSettings.default(CatiSettings.parse({})),
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
+  /** Web surveys by e-mail. */
+  cawi: CawiSettings.default(CawiSettings.parse({})),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

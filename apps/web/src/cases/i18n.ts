@@ -7,6 +7,7 @@ export const casesEn = {
     import: 'Import sample',
     assignments: 'Assignments',
     calls: 'Phone calls',
+    web: 'Web survey',
     settings: 'Settings',
   },
   list: {
@@ -262,6 +263,7 @@ export const casesEs: CasesCatalogue = {
     import: 'Importar muestra',
     assignments: 'Asignaciones',
     calls: 'Llamadas',
+    web: 'Encuesta web',
     settings: 'Configuración',
   },
   list: {

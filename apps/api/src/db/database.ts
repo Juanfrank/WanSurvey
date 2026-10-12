@@ -129,6 +129,30 @@ export class Database implements OnModuleDestroy {
     return rows[0]?.n ?? 0;
   }
 
+  /** The invitation a respondent's token belongs to, and its organisation. */
+  async invitationByToken(hash: string): Promise<{ id: string; tenantId: string } | null> {
+    const [r] = await this.client<{ id: string; tenant_id: string }[]>`
+      select * from invitation_by_token(${hash})`;
+    return r ? { id: r.id, tenantId: r.tenant_id } : null;
+  }
+
+  async invitationTenant(id: string): Promise<string | null> {
+    if (!isUuid(id)) return null;
+    const [r] = await this.client<{ t: string | null }[]>`select invitation_tenant(${id}) as t`;
+    return r?.t ?? null;
+  }
+
+  async openLinkBySlug(slug: string): Promise<{ id: string; tenantId: string } | null> {
+    const [r] = await this.client<{ id: string; tenant_id: string }[]>`
+      select * from open_link_by_slug(${slug})`;
+    return r ? { id: r.id, tenantId: r.tenant_id } : null;
+  }
+
+  async tenantsWithMailDue(): Promise<string[]> {
+    const rows = await this.client<{ tenant_id: string }[]>`select * from tenants_with_mail_due()`;
+    return rows.map((r) => r.tenant_id);
+  }
+
   async onModuleDestroy() {
     await this.client.end({ timeout: 5 });
   }

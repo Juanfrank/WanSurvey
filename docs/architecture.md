@@ -167,3 +167,20 @@ interviewer screen (device copy) ─▶ numbered outbox ─ online ─▶ POST /
 - `apps/web/src/interview/device.ts`: download, start on the device, sync everything (changes, then queued submissions, then check-in of finished cases), give back.
 - The My device page (`/projects/$projectId/device`) syncs on arrival, every 30 seconds and when the connection returns, and shows the connection, the last sync and what is waiting.
 - The service worker is generated at build time by a small Vite plugin and registered in production builds only.
+
+## Web surveys and e-mail (slice 9)
+
+```
+Web survey tab ─ create wave ─▶ POST …/waves ─ send ─▶ invitations (queued, token hashed + encrypted)
+                                                          │ dispatcher (every 15 s, 200 per organisation)
+                                                          ▼
+                                           Mailer (console | file | SMTP) ─▶ respondent's inbox
+                                                          │ click /t/c/:token ─▶ /s/:token (respondent page)
+                                                          ▼
+              GET /public/s/:token ─▶ CAWI interview ─▶ POST …/sync ─▶ POST …/submit ─▶ invitation completed
+mail provider ─▶ POST /webhooks/mail (secret) ─▶ delivered / bounced ─▶ do-not-e-mail list (+ to CATI)
+```
+
+- Tables: `email_templates`, `waves`, `invitations`, `suppressions`, `open_links` (all under row-level security). Respondent links and webhooks find their organisation through security-definer functions that return only an id and a tenant.
+- The respondent page (`apps/web/src/respondent/`) is outside the staff application: no sign-in, the questionnaire's language, pages on wide screens and one question per page on phones. Changes are kept in IndexedDB and sent after each page through the same numbered sync as interviewers'; navigation is recorded so the position reaches the server, and the server re-checks the path on submit.
+- The funnel per wave counts sent, delivered, opened (approximate), clicked, started, completed and bounced, plus reminders.

@@ -29,6 +29,19 @@ const Env = z.object({
   GEOCODER_EMAIL: z.string().email().optional(),
   /** Addresses geocoded per request at most. */
   GEOCODE_MAX: z.coerce.number().int().positive().default(5000),
+  /** How e-mail leaves: logged, written as files (development, tests), or SMTP. */
+  MAILER: z.enum(['console', 'file', 'smtp']).default('console'),
+  /** Folder for MAILER=file (one JSON file per message). */
+  MAIL_OUTBOX_DIR: z.string().optional(),
+  /** SMTP server, e.g. smtps://user:pass@smtp.example.org:465 (MAILER=smtp). */
+  SMTP_URL: z.string().optional(),
+  MAIL_FROM: z.string().default('WanSurvey <encuestas@localhost>'),
+  /** Shared secret the mail provider sends in `x-webhook-secret` with delivery events. */
+  MAIL_WEBHOOK_SECRET: z.string().min(16).optional(),
+  /** Base of respondent links; the web app by default. */
+  PUBLIC_SURVEY_URL: z.string().url().optional(),
+  /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
+  DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Optional: OpenTelemetry/Sentry are wired only when configured. */
   SENTRY_DSN: z.string().optional(),
@@ -44,6 +57,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (parsed.success && parsed.data.GEOCODER === 'nominatim' && !parsed.data.GEOCODER_EMAIL) {
     throw new Error('Invalid configuration:\n  GEOCODER_EMAIL: required when GEOCODER=nominatim');
   }
+  if (parsed.success && parsed.data.MAILER === 'file' && !parsed.data.MAIL_OUTBOX_DIR)
+    throw new Error('Invalid configuration:\n  MAIL_OUTBOX_DIR: required when MAILER=file');
+  if (parsed.success && parsed.data.MAILER === 'smtp' && !parsed.data.SMTP_URL)
+    throw new Error('Invalid configuration:\n  SMTP_URL: required when MAILER=smtp');
   if (!parsed.success) {
     throw new Error(
       `Invalid configuration:\n${parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n')}`,

@@ -31,6 +31,23 @@ const twoFactorSetupRoute = createRoute({
   component: TwoFactorSetupPage,
 });
 
+// Respondent pages: outside the staff application, no sign-in (the link is the credential).
+const respondentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/s/$token',
+  component: lazyRouteComponent(() => import('./respondent/RespondentPage.js'), 'RespondentPage'),
+});
+const openLinkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/o/$slug',
+  component: lazyRouteComponent(() => import('./respondent/OpenLinkPage.js'), 'OpenLinkPage'),
+});
+const unsubscribeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/u/$token',
+  component: lazyRouteComponent(() => import('./respondent/UnsubscribePage.js'), 'UnsubscribePage'),
+});
+
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: AppLayout });
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: HomePage });
 const waitingRoute = createRoute({
@@ -85,6 +102,9 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
   twoFactorSetupRoute,
+  respondentRoute,
+  openLinkRoute,
+  unsubscribeRoute,
   appRoute.addChildren([
     homeRoute,
     waitingRoute,

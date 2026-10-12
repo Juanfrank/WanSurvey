@@ -5,7 +5,7 @@ import {
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
-import { createInterview, type CompiledQuestionnaire } from '@wansurvey/logic';
+import { createInterview, respondentFromCase, type CompiledQuestionnaire } from '@wansurvey/logic';
 import {
   CALL_OUTCOMES,
   OUTCOME_DISPOSITION,
@@ -29,7 +29,6 @@ import {
   questionnaires,
   users,
 } from '../db/schema.js';
-import { MASK } from '../cases/case-logic.js';
 import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
 import { DeviceId } from '../interviews/schemas.js';
 import {
@@ -407,12 +406,8 @@ export class CatiService implements OnModuleInit {
       .select({ name: users.name, firstName: users.firstName })
       .from(users)
       .where(eq(users.id, ctx.userId));
-    const str = (v: unknown) => (typeof v === 'string' && v !== MASK ? v : undefined);
     return {
-      respondent: {
-        firstName: str(sample.first_name) ?? str(sample.nombre) ?? '',
-        lastName: str(sample.last_name) ?? str(sample.apellido) ?? '',
-      },
+      respondent: respondentFromCase(sample),
       interviewer: { firstName: me?.firstName ?? me?.name ?? '', name: me?.name ?? '' },
     };
   }

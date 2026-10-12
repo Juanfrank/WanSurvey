@@ -390,9 +390,11 @@ function Runner(p: InterviewRunnerProps) {
       {finished ? (
         <div className="flex flex-col items-start gap-4 rounded-lg border border-slate-200 bg-white p-6">
           <p className="text-lg font-medium" data-focus-first tabIndex={-1}>
-            {status.state === 'ended'
-              ? t('done.ended', { disposition: status.disposition })
-              : t('done.complete')}
+            {respondent
+              ? t('done.respondent')
+              : status.state === 'ended'
+                ? t('done.ended', { disposition: status.disposition })
+                : t('done.complete')}
           </p>
           <button
             type="button"

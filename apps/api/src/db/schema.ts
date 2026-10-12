@@ -691,6 +691,140 @@ export const auditLog = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Web surveys and e-mail (slice 9)
+// ---------------------------------------------------------------------------
+
+/** Invitation and reminder e-mails per project and language. */
+export const emailTemplates = pgTable(
+  'email_templates',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    /** invitation | reminder */
+    kind: text('kind').notNull(),
+    language: text('language').notNull(),
+    subject: text('subject').notNull(),
+    /** Plain text with {{case.*}}, {{link}} and {{unsubscribe}}. */
+    body: text('body').notNull(),
+    updatedBy: uuid('updated_by'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('email_templates_uq').on(t.projectId, t.kind, t.language)],
+);
+
+/** A mailing: which cases get the questionnaire, when, and the reminder schedule. */
+export const waves = pgTable(
+  'waves',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    questionnaireId: uuid('questionnaire_id')
+      .notNull()
+      .references(() => questionnaires.id),
+    name: text('name').notNull(),
+    /** draft | sending | sent */
+    status: text('status').notNull().default('draft'),
+    /** Case rule (as in assignment rules); null means every eligible case. */
+    filter: text('filter'),
+    /** Days after the invitation for each reminder, e.g. {3,7}. */
+    reminderDays: integer('reminder_days')
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
+    /** Not sent before this time; null means as soon as it is sent. */
+    sendAt: timestamp('send_at', { withTimezone: true }),
+    /** A hard bounce moves the case to telephone interviewing. */
+    bouncesToCati: boolean('bounces_to_cati').notNull().default(false),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (t) => [index('waves_project_idx').on(t.tenantId, t.projectId)],
+);
+
+/**
+ * One respondent's link: by e-mail in a wave, or an anonymous open-link start. The token is
+ * stored hashed (lookup) and encrypted (to send reminders); the raw token is only in the link.
+ */
+export const invitations = pgTable(
+  'invitations',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    questionnaireId: uuid('questionnaire_id')
+      .notNull()
+      .references(() => questionnaires.id),
+    waveId: uuid('wave_id').references(() => waves.id),
+    caseId: uuid('case_id').references(() => cases.id),
+    contactId: uuid('contact_id'),
+    email: text('email'),
+    tokenHash: text('token_hash').notNull(),
+    tokenEnc: text('token_enc').notNull(),
+    language: text('language').notNull(),
+    /** queued | sent | failed | bounced | suppressed | completed */
+    status: text('status').notNull().default('queued'),
+    sendAttempts: integer('send_attempts').notNull().default(0),
+    queuedAt: timestamp('queued_at', { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    bouncedAt: timestamp('bounced_at', { withTimezone: true }),
+    bounceType: text('bounce_type'),
+    openedAt: timestamp('opened_at', { withTimezone: true }),
+    clickedAt: timestamp('clicked_at', { withTimezone: true }),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    remindersSent: integer('reminders_sent').notNull().default(0),
+    lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    interviewId: uuid('interview_id'),
+  },
+  (t) => [
+    uniqueIndex('invitations_token_uq').on(t.tokenHash),
+    uniqueIndex('invitations_wave_case_uq').on(t.waveId, t.caseId),
+    index('invitations_status_idx').on(t.tenantId, t.status),
+    index('invitations_interview_idx').on(t.interviewId),
+  ],
+);
+
+/** Addresses never e-mailed again: hard bounces, complaints and unsubscribes. */
+export const suppressions = pgTable(
+  'suppressions',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    email: text('email').notNull(),
+    /** hard_bounce | complaint | unsubscribe */
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('suppressions_uq').on(t.tenantId, t.email)],
+);
+
+/** Anonymous links that anyone can open (no case); one interview per browser (W6). */
+export const openLinks = pgTable('open_links', {
+  id: id(),
+  tenantId: tenantId().references(() => tenants.id),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id),
+  questionnaireId: uuid('questionnaire_id')
+    .notNull()
+    .references(() => questionnaires.id),
+  slug: text('slug').notNull().unique(),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+});
+
 /** Tables protected by tenant row-level security. */
 export const TENANT_TABLES = [
   'tenant_members',
@@ -716,5 +850,10 @@ export const TENANT_TABLES = [
   'interview_answer_events',
   'interview_paradata',
   'call_attempts',
+  'email_templates',
+  'waves',
+  'invitations',
+  'suppressions',
+  'open_links',
   'audit_log',
 ] as const;

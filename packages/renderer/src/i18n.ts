@@ -40,6 +40,7 @@ const en = {
   },
   done: {
     complete: 'The interview is complete. Thank you.',
+    respondent: 'You have reached the end of the survey. Send your answers to finish.',
     ended: 'The interview has ended ({{disposition}}).',
     reviewAnswers: 'Go back to the last question',
   },
@@ -141,6 +142,7 @@ const es: Catalogue = {
   },
   done: {
     complete: 'La entrevista está completa. Gracias.',
+    respondent: 'Llegó al final de la encuesta. Envíe sus respuestas para terminar.',
     ended: 'La entrevista terminó ({{disposition}}).',
     reviewAnswers: 'Volver a la última pregunta',
   },

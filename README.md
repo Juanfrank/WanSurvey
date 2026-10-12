@@ -4,7 +4,7 @@ WanSurvey is a multi-tenant platform for survey data collection. A questionnaire
 
 ## Status
 
-The MVP is built in 13 vertical slices; eight are done so far.
+The MVP is built in 13 vertical slices; nine are done so far.
 
 | Slice | Scope                                                                                                                                                                                                                                                                                                                                                                                                                 | State   |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -17,7 +17,8 @@ The MVP is built in 13 vertical slices; eight are done so far.
 | 6     | **Interview runtime and autosave**: interviewer screen (case details, section navigator, notes, pause, keyboard shortcuts), answers kept on the device in IndexedDB and synced in numbered batches, "Saved" only when the server has them, timing and navigation paradata, server-checked submission, and the full answer history per case                                                                            | ✅      |
 | 7     | **CATI**: call queue with callbacks first, locks so no case is served twice, calling hours in the respondent's time zone, outcomes mapped to AAPOR dispositions with retries, callbacks and appointments, scripts, and a keyboard-first Phone calls workspace with timers and the case's call history                                                                                                                 | ✅      |
 | 8     | **CAPI offline**: installable app with a service worker, cases downloaded to one device, interviews started, continued and submitted with no connection and sent automatically when back online, optional location at start and end, and supervisor release of a lost device                                                                                                                                          | ✅      |
-| 9–13  | CAWI, PAPI, review, metrics, hardening                                                                                                                                                                                                                                                                                                                                                                                | planned |
+| 9     | **CAWI and e-mail**: invitation and reminder wording with preview, waves with reminders and a send funnel, tracking of opens and clicks, bounce webhook and do-not-e-mail list, unsubscribe, lawful-basis check, and the respondent survey (phone-friendly, resumable on any device) plus open links                                                                                                                  | ✅      |
+| 10–13 | PAPI, review, metrics, hardening                                                                                                                                                                                                                                                                                                                                                                                      | planned |
 
 Background reading:
 
@@ -33,7 +34,7 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 - Node 22
 - pnpm 10
 - Postgres 16
-- Redis 7 (unused until slice 9)
+- Redis 7 (unused until the background worker; e-mail runs in-process for now, W5)
 
 ## Getting started
 

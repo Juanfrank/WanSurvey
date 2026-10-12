@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { MAIL_DIR } from './e2e/mail.js';
 
 const API_PORT = 3100;
 const WEB_PORT = 4173;
@@ -51,6 +52,11 @@ export default defineConfig({
         GEOCODER_URL: `http://localhost:${GEO_PORT}`,
         GEOCODER_EMAIL: 'e2e@example.org',
         LOG_LEVEL: 'warn',
+        // E-mail goes to files the tests read; the dispatcher runs every second.
+        MAILER: 'file',
+        MAIL_OUTBOX_DIR: MAIL_DIR,
+        DISPATCH_INTERVAL_MS: '1000',
+        MAIL_WEBHOOK_SECRET: 'e2e-webhook-secret-0123456789',
       },
     },
     {

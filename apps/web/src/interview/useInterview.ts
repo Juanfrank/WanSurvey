@@ -1,5 +1,6 @@
 import {
   createInterview,
+  respondentFromCase,
   type CompiledQuestionnaire,
   type InterviewSession,
   type InterviewState,
@@ -284,7 +285,10 @@ export function useInterview(id: string) {
           language: p.interview.language,
           seed: p.interview.id,
           now: () => new Date(p.interview.startedAt),
-          context: { case: p.context.case ?? {} },
+          context: {
+            case: p.context.case ?? {},
+            respondent: respondentFromCase(p.context.case ?? {}),
+          },
           ...(hasState(state) ? { state: state as Partial<InterviewState> } : {}),
         });
         s.drainEvents();

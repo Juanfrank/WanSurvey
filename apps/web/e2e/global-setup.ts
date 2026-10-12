@@ -3,12 +3,14 @@ import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
 import { runMigrations } from '../../api/dist/db/migrate.js';
 import { seed } from '../../api/dist/db/seed.js';
+import { clearMail } from './mail.js';
 
 export const PASSWORD = 'demo-password-123';
 export const WAITING_EMAIL = 'waiting@demo.wansurvey.test';
 
 /** Fresh database for every run: migrations, the demo seed, and a member with no role. */
 export default async function globalSetup() {
+  clearMail();
   const adminUrl =
     process.env.E2E_DATABASE_ADMIN_URL ??
     'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';

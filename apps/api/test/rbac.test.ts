@@ -275,6 +275,21 @@ const ENDPOINTS: Endpoint[] = [
         .set('x-csrf-token', s.csrf),
   },
   {
+    name: 'GET waves',
+    permission: 'cawi.waves',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/waves`),
+  },
+  {
+    name: 'GET email-templates',
+    permission: ['email.templates', 'cawi.waves'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/email-templates`),
+  },
+  {
+    name: 'GET suppressions',
+    permission: 'cawi.waves',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/suppressions`),
+  },
+  {
     name: 'GET cases',
     permission: ['cases.read_all', 'cases.read_assigned'],
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cases`),

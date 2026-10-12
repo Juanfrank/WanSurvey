@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import axe from 'axe-core';
-import { CapiSettings, CatiSettings } from '@wansurvey/schema';
+import { CapiSettings, CatiSettings, CawiSettings } from '@wansurvey/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CasesTab } from '../src/cases/CasesTab.js';
 import { CaseMap } from '../src/cases/CaseMap.js';
@@ -120,6 +120,7 @@ describe('project settings', () => {
         assignmentMode: 'assigned' as const,
         cati: CatiSettings.parse({}),
         capi: CapiSettings.parse({}),
+        cawi: CawiSettings.parse({}),
       },
     };
     const { container } = render(
@@ -141,6 +142,7 @@ describe('project settings', () => {
         assignmentMode: 'pool',
         cati: CatiSettings.parse({}),
         capi: CapiSettings.parse({}),
+        cawi: CawiSettings.parse({}),
       },
     });
     const result = await axe.run(container, {

@@ -14,6 +14,7 @@ import { CasesTab } from '../cases/CasesTab.js';
 import { ImportTab } from '../cases/ImportTab.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
 import { CallsTab } from '../cati/CallsTab.js';
+import { CawiTab } from '../cawi/CawiTab.js';
 import { inputCls } from './fields.js';
 import { useCan } from './hooks.js';
 
@@ -242,7 +243,8 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
 const tabCls =
   '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
 
-type ProjectTab = 'questionnaires' | 'cases' | 'calls' | 'import' | 'assignments' | 'settings';
+type ProjectTab =
+  'questionnaires' | 'cases' | 'calls' | 'web' | 'import' | 'assignments' | 'settings';
 
 /** A project: its questionnaires, cases, sample import and assignments, as allowed by role. */
 export function ProjectPage() {
@@ -259,6 +261,9 @@ export function ProjectPage() {
   const canImport = useCan('cases.import', projectId);
   const canAssign = useCan('cases.assign', projectId);
   const canSettings = useCan('projects.update', projectId);
+  const canWeb =
+    useCan('cawi.waves', projectId) &&
+    (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CAWI'));
   const canDevice =
     useCan('interviews.conduct', projectId) &&
     (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CAPI'));
@@ -269,6 +274,7 @@ export function ProjectPage() {
     ...(canQuestionnaires ? (['questionnaires'] as const) : []),
     ...(canCasesAll || canCasesOwn ? (['cases'] as const) : []),
     ...(canCall ? (['calls'] as const) : []),
+    ...(canWeb ? (['web'] as const) : []),
     ...(canImport ? (['import'] as const) : []),
     ...(canAssign ? (['assignments'] as const) : []),
     ...(canSettings ? (['settings'] as const) : []),
@@ -319,6 +325,9 @@ export function ProjectPage() {
           </Tabs.Content>
           <Tabs.Content value="calls">
             <CallsTab projectId={projectId} notice={search.notice} />
+          </Tabs.Content>
+          <Tabs.Content value="web">
+            {project.data ? <CawiTab project={project.data} /> : null}
           </Tabs.Content>
           <Tabs.Content value="import">
             <ImportTab projectId={projectId} onDone={() => setTab('cases')} />

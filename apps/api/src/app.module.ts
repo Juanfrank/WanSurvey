@@ -9,6 +9,10 @@ import { AuthGuard } from './auth/auth.guard.js';
 import { AuthService } from './auth/auth.service.js';
 import { CapiController } from './capi/capi.controller.js';
 import { CapiService } from './capi/capi.service.js';
+import { CawiController } from './cawi/cawi.controller.js';
+import { CawiService } from './cawi/cawi.service.js';
+import { WaveDispatcher } from './cawi/dispatcher.js';
+import { PublicSurveyController } from './cawi/public.controller.js';
 import { CatiController } from './cati/cati.controller.js';
 import { CatiService } from './cati/cati.service.js';
 import { CasesController } from './cases/cases.controller.js';
@@ -19,7 +23,14 @@ import { SsoService } from './auth/sso.service.js';
 import { CONFIG, loadConfig } from './config.js';
 import { Database } from './db/database.js';
 import { HealthController } from './health/health.controller.js';
-import { ConsoleMailer, MAILER, MemoryMailer, type Mailer } from './mail/mailer.js';
+import {
+  ConsoleMailer,
+  FileMailer,
+  MAILER,
+  MemoryMailer,
+  SmtpMailer,
+  type Mailer,
+} from './mail/mailer.js';
 import { ProjectsController } from './projects/projects.controller.js';
 import { GeoController } from './geo/geo.controller.js';
 import { InterviewsController } from './interviews/interviews.controller.js';
@@ -73,6 +84,8 @@ export class AppModule {
         InterviewsController,
         CatiController,
         CapiController,
+        CawiController,
+        PublicSurveyController,
         CasesController,
         ImportsController,
         AuditController,
@@ -82,7 +95,14 @@ export class AppModule {
         {
           provide: MAILER,
           useValue:
-            opts.mailer ?? (config.NODE_ENV === 'test' ? new MemoryMailer() : new ConsoleMailer()),
+            opts.mailer ??
+            (config.NODE_ENV === 'test'
+              ? new MemoryMailer()
+              : config.MAILER === 'file'
+                ? new FileMailer(config.MAIL_OUTBOX_DIR!)
+                : config.MAILER === 'smtp'
+                  ? new SmtpMailer(config.SMTP_URL!, config.MAIL_FROM)
+                  : new ConsoleMailer()),
         },
         Database,
         AuditService,
@@ -94,6 +114,8 @@ export class AppModule {
         InterviewsService,
         CatiService,
         CapiService,
+        CawiService,
+        WaveDispatcher,
         {
           provide: GEOCODER,
           useValue:
