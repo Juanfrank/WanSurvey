@@ -20,13 +20,15 @@ import {
   type Model,
 } from './model.js';
 import { parseTemplate, TemplateError, templateExpressions, hasPipes } from './piping.js';
-import { typecheck, type StaticType } from './typecheck.js';
+import { typecheck, type MessageRef, type StaticType } from './typecheck.js';
 import { own, truthy } from './values.js';
 
 export interface Diagnostic {
   severity: 'error' | 'warning';
   code: string;
+  /** English text; `msg` identifies the translatable message. */
   message: string;
+  msg?: MessageRef;
   itemId?: string;
   field?: string;
   span?: Span;
@@ -45,7 +47,13 @@ export function analyze(questionnaire: Questionnaire): AnalysisResult {
   const add = (d: Diagnostic) => diagnostics.push(d);
 
   for (const p of model.problems)
-    add({ severity: 'error', code: p.code, message: p.message, itemId: p.itemId });
+    add({
+      severity: 'error',
+      code: p.code,
+      message: p.message,
+      msg: { id: p.code, params: p.params ?? {} },
+      itemId: p.itemId,
+    });
 
   const specialCodes = Object.values(questionnaire.settings.specialCodes).map((s) => s.code);
 
@@ -89,6 +97,7 @@ function checkForwardRefs(
           severity: 'error',
           code: 'computed_cycle',
           message: `Computed variable ${ref} refers to itself`,
+          msg: { id: 'self_reference', params: { name: ref } },
           itemId: node.id,
           field,
         });
@@ -102,6 +111,10 @@ function checkForwardRefs(
         code === 'missing_pipe'
           ? `Pipe {{${ref}}} refers to a question that is asked later, so it would be empty here`
           : `${field} refers to ${ref}, which is asked later (forward reference)`,
+      msg: {
+        id: code === 'missing_pipe' ? 'pipe_later' : 'forward_reference',
+        params: { name: ref },
+      },
       itemId: node.id,
       field,
     });
@@ -128,6 +141,7 @@ function checkExpressions(
         severity: 'error',
         code: 'syntax',
         message: expr.error!.message,
+        msg: { id: 'syntax', params: { at: expr.error!.span.start + 1 } },
         itemId: node.id,
         field,
         span: expr.error!.span,
@@ -148,6 +162,7 @@ function checkExpressions(
         severity: 'error',
         code: 'type_mismatch',
         message: 'Roster count must be a number',
+        msg: { id: 'roster_count_number' },
         itemId: node.id,
         field,
       });
@@ -159,6 +174,7 @@ function checkExpressions(
           severity: 'warning',
           code: 'type_mismatch',
           message: `Formula returns ${type.t} but ${node.name} is declared as ${declared}`,
+          msg: { id: 'formula_type', params: { got: type.t, name: node.name!, declared } },
           itemId: node.id,
           field,
         });
@@ -185,6 +201,7 @@ function checkSkips(model: Model, node: CompiledNode, add: (d: Diagnostic) => vo
         severity: 'error',
         code: 'unknown_skip_target',
         message: `Skip target '${skip.to}' does not exist`,
+        msg: { id: 'unknown_skip_target', params: { target: skip.to } },
         itemId: node.id,
         field,
       });
@@ -197,6 +214,7 @@ function checkSkips(model: Model, node: CompiledNode, add: (d: Diagnostic) => vo
           severity: 'error',
           code: 'skip_scope',
           message: 'END_ROW can only be used inside a roster',
+          msg: { id: 'end_row_outside' },
           itemId: node.id,
           field,
         });
@@ -209,6 +227,7 @@ function checkSkips(model: Model, node: CompiledNode, add: (d: Diagnostic) => vo
         severity: 'error',
         code: 'backward_skip',
         message: `Skip to ${target.id} goes backwards`,
+        msg: { id: 'backward_skip', params: { target: target.id } },
         itemId: node.id,
         field,
       });
@@ -219,6 +238,7 @@ function checkSkips(model: Model, node: CompiledNode, add: (d: Diagnostic) => vo
         severity: 'error',
         code: 'skip_scope',
         message: `Skip to ${target.id} crosses a roster boundary; use END_ROW to finish the current row`,
+        msg: { id: 'skip_crosses_roster', params: { target: target.id } },
         itemId: node.id,
         field,
       });
@@ -233,25 +253,41 @@ function checkQuestion(
   add: (d: Diagnostic) => void,
 ) {
   const q = node.def as Question;
-  const err = (code: string, message: string, field?: string) =>
-    add({ severity: 'error', code, message, itemId: node.id, ...(field ? { field } : {}) });
+  const err = (
+    code: string,
+    message: string,
+    field?: string,
+    params: Record<string, string | number> = {},
+  ) =>
+    add({
+      severity: 'error',
+      code,
+      message,
+      msg: { id: code, params: { name: q.name, ...params } },
+      itemId: node.id,
+      ...(field ? { field } : {}),
+    });
   const options = questionOptions(q, model.questionnaire);
   const coded = ['single', 'multi', 'grid', 'ranking'].includes(q.type);
   if (q.answerSetId && !own(model.questionnaire.answerSets, q.answerSetId)) {
-    err('unknown_answer_set', `Answer set '${q.answerSetId}' does not exist`, 'answerSetId');
+    err('unknown_answer_set', `Answer set '${q.answerSetId}' does not exist`, 'answerSetId', {
+      set: q.answerSetId,
+    });
   }
   if (coded && options.length === 0)
     err('missing_options', `${q.name} has no answer options`, 'options');
   const seen = new Set<string>();
   for (const o of options) {
     const k = String(o.code);
-    if (seen.has(k)) err('duplicate_code', `Code ${k} appears twice in ${q.name}`, 'options');
+    if (seen.has(k))
+      err('duplicate_code', `Code ${k} appears twice in ${q.name}`, 'options', { code: k });
     seen.add(k);
     if (specialCodes.some((c) => String(c) === k)) {
       err(
         'special_code_clash',
         `Code ${k} in ${q.name} clashes with a special code (DK/Refused/NA)`,
         'options',
+        { code: k },
       );
     }
   }
@@ -260,14 +296,14 @@ function checkQuestion(
   if (q.min !== undefined && q.max !== undefined && q.min > q.max)
     err('invalid_range', `min is greater than max in ${q.name}`, 'min');
   if (q.scale && q.scale.min >= q.scale.max)
-    err('invalid_range', `Scale min must be below max in ${q.name}`, 'scale');
+    err('invalid_scale', `Scale min must be below max in ${q.name}`, 'scale');
   if (
     q.minSelections !== undefined &&
     q.maxSelections !== undefined &&
     q.minSelections > q.maxSelections
   ) {
     err(
-      'invalid_range',
+      'invalid_selections',
       `minSelections is greater than maxSelections in ${q.name}`,
       'minSelections',
     );
@@ -291,6 +327,7 @@ function checkRoster(node: CompiledNode, add: (d: Diagnostic) => void) {
       severity: 'warning',
       code: 'empty_container',
       message: `Roster ${r.name} has no items`,
+      msg: { id: 'empty_roster', params: { name: r.name } },
       itemId: r.id,
     });
 }
@@ -304,6 +341,7 @@ function checkVariants(node: CompiledNode, add: (d: Diagnostic) => void) {
       severity: 'warning',
       code: 'hidden_in_all_modes',
       message: `${node.id} is hidden in every mode`,
+      msg: { id: 'hidden_in_all_modes', params: { name: node.id } },
       itemId: node.id,
     });
   }
@@ -374,6 +412,7 @@ function checkTemplate(
           severity: 'error',
           code: 'pipe_syntax',
           message: `${e.message} (${lang})`,
+          msg: { id: 'pipe_syntax', params: { lang } },
           itemId: node.id,
           field,
         });
@@ -388,6 +427,9 @@ function checkTemplate(
           ...i,
           code: i.code === 'unknown_variable' ? 'missing_pipe' : i.code,
           message: i.code === 'unknown_variable' ? `Pipe {{${e.src}}}: ${i.message}` : i.message,
+          ...(i.code === 'unknown_variable'
+            ? { msg: { id: 'missing_pipe', params: { pipe: e.src } } }
+            : {}),
           itemId: node.id,
           field,
         });
@@ -446,9 +488,10 @@ function checkTexts(
       const missing = languages.filter((l) => !text[l]);
       if (missing.length) {
         add({
-          severity: 'warning',
+          severity: 'error',
           code: 'missing_translation',
           message: `Missing ${missing.join(', ')} translation`,
+          msg: { id: 'missing_translation', params: { langs: missing.join(', ') } },
           itemId: node.id,
           field,
         });
@@ -469,6 +512,7 @@ function checkScripts(
         severity: 'error',
         code: 'unknown_script_anchor',
         message: `Script ${script.id} is attached to an unknown item`,
+        msg: { id: 'unknown_script_anchor', params: { name: script.id } },
         field: `scripts.${script.id}`,
       });
       continue;
@@ -595,6 +639,7 @@ function checkUnreachable(model: Model, add: (d: Diagnostic) => void) {
       severity: 'error',
       code: 'unreachable',
       message: `${n.id} can never be reached`,
+      msg: { id: 'unreachable', params: { name: n.id } },
       itemId: n.id,
     });
   }
@@ -624,6 +669,7 @@ function checkComputedCycles(model: Model, add: (d: Diagnostic) => void) {
             severity: 'error',
             code: 'computed_cycle',
             message: `Computed variables form a cycle: ${cycle.join(' → ')}`,
+            msg: { id: 'computed_cycle', params: { cycle: cycle.join(' → ') } },
             itemId: model.nodes[own(model.vars, dep)!.node]!.id,
           });
         }
@@ -646,6 +692,7 @@ function checkQuotas(
         severity: 'error',
         code: 'syntax',
         message: q.expr.error!.message,
+        msg: { id: 'syntax', params: { at: q.expr.error!.span.start + 1 } },
         field,
         span: q.expr.error!.span,
       });

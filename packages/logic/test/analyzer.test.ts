@@ -67,11 +67,40 @@ describe('static analysis', () => {
     expect(errs).toEqual(expect.arrayContaining(['N1', 'N2', 'N3', 'N4']));
   });
 
-  it('warns about codes that are not in the answer set', () => {
+  it('treats codes that are not in the answer set as errors (L13)', () => {
     const d = analyze(q([single('A'), num('B', { showIf: 'A == 7' })])).diagnostics;
     expect(d).toContainEqual(
-      expect.objectContaining({ severity: 'warning', code: 'unknown_code', itemId: 'B' }),
+      expect.objectContaining({
+        severity: 'error',
+        code: 'unknown_code',
+        itemId: 'B',
+        msg: { id: 'unknown_code', params: { code: '7', name: 'A' } },
+      }),
     );
+  });
+
+  it('treats missing translations as errors (L13)', () => {
+    const r = analyze(
+      q([{ ...single('A'), text: { en: 'A?' } } as never], {
+        languages: ['en', 'es'],
+      }),
+    );
+    expect(r.canPublish).toBe(false);
+    expect(r.diagnostics).toContainEqual(
+      expect.objectContaining({
+        severity: 'error',
+        code: 'missing_translation',
+        msg: { id: 'missing_translation', params: { langs: 'es' } },
+      }),
+    );
+  });
+
+  it('gives every diagnostic a message id', () => {
+    const r = analyze(
+      q([single('A', { showIf: 'NOPE == 1', skips: [{ when: 'A == 1', to: 'X' }] }), num('B')]),
+    );
+    expect(r.diagnostics.length).toBeGreaterThan(1);
+    for (const d of r.diagnostics) expect(d.msg?.id, d.code).toBeTruthy();
   });
 
   it('flags forward references in conditions', () => {

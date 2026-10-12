@@ -4,6 +4,7 @@ import type { MappingAction, VersionMapping } from '@wansurvey/schema';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
+import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { toLiteral } from './ConditionBuilder.js';
 import { Dialog } from './Dialog.js';
@@ -11,6 +12,7 @@ import { controlCls } from './fields.js';
 import type { PublishCheckResult } from './hooks.js';
 import type { Draft } from './tree.js';
 import { variablesOf } from './vars.js';
+import { localiseCheck, localiseDiagnostic, localiseMapping } from '../i18n-messages.js';
 
 /**
  * Saves the draft, runs every publish check on the server and, when breaking changes need it,
@@ -61,7 +63,7 @@ export function PublishDialog({
         });
         if (mine === seq.current) setCheck(res);
       } catch (e) {
-        setError((e as Error).message);
+        setError(localiseError(t, e));
       }
     }, 250);
     return () => clearTimeout(timer);
@@ -81,7 +83,7 @@ export function PublishDialog({
     } catch (e) {
       if (e instanceof ApiError && e.code === 'PUBLISH_BLOCKED') {
         setCheck({ ...(e.body.check as PublishCheckResult), draftRevision: revision });
-      } else setError(e instanceof ApiError ? (e.body.message ?? e.message) : String(e));
+      } else setError(localiseError(t, e));
     } finally {
       setBusy(false);
     }
@@ -146,7 +148,7 @@ export function PublishDialog({
 
             {[
               ...check.schemaIssues.map((i) => `${i.path}: ${i.message}`),
-              ...errors.map((d) => d.message),
+              ...errors.map((d) => localiseDiagnostic(t, d)),
             ]
               .slice(0, 8)
               .map((m, i) => (
@@ -163,8 +165,8 @@ export function PublishDialog({
                     .filter((c) => !c.passed)
                     .map((c, i) => (
                       <li key={i}>
-                        {c.label}
-                        {c.detail ? ` — ${c.detail}` : ''}
+                        {localiseCheck(t, c)}
+                        {c.detail && !c.msg ? ` — ${c.detail}` : ''}
                       </li>
                     ))}
                 </ul>
@@ -185,7 +187,7 @@ export function PublishDialog({
                     variables={vars}
                     problems={check.mappingProblems
                       .filter((p) => p.changeId === b.id)
-                      .map((p) => p.message)}
+                      .map((p) => localiseMapping(t, p))}
                     onChange={(a) =>
                       setMapping((m) => {
                         const next = { ...m };

@@ -79,7 +79,12 @@ export interface Model {
   /** Root variable → indices of nodes whose expressions read it (the dependency graph). */
   dependents: Record<string, number[]>;
   /** Structural problems found while building (duplicate ids, names...). */
-  problems: { code: string; message: string; itemId?: string }[];
+  problems: {
+    code: string;
+    message: string;
+    itemId?: string;
+    params?: Record<string, string>;
+  }[];
 }
 
 const RESERVED = new Set<string>([
@@ -197,6 +202,7 @@ export function buildModel(questionnaire: Questionnaire): Model {
       problems.push({
         code: 'reserved_name',
         message: `'${info.name}' is a reserved word`,
+        params: { name: info.name },
         itemId,
       });
     }
@@ -204,6 +210,7 @@ export function buildModel(questionnaire: Questionnaire): Model {
       problems.push({
         code: 'duplicate_variable',
         message: `Variable '${info.name}' is defined twice`,
+        params: { name: info.name },
         itemId,
       });
       return;
@@ -217,6 +224,7 @@ export function buildModel(questionnaire: Questionnaire): Model {
       problems.push({
         code: 'duplicate_id',
         message: `Item id '${def.id}' is used twice`,
+        params: { name: def.id },
         itemId: def.id,
       });
     } else {

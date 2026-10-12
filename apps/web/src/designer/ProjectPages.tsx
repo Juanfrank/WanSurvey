@@ -4,7 +4,8 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError } from '../api.js';
+import { api } from '../api.js';
+import { localiseError } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
 import { AssignmentsTab } from '../cases/AssignmentsTab.js';
@@ -106,8 +107,7 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
         params: { projectId, qid: q.id },
       });
     },
-    onError: (e) =>
-      setError(e instanceof ApiError ? (e.body.message ?? e.message) : (e as Error).message),
+    onError: (e) => setError(localiseError(t, e)),
   });
 
   return (

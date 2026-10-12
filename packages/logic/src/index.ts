@@ -5,7 +5,13 @@ export { evaluate, evaluateCondition, type Scope } from './evaluator.js';
 export { FUNCTIONS, type FunctionDef, type TypeTag } from './functions.js';
 export * from './values.js';
 export * from './keys.js';
-export { typecheck, type StaticType, type TypeIssue, type TypeEnv } from './typecheck.js';
+export {
+  typecheck,
+  type StaticType,
+  type TypeIssue,
+  type TypeEnv,
+  type MessageRef,
+} from './typecheck.js';
 export {
   parseTemplate,
   renderTemplate,

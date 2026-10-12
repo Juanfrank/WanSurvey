@@ -155,5 +155,5 @@ test('the preview flags questionnaire problems and runs saved scenarios', async 
   );
   await page.getByRole('button', { name: 'Load', exact: true }).click();
   await expect(page.getByText('1 error blocks publishing')).toBeVisible();
-  await expect(page.getByText("Unknown variable 'NOPE'")).toBeVisible();
+  await expect(page.getByText('Unknown variable NOPE')).toBeVisible();
 });

@@ -150,6 +150,15 @@ export function InterviewRunner(p: InterviewRunnerProps) {
     [session, announce, refresh],
   );
 
+  const revert = useCallback(
+    (key: string) => {
+      const r = session.revertToPrefill(key, respondent ? 'respondent' : 'interviewer');
+      announce(r);
+      refresh();
+    },
+    [session, respondent, announce, refresh],
+  );
+
   const confirm = useCallback(
     (key: string, ruleId: string) => {
       session.confirmWarning(key, ruleId);
@@ -384,6 +393,7 @@ export function InterviewRunner(p: InterviewRunnerProps) {
               onAnswer={answer}
               onSpecial={special}
               onConfirm={confirm}
+              onRevertPrefill={revert}
               showAllErrors={showErrors}
               touch={respondent}
             />

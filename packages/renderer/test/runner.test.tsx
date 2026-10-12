@@ -148,3 +148,41 @@ describe('InterviewRunner (respondent mode)', () => {
     await expectNoAxeViolations(container);
   });
 });
+
+describe('prefilled answers', () => {
+  it('offers to restore the prefilled value after it was changed (L11)', async () => {
+    const small = compile({
+      id: 'P',
+      title: { en: 'P' },
+      defaultLanguage: 'en',
+      languages: ['en'],
+      sections: [
+        {
+          id: 'S',
+          title: { en: 'S' },
+          items: [
+            {
+              kind: 'question',
+              id: 'REGION',
+              name: 'REGION',
+              type: 'numeric',
+              text: { en: 'Region' },
+              prefill: 'case.region',
+            },
+          ],
+        },
+      ],
+    });
+    const session = createInterview(small, { mode: 'CAPI', context, seed: 't' });
+    const user = userEvent.setup();
+    render(<InterviewRunner session={session} mode="CAPI" lang="en" narrow={false} />);
+    expect(session.getAnswer('REGION')).toBe(1);
+    expect(screen.queryByRole('button', { name: 'Restore the prefilled value' })).toBeNull();
+    const input = screen.getByRole('textbox', { name: /Region/ });
+    await user.clear(input);
+    await user.type(input, '4');
+    await user.click(screen.getByRole('button', { name: 'Restore the prefilled value' }));
+    expect(session.getAnswer('REGION')).toBe(1);
+    expect(screen.queryByRole('button', { name: 'Restore the prefilled value' })).toBeNull();
+  });
+});

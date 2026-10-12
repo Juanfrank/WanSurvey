@@ -22,6 +22,7 @@ import type { Draft } from './tree.js';
 import { useDraft, type DraftApi } from './useDraft.js';
 import { useRouting } from './useRouting.js';
 import { caseVariables, variablesOf, type SampleField } from './vars.js';
+import { localiseDiagnostic } from '../i18n-messages.js';
 
 const tabCls =
   '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
@@ -256,7 +257,7 @@ export function DesignerPage() {
                         {t('designer.goTo', { id: x.itemId })}
                       </button>{' '}
                       <span className={x.severity === 'error' ? 'text-red-800' : 'text-amber-800'}>
-                        {x.message}
+                        {localiseDiagnostic(t, x)}
                       </span>
                     </li>
                   ))}

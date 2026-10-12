@@ -94,7 +94,13 @@ export interface ChangeEvent {
   newValue: AnswerValue;
   source: AnswerSourceKind;
   reason?:
-    'path_change' | 'path_restored' | 'prefill' | 'computed' | 'row_removed' | 'roster_resized';
+    | 'path_change'
+    | 'path_restored'
+    | 'prefill'
+    | 'prefill_restored'
+    | 'computed'
+    | 'row_removed'
+    | 'roster_resized';
 }
 
 export interface EndState {
@@ -402,6 +408,38 @@ export class InterviewSession {
 
   clearAnswer(key: string, source: AnswerSourceKind = 'interviewer'): ChangeResult {
     return this.setAnswer(key, null, source);
+  }
+
+  /**
+   * The value the question's prefill gives right now (from sample data or earlier answers),
+   * or null when it has no prefill or the prefill is empty.
+   */
+  prefillValue(key: string): AnswerValue {
+    const parsed = parseKey(key);
+    if (!parsed) return null;
+    const info = own(this.compiled.vars, parsed.name);
+    if (!info || info.kind !== 'question') return null;
+    const node = this.compiled.nodes[info.node]!;
+    if (!node.prefill?.ast) return null;
+    const v = evaluate(node.prefill.ast, new InterviewScope(this, parsed.frames));
+    return isAnswered(v) && !this.shapeError(node, v as AnswerValue) ? (v as AnswerValue) : null;
+  }
+
+  /** True when the question has a prefill and its answer differs from it (L11). */
+  canRevertToPrefill(key: string): boolean {
+    const v = this.prefillValue(key);
+    return v !== null && !jsonEqual(v, this.getAnswer(key));
+  }
+
+  /** Puts the prefilled value back after the interviewer changed or cleared it (L11). */
+  revertToPrefill(key: string, source: AnswerSourceKind = 'interviewer'): ChangeResult {
+    const v = this.prefillValue(key);
+    if (v === null) return fail(`${key} has no prefilled value`);
+    const from = this.events.length;
+    const r = this.setAnswer(key, v, source);
+    const ev = this.events.slice(from).find((e) => e.key === key && !e.reason);
+    if (r.ok && ev) ev.reason = 'prefill_restored';
+    return r;
   }
 
   confirmWarning(key: string, ruleId: string): void {

@@ -127,6 +127,26 @@ describe('interview engine — full path', () => {
     );
   });
 
+  it('restores a prefilled value the interviewer changed or cleared (L11)', () => {
+    const s = start();
+    drive(s, base);
+    expect(s.canRevertToPrefill('E5_REGION')).toBe(false);
+    s.jumpTo('E5_REGION');
+    s.setAnswer('E5_REGION', 3);
+    expect(s.canRevertToPrefill('E5_REGION')).toBe(true);
+    s.drainEvents();
+    expect(s.revertToPrefill('E5_REGION').ok).toBe(true);
+    expect(s.getAnswer('E5_REGION')).toBe(2);
+    expect(s.drainEvents()).toContainEqual(
+      expect.objectContaining({ key: 'E5_REGION', reason: 'prefill_restored', newValue: 2 }),
+    );
+    s.clearAnswer('E5_REGION');
+    expect(s.getAnswer('E5_REGION')).toBeNull(); // clearing still sticks
+    expect(s.revertToPrefill('E5_REGION').ok).toBe(true);
+    expect(s.getAnswer('E5_REGION')).toBe(2);
+    expect(s.revertToPrefill('A1_CONSENT').ok).toBe(false);
+  });
+
   it('skip to END completes the interview and skips the rest', () => {
     const s = start();
     drive(s, { ...base, E1_RECONTACT: 2 });

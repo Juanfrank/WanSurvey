@@ -1,5 +1,6 @@
 import type { Question, Questionnaire, VersionMapping } from '@wansurvey/schema';
 import { buildModel, type Model, type VariableInfo } from './model.js';
+import type { MessageRef } from './typecheck.js';
 
 export type BreakingKind = 'removed' | 'type' | 'codes' | 'roster' | 'gridRows';
 
@@ -10,6 +11,7 @@ export interface BreakingChange {
   kind: BreakingKind;
   variable: string;
   message: string;
+  msg?: MessageRef;
   /** Codes (or grid rows) that no longer exist. */
   removedCodes?: (string | number)[];
   /** Which mapping actions make sense for it. */
@@ -103,6 +105,7 @@ export function breakingChanges(prev: Questionnaire, next: Questionnaire): Break
 export interface MappingProblem {
   changeId: string;
   message: string;
+  msg: MessageRef;
 }
 
 /** Checks that the mapping covers every breaking change with a valid action. */
@@ -118,16 +121,29 @@ export function validateMapping(
   const problems: MappingProblem[] = [];
   const ids = new Set(changes.map((c) => c.id));
   for (const id of Object.keys(m)) {
-    if (!ids.has(id)) problems.push({ changeId: id, message: `No breaking change '${id}'` });
+    if (!ids.has(id))
+      problems.push({
+        changeId: id,
+        message: `No breaking change '${id}'`,
+        msg: { id: 'no_such_change', params: { id } },
+      });
   }
   for (const c of changes) {
     const action = Object.prototype.hasOwnProperty.call(m, c.id) ? m[c.id] : undefined;
     if (!action) {
-      problems.push({ changeId: c.id, message: `Choose what happens to ${c.variable}` });
+      problems.push({
+        changeId: c.id,
+        message: `Choose what happens to ${c.variable}`,
+        msg: { id: 'choose', params: { name: c.variable } },
+      });
       continue;
     }
     if (!c.allowed.includes(action.action)) {
-      problems.push({ changeId: c.id, message: `'${action.action}' is not possible here` });
+      problems.push({
+        changeId: c.id,
+        message: `'${action.action}' is not possible here`,
+        msg: { id: 'not_possible', params: { action: action.action } },
+      });
       continue;
     }
     if (action.action === 'rename') {
@@ -136,16 +152,25 @@ export function validateMapping(
         : undefined;
       const source = a.vars[c.variable]!;
       if (!target) {
-        problems.push({ changeId: c.id, message: `${action.to} does not exist in this version` });
+        problems.push({
+          changeId: c.id,
+          message: `${action.to} does not exist in this version`,
+          msg: { id: 'target_missing', params: { name: action.to } },
+        });
       } else if (Object.prototype.hasOwnProperty.call(a.vars, action.to)) {
         problems.push({
           changeId: c.id,
           message: `${action.to} already existed and has its own data`,
+          msg: { id: 'target_existed', params: { name: action.to } },
         });
       } else if (target.type !== source.type) {
         problems.push({
           changeId: c.id,
           message: `${action.to} holds ${target.type} values, ${c.variable} held ${source.type}`,
+          msg: {
+            id: 'target_type',
+            params: { name: action.to, type: target.type, old: c.variable, oldType: source.type },
+          },
         });
       }
     }
@@ -153,12 +178,20 @@ export function validateMapping(
       const valid = new Set((b.vars[c.variable]?.codes ?? []).map(key));
       for (const code of c.removedCodes ?? []) {
         if (!Object.prototype.hasOwnProperty.call(action.map, key(code))) {
-          problems.push({ changeId: c.id, message: `Code ${code} needs a new code or 'discard'` });
+          problems.push({
+            changeId: c.id,
+            message: `Code ${code} needs a new code or 'discard'`,
+            msg: { id: 'code_needs_target', params: { code: String(code) } },
+          });
         }
       }
       for (const [from, to] of Object.entries(action.map)) {
         if (to !== null && !valid.has(key(to))) {
-          problems.push({ changeId: c.id, message: `${from} → ${to}: ${to} is not a code` });
+          problems.push({
+            changeId: c.id,
+            message: `${from} → ${to}: ${to} is not a code`,
+            msg: { id: 'not_a_code', params: { from, to: String(to) } },
+          });
         }
       }
     }

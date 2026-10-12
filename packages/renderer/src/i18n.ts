@@ -28,6 +28,7 @@ const en = {
     addRow: 'Add another',
     removeRow: 'Remove',
     shapeError: 'This answer could not be saved: {{error}}',
+    restorePrefill: 'Restore the prefilled value',
   },
   notice: {
     cleared_one: 'This change removed 1 later answer that no longer applies: {{keys}}.',
@@ -126,6 +127,7 @@ const es: Catalogue = {
     addRow: 'Agregar otro',
     removeRow: 'Quitar',
     shapeError: 'No se pudo guardar esta respuesta: {{error}}',
+    restorePrefill: 'Restaurar el valor precargado',
   },
   notice: {
     cleared_one: 'Este cambio eliminó 1 respuesta posterior que ya no aplica: {{keys}}.',

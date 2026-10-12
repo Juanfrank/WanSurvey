@@ -31,6 +31,8 @@ export interface QuestionViewProps {
   onAnswer(key: string, value: AnswerValue): void;
   onSpecial(key: string, kind: SpecialKind | null): void;
   onConfirm(key: string, ruleId: string): void;
+  /** Put the prefilled value back (shown only when it differs from the answer). */
+  onRevertPrefill?(key: string): void;
   /** Show "required" errors too (after a failed Next). */
   showAllErrors: boolean;
   /** Respondent modes on small screens get larger targets. */
@@ -195,6 +197,17 @@ export function QuestionView(p: QuestionViewProps) {
               </button>
             );
           })}
+        </div>
+      ) : null}
+      {p.onRevertPrefill && session.canRevertToPrefill(entry.key) ? (
+        <div>
+          <button
+            type="button"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+            onClick={() => p.onRevertPrefill!(entry.key)}
+          >
+            {t('question.restorePrefill')}
+          </button>
         </div>
       ) : null}
       <Messages

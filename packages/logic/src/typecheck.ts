@@ -10,11 +10,18 @@ export type StaticType =
   | { t: 'row'; roster: string }
   | { t: 'null' };
 
+/** A translatable message: an id (`diag.<id>` in the app catalogues) and its parameters. */
+export interface MessageRef {
+  id: string;
+  params?: Record<string, string | number>;
+}
+
 export interface TypeIssue {
   severity: 'error' | 'warning';
   code: string;
   message: string;
   span: Span;
+  msg?: MessageRef;
 }
 
 export interface TypeEnv {
@@ -45,11 +52,8 @@ class Checker {
     private readonly issues: TypeIssue[],
   ) {}
 
-  private err(code: string, message: string, span: Span) {
-    this.issues.push({ severity: 'error', code, message, span });
-  }
-  private warn(code: string, message: string, span: Span) {
-    this.issues.push({ severity: 'warning', code, message, span });
+  private err(code: string, message: string, span: Span, msg?: MessageRef) {
+    this.issues.push({ severity: 'error', code, message, span, ...(msg ? { msg } : {}) });
   }
 
   check(node: Node, chain: string[]): StaticType {
@@ -70,7 +74,9 @@ class Checker {
         const obj = this.check(node.object, chain);
         const idx = this.check(node.index, chain);
         if (idx.t !== 'number' && idx.t !== 'any' && idx.t !== 'code' && idx.t !== 'string') {
-          this.err('type_mismatch', 'Index must be a number', node.index.span);
+          this.err('type_mismatch', 'Index must be a number', node.index.span, {
+            id: 'index_number',
+          });
         }
         if (obj.t === 'roster') return { t: 'row', roster: obj.roster };
         if (obj.t === 'array') return { t: 'code' };
@@ -79,6 +85,7 @@ class Checker {
           'type_mismatch',
           'Only rosters, multi-choice answers and grids can be indexed',
           node.span,
+          { id: 'index_target' },
         );
         return ANY;
       }
@@ -106,7 +113,9 @@ class Checker {
         const lo = this.check(node.low, chain);
         const hi = this.check(node.high, chain);
         if (!['number', 'date', 'string', 'code', 'any'].includes(v.t)) {
-          this.err('type_mismatch', "'between' needs a number or date", node.value.span);
+          this.err('type_mismatch', "'between' needs a number or date", node.value.span, {
+            id: 'between_type',
+          });
         }
         this.expectComparable(v, lo, node.low.span);
         this.expectComparable(v, hi, node.high.span);
@@ -124,6 +133,7 @@ class Checker {
           'roster_scope',
           `'${node.name}' belongs to roster ${roster}; outside it use ${roster}[n].${node.name}, any(${roster}, …) or ${roster}.${node.name}`,
           node.span,
+          { id: 'roster_scope', params: { name: node.name, roster: roster ?? '' } },
         );
         return ANY;
       }
@@ -133,12 +143,17 @@ class Checker {
     if (node.name === 'mode') return { t: 'string' };
     if (node.name === 'index') {
       if (chain.length === 0)
-        this.err('roster_scope', "'index' is only available inside a roster", node.span);
+        this.err('roster_scope', "'index' is only available inside a roster", node.span, {
+          id: 'index_outside',
+        });
       return { t: 'number' };
     }
     if (node.name === 'code' && this.env.codeBound) return { t: 'code' };
     if (NS.has(node.name)) return ANY;
-    this.err('unknown_variable', `Unknown variable '${node.name}'`, node.span);
+    this.err('unknown_variable', `Unknown variable '${node.name}'`, node.span, {
+      id: 'unknown_variable',
+      params: { name: node.name },
+    });
     return ANY;
   }
 
@@ -159,6 +174,7 @@ class Checker {
           'unknown_variable',
           `Roster ${obj.roster} has no variable '${node.property}'`,
           node.span,
+          { id: 'roster_no_variable', params: { roster: obj.roster, name: node.property } },
         );
         return ANY;
       }
@@ -166,14 +182,20 @@ class Checker {
       if (child.type === 'roster') return { t: 'roster', roster: child.name };
       return { t: child.type } as StaticType;
     }
-    this.err('type_mismatch', `Cannot read '.${node.property}' here`, node.span);
+    this.err('type_mismatch', `Cannot read '.${node.property}' here`, node.span, {
+      id: 'member_here',
+      params: { name: node.property },
+    });
     return ANY;
   }
 
   private checkCall(node: Extract<Node, { type: 'call' }>, chain: string[]): StaticType {
     const fn = own(FUNCTIONS, node.name);
     if (!fn) {
-      this.err('unknown_function', `Unknown function '${node.name}'`, node.span);
+      this.err('unknown_function', `Unknown function '${node.name}'`, node.span, {
+        id: 'unknown_function',
+        params: { name: node.name },
+      });
       node.args.forEach((a) => this.check(a, chain));
       return ANY;
     }
@@ -185,13 +207,19 @@ class Checker {
           : fn.minArgs === fn.maxArgs
             ? `${fn.minArgs}`
             : `${fn.minArgs}–${fn.maxArgs}`;
-      this.err('arity', `${node.name}() takes ${expected} argument(s), got ${n}`, node.span);
+      this.err('arity', `${node.name}() takes ${expected} argument(s), got ${n}`, node.span, {
+        id: 'arity',
+        params: { name: node.name, expected, got: n },
+      });
     }
     node.args.forEach((arg, i) => {
       if (fn.rosterArg !== undefined && i === fn.rosterArg) {
         const t = this.check(arg, chain);
         if (t.t !== 'roster' && t.t !== 'any')
-          this.err('type_mismatch', `${node.name}() needs a roster`, arg.span);
+          this.err('type_mismatch', `${node.name}() needs a roster`, arg.span, {
+            id: 'needs_roster',
+            params: { name: node.name },
+          });
         return;
       }
       if (fn.rosterArg !== undefined && i === fn.rosterArg + 1) {
@@ -201,18 +229,26 @@ class Checker {
         return;
       }
       if (fn.varArgs?.includes(i) && !['var', 'member', 'index'].includes(arg.type)) {
-        this.err('type_mismatch', `${node.name}() needs a question variable`, arg.span);
+        this.err('type_mismatch', `${node.name}() needs a question variable`, arg.span, {
+          id: 'needs_question',
+          params: { name: node.name },
+        });
       }
       const t = this.check(arg, chain);
       if (node.name === 'contains' && i === 0 && !['array', 'string', 'any'].includes(t.t)) {
-        this.err('type_mismatch', 'contains() needs a multi-choice or text answer', arg.span);
+        this.err('type_mismatch', 'contains() needs a multi-choice or text answer', arg.span, {
+          id: 'contains_type',
+        });
       }
       if (
         ['age', 'datediff'].includes(node.name) &&
         i < 2 &&
         !['date', 'string', 'any'].includes(t.t)
       ) {
-        this.err('type_mismatch', `${node.name}() needs dates`, arg.span);
+        this.err('type_mismatch', `${node.name}() needs dates`, arg.span, {
+          id: 'needs_dates',
+          params: { name: node.name },
+        });
       }
     });
     return fn.returns === 'roster' ? ANY : ({ t: fn.returns } as StaticType);
@@ -233,7 +269,9 @@ class Checker {
       case '>=':
         if (l.t === 'null' || r.t === 'null') {
           if (node.op !== '==' && node.op !== '!=')
-            this.err('type_mismatch', 'null can only be tested with == or !=', node.span);
+            this.err('type_mismatch', 'null can only be tested with == or !=', node.span, {
+              id: 'null_test',
+            });
           return { t: 'boolean' };
         }
         if ((l.t === 'array' || r.t === 'array') && l.t !== 'any' && r.t !== 'any') {
@@ -241,6 +279,7 @@ class Checker {
             'type_mismatch',
             'Multi-choice answers cannot be compared directly; use contains() or in (…)',
             node.span,
+            { id: 'multi_compare' },
           );
           return { t: 'boolean' };
         }
@@ -257,6 +296,7 @@ class Checker {
             'type_mismatch',
             'Subtracting dates is not supported; use datediff(a, b, "days")',
             node.span,
+            { id: 'date_subtract' },
           );
           return ANY;
         }
@@ -268,7 +308,10 @@ class Checker {
 
   private expectNumber(t: StaticType, span: Span, what: string) {
     if (!['number', 'any', 'code', 'null'].includes(t.t)) {
-      this.err('type_mismatch', `${what} needs numbers, got ${t.t}`, span);
+      this.err('type_mismatch', `${what} needs numbers, got ${t.t}`, span, {
+        id: 'needs_numbers',
+        params: { what, got: t.t },
+      });
     }
   }
 
@@ -278,10 +321,13 @@ class Checker {
       t === 'number' || t === 'code' ? 'num' : t === 'string' || t === 'date' ? 'str' : t;
     if (a.t === 'code' || b.t === 'code') return; // codes may be numeric or string
     if (group(a.t) !== group(b.t))
-      this.err('type_mismatch', `Cannot compare ${a.t} with ${b.t}`, span);
+      this.err('type_mismatch', `Cannot compare ${a.t} with ${b.t}`, span, {
+        id: 'cannot_compare',
+        params: { a: a.t, b: b.t },
+      });
   }
 
-  /** Warns when a coded variable is compared with a literal that is not one of its codes. */
+  /** A coded variable compared with a literal that is not one of its codes is an error (L13). */
   private checkCode(varNode: Node, litNode: Node) {
     if (varNode.type !== 'var' || (litNode.type !== 'num' && litNode.type !== 'str')) return;
     const info = own(this.env.vars, varNode.name);
@@ -289,10 +335,11 @@ class Checker {
     const lit = litNode.value;
     const known = [...info.codes, ...(this.env.specialCodes ?? [])];
     if (!known.some((c) => String(c) === String(lit))) {
-      this.warn(
+      this.err(
         'unknown_code',
         `Code ${JSON.stringify(lit)} is not in the answer set of ${info.name}`,
         litNode.span,
+        { id: 'unknown_code', params: { code: String(lit), name: info.name } },
       );
     }
   }

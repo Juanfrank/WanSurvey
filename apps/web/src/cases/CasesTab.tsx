@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError } from '../api.js';
+import { api } from '../api.js';
+import { localiseError } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
 import { Dialog } from '../designer/Dialog.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
@@ -74,7 +75,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
       await qc.invalidateQueries({ queryKey: ['cases', projectId] });
       await qc.invalidateQueries({ queryKey: ['assignees', projectId] });
     },
-    onError: (e) => setMessage(e instanceof ApiError ? (e.body.message ?? e.message) : String(e)),
+    onError: (e) => setMessage(localiseError(t, e)),
   });
 
   const rows = data?.rows ?? [];

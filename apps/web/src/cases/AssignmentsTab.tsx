@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { describeCondition, tryParse } from '@wansurvey/logic';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError } from '../api.js';
+import { api } from '../api.js';
+import { localiseError } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
 import { controlCls, NumberField, smallBtn, TextField } from '../designer/fields.js';
 import { caseVariables } from '../designer/vars.js';
@@ -46,8 +47,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
     await qc.invalidateQueries({ queryKey: ['assignees', projectId] });
     await qc.invalidateQueries({ queryKey: ['cases', projectId] });
   };
-  const fail = (e: unknown) =>
-    setError(e instanceof ApiError ? (e.body.message ?? e.message) : (e as Error).message);
+  const fail = (e: unknown) => setError(localiseError(t, e));
 
   useEffect(() => {
     setPreview(null);

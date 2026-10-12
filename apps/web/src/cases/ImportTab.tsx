@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError, upload } from '../api.js';
+import { api, upload } from '../api.js';
+import { localiseError } from '../i18n-messages.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { Button, Card, ErrorText } from '../routes/ui.js';
 
@@ -86,8 +87,7 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
         `/projects/${projectId}/imports`,
       ),
   });
-  const fail = (e: unknown) =>
-    setError(e instanceof ApiError ? (e.body.message ?? e.message) : (e as Error).message);
+  const fail = (e: unknown) => setError(localiseError(t, e));
 
   const send = useMutation({
     mutationFn: (file: File) => {

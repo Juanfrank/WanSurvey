@@ -3,6 +3,7 @@ import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { casesEn, casesEs } from './cases/i18n.js';
 import { designerEn, designerEs } from './designer/i18n.js';
+import { messagesEn, messagesEs } from './messages-i18n.js';
 
 export const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -131,6 +132,7 @@ const en = {
   },
   designer: designerEn,
   cases: casesEn,
+  ...messagesEn,
 };
 
 type Catalogue = typeof en;
@@ -259,6 +261,7 @@ const es: Catalogue = {
   },
   designer: designerEs,
   cases: casesEs,
+  ...messagesEs,
 };
 
 export function initI18n(lng = 'en') {

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { BreakingChange, Diagnostic, MappingProblem } from '@wansurvey/logic';
+import type { BreakingChange, Diagnostic, MappingProblem, ScenarioCheck } from '@wansurvey/logic';
 import { roleHasPermission, Scenario, type Permission, type Role } from '@wansurvey/schema';
 import { api } from '../api.js';
 import type { ScenarioStore } from '../preview/panels.js';
@@ -23,7 +23,7 @@ export interface PublishCheckResult {
     id: string;
     name: string;
     passed: boolean;
-    checks: { label: string; passed: boolean; detail?: string }[];
+    checks: ScenarioCheck[];
   }[];
   breaking: BreakingChange[];
   mappingProblems: MappingProblem[];

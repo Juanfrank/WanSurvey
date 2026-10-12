@@ -12,6 +12,7 @@ import { MODES, Scenario, type Question, type StaticText } from '@wansurvey/sche
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RunOptions } from './usePreview.js';
+import { localiseCheck, localiseDiagnostic } from '../i18n-messages.js';
 
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-900',
@@ -53,7 +54,7 @@ export function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] })
                 {d.severity === 'error' ? '✕' : '!'}
               </span>
               {d.itemId ? <span className="font-mono text-slate-600">{d.itemId}</span> : null}
-              <span>{d.message}</span>
+              <span>{localiseDiagnostic(t, d)}</span>
             </li>
           ))}
         </ul>
@@ -426,8 +427,10 @@ export function ScenariosPanel({
                     .filter((c) => !c.passed)
                     .map((c, i) => (
                       <li key={i}>
-                        {c.label}
-                        {c.detail ? <span className="text-slate-600"> — {c.detail}</span> : null}
+                        {localiseCheck(t, c)}
+                        {c.detail && !c.msg ? (
+                          <span className="text-slate-600"> — {c.detail}</span>
+                        ) : null}
                       </li>
                     ))}
                 </ul>
