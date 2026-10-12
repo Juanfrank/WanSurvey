@@ -1,6 +1,45 @@
 {
   "name": "@wansurvey/renderer",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "React questionnaire renderer per mode/device. Planned for slice 3."
+  "description": "React components that render a questionnaire for each mode (CATI, CAPI, CAWI, PAPI).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@wansurvey/logic": "workspace:*",
+    "@wansurvey/schema": "workspace:*",
+    "i18next": "^25.5.0",
+    "react-i18next": "^15.7.0"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@wansurvey/fixtures": "workspace:*",
+    "axe-core": "^4.10.3",
+    "jsdom": "^26.1.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
 }
