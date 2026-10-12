@@ -4,6 +4,7 @@ import { userEvent } from '@testing-library/user-event';
 import axe from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CasesTab } from '../src/cases/CasesTab.js';
+import { CaseMap } from '../src/cases/CaseMap.js';
 import { SettingsTab } from '../src/cases/SettingsTab.js';
 
 const me = {
@@ -131,6 +132,63 @@ describe('project settings', () => {
     expect(JSON.parse(String(patch.init!.body))).toEqual({
       settings: { revealToInterviewers: false, assignmentMode: 'pool' },
     });
+    const result = await axe.run(container, {
+      rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
+    });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+});
+
+describe('case map', () => {
+  it('lists the points as a table and starts geocoding', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        const path = url.replace('/api/v1', '');
+        let body: unknown = {};
+        if (path === '/auth/me') body = me;
+        else if (path.endsWith('/cases-map'))
+          body = [
+            {
+              caseId: 'c1',
+              externalId: 'HH1',
+              status: 'fresh',
+              lat: -12.05,
+              lng: -77.04,
+              quality: 'house',
+            },
+          ];
+        else if (path.endsWith('/geocode/status'))
+          body = {
+            enabled: true,
+            job: { running: false, total: 3, done: 3, found: 2, notFound: 1, failed: 0 },
+          };
+        else if (path.endsWith('/geocode')) body = { running: true, total: 3 };
+        return new Response(JSON.stringify(body), { status: 200 });
+      }),
+    );
+    const user = userEvent.setup();
+    const opened: string[] = [];
+    const { container } = render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <CaseMap projectId="p" onOpen={(id) => opened.push(id)} />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Addresses: 2 found, 1 not found, 0 failed.');
+    expect(screen.getByText(/sent to OpenStreetMap Nominatim/)).toBeTruthy();
+    await user.click(screen.getByText('1 point as a table'));
+    await user.click(screen.getByRole('button', { name: 'HH1' }));
+    expect(opened).toEqual(['c1']);
+    expect(screen.getByText('-12.05000, -77.04000')).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Find addresses on the map' })).toBeTruthy(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Find addresses on the map' }));
+    expect(calls.some((c) => c.url.endsWith('/geocode') && c.init?.method === 'POST')).toBe(true);
     const result = await axe.run(container, {
       rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
     });

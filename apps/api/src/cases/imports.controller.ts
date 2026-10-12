@@ -420,7 +420,53 @@ export class ImportsController {
         .where(and(eq(cases.projectId, projectId), inArray(cases.externalId, part)));
       found.forEach((f) => existing.add(f.externalId));
     }
-    return validateRows(headers, rows, mapping, existing, maxExamples);
+    const result = validateRows(headers, rows, mapping, existing, maxExamples);
+    await this.flagElsewhere(tx, projectId, result, maxExamples);
+    return result;
+  }
+
+  /**
+   * Adds a non-blocking `duplicate_elsewhere` issue for rows whose phone or e-mail is already
+   * on a case of another project, with project names and counts only (no personal values).
+   */
+  private async flagElsewhere(
+    tx: Tx,
+    projectId: string,
+    { report, prepared }: ReturnType<typeof validateRows>,
+    maxExamples: number,
+  ) {
+    const items = prepared
+      .filter((r) => r.valid)
+      .flatMap((r) =>
+        r.contacts
+          .filter((c) => c.type !== 'address')
+          .map((c) => ({ key: String(r.rowNo), type: c.type, value: c.value })),
+      );
+    if (!items.length) return;
+    const found = await this.casesService.matchesElsewhere(tx, projectId, items);
+    if (!found.size) return;
+    const perProject = new Map<string, { projectId: string; name: string; rows: number }>();
+    for (const projects of found.values())
+      for (const p of projects) {
+        const e = perProject.get(p.projectId) ?? { projectId: p.projectId, name: p.name, rows: 0 };
+        e.rows++;
+        perProject.set(p.projectId, e);
+      }
+    const rows = [...found.keys()].map(Number).sort((a, b) => a - b);
+    report.elsewhere = [...perProject.values()].sort((a, b) => a.name.localeCompare(b.name));
+    report.issues.push({
+      code: 'duplicate_elsewhere',
+      count: rows.length,
+      blocking: false,
+      examples: rows.slice(0, maxExamples).map((row) => ({
+        row,
+        column: found
+          .get(String(row))!
+          .map((p) => p.name)
+          .join(', '),
+        value: '',
+      })),
+    });
   }
 
   private async insertContacts(

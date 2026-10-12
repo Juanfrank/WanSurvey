@@ -10,7 +10,7 @@ import {
   type ProjectSettings,
   type Role,
 } from '@wansurvey/schema';
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { can } from '../common/auth-context.js';
@@ -20,6 +20,7 @@ import {
   auditLog,
   caseEvents,
   cases,
+  contacts,
   memberships,
   projects,
   sampleFields,
@@ -244,6 +245,82 @@ export class CasesService {
         }),
       );
     }
+  }
+
+  /**
+   * Other projects of the organisation with a case sharing one of these phones or e-mails, and
+   * how many such cases each has, keyed by the row that has them (`key`, e.g. a row number).
+   * Only names and counts come back, never the matching values.
+   */
+  async matchesElsewhere(
+    tx: Tx,
+    projectId: string,
+    items: { key: string; type: string; value: string }[],
+  ): Promise<Map<string, { projectId: string; name: string; cases: number }[]>> {
+    const out = new Map<
+      string,
+      Map<string, { projectId: string; name: string; cases: Set<string> }>
+    >();
+    const byValue = new Map<string, string[]>();
+    for (const i of items) {
+      const k = `${i.type}\u0000${i.value}`;
+      byValue.set(k, [...(byValue.get(k) ?? []), i.key]);
+    }
+    const pairs = [...byValue.keys()].map((k) => k.split('\u0000') as [string, string]);
+    for (const part of chunks(pairs, 500)) {
+      const rows = await tx
+        .select({
+          type: contacts.type,
+          value: contacts.value,
+          caseId: cases.id,
+          projectId: projects.id,
+          name: projects.name,
+        })
+        .from(contacts)
+        .innerJoin(cases, eq(cases.id, contacts.caseId))
+        .innerJoin(projects, eq(projects.id, cases.projectId))
+        .where(
+          and(
+            ne(cases.projectId, projectId),
+            or(
+              ...part.map(([type, value]) =>
+                and(eq(contacts.type, type), eq(contacts.value, value)),
+              ),
+            ),
+          ),
+        );
+      for (const r of rows)
+        for (const key of byValue.get(`${r.type}\u0000${r.value}`) ?? []) {
+          const per = out.get(key) ?? new Map();
+          const p = per.get(r.projectId) ?? {
+            projectId: r.projectId,
+            name: r.name,
+            cases: new Set(),
+          };
+          p.cases.add(r.caseId);
+          per.set(r.projectId, p);
+          out.set(key, per);
+        }
+    }
+    return new Map(
+      [...out].map(([key, per]) => [
+        key,
+        [...per.values()]
+          .map((p) => ({ projectId: p.projectId, name: p.name, cases: p.cases.size }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      ]),
+    );
+  }
+
+  /** `matchesElsewhere` for one case's contacts. */
+  async elsewhere(tx: Tx, projectId: string, cs: { type: string; value: string }[]) {
+    if (!cs.length) return [];
+    const found = await this.matchesElsewhere(
+      tx,
+      projectId,
+      cs.map((c) => ({ key: 'case', ...c })),
+    );
+    return found.get('case') ?? [];
   }
 
   /**

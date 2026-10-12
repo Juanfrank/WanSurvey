@@ -22,6 +22,13 @@ const Env = z.object({
   /** Sample import limits. */
   IMPORT_MAX_MB: z.coerce.number().positive().default(20),
   IMPORT_MAX_ROWS: z.coerce.number().int().positive().default(200_000),
+  /** Geocoding of case addresses: off unless set; addresses are sent to the service. */
+  GEOCODER: z.enum(['none', 'nominatim']).default('none'),
+  GEOCODER_URL: z.string().url().default('https://nominatim.openstreetmap.org'),
+  /** Contact e-mail sent to Nominatim, as its usage policy requires. */
+  GEOCODER_EMAIL: z.string().email().optional(),
+  /** Addresses geocoded per request at most. */
+  GEOCODE_MAX: z.coerce.number().int().positive().default(5000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Optional: OpenTelemetry/Sentry are wired only when configured. */
   SENTRY_DSN: z.string().optional(),
@@ -34,6 +41,9 @@ let cached: AppConfig | null = null;
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && env === process.env) return cached;
   const parsed = Env.safeParse(env);
+  if (parsed.success && parsed.data.GEOCODER === 'nominatim' && !parsed.data.GEOCODER_EMAIL) {
+    throw new Error('Invalid configuration:\n  GEOCODER_EMAIL: required when GEOCODER=nominatim');
+  }
   if (!parsed.success) {
     throw new Error(
       `Invalid configuration:\n${parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n')}`,

@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const API_PORT = 3100;
 const WEB_PORT = 4173;
+const GEO_PORT = 3200;
 const adminUrl =
   process.env.E2E_DATABASE_ADMIN_URL ?? 'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';
 const appUrl =
@@ -26,6 +27,12 @@ export default defineConfig({
   },
   webServer: [
     {
+      command: 'node e2e/mock-nominatim.mjs',
+      url: `http://localhost:${GEO_PORT}/status`,
+      reuseExistingServer: false,
+      env: { PORT: String(GEO_PORT) },
+    },
+    {
       command: 'node ../api/dist/main.js',
       // /health needs the database, which global setup creates after the servers start.
       url: `http://localhost:${API_PORT}/docs/openapi.json`,
@@ -38,6 +45,9 @@ export default defineConfig({
         PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
         API_PUBLIC_URL: `http://localhost:${WEB_PORT}`,
         LOGIN_RATE_LIMIT: '1000',
+        GEOCODER: 'nominatim',
+        GEOCODER_URL: `http://localhost:${GEO_PORT}`,
+        GEOCODER_EMAIL: 'e2e@example.org',
         LOG_LEVEL: 'warn',
       },
     },

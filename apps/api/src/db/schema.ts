@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  doublePrecision,
   boolean,
   index,
   integer,
@@ -419,9 +420,19 @@ export const contacts = pgTable(
     label: text('label'),
     consent: jsonb('consent').notNull().default({}),
     valid: boolean('valid').notNull().default(true),
+    /** Coordinates of an address, from the geocoder (null until geocoded or when not found). */
+    lat: doublePrecision('lat'),
+    lng: doublePrecision('lng'),
+    /** The geocoder's match type (house, street, city…) or `not_found`. */
+    geocodeQuality: text('geocode_quality'),
+    geocodedAt: timestamp('geocoded_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [index('contacts_case_idx').on(t.caseId)],
+  (t) => [
+    index('contacts_case_idx').on(t.caseId),
+    // Finds the same phone or e-mail in other projects (duplicate detection).
+    index('contacts_value_idx').on(t.tenantId, t.type, t.value),
+  ],
 );
 
 /** An uploaded sample file: its mapping, validation report and outcome. */

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
@@ -9,6 +9,7 @@ import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { caseVariables } from '../designer/vars.js';
 import { Button } from '../routes/ui.js';
+import { CaseMap } from './CaseMap.js';
 import { qs, STATUSES, useAssignees, type CaseList, type CaseRow } from './hooks.js';
 
 const MAX_FIELD_COLUMNS = 4;
@@ -34,6 +35,8 @@ export function CasesTab({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const [assignee, setAssignee] = useState('');
   const [message, setMessage] = useState('');
+  const [view, setView] = useState<'list' | 'map'>('list');
+  const openCase = useCallback((id: string) => setOpen(id), []);
   const limit = 25;
 
   useEffect(() => {
@@ -97,8 +100,35 @@ export function CasesTab({ projectId }: { projectId: string }) {
   };
   const allOnPage = rows.length > 0 && rows.every((r) => selected.has(r.id));
 
+  const viewSwitch = (
+    <div role="group" aria-label={t('cases.map.view')} className="flex gap-1 text-sm">
+      {(['list', 'map'] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={view === v}
+          className={`${smallBtn} aria-pressed:border-indigo-500 aria-pressed:bg-indigo-50`}
+          onClick={() => setView(v)}
+        >
+          {t(`cases.map.${v}`)}
+        </button>
+      ))}
+    </div>
+  );
+  if (view === 'map')
+    return (
+      <div className="flex flex-col gap-4">
+        {viewSwitch}
+        <CaseMap projectId={projectId} onOpen={openCase} />
+        {open ? (
+          <CaseDrawer projectId={projectId} caseId={open} onClose={() => setOpen(null)} />
+        ) : null}
+      </div>
+    );
+
   return (
     <div className="flex flex-col gap-4">
+      {viewSwitch}
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">{t('cases.list.search')}</span>
@@ -417,7 +447,17 @@ function formatValue(v: unknown): string {
 }
 
 interface CaseDetail extends CaseRow {
-  contacts: { id: string; type: string; value: string; label: string | null; valid: boolean }[];
+  contacts: {
+    id: string;
+    type: string;
+    value: string;
+    label: string | null;
+    valid: boolean;
+    lat?: number | null;
+    lng?: number | null;
+    geocodeQuality?: string | null;
+  }[];
+  elsewhere?: { projectId: string; name: string; cases: number }[];
   history: { type: string; details: Record<string, unknown>; at: string; actor: string | null }[];
   pii: { masked: boolean; canReveal: boolean; auto: boolean };
   canClaim: boolean;
@@ -552,6 +592,30 @@ function CaseDrawer({
                 {c.contacts.map((x) => (
                   <li key={x.id}>
                     <span className="text-slate-600">{x.label ?? x.type}:</span> {x.value}
+                    {x.lat != null && x.lng != null ? (
+                      <>
+                        {' '}
+                        <span
+                          className="font-mono text-xs text-slate-600"
+                          data-testid="coordinates"
+                        >
+                          ({x.lat.toFixed(5)}, {x.lng.toFixed(5)})
+                        </span>{' '}
+                        <a
+                          className="text-xs text-indigo-700 underline"
+                          href={`https://www.openstreetmap.org/?mlat=${x.lat}&mlon=${x.lng}#map=17/${x.lat}/${x.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {t('cases.detail.openMap')}
+                        </a>
+                      </>
+                    ) : x.geocodeQuality === 'not_found' ? (
+                      <span className="text-xs text-slate-600">
+                        {' '}
+                        · {t('cases.detail.notFound')}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -559,6 +623,18 @@ function CaseDrawer({
               <p className="text-slate-600">{t('cases.detail.noContacts')}</p>
             )}
           </section>
+          {c.elsewhere?.length ? (
+            <p
+              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2"
+              data-testid="elsewhere"
+            >
+              {t('cases.detail.elsewhere', {
+                list: c.elsewhere
+                  .map((p) => t('cases.detail.elsewhereCases', { name: p.name, count: p.cases }))
+                  .join(', '),
+              })}
+            </p>
+          ) : null}
           {canEdit ? (
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1">

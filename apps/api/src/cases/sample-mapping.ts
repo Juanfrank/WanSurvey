@@ -163,7 +163,9 @@ export type IssueCode =
   | 'invalid_date'
   | 'invalid_priority'
   | 'invalid_mode'
-  | 'empty_row';
+  | 'empty_row'
+  /** A phone or e-mail already belongs to a case in another project (informational). */
+  | 'duplicate_elsewhere';
 
 /** Issues that make a row unusable; `existing_id` and `empty_row` are informational. */
 const BLOCKING = new Set<IssueCode>([
@@ -187,6 +189,8 @@ export interface ImportReport {
   /** Rows that will be created / updated on commit. */
   toCreate: number;
   toUpdate: number;
+  /** Other projects sharing phones or e-mails with rows of this file: names and row counts. */
+  elsewhere?: { projectId: string; name: string; rows: number }[];
   issues: {
     code: IssueCode;
     count: number;

@@ -39,6 +39,7 @@ export type AuditAction =
   | 'case.pii_viewed'
   | 'case.claimed'
   | 'case.released'
+  | 'cases.geocoded'
   | 'library_item.created'
   | 'library_item.deleted'
   | 'sample_field.updated'

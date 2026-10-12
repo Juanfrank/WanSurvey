@@ -71,6 +71,11 @@ export function maskSample(
   );
 }
 
-export function maskContact<T extends { value: string }>(c: T, canSeePii: boolean): T {
-  return canSeePii ? c : { ...c, value: MASK };
+/** Hides a contact's value, and an address's coordinates, which locate the person as well. */
+export function maskContact<T extends { value: string; lat?: number | null; lng?: number | null }>(
+  c: T,
+  canSeePii: boolean,
+): T {
+  if (canSeePii) return c;
+  return { ...c, value: MASK, ...('lat' in c ? { lat: null, lng: null } : {}) };
 }

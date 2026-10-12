@@ -17,6 +17,9 @@ import { Database } from './db/database.js';
 import { HealthController } from './health/health.controller.js';
 import { ConsoleMailer, MAILER, MemoryMailer, type Mailer } from './mail/mailer.js';
 import { ProjectsController } from './projects/projects.controller.js';
+import { GeoController } from './geo/geo.controller.js';
+import { GEOCODER, NominatimGeocoder, type Geocoder } from './geo/geocoder.js';
+import { GeoService } from './geo/geo.service.js';
 import { LibraryController } from './library/library.controller.js';
 import { CollabController } from './questionnaires/collab.controller.js';
 import { QuestionnairesController } from './questionnaires/questionnaires.controller.js';
@@ -26,6 +29,8 @@ import { UsersService } from './users/users.service.js';
 
 export interface AppModuleOptions {
   mailer?: Mailer;
+  /** Replaces the configured geocoder (tests use a mock Nominatim). */
+  geocoder?: Geocoder | null;
 }
 
 @Module({})
@@ -58,6 +63,7 @@ export class AppModule {
         QuestionnairesController,
         CollabController,
         LibraryController,
+        GeoController,
         CasesController,
         ImportsController,
         AuditController,
@@ -75,6 +81,16 @@ export class AppModule {
         SsoService,
         UsersService,
         CasesService,
+        GeoService,
+        {
+          provide: GEOCODER,
+          useValue:
+            opts.geocoder !== undefined
+              ? opts.geocoder
+              : config.GEOCODER === 'nominatim'
+                ? new NominatimGeocoder(config.GEOCODER_URL, config.GEOCODER_EMAIL!)
+                : null,
+        },
         // Order matters: rate limiting first, then authentication/authorisation.
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },

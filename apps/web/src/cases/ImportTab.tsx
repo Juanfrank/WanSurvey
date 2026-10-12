@@ -40,6 +40,7 @@ interface Report {
   existing: number;
   toCreate: number;
   toUpdate: number;
+  elsewhere?: { projectId: string; name: string; rows: number }[];
   issues: {
     code: string;
     count: number;
@@ -408,7 +409,9 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
                     </td>
                     <td>{i.count}</td>
                     <td className="text-slate-600">
-                      {i.examples.map((e) => `${e.row}: ${e.value || '∅'}`).join(' · ')}
+                      {i.code === 'duplicate_elsewhere'
+                        ? i.examples.map((e) => `${e.row}: ${e.column}`).join(' · ')
+                        : i.examples.map((e) => `${e.row}: ${e.value || '∅'}`).join(' · ')}
                     </td>
                   </tr>
                 ))}
@@ -417,6 +420,15 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
           ) : (
             <p className="text-sm">{t('cases.import.report.noIssues')}</p>
           )}
+          {report.elsewhere?.length ? (
+            <p className="text-sm text-slate-700" data-testid="import-elsewhere">
+              {t('cases.import.elsewhere', {
+                list: report.elsewhere
+                  .map((p) => t('cases.import.elsewhereRows', { name: p.name, count: p.rows }))
+                  .join(', '),
+              })}
+            </p>
+          ) : null}
           {report.invalid ? (
             <a
               className="text-sm text-indigo-700 underline"

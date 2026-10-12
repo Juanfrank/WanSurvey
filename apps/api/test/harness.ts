@@ -5,6 +5,7 @@ import { Questionnaire, type Role } from '@wansurvey/schema';
 import postgres from 'postgres';
 import request from 'supertest';
 import { uuidv7 } from 'uuidv7';
+import type { AppModuleOptions } from '../src/app.module.js';
 import { createApp } from '../src/app.js';
 import { hashPassword } from '../src/auth/auth.service.js';
 import { encryptField, generateTotpSecret, totp } from '../src/common/crypto.js';
@@ -21,9 +22,9 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function bootstrap(): Promise<TestApp> {
+export async function bootstrap(opts: Omit<AppModuleOptions, 'mailer'> = {}): Promise<TestApp> {
   const mailer = new MemoryMailer();
-  const app = await createApp({ mailer });
+  const app = await createApp({ ...opts, mailer });
   await app.init();
   const admin = postgres(process.env.DATABASE_ADMIN_URL!, { max: 2, onnotice: () => {} });
   return {

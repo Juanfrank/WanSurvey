@@ -228,6 +228,9 @@ export class CasesController {
           label: contacts.label,
           valid: contacts.valid,
           consent: contacts.consent,
+          lat: contacts.lat,
+          lng: contacts.lng,
+          geocodeQuality: contacts.geocodeQuality,
         })
         .from(contacts)
         .where(eq(contacts.caseId, caseId))
@@ -245,6 +248,14 @@ export class CasesController {
         .orderBy(desc(caseEvents.at))
         .limit(200);
       const hasPii = pii.size > 0 || cs.length > 0;
+      // The same phone or e-mail in other projects, for people who see all cases.
+      const elsewhere = can(ctx.memberships, 'cases.read_all', projectId)
+        ? await this.svc.elsewhere(
+            tx,
+            projectId,
+            cs.filter((x) => x.type !== 'address'),
+          )
+        : [];
       const free = !c.assignedTo && c.status === 'fresh';
       return {
         ...c,
@@ -253,6 +264,7 @@ export class CasesController {
         history,
         pii: { masked: hasPii && !show, canReveal: canSee && hasPii && !show, auto },
         assignmentMode: settings.assignmentMode,
+        elsewhere,
         canClaim: pool && free && can(ctx.memberships, 'cases.read_assigned', projectId),
         canRelease:
           c.status === 'assigned' &&

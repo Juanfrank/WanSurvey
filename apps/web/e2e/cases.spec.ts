@@ -184,7 +184,7 @@ test('interviewers see their cases automatically; in pool mode the first to take
   for (const p of [interviewer, clerk]) {
     await p.reload();
     await p.getByRole('tab', { name: 'My cases' }).click();
-    await p.getByLabel('Show').selectOption({ label: 'Available to claim' });
+    await p.getByRole('combobox', { name: /^Show/ }).selectOption({ label: 'Available to claim' });
   }
   const free = interviewer.locator('[data-testid="cases-table"] tbody tr').first();
   await expect(free).toContainText('Available');
@@ -206,4 +206,91 @@ test('interviewers see their cases automatically; in pool mode the first to take
   await page.getByRole('radio', { name: /Assigned by a supervisor/ }).check();
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByText('Settings saved.')).toBeVisible();
+});
+
+test('duplicates across projects are flagged; addresses are found and shown on the map', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await openProject(page);
+  // Another project of the organisation already has one of these phones.
+  const csrf = (await page.context().cookies()).find((c) => c.name === 'ws_csrf')!.value;
+  const code = `PANEL${Date.now() % 100000}`;
+  const created = await page.request.post('/api/v1/projects', {
+    headers: { 'x-csrf-token': csrf },
+    data: { name: `Panel ${code}`, code },
+  });
+  expect(created.ok()).toBe(true);
+  const other = (await created.json()) as { id: string };
+  const table = [
+    ['id', 'first_name', 'phone', 'address'],
+    [`${code}-1`, 'Rosa', '987650001', 'Av. Brasil 100, Lima'],
+    [`${code}-2`, 'Luis', '987650002', 'Nowhere street 9'],
+  ];
+  const csv = table.map((r) => r.join(',')).join('\n');
+  const up = await page.request.post(`/api/v1/projects/${other.id}/imports`, {
+    headers: { 'x-csrf-token': csrf },
+    multipart: { file: { name: 'panel.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) } },
+  });
+  const upload = (await up.json()) as { id: string; suggested: object };
+  await page.request.put(`/api/v1/projects/${other.id}/imports/${upload.id}/mapping`, {
+    headers: { 'x-csrf-token': csrf },
+    data: { ...upload.suggested, defaultCountryCode: '51' },
+  });
+  expect(
+    (
+      await page.request.post(`/api/v1/projects/${other.id}/imports/${upload.id}/commit`, {
+        headers: { 'x-csrf-token': csrf },
+      })
+    ).ok(),
+  ).toBe(true);
+
+  // The household project imports the same phone under another id.
+  await page.getByRole('tab', { name: 'Import sample' }).click();
+  const mine = [
+    ['id', 'first_name', 'phone', 'address'],
+    [`G${code}-1`, 'Rosa', '987650001', 'Av. Brasil 100, Lima'],
+    [`G${code}-2`, 'Ana', '987650003', 'Jr. Ica 22, Lima'],
+  ];
+  await page.getByLabel('Sample file (.csv or .xlsx)').setInputFiles({
+    name: 'more.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(mine.map((r) => r.join(',')).join('\n')),
+  });
+  await page.getByRole('button', { name: 'Upload and read' }).click();
+  await page.getByLabel('Country code for phones without one').fill('51');
+  await page.getByRole('button', { name: 'Check the file' }).click();
+  const issues = page.getByTestId('import-issues');
+  await expect(issues.locator('[data-issue="duplicate_elsewhere"]')).toContainText(`Panel ${code}`);
+  await expect(page.getByTestId('import-elsewhere')).toContainText(`Panel ${code} (1 row)`);
+  await shot(page, 'cases-import-duplicates');
+  await expectAccessible(page);
+  await page.getByRole('button', { name: 'Create 2 cases' }).click();
+  await expect(page.getByTestId('import-done')).toContainText('2 cases created');
+
+  // The case drawer says where else the person is.
+  await page.getByRole('button', { name: 'View the cases' }).click();
+  await page.getByLabel('Search id or sample data').fill(`G${code}-1`);
+  await page.getByRole('button', { name: `Open case G${code}-1` }).click();
+  const drawer = page.getByRole('dialog', { name: `Case G${code}-1` });
+  await expect(drawer.getByTestId('elsewhere')).toContainText(`Panel ${code} (1 case)`);
+  await drawer.getByRole('button', { name: 'Close' }).click();
+
+  // Geocode the addresses and see the points.
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await expect(page.getByTestId('case-map')).toContainText('Addresses are sent to OpenStreetMap');
+  await page.getByRole('button', { name: 'Find addresses on the map' }).click();
+  await expect(page.getByTestId('geocode-status')).toContainText(/Addresses: \d+ found/, {
+    timeout: 20_000,
+  });
+  await page.getByText(/points? as a table/).click();
+  const points = page.getByTestId('map-points');
+  await expect(points).toContainText(`G${code}-2`);
+  await expect(page.getByRole('region', { name: /Map of \d+ geocoded cases/ })).toBeVisible();
+  await shot(page, 'cases-map');
+  await points.getByRole('button', { name: `G${code}-2` }).click();
+  const d2 = page.getByRole('dialog', { name: `Case G${code}-2` });
+  await d2.getByRole('button', { name: 'Show personal data' }).click();
+  await expect(d2.getByTestId('coordinates')).toContainText('-12.');
+  await expect(d2.getByRole('link', { name: 'Open in OpenStreetMap' })).toBeVisible();
 });
