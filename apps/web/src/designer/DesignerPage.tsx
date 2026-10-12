@@ -1,7 +1,7 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { compile, type CompiledQuestionnaire } from '@wansurvey/logic';
+import { buildModel, compile, type CompiledQuestionnaire } from '@wansurvey/logic';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -9,15 +9,18 @@ import { DiagnosticsPanel, ScenariosPanel } from '../preview/panels.js';
 import { PreviewWorkbench } from '../preview/PreviewPage.js';
 import { usePreview } from '../preview/usePreview.js';
 import { Button, Card } from '../routes/ui.js';
+import { TypeEnvContext } from './context.js';
 import { Dialog } from './Dialog.js';
 import { smallBtn } from './fields.js';
 import { download, useApiScenarios, useCan, useRetire, useVersions } from './hooks.js';
 import { ItemEditor } from './ItemEditor.js';
 import { Outline, SETTINGS_ID } from './Outline.js';
 import { PublishDialog } from './PublishDialog.js';
+import { RoutingMap } from './RoutingMap.js';
 import { SettingsEditor } from './SettingsEditor.js';
 import type { Draft } from './tree.js';
 import { useDraft, type DraftApi } from './useDraft.js';
+import { useRouting } from './useRouting.js';
 import { variablesOf } from './vars.js';
 
 const tabCls =
@@ -40,6 +43,11 @@ export function DesignerPage() {
   const draft = d.draft;
   const lang = draft?.defaultLanguage ?? 'en';
   const variables = useMemo(() => (draft ? variablesOf(draft, lang) : []), [draft, lang]);
+  const routing = useRouting(d);
+  const typeVars = useMemo(
+    () => (d.questionnaire ? buildModel(d.questionnaire).vars : null),
+    [d.questionnaire],
+  );
   const errorsById = useMemo(() => {
     const m = new Map<string, number>();
     for (const x of d.diagnostics)
@@ -81,196 +89,219 @@ export function DesignerPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
-      <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-        <Link to="/projects" className="hover:underline">
-          {t('designer.projects')}
-        </Link>{' '}
-        /{' '}
-        <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
-          {t('designer.project')}
-        </Link>
-      </nav>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="sr-only">{d.name}</h1>
-        <label className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="sr-only">{t('designer.name')}</span>
-          <input
-            className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            value={d.name}
-            readOnly={!canEdit}
-            onChange={(e) => d.rename(e.target.value)}
-          />
-        </label>
-        <SaveStatus status={d.status} />
-        {canEdit ? (
-          <>
-            <button type="button" className={smallBtn} disabled={!d.canUndo} onClick={d.undo}>
-              {t('designer.undo')}
-            </button>
-            <button type="button" className={smallBtn} disabled={!d.canRedo} onClick={d.redo}>
-              {t('designer.redo')}
-            </button>
-          </>
+    <TypeEnvContext.Provider value={typeVars}>
+      <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
+        <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
+          <Link to="/projects" className="hover:underline">
+            {t('designer.projects')}
+          </Link>{' '}
+          /{' '}
+          <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
+            {t('designer.project')}
+          </Link>
+        </nav>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="sr-only">{d.name}</h1>
+          <label className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="sr-only">{t('designer.name')}</span>
+            <input
+              className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              value={d.name}
+              readOnly={!canEdit}
+              onChange={(e) => d.rename(e.target.value)}
+            />
+          </label>
+          <SaveStatus status={d.status} />
+          {canEdit ? (
+            <>
+              <button type="button" className={smallBtn} disabled={!d.canUndo} onClick={d.undo}>
+                {t('designer.undo')}
+              </button>
+              <button type="button" className={smallBtn} disabled={!d.canRedo} onClick={d.redo}>
+                {t('designer.redo')}
+              </button>
+            </>
+          ) : null}
+          {canPublish ? (
+            <Button
+              type="button"
+              onClick={() => setPublishing(true)}
+              disabled={d.status === 'conflict'}
+            >
+              {t('designer.publish.open')}
+            </Button>
+          ) : null}
+        </div>
+        {!canEdit ? (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {t('designer.readOnly')}
+          </p>
         ) : null}
-        {canPublish ? (
-          <Button
-            type="button"
-            onClick={() => setPublishing(true)}
-            disabled={d.status === 'conflict'}
+        <p role="status" aria-live="polite" className="sr-only">
+          {message}
+        </p>
+
+        <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
+          <Tabs.List
+            aria-label={t('designer.tabs')}
+            className="flex flex-wrap gap-1 border-b border-slate-200"
           >
-            {t('designer.publish.open')}
-          </Button>
+            <Tabs.Trigger value="design" className={tabCls}>
+              {t('designer.tab.design')}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="routing" className={tabCls}>
+              {t('designer.tab.routing')}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="check" className={tabCls}>
+              {t('designer.tab.check')}
+              {errorCount ? (
+                <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-900">
+                  {errorCount}
+                </span>
+              ) : null}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="preview" className={tabCls}>
+              {t('designer.tab.preview')}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="scenarios" className={tabCls}>
+              {t('designer.tab.scenarios')}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="versions" className={tabCls}>
+              {t('designer.tab.versions')}
+            </Tabs.Trigger>
+          </Tabs.List>
+
+          <Tabs.Content value="design" className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+            <Outline
+              draft={draft}
+              selected={selected}
+              onSelect={setSelected}
+              change={d.change}
+              errorsById={errorsById}
+              routing={routing}
+              lang={lang}
+              readOnly={!canEdit}
+              onRename={() => setRenameTick((n) => n + 1)}
+              onEnter={focusEditor}
+              announce={setMessage}
+            />
+            <section
+              ref={editorRef}
+              tabIndex={-1}
+              aria-label={t('designer.editor')}
+              className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
+            >
+              <fieldset disabled={!canEdit} className="min-w-0">
+                {selected === SETTINGS_ID ? (
+                  <SettingsEditor draft={draft} variables={variables} change={d.change} />
+                ) : (
+                  <ItemEditor
+                    key={selected}
+                    draft={draft}
+                    id={selected}
+                    lang={lang}
+                    variables={variables}
+                    change={d.change}
+                    focusNameSignal={renameTick}
+                    select={setSelected}
+                  />
+                )}
+              </fieldset>
+            </section>
+          </Tabs.Content>
+
+          <Tabs.Content value="routing">
+            {routing ? (
+              <RoutingMap
+                draft={draft}
+                routing={routing}
+                lang={lang}
+                onOpen={(id) => {
+                  setSelected(id);
+                  setTab('design');
+                  requestAnimationFrame(focusEditor);
+                }}
+              />
+            ) : (
+              <Card>{t('designer.routing.unavailable')}</Card>
+            )}
+          </Tabs.Content>
+
+          <Tabs.Content value="check">
+            <Card>
+              <DiagnosticsPanel diagnostics={d.diagnostics} />
+              <ul className="mt-4 flex flex-col gap-1 text-sm">
+                {d.diagnostics
+                  .filter((x) => x.itemId)
+                  .map((x, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        className="text-left text-indigo-700 underline"
+                        onClick={() => {
+                          setSelected(x.itemId!);
+                          setTab('design');
+                          requestAnimationFrame(focusEditor);
+                        }}
+                      >
+                        {t('designer.goTo', { id: x.itemId })}
+                      </button>{' '}
+                      <span className={x.severity === 'error' ? 'text-red-800' : 'text-amber-800'}>
+                        {x.message}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </Card>
+          </Tabs.Content>
+
+          <Tabs.Content value="preview">
+            <DraftPreview d={d} projectId={projectId} qid={qid} />
+          </Tabs.Content>
+
+          <Tabs.Content value="scenarios">
+            <ScenariosTab d={d} projectId={projectId} qid={qid} />
+          </Tabs.Content>
+
+          <Tabs.Content value="versions">
+            <VersionsPanel projectId={projectId} qid={qid} canPublish={canPublish} />
+          </Tabs.Content>
+        </Tabs.Root>
+
+        {publishing ? (
+          <PublishDialog
+            projectId={projectId}
+            qid={qid}
+            draft={draft}
+            flush={d.flush}
+            onClose={() => setPublishing(false)}
+            onPublished={(v) => {
+              setPublishing(false);
+              setMessage(t('designer.publish.done', { version: v }));
+              setTab('versions');
+            }}
+          />
+        ) : null}
+        {d.conflict ? (
+          <Dialog title={t('designer.conflict.title')} onClose={() => undefined}>
+            <p className="mb-4 text-sm">
+              {t('designer.conflict.text', {
+                who: d.conflict.updatedBy ?? t('designer.conflict.someone'),
+                when: new Date(d.conflict.updatedAt).toLocaleTimeString(),
+              })}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="secondary" type="button" onClick={() => void d.reloadTheirs()}>
+                {t('designer.conflict.reload')}
+              </Button>
+              <Button type="button" onClick={() => void d.overwriteMine()}>
+                {t('designer.conflict.overwrite')}
+              </Button>
+            </div>
+          </Dialog>
         ) : null}
       </div>
-      {!canEdit ? (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {t('designer.readOnly')}
-        </p>
-      ) : null}
-      <p role="status" aria-live="polite" className="sr-only">
-        {message}
-      </p>
-
-      <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
-        <Tabs.List
-          aria-label={t('designer.tabs')}
-          className="flex flex-wrap gap-1 border-b border-slate-200"
-        >
-          <Tabs.Trigger value="design" className={tabCls}>
-            {t('designer.tab.design')}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="check" className={tabCls}>
-            {t('designer.tab.check')}
-            {errorCount ? (
-              <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-900">
-                {errorCount}
-              </span>
-            ) : null}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="preview" className={tabCls}>
-            {t('designer.tab.preview')}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="scenarios" className={tabCls}>
-            {t('designer.tab.scenarios')}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="versions" className={tabCls}>
-            {t('designer.tab.versions')}
-          </Tabs.Trigger>
-        </Tabs.List>
-
-        <Tabs.Content value="design" className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <Outline
-            draft={draft}
-            selected={selected}
-            onSelect={setSelected}
-            change={d.change}
-            errorsById={errorsById}
-            lang={lang}
-            readOnly={!canEdit}
-            onRename={() => setRenameTick((n) => n + 1)}
-            onEnter={focusEditor}
-            announce={setMessage}
-          />
-          <section
-            ref={editorRef}
-            tabIndex={-1}
-            aria-label={t('designer.editor')}
-            className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
-          >
-            <fieldset disabled={!canEdit} className="min-w-0">
-              {selected === SETTINGS_ID ? (
-                <SettingsEditor draft={draft} variables={variables} change={d.change} />
-              ) : (
-                <ItemEditor
-                  key={selected}
-                  draft={draft}
-                  id={selected}
-                  lang={lang}
-                  variables={variables}
-                  change={d.change}
-                  focusNameSignal={renameTick}
-                  select={setSelected}
-                />
-              )}
-            </fieldset>
-          </section>
-        </Tabs.Content>
-
-        <Tabs.Content value="check">
-          <Card>
-            <DiagnosticsPanel diagnostics={d.diagnostics} />
-            <ul className="mt-4 flex flex-col gap-1 text-sm">
-              {d.diagnostics
-                .filter((x) => x.itemId)
-                .map((x, i) => (
-                  <li key={i}>
-                    <button
-                      type="button"
-                      className="text-left text-indigo-700 underline"
-                      onClick={() => {
-                        setSelected(x.itemId!);
-                        setTab('design');
-                        requestAnimationFrame(focusEditor);
-                      }}
-                    >
-                      {t('designer.goTo', { id: x.itemId })}
-                    </button>{' '}
-                    <span className={x.severity === 'error' ? 'text-red-800' : 'text-amber-800'}>
-                      {x.message}
-                    </span>
-                  </li>
-                ))}
-            </ul>
-          </Card>
-        </Tabs.Content>
-
-        <Tabs.Content value="preview">
-          <DraftPreview d={d} projectId={projectId} qid={qid} />
-        </Tabs.Content>
-
-        <Tabs.Content value="scenarios">
-          <ScenariosTab d={d} projectId={projectId} qid={qid} />
-        </Tabs.Content>
-
-        <Tabs.Content value="versions">
-          <VersionsPanel projectId={projectId} qid={qid} canPublish={canPublish} />
-        </Tabs.Content>
-      </Tabs.Root>
-
-      {publishing ? (
-        <PublishDialog
-          projectId={projectId}
-          qid={qid}
-          draft={draft}
-          flush={d.flush}
-          onClose={() => setPublishing(false)}
-          onPublished={(v) => {
-            setPublishing(false);
-            setMessage(t('designer.publish.done', { version: v }));
-            setTab('versions');
-          }}
-        />
-      ) : null}
-      {d.conflict ? (
-        <Dialog title={t('designer.conflict.title')} onClose={() => undefined}>
-          <p className="mb-4 text-sm">
-            {t('designer.conflict.text', {
-              who: d.conflict.updatedBy ?? t('designer.conflict.someone'),
-              when: new Date(d.conflict.updatedAt).toLocaleTimeString(),
-            })}
-          </p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" type="button" onClick={() => void d.reloadTheirs()}>
-              {t('designer.conflict.reload')}
-            </Button>
-            <Button type="button" onClick={() => void d.overwriteMine()}>
-              {t('designer.conflict.overwrite')}
-            </Button>
-          </div>
-        </Dialog>
-      ) : null}
-    </div>
+    </TypeEnvContext.Provider>
   );
 }
 

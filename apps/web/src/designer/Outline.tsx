@@ -1,5 +1,13 @@
 import { QUESTION_TYPES } from '@wansurvey/schema';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { smallBtn } from './fields.js';
 import {
@@ -15,6 +23,7 @@ import {
   type NewKind,
   type TreeNode,
 } from './tree.js';
+import { assignLanes, type Routing } from './useRouting.js';
 import { nodeLabel, nodeName } from './vars.js';
 
 export const SETTINGS_ID = '__settings';
@@ -75,6 +84,7 @@ export function Outline({
   onSelect,
   change,
   errorsById,
+  routing = null,
   lang,
   readOnly,
   onRename,
@@ -86,6 +96,8 @@ export function Outline({
   onSelect(id: string): void;
   change(next: Draft): void;
   errorsById: ReadonlyMap<string, number>;
+  /** Routing of the draft for logic badges and skip arcs; null when the draft does not parse. */
+  routing?: Routing | null;
   lang: string;
   readOnly: boolean;
   onRename(): void;
@@ -101,6 +113,65 @@ export function Outline({
 
   const rows = useMemo(() => flatten(draft, collapsed), [draft, collapsed]);
   const ids = [SETTINGS_ID, ...rows.map((r) => r.node.id)];
+
+  // Skip arcs: from the skipping item to its target, or to the nearest visible ancestor
+  // when the target is inside a collapsed block; END lands below the last row.
+  const visibleIds = useMemo(() => new Set(rows.map((r) => r.node.id)), [rows]);
+  const arcs = useMemo(() => {
+    if (!routing) return [];
+    const visibleFor = (id: string): string | null => {
+      for (let cur: string | null = id; cur; cur = routing.byId.get(cur)?.parentId ?? null)
+        if (visibleIds.has(cur)) return cur;
+      return null;
+    };
+    const out: { from: string; to: string; label: string }[] = [];
+    for (const n of routing.nodes)
+      for (const sk of n.skips) {
+        const from = visibleFor(n.id);
+        const to =
+          sk.target === 'END'
+            ? '__end'
+            : typeof sk.target === 'number'
+              ? visibleFor(routing.nodes[sk.target]!.id)
+              : null;
+        if (from && to && from !== to)
+          out.push({
+            from,
+            to,
+            label: `${n.name ?? n.id} → ${sk.to}: ${routing.describe(sk.ast, sk.src)}`,
+          });
+      }
+    return out;
+  }, [routing, visibleIds]);
+  const order = useMemo(() => new Map(rows.map((r, i) => [r.node.id, i])), [rows]);
+  const lanes = useMemo(
+    () =>
+      assignLanes(
+        arcs.map((a) => ({ from: order.get(a.from)!, to: order.get(a.to) ?? rows.length })),
+      ),
+    [arcs, order, rows.length],
+  );
+  const gutter = arcs.length ? 10 + (Math.max(...lanes) + 1) * 9 : 0;
+  const [rowY, setRowY] = useState<Record<string, number>>({});
+  const [hot, setHot] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    const el = treeRef.current;
+    if (!el || !arcs.length) return;
+    const measure = () => {
+      const y: Record<string, number> = {};
+      let last = 0;
+      el.querySelectorAll<HTMLElement>('[data-id]').forEach((li) => {
+        y[li.dataset.id!] = li.offsetTop + li.offsetHeight / 2;
+        last = li.offsetTop + li.offsetHeight;
+      });
+      y.__end = last + 6;
+      setRowY(y);
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [arcs, rows]);
   const index = Math.max(0, ids.indexOf(selected));
 
   // Keep keyboard focus on the selected row after it moves.
@@ -234,71 +305,180 @@ export function Outline({
           ))}
         </div>
       ) : null}
-      <ul
-        ref={treeRef}
-        role="tree"
-        aria-labelledby="outline-h"
-        aria-describedby="outline-keys"
-        className="flex flex-col rounded-md border border-slate-200 bg-white py-1 text-sm"
-        onKeyDown={onKey}
+      <div
+        className="relative lg:pl-[var(--gutter)]"
+        style={{ '--gutter': `${gutter}px` } as CSSProperties}
       >
-        <li
-          role="treeitem"
-          aria-level={1}
-          aria-selected={selected === SETTINGS_ID}
-          tabIndex={selected === SETTINGS_ID ? 0 : -1}
-          data-id={SETTINGS_ID}
-          className="cursor-pointer px-2 py-1 font-medium aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
-          onClick={() => go(SETTINGS_ID)}
-          onFocus={() => selected !== SETTINGS_ID && onSelect(SETTINGS_ID)}
+        {arcs.length ? (
+          <svg
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 hidden h-full overflow-visible lg:block"
+            style={{ width: gutter }}
+            data-testid="outline-arcs"
+          >
+            {arcs.map((a, i) => {
+              const y0 = rowY[a.from];
+              const y1 = rowY[a.to];
+              if (y0 === undefined || y1 === undefined) return null;
+              const x = gutter;
+              const bulge = 8 + lanes[i]! * 9;
+              const on = hot !== null && (a.from === hot || a.to === hot);
+              return (
+                <path
+                  key={i}
+                  d={`M ${x} ${y0} C ${x - bulge} ${y0}, ${x - bulge} ${y1}, ${x - 1} ${y1}`}
+                  fill="none"
+                  stroke="currentColor"
+                  className={on ? 'text-indigo-700' : 'text-slate-400'}
+                  strokeWidth={on ? 2 : 1.25}
+                  markerEnd="url(#ol-arrow)"
+                >
+                  <title>{a.label}</title>
+                </path>
+              );
+            })}
+            <defs>
+              <marker
+                id="ol-arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="5"
+                markerHeight="5"
+                orient="auto-start-reverse"
+              >
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+              </marker>
+            </defs>
+          </svg>
+        ) : null}
+        <ul
+          onMouseOver={(e) =>
+            setHot((e.target as HTMLElement).closest<HTMLElement>('[data-id]')?.dataset.id ?? null)
+          }
+          onMouseLeave={() => setHot(null)}
+          onFocus={(e) => setHot((e.target as HTMLElement).dataset.id ?? null)}
+          ref={treeRef}
+          role="tree"
+          aria-labelledby="outline-h"
+          aria-describedby="outline-keys"
+          className="flex flex-col rounded-md border border-slate-200 bg-white py-1 text-sm"
+          onKeyDown={onKey}
         >
-          ⚙ {t('designer.settings.title')}
-        </li>
-        {rows.map(({ node, depth }) => {
-          const container = 'items' in node;
-          const errors = errorsById.get(node.id) ?? 0;
-          const label = nodeLabel(node, lang);
-          return (
-            <li
-              key={node.id}
-              role="treeitem"
-              aria-level={depth + 1}
-              aria-selected={selected === node.id}
-              aria-expanded={container ? !collapsed.has(node.id) : undefined}
-              tabIndex={selected === node.id ? 0 : -1}
-              data-id={node.id}
-              data-testid="outline-item"
-              className="flex cursor-pointer items-center gap-1.5 py-1 pr-2 aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
-              style={{ paddingLeft: `${0.5 + depth * 1.1}rem` }}
-              onClick={() => go(node.id)}
-              onFocus={() => selected !== node.id && onSelect(node.id)}
-            >
-              {container ? (
-                <span aria-hidden className="w-3 text-slate-500">
-                  {collapsed.has(node.id) ? '▸' : '▾'}
+          <li
+            role="treeitem"
+            aria-level={1}
+            aria-selected={selected === SETTINGS_ID}
+            tabIndex={selected === SETTINGS_ID ? 0 : -1}
+            data-id={SETTINGS_ID}
+            className="cursor-pointer px-2 py-1 font-medium aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+            onClick={() => go(SETTINGS_ID)}
+            onFocus={() => selected !== SETTINGS_ID && onSelect(SETTINGS_ID)}
+          >
+            ⚙ {t('designer.settings.title')}
+          </li>
+          {rows.map(({ node, depth }) => {
+            const container = 'items' in node;
+            const errors = errorsById.get(node.id) ?? 0;
+            const label = nodeLabel(node, lang);
+            return (
+              <li
+                key={node.id}
+                role="treeitem"
+                aria-level={depth + 1}
+                aria-selected={selected === node.id}
+                aria-expanded={container ? !collapsed.has(node.id) : undefined}
+                tabIndex={selected === node.id ? 0 : -1}
+                data-id={node.id}
+                data-testid="outline-item"
+                className="flex cursor-pointer items-center gap-1.5 py-1 pr-2 aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+                style={{ paddingLeft: `${0.5 + depth * 1.1}rem` }}
+                onClick={() => go(node.id)}
+                onFocus={() => selected !== node.id && onSelect(node.id)}
+              >
+                {container ? (
+                  <span aria-hidden className="w-3 text-slate-500">
+                    {collapsed.has(node.id) ? '▸' : '▾'}
+                  </span>
+                ) : (
+                  <span aria-hidden className="w-3" />
+                )}
+                <span aria-hidden className="w-6 shrink-0 text-center text-xs text-slate-600">
+                  {badge(node)}
                 </span>
-              ) : (
-                <span aria-hidden className="w-3" />
-              )}
-              <span aria-hidden className="w-6 shrink-0 text-center text-xs text-slate-600">
-                {badge(node)}
-              </span>
-              <span className={`shrink-0 font-mono ${isSection(node) ? 'font-semibold' : ''}`}>
-                {nodeName(node)}
-              </span>
-              <span className="truncate text-slate-600">{label}</span>
-              {errors ? (
-                <span className="ml-auto shrink-0 rounded bg-red-100 px-1.5 text-xs text-red-900">
-                  {t('designer.outline.errors', { count: errors })}
+                <span className={`shrink-0 font-mono ${isSection(node) ? 'font-semibold' : ''}`}>
+                  {nodeName(node)}
                 </span>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+                <span className="truncate text-slate-600">{label}</span>
+                <LogicBadges id={node.id} routing={routing} />
+                {errors ? (
+                  <span className="ml-auto shrink-0 rounded bg-red-100 px-1.5 text-xs text-red-900">
+                    {t('designer.outline.errors', { count: errors })}
+                  </span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
       <p id="outline-keys" className="text-xs text-slate-600">
         {readOnly ? t('designer.outline.keysReadOnly') : t('designer.outline.keys')}
       </p>
     </div>
+  );
+}
+
+/** Small marks for the logic attached to an item, each described for screen readers. */
+function LogicBadges({ id, routing }: { id: string; routing: Routing | null }) {
+  const { t } = useTranslation();
+  const n = routing?.byId.get(id);
+  if (!n || !routing) return null;
+  const marks: { sym: string; label: string; cls: string; key: string }[] = [];
+  if (n.showIf)
+    marks.push({
+      key: 'if',
+      sym: '◇',
+      cls: 'text-violet-800',
+      label: t('designer.badge.conditional', {
+        text: routing.describe(n.showIf.ast, n.showIf.src),
+      }),
+    });
+  if (n.skips.length)
+    marks.push({
+      key: 'skip',
+      sym: n.skips.length > 1 ? `↷${n.skips.length}` : '↷',
+      cls: 'text-slate-700',
+      label: t('designer.badge.skips', {
+        text: n.skips.map((s) => `${s.to}: ${routing.describe(s.ast, s.src)}`).join('; '),
+      }),
+    });
+  if (n.ends.length)
+    marks.push({
+      key: 'end',
+      sym: '⏹',
+      cls: 'text-red-700',
+      label: t('designer.badge.ends', {
+        text: n.ends.map((e) => `${e.disposition}: ${routing.describe(e.ast, e.src)}`).join('; '),
+      }),
+    });
+  const checks = n.checks.errors + n.checks.warnings;
+  if (checks)
+    marks.push({
+      key: 'chk',
+      sym: '✓',
+      cls: 'text-emerald-800',
+      label: t('designer.badge.checks', { count: checks }),
+    });
+  if (n.hasPrefill || n.hasFilter)
+    marks.push({ key: 'fx', sym: 'ƒ', cls: 'text-sky-800', label: t('designer.badge.computed') });
+  if (!marks.length) return null;
+  return (
+    <span className="ml-auto flex shrink-0 gap-1 text-xs" data-testid="logic-badges">
+      {marks.map((m) => (
+        <span key={m.key} className={m.cls} title={m.label} role="img" aria-label={m.label}>
+          {m.sym}
+        </span>
+      ))}
+    </span>
   );
 }

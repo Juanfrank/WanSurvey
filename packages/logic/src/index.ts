@@ -59,3 +59,24 @@ export {
   type BreakingKind,
   type MappingProblem,
 } from './diff.js';
+export {
+  toTree,
+  fromTree,
+  treeVariables,
+  condRowComplete,
+  operandComplete,
+  emptyGroup,
+  BUILDER_FUNCTIONS,
+  type BuilderFunction,
+  type Operand,
+  type CondRow,
+  type CondGroup,
+  type CondItem,
+} from './conditionTree.js';
+export { describeCondition, type DescribeContext } from './describe.js';
+export {
+  routingMap,
+  type RoutingNode,
+  type RoutingSkip,
+  type RoutingCondition,
+} from './routingMap.js';

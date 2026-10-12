@@ -78,7 +78,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await outlineItem(page, 'WORK').click();
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Add skip' }).click();
-  await page.getByLabel('Condition 1: value').first().selectOption('2');
+  await page.getByLabel('Condition 1: value', { exact: true }).first().selectOption('2');
   await page.getByLabel('Skip 1: go to').selectOption('END');
   await expect(page.getByTestId('skip-rule')).toContainText('No');
   await saved(page);
@@ -118,7 +118,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await outlineItem(page, 'WORK').click();
   await page.getByLabel('Code of option 2').fill('3');
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
-  await page.getByLabel('Condition 1: value').first().selectOption('3');
+  await page.getByLabel('Condition 1: value', { exact: true }).first().selectOption('3');
   await saved(page);
   await page.getByRole('button', { name: 'Publish…' }).click();
   await expect(dialog).toContainText('1 change breaks compatibility');
@@ -146,8 +146,8 @@ test('a failing saved scenario blocks publishing', async ({ page }) => {
   await page.getByLabel('Question wording (es)').fill('¿Nombre?');
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Add condition' }).first().click();
-  await page.getByLabel('Condition 1: variable').first().fill('Q1');
-  await page.getByLabel('Condition 1: value').first().selectOption('1');
+  await page.getByLabel('Condition 1: variable', { exact: true }).first().fill('Q1');
+  await page.getByLabel('Condition 1: value', { exact: true }).first().selectOption('1');
   await saved(page);
 
   // Save a run where "No" skips the name.
@@ -194,4 +194,51 @@ test('a second editor saving first gets a conflict dialog, not a silent overwrit
   await dialog.getByRole('button', { name: 'Discard mine and load theirs' }).click();
   await expect(a.getByLabel('Questionnaire name')).toHaveValue('Shared draft (B)');
   await expect(dialog).toBeHidden();
+});
+
+test('the routing map, outline arcs and nested condition builder on the household survey', async ({
+  page,
+}) => {
+  await login(page);
+  const org = page.getByRole('combobox', { name: 'Organisation' });
+  await expect(org).toBeVisible();
+  if ((await org.locator('option:checked').textContent()) !== 'Demo Research')
+    await org.selectOption({ label: 'Demo Research' });
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Projects' })
+    .click();
+  await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('link', { name: 'Household questionnaire' }).click();
+  await expect(page.getByRole('tree', { name: 'Outline' })).toBeVisible();
+
+  // Outline: badges and skip arcs.
+  await expect(page.getByTestId('logic-badges').first()).toBeVisible();
+  await expect(page.getByTestId('outline-arcs').locator('path').first()).toBeVisible();
+  await shot(page, 'designer-outline-arcs');
+
+  // Routing map.
+  await page.getByRole('tab', { name: 'Routing' }).click();
+  const map = page.getByTestId('routing-map');
+  await expect(map).toContainText('Skips to');
+  await expect(map).toContainText('Ends as');
+  await expect(page.locator('path[data-arc]').first()).toBeVisible();
+  await shot(page, 'designer-routing-map');
+  await expectAccessible(page);
+  const card = map.getByTestId('routing-card').filter({ hasText: 'Asked only if' }).first();
+  const id = (await card.getAttribute('data-card'))!;
+  await card.getByRole('button').last().click();
+  await expect(page.getByRole('tab', { name: 'Design' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('treeitem', { selected: true })).toHaveAttribute('data-id', id);
+
+  // Nested condition builder with a plain-language summary and a live test.
+  await page.getByRole('tab', { name: 'Logic', exact: true }).click();
+  const showIf = page.getByRole('group', { name: 'Show only if' });
+  await expect(showIf.getByTestId('condition-summary')).not.toContainText('Always');
+  await showIf.getByRole('button', { name: 'Add group' }).click();
+  await expect(showIf.getByTestId('condition-group')).toBeVisible();
+  await showIf.getByText('Try it with sample answers').click();
+  await expect(showIf.getByTestId('try-result')).toBeVisible();
+  await shot(page, 'designer-condition-builder');
+  await expectAccessible(page);
 });

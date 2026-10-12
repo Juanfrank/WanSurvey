@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { fromRows, toRows } from '../src/conditionModel.js';
 import { breakingChanges, validateMapping } from '../src/diff.js';
 import { printExpr } from '../src/print.js';
+import { fromTree, toTree } from '../src/conditionTree.js';
+import { describeCondition } from '../src/describe.js';
+import { routingMap } from '../src/routingMap.js';
+import { household } from '@wansurvey/fixtures';
+import { Questionnaire } from '@wansurvey/schema';
 import { parse } from '../src/parser.js';
 import { en, num, q, single } from './builders.js';
 
@@ -171,5 +176,121 @@ describe('breaking changes', () => {
     expect(bad.map((p) => p.changeId).sort()).toEqual(
       ['codes:A', 'removed:C', 'removed:G', 'removed:X'].sort(),
     );
+  });
+});
+
+describe('condition tree', () => {
+  it.each([
+    'Q1 == 1 and (Q2 == 1 or Q3 == 1)',
+    '(Q1 == 1 or Q2 == 2) and not (Q3 == 1 and Q4 > 2)',
+    'Q10 > Q9',
+    'age(DOB) >= 18',
+    'count(Q4, 1) > 0 or length(NAME) < 3',
+    'DATE <= today()',
+    'case.region in (1, 2) and Q2 between 18 and Q9',
+    'not answered(Q1) or isDK(Q2)',
+    'contains(Q4, 3)',
+  ])('round-trips %s', (src) => {
+    const tree = toTree(src);
+    expect(tree).not.toBeNull();
+    expect(fromTree(tree!)).toBe(printExpr(parse(src)));
+  });
+
+  it('nests groups and negation', () => {
+    expect(toTree('A == 1 and not (B == 2 or C == 3)')).toEqual({
+      type: 'group',
+      join: 'all',
+      items: [
+        {
+          type: 'row',
+          left: { kind: 'var', name: 'A' },
+          op: '==',
+          right: [{ kind: 'value', value: 1 }],
+        },
+        {
+          type: 'group',
+          join: 'any',
+          negate: true,
+          items: [
+            {
+              type: 'row',
+              left: { kind: 'var', name: 'B' },
+              op: '==',
+              right: [{ kind: 'value', value: 2 }],
+            },
+            {
+              type: 'row',
+              left: { kind: 'var', name: 'C' },
+              op: '==',
+              right: [{ kind: 'value', value: 3 }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it.each(['Q2 + 1 > 3', 'Q1', 'label(Q1) == "x"', 'any(HH, AGE > 18)', 'Q1 =='])(
+    'leaves %s to the expression editor',
+    (src) => expect(toTree(src)).toBeNull(),
+  );
+
+  it('drops incomplete rows and empty groups', () => {
+    expect(
+      fromTree({
+        type: 'group',
+        join: 'any',
+        items: [
+          { type: 'row', left: { kind: 'var', name: 'A' }, op: '==', right: [] },
+          { type: 'group', join: 'all', items: [] },
+          {
+            type: 'row',
+            left: { kind: 'var', name: 'B' },
+            op: '>',
+            right: [{ kind: 'var', name: 'C' }],
+          },
+        ],
+      }),
+    ).toBe('B > C');
+  });
+});
+
+describe('describeCondition', () => {
+  const ctx = {
+    ref: (n: string) => n,
+    label: (n: string, c: string | number) => (n === 'SEX' && c === 2 ? 'Female' : null),
+    t: (k: string, v: Record<string, string>) =>
+      ({
+        'paper.is': `${v.q} is ${v.value}`,
+        'paper.compare': `${v.q} ${v.op} ${v.value}`,
+        'paper.and': `${v.a} and ${v.b}`,
+        'paper.or': `${v.a} or ${v.b}`,
+        'paper.notAnswered': `${v.q} is not answered`,
+      })[k] ?? k,
+  };
+  it('brackets mixed and/or and compares variables', () => {
+    expect(describeCondition(parse('AGE >= 18 and (SEX == 2 or KIDS > ADULTS)'), ctx)).toBe(
+      'AGE ≥ 18 and (SEX is “Female” (2) or KIDS > ADULTS)',
+    );
+    expect(describeCondition(parse('not answered(Q1)'), ctx)).toBe('Q1 is not answered');
+  });
+});
+
+describe('routingMap', () => {
+  it('lists conditions, skips, ends and dependencies of the household survey', () => {
+    const map = routingMap(Questionnaire.parse(household));
+    const byId = new Map(map.map((n) => [n.id, n]));
+    const withSkips = map.filter((n) => n.skips.length);
+    expect(withSkips.length).toBeGreaterThan(0);
+    for (const n of withSkips)
+      for (const s of n.skips)
+        if (typeof s.target === 'number') expect(s.target).toBeGreaterThan(n.index);
+    expect(map.some((n) => n.ends.length)).toBe(true);
+    expect(map.some((n) => n.showIf)).toBe(true);
+    const roster = map.find((n) => n.kind === 'roster')!;
+    expect(roster.roster).toBeDefined();
+    // Rosters collect readers of their row variables too; check plain variables.
+    for (const n of map.filter((x) => x.kind === 'question' && x.depth <= 1))
+      for (const id of n.readBy) expect(byId.get(id)!.reads).toContain(n.name);
   });
 });

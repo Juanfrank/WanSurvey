@@ -8,6 +8,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConditionBuilder } from '../src/designer/ConditionBuilder.js';
 import { ItemEditor } from '../src/designer/ItemEditor.js';
 import { Outline } from '../src/designer/Outline.js';
+import { RoutingMap } from '../src/designer/RoutingMap.js';
+import { useRouting } from '../src/designer/useRouting.js';
 import { SettingsEditor } from '../src/designer/SettingsEditor.js';
 import {
   duplicate,
@@ -202,9 +204,48 @@ describe('condition builder', () => {
     await user.clear(box);
     await user.type(box, 'A == 1 and (B > 1 or NOPE == 2)');
     expect(screen.getByText('Unknown: NOPE')).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Edit as conditions' }).hasAttribute('disabled'),
-    ).toBe(true);
+
+    // Nested groups now fit the builder.
+    await user.clear(box);
+    await user.type(box, 'A == 1 and (B > C or not answered(C))');
+    expect(screen.getByTestId('condition-summary').textContent).toBe(
+      'Reads as: A is “Yes” (1) and (B > C or C is not answered)',
+    );
+    await user.click(screen.getByRole('button', { name: 'Edit as conditions' }));
+    const group = screen.getByRole('group', { name: 'Group 2' });
+    expect(within(group).getAllByTestId('condition-row')).toHaveLength(2);
+    expect((screen.getByLabelText('Type of Condition 2.1: value') as HTMLSelectElement).value).toBe(
+      'var',
+    );
+    await user.selectOptions(within(group).getByLabelText('Group 2: Match'), 'all');
+    expect(onChange).toHaveBeenLastCalledWith('A == 1 and (B > C and not answered(C))');
+    await expectAccessible(container);
+
+    // Try it with sample answers: A == 1 and (B > C or C not answered).
+    await user.selectOptions(within(group).getByLabelText('Group 2: Match'), 'any');
+    await user.click(screen.getByText('Try it with sample answers'));
+    await user.selectOptions(screen.getByLabelText('Test answer for A'), '1');
+    await user.type(screen.getByLabelText('Test answer for B'), '5');
+    expect(screen.getByTestId('try-result').dataset.result).toBe('true');
+    await user.type(screen.getByLabelText('Test answer for C'), '9');
+    expect(screen.getByTestId('try-result').dataset.result).toBe('false');
+  });
+
+  it('adds groups and compares against other variables and functions', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ConditionBuilder label="When" value="" variables={vars} onChange={onChange} />);
+    await user.click(screen.getByRole('button', { name: 'Add condition' }));
+    await user.click(screen.getByRole('button', { name: 'Add group' }));
+    await user.selectOptions(screen.getByLabelText('Condition 1: value'), '1');
+    const v21 = screen.getByLabelText('Condition 2.1: variable');
+    await user.clear(v21);
+    await user.type(v21, 'B');
+    await user.selectOptions(screen.getByLabelText('Condition 2.1: comparison'), '>');
+    await user.selectOptions(screen.getByLabelText('Type of Condition 2.1: value'), 'call');
+    await user.selectOptions(screen.getByLabelText('Function for Condition 2.1: value'), 'length');
+    await user.type(screen.getByLabelText('Argument 1 of Condition 2.1: value'), 'C');
+    expect(onChange).toHaveBeenLastCalledWith('A == 1 and B > length(C)');
   });
 
   it('starts in expression mode for conditions the rows cannot show', () => {
@@ -237,5 +278,60 @@ describe('editors', () => {
     unmount();
     const s = render(<SettingsEditor draft={d} variables={vars} change={() => {}} />);
     await expectAccessible(s.container);
+  });
+});
+
+function RoutingHarness({ onOpen }: { onOpen(id: string): void }) {
+  const q = Questionnaire.parse(household);
+  const routing = useRouting({ questionnaire: q });
+  return <RoutingMap draft={q} routing={routing!} lang="en" onOpen={onOpen} />;
+}
+
+describe('routing', () => {
+  it('maps the household survey with conditions, skips and ends in words', async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const { container } = render(<RoutingHarness onOpen={onOpen} />);
+    const map = screen.getByTestId('routing-map');
+    const cards = within(map).getAllByTestId('routing-card');
+    expect(cards.length).toBeGreaterThan(20);
+    expect(map.textContent).toMatch(/Asked only if/);
+    expect(map.textContent).toMatch(/Skips to/);
+    expect(map.textContent).toMatch(/Ends as/);
+    await expectAccessible(container);
+
+    const first = within(cards[0]!).getAllByRole('button').at(-1)!;
+    first.focus();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onOpen).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByLabelText('Only items with logic'));
+    expect(within(map).getAllByTestId('routing-card').length).toBeLessThan(cards.length);
+  });
+
+  it('shows logic badges in the outline', () => {
+    const q = Questionnaire.parse(household);
+    function H() {
+      const routing = useRouting({ questionnaire: q });
+      return (
+        <Outline
+          draft={q}
+          selected={q.sections[0]!.id}
+          onSelect={() => {}}
+          change={() => {}}
+          errorsById={new Map()}
+          routing={routing}
+          lang="en"
+          readOnly
+          onRename={() => {}}
+          onEnter={() => {}}
+          announce={() => {}}
+        />
+      );
+    }
+    render(<H />);
+    expect(screen.getAllByTestId('logic-badges').length).toBeGreaterThan(3);
+    expect(screen.getAllByRole('img', { name: /^Conditional: / }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('img', { name: /^Skips: / }).length).toBeGreaterThan(0);
   });
 });
