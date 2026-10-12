@@ -28,6 +28,12 @@ export const CawiSettings = z.object({
 });
 export type CawiSettings = z.infer<typeof CawiSettings>;
 
+export const PapiSettings = z.object({
+  /** Every paper form is keyed twice, by different clerks, and differences are resolved (P3). */
+  doubleEntry: z.boolean().default(false),
+});
+export type PapiSettings = z.infer<typeof PapiSettings>;
+
 /** Per-project settings, stored as jsonb on `projects.settings`. Missing keys take defaults. */
 export const ProjectSettings = z.object({
   /**
@@ -43,6 +49,8 @@ export const ProjectSettings = z.object({
   capi: CapiSettings.default(CapiSettings.parse({})),
   /** Web surveys by e-mail. */
   cawi: CawiSettings.default(CawiSettings.parse({})),
+  /** Paper forms keyed by data-entry clerks. */
+  papi: PapiSettings.default(PapiSettings.parse({})),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

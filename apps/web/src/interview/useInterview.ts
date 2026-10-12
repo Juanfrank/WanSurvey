@@ -30,6 +30,7 @@ export interface InterviewPayload {
     totalMs: number;
     deviceId: string;
     interviewer: string | null;
+    entryPass?: number;
   };
   context: {
     externalId?: string;
@@ -409,6 +410,13 @@ export function useInterview(id: string) {
     [record, paradata],
   );
 
+  /** Date and duration written on a paper form (P4). */
+  const paperMeta = useCallback(
+    (meta: { date: string | null; minutes: number | null }) =>
+      record([paradata('paper_meta', meta)]),
+    [record, paradata],
+  );
+
   const setLanguage = useCallback(
     (lang: string) => {
       const r = ref.current;
@@ -477,6 +485,7 @@ export function useInterview(id: string) {
     pause,
     resume,
     note,
+    paperMeta,
     setLanguage,
     submit,
     sync,

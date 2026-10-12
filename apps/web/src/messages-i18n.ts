@@ -84,6 +84,9 @@ export const messagesEn = {
     not_a_code: '{{to}} is not a code of this question',
   },
   apiError: {
+    SAME_CLERK: 'The second entry must be keyed by another person.',
+    CASE_CLOSED: 'This case is finished or withdrawn.',
+    ENTRY_IN_PROGRESS: 'Another entry of this form is in progress.',
     NO_LAWFUL_BASIS: 'Declare the lawful basis for e-mailing this sample first.',
     TEMPLATE_INVALID:
       'The wording uses unknown placeholders, or lacks the survey link or the unsubscribe link.',
@@ -194,6 +197,9 @@ export const messagesEs: MessagesCatalogue = {
     not_a_code: '{{to}} no es un código de esta pregunta',
   },
   apiError: {
+    SAME_CLERK: 'La segunda digitación debe hacerla otra persona.',
+    CASE_CLOSED: 'Este caso terminó o fue retirado.',
+    ENTRY_IN_PROGRESS: 'Otra digitación de este formulario está en curso.',
     NO_LAWFUL_BASIS: 'Primero declare la base legal para escribir por correo a esta muestra.',
     TEMPLATE_INVALID:
       'El texto usa marcadores desconocidos, o le falta el enlace a la encuesta o el de baja.',

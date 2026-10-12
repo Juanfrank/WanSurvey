@@ -290,6 +290,11 @@ const ENDPOINTS: Endpoint[] = [
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/suppressions`),
   },
   {
+    name: 'GET papi/mismatches',
+    permission: 'interviews.review',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/papi/mismatches`),
+  },
+  {
     name: 'GET cases',
     permission: ['cases.read_all', 'cases.read_assigned'],
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cases`),

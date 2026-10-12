@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import axe from 'axe-core';
-import { CapiSettings, CatiSettings, CawiSettings } from '@wansurvey/schema';
+import { ProjectSettings } from '@wansurvey/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CasesTab } from '../src/cases/CasesTab.js';
 import { CaseMap } from '../src/cases/CaseMap.js';
@@ -115,13 +115,7 @@ describe('project settings', () => {
       status: 'active',
       languages: ['en'],
       modesEnabled: [],
-      settings: {
-        revealToInterviewers: true,
-        assignmentMode: 'assigned' as const,
-        cati: CatiSettings.parse({}),
-        capi: CapiSettings.parse({}),
-        cawi: CawiSettings.parse({}),
-      },
+      settings: { ...ProjectSettings.parse({}), revealToInterviewers: true },
     };
     const { container } = render(
       <QueryClientProvider client={new QueryClient()}>
@@ -138,11 +132,9 @@ describe('project settings', () => {
     expect(patch.url).toMatch(/\/projects\/p$/);
     expect(JSON.parse(String(patch.init!.body))).toEqual({
       settings: {
+        ...ProjectSettings.parse({}),
         revealToInterviewers: false,
         assignmentMode: 'pool',
-        cati: CatiSettings.parse({}),
-        capi: CapiSettings.parse({}),
-        cawi: CawiSettings.parse({}),
       },
     });
     const result = await axe.run(container, {

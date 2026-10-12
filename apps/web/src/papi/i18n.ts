@@ -1,0 +1,103 @@
+/** Strings for paper forms (namespace `app`, key `papi`). */
+export const papiEn = {
+  key: {
+    title: 'Key a paper form',
+    caseId: 'Case id on the form (type it or scan the QR code)',
+    start: 'Key form',
+    second: 'Second entry of case {{id}}: key it exactly as written on the form.',
+    done: 'Form keyed. Scan or type the next one.',
+  },
+  print: {
+    title: 'Print forms',
+    help: 'One form per case: a cover with the case id and its QR code, then the questionnaire. Use the browser’s “Save as PDF” to make a PDF.',
+    filter: 'Only cases where (optional)',
+    limit: 'How many',
+    open: 'Prepare forms',
+    print: 'Print',
+    back: 'Back to the project',
+    count_one: '{{count}} form',
+    count_other: '{{count}} forms',
+    qr: 'QR code of case {{id}}',
+    case: 'Case',
+    date: 'Date of the interview',
+    duration: 'Duration (minutes)',
+    interviewer: 'Interviewer',
+    sample: 'Case data',
+    none: 'No cases match.',
+  },
+  mismatches: {
+    title: 'Double-entry differences',
+    none: 'No differences to resolve.',
+    case: 'Case',
+    question: 'Question',
+    first: 'First entry',
+    second: 'Second entry',
+    keepFirst: 'Keep first',
+    useSecond: 'Use second',
+    resolved: 'Resolved {{variable}} of case {{id}}.',
+    finished: 'Case {{id}} is finished.',
+  },
+  meta: {
+    title: 'From the paper form',
+    date: 'Interview date on the form',
+    minutes: 'Duration on the form (minutes)',
+    second: 'Second entry',
+  },
+  settings: {
+    title: 'Paper forms',
+    doubleEntry: 'Key every form twice (by different clerks) and resolve the differences',
+  },
+};
+
+export type PapiCatalogue = typeof papiEn;
+
+export const papiEs: PapiCatalogue = {
+  key: {
+    title: 'Digitar un formulario',
+    caseId: 'Id del caso en el formulario (escríbalo o escanee el código QR)',
+    start: 'Digitar formulario',
+    second: 'Segunda digitación del caso {{id}}: dígitela tal como está escrita en el formulario.',
+    done: 'Formulario digitado. Escanee o escriba el siguiente.',
+  },
+  print: {
+    title: 'Imprimir formularios',
+    help: 'Un formulario por caso: una portada con el id del caso y su código QR, y luego el cuestionario. Use “Guardar como PDF” del navegador para obtener un PDF.',
+    filter: 'Solo casos donde (opcional)',
+    limit: 'Cuántos',
+    open: 'Preparar formularios',
+    print: 'Imprimir',
+    back: 'Volver al proyecto',
+    count_one: '{{count}} formulario',
+    count_other: '{{count}} formularios',
+    qr: 'Código QR del caso {{id}}',
+    case: 'Caso',
+    date: 'Fecha de la entrevista',
+    duration: 'Duración (minutos)',
+    interviewer: 'Entrevistador(a)',
+    sample: 'Datos del caso',
+    none: 'Ningún caso coincide.',
+  },
+  mismatches: {
+    title: 'Diferencias de doble digitación',
+    none: 'No hay diferencias por resolver.',
+    case: 'Caso',
+    question: 'Pregunta',
+    first: 'Primera digitación',
+    second: 'Segunda digitación',
+    keepFirst: 'Mantener la primera',
+    useSecond: 'Usar la segunda',
+    resolved: 'Resuelta {{variable}} del caso {{id}}.',
+    finished: 'El caso {{id}} terminó.',
+  },
+  meta: {
+    title: 'Del formulario en papel',
+    date: 'Fecha de la entrevista en el formulario',
+    minutes: 'Duración en el formulario (minutos)',
+    second: 'Segunda digitación',
+  },
+  settings: {
+    title: 'Formularios en papel',
+    doubleEntry:
+      'Digitar cada formulario dos veces (personas distintas) y resolver las diferencias',
+  },
+};

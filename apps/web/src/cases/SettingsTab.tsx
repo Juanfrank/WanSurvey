@@ -169,6 +169,20 @@ export function SettingsTab({ project }: { project: Project }) {
           />
         </label>
       </fieldset>
+      <fieldset className="flex flex-col gap-2" data-testid="papi-settings">
+        <legend className="mb-1 font-medium">{t('papi.settings.title')}</legend>
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.papi.doubleEntry}
+            onChange={(e) =>
+              setForm({ ...form, papi: { ...form.papi, doubleEntry: e.target.checked } })
+            }
+          />
+          {t('papi.settings.doubleEntry')}
+        </label>
+      </fieldset>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={save.isPending}>
           {t('cases.settings.save')}

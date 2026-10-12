@@ -8,6 +8,7 @@ export const casesEn = {
     assignments: 'Assignments',
     calls: 'Phone calls',
     web: 'Web survey',
+    paper: 'Paper forms',
     settings: 'Settings',
   },
   list: {
@@ -264,6 +265,7 @@ export const casesEs: CasesCatalogue = {
     assignments: 'Asignaciones',
     calls: 'Llamadas',
     web: 'Encuesta web',
+    paper: 'Formularios en papel',
     settings: 'Configuración',
   },
   list: {

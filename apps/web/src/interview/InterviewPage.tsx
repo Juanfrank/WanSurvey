@@ -156,13 +156,19 @@ export function InterviewPage() {
           params: { projectId },
           search: queued ? { notice: 'queued' } : {},
         })
-      : payload.interview.mode === 'CATI'
+      : payload.interview.mode === 'PAPI'
         ? navigate({
             to: '/projects/$projectId',
             params: { projectId },
-            search: { tab: 'calls', ...(done ? { notice: 'interview_done' } : {}) },
+            search: { tab: 'paper', ...(done ? { notice: 'entry_done' } : {}) },
           })
-        : navigate({ to: '/projects/$projectId', params: { projectId } });
+        : payload.interview.mode === 'CATI'
+          ? navigate({
+              to: '/projects/$projectId',
+              params: { projectId },
+              search: { tab: 'calls', ...(done ? { notice: 'interview_done' } : {}) },
+            })
+          : navigate({ to: '/projects/$projectId', params: { projectId } });
 
   const submit = async () => {
     setSubmitting(true);
@@ -229,6 +235,12 @@ export function InterviewPage() {
         ) : null}
         <SaveBadge state={iv.save} />
       </header>
+      {payload.interview.mode === 'PAPI' ? (
+        <PaperMeta
+          second={payload.interview.entryPass === 2}
+          onSave={(meta) => iv.paperMeta(meta)}
+        />
+      ) : null}
       {iv.problem ? (
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
           {t(`interview.problem.${iv.problem}`, { defaultValue: iv.problem })}
@@ -472,5 +484,55 @@ function SaveBadge({ state }: { state: SaveState }) {
     >
       {t(`interview.save.${state}`)}
     </span>
+  );
+}
+
+/** The date and duration written on the paper form, recorded as paradata (P4). */
+function PaperMeta({
+  second,
+  onSave,
+}: {
+  second: boolean;
+  onSave(meta: { date: string | null; minutes: number | null }): void;
+}) {
+  const { t } = useTranslation();
+  const [date, setDate] = useState('');
+  const [minutes, setMinutes] = useState('');
+  const save = (d: string, m: string) =>
+    onSave({ date: d || null, minutes: m ? Math.max(0, Math.round(Number(m))) : null });
+  return (
+    <section
+      aria-label={t('papi.meta.title')}
+      className="flex flex-wrap items-end gap-4 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+      data-testid="paper-meta"
+    >
+      {second ? (
+        <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-900">
+          {t('papi.meta.second')}
+        </span>
+      ) : null}
+      <label className="flex flex-col gap-1">
+        <span>{t('papi.meta.date')}</span>
+        <input
+          type="date"
+          className="rounded-md border border-slate-300 px-2 py-1"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          onBlur={() => save(date, minutes)}
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span>{t('papi.meta.minutes')}</span>
+        <input
+          type="number"
+          min={0}
+          max={600}
+          className="w-24 rounded-md border border-slate-300 px-2 py-1"
+          value={minutes}
+          onChange={(e) => setMinutes(e.target.value)}
+          onBlur={() => save(date, minutes)}
+        />
+      </label>
+    </section>
   );
 }

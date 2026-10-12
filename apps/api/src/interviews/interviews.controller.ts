@@ -25,6 +25,7 @@ import {
   users,
 } from '../db/schema.js';
 import { StartBody, SubmitBody, SyncBody } from './schemas.js';
+import { PapiService } from '../papi/papi.service.js';
 import { InterviewsService, personalVariables } from './interviews.service.js';
 
 export { personalVariables };
@@ -45,6 +46,7 @@ export class InterviewsController {
     private readonly database: Database,
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
+    private readonly papi: PapiService,
   ) {}
 
   /** Starts an interview on a case, or resumes the one in progress. Idempotent on `id`. */
@@ -65,7 +67,16 @@ export class InterviewsController {
             can(ctx.memberships, CONDUCT, projectId)
           : can(ctx.memberships, CONDUCT, projectId);
       if (!allowed) throw new NotFoundException('Case not found');
-      const row = await this.runtime.start(tx, ctx, projectId, body);
+      // Paper forms: the entry in progress continues, otherwise the next one (P3).
+      let entryPass: number | undefined;
+      if (body.mode === 'PAPI') {
+        const [open] = await tx
+          .select({ pass: interviews.entryPass })
+          .from(interviews)
+          .where(and(eq(interviews.caseId, body.caseId), eq(interviews.status, 'in_progress')));
+        entryPass = open?.pass ?? (await this.papi.nextPass(tx, ctx, projectId, body.caseId));
+      }
+      const row = await this.runtime.start(tx, ctx, projectId, body, { entryPass });
       return this.runtime.payload(tx, row, body.deviceId);
     });
   }

@@ -184,3 +184,14 @@ mail provider ─▶ POST /webhooks/mail (secret) ─▶ delivered / bounced ─
 - Tables: `email_templates`, `waves`, `invitations`, `suppressions`, `open_links` (all under row-level security). Respondent links and webhooks find their organisation through security-definer functions that return only an id and a tenant.
 - The respondent page (`apps/web/src/respondent/`) is outside the staff application: no sign-in, the questionnaire's language, pages on wide screens and one question per page on phones. Changes are kept in IndexedDB and sent after each page through the same numbered sync as interviewers'; navigation is recorded so the position reaches the server, and the server re-checks the path on submit.
 - The funnel per wave counts sent, delivered, opened (approximate), clicked, started, completed and bounced, plus reminders.
+
+## Paper forms (slice 10)
+
+```
+Paper forms tab ─ print ─▶ GET …/papi/forms ─▶ print page: cover (case id + QR) + PaperForm ─▶ browser print / PDF
+                ─ key ───▶ GET …/papi/lookup?externalId= ─▶ POST …/interviews (mode PAPI, pass 1 or 2) ─▶ interviewer screen
+submit (pass 2) ─▶ compare with pass 1 ─▶ entry_mismatches ─▶ supervisor resolves ─▶ reviewer answer event, case finished
+```
+
+- `interviews.entry_pass` tells the first and second entries apart; the start endpoint picks the pass (`PapiService.nextPass`) and refuses a second entry by the same clerk.
+- The comparison runs in a submit hook; until every difference is resolved the case stays _in progress_.

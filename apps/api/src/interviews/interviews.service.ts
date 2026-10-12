@@ -85,7 +85,7 @@ export class InterviewsService {
     ctx: AuthContext,
     projectId: string,
     body: StartBody,
-    opts: { entryPass?: number } = {},
+    opts: { entryPass?: number | undefined } = {},
   ): Promise<InterviewRow> {
     const settings = await this.cases.settings(tx, projectId);
     const [c] = await tx

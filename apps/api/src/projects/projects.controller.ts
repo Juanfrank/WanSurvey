@@ -15,6 +15,7 @@ import {
   CatiSettings,
   CawiSettings,
   Mode,
+  PapiSettings,
   projectSettings,
 } from '@wansurvey/schema';
 import { eq, inArray } from 'drizzle-orm';
@@ -48,6 +49,7 @@ const ProjectPatch = ProjectFields.partial().extend({
       cati: CatiSettings,
       capi: CapiSettings,
       cawi: CawiSettings,
+      papi: PapiSettings,
     })
     .partial()
     .strict()

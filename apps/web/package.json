@@ -22,6 +22,7 @@
     "@wansurvey/schema": "workspace:*",
     "i18next": "25.10.10",
     "leaflet": "1.9.4",
+    "qrcode": "1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-i18next": "15.7.4"
@@ -33,6 +34,7 @@
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",
     "@types/leaflet": "1.9.22",
+    "@types/qrcode": "1.5.5",
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.2.0",

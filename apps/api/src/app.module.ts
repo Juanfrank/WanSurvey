@@ -13,6 +13,8 @@ import { CawiController } from './cawi/cawi.controller.js';
 import { CawiService } from './cawi/cawi.service.js';
 import { WaveDispatcher } from './cawi/dispatcher.js';
 import { PublicSurveyController } from './cawi/public.controller.js';
+import { PapiController } from './papi/papi.controller.js';
+import { PapiService } from './papi/papi.service.js';
 import { CatiController } from './cati/cati.controller.js';
 import { CatiService } from './cati/cati.service.js';
 import { CasesController } from './cases/cases.controller.js';
@@ -86,6 +88,7 @@ export class AppModule {
         CapiController,
         CawiController,
         PublicSurveyController,
+        PapiController,
         CasesController,
         ImportsController,
         AuditController,
@@ -116,6 +119,7 @@ export class AppModule {
         CapiService,
         CawiService,
         WaveDispatcher,
+        PapiService,
         {
           provide: GEOCODER,
           useValue:

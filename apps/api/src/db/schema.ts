@@ -825,6 +825,39 @@ export const openLinks = pgTable('open_links', {
   createdAt: createdAt(),
 });
 
+/**
+ * Paper forms keyed twice (P3): each variable whose two entries differ, until a supervisor
+ * chooses the right value.
+ */
+export const entryMismatches = pgTable(
+  'entry_mismatches',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id),
+    firstInterviewId: uuid('first_interview_id').notNull(),
+    secondInterviewId: uuid('second_interview_id').notNull(),
+    variable: text('variable').notNull(),
+    firstValue: jsonb('first_value'),
+    secondValue: jsonb('second_value'),
+    /** open | resolved */
+    status: text('status').notNull().default('open'),
+    resolvedValue: jsonb('resolved_value'),
+    resolvedBy: uuid('resolved_by'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('entry_mismatches_project_idx').on(t.tenantId, t.projectId, t.status),
+    uniqueIndex('entry_mismatches_uq').on(t.secondInterviewId, t.variable),
+  ],
+);
+
 /** Tables protected by tenant row-level security. */
 export const TENANT_TABLES = [
   'tenant_members',
@@ -855,5 +888,6 @@ export const TENANT_TABLES = [
   'invitations',
   'suppressions',
   'open_links',
+  'entry_mismatches',
   'audit_log',
 ] as const;

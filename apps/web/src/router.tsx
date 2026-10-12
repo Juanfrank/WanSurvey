@@ -98,6 +98,20 @@ const deviceRoute = createRoute({
     typeof s.notice === 'string' ? { notice: s.notice } : {},
 });
 
+// Paper forms to print (PAPI).
+const printRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId/papi/print',
+  component: lazyRouteComponent(() => import('./papi/PrintPage.js'), 'PrintPage'),
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): { filter?: string; limit?: number; caseIds?: string } => ({
+    ...(typeof s.filter === 'string' ? { filter: s.filter } : {}),
+    ...(typeof s.limit === 'number' ? { limit: s.limit } : {}),
+    ...(typeof s.caseIds === 'string' ? { caseIds: s.caseIds } : {}),
+  }),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
@@ -114,6 +128,7 @@ const routeTree = rootRoute.addChildren([
     designerRoute,
     interviewRoute,
     deviceRoute,
+    printRoute,
   ]),
 ]);
 
