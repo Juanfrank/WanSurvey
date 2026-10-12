@@ -246,6 +246,34 @@ function saveScenarios(id: string, list: Scenario[]) {
   }
 }
 
+/** Where saved scenarios live: the browser for the sample preview, the API in the designer. */
+export interface ScenarioStore {
+  list: Scenario[];
+  save(s: Scenario): void | Promise<void>;
+  remove(s: Scenario): void | Promise<void>;
+}
+
+/** Scenarios kept in this browser, per questionnaire id. */
+export function useLocalScenarios(questionnaireId: string): ScenarioStore {
+  const [state, setState] = useState(() => ({
+    id: questionnaireId,
+    list: loadScenarios(questionnaireId),
+  }));
+  if (state.id !== questionnaireId) {
+    setState({ id: questionnaireId, list: loadScenarios(questionnaireId) });
+  }
+  const list = state.id === questionnaireId ? state.list : [];
+  const store = (next: Scenario[]) => {
+    setState({ id: questionnaireId, list: next });
+    saveScenarios(questionnaireId, next);
+  };
+  return {
+    list,
+    save: (s) => store([...list.filter((x) => x.name !== s.name), s]),
+    remove: (s) => store(list.filter((x) => x.name !== s.name)),
+  };
+}
+
 function download(name: string, data: unknown) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
@@ -259,57 +287,71 @@ function download(name: string, data: unknown) {
 
 /** Saved runs that act as regression tests for the questionnaire. */
 export function ScenariosPanel({
-  questionnaireId,
+  store,
   compiled,
   toScenario,
+  help,
 }: {
-  questionnaireId: string;
+  store: ScenarioStore;
   compiled: CompiledQuestionnaire;
-  toScenario(name: string): Scenario | null;
+  /** Snapshot of the current run; omitted where there is no run to save. */
+  toScenario?(name: string): Scenario | null;
+  help?: string;
 }) {
   const { t } = useTranslation();
-  const [list, setList] = useState<Scenario[]>(() => loadScenarios(questionnaireId));
+  const list = store.list;
   const [results, setResults] = useState<Record<string, ScenarioResult>>({});
   const [name, setName] = useState('');
-  const store = (next: Scenario[]) => {
-    setList(next);
-    saveScenarios(questionnaireId, next);
-  };
-  const run = (s: Scenario) => setResults((r) => ({ ...r, [s.name]: runScenario(compiled, s) }));
+  const run = (s: Scenario) =>
+    setResults((r) => {
+      let result: ScenarioResult;
+      try {
+        result = runScenario(compiled, s);
+      } catch (e) {
+        result = {
+          name: s.name,
+          passed: false,
+          checks: [{ label: 'run', passed: false, detail: (e as Error).message }],
+        } as unknown as ScenarioResult;
+      }
+      return { ...r, [s.name]: result };
+    });
 
   return (
     <section aria-labelledby="scen-h" className="flex flex-col gap-3">
       <h2 id="scen-h" className="font-semibold">
         {t('preview.scenarios')}
       </h2>
-      <p className="text-sm text-slate-600">{t('preview.scenariosHelp')}</p>
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const s = toScenario(name.trim() || `Run ${list.length + 1}`);
-          if (!s) return;
-          store([...list.filter((x) => x.name !== s.name), s]);
-          setName('');
-        }}
-      >
-        <label className="sr-only" htmlFor="scenario-name">
-          {t('preview.scenarioName')}
-        </label>
-        <input
-          id="scenario-name"
-          className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
-          placeholder={t('preview.scenarioName')}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button
-          type="submit"
-          className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700"
+      <p className="text-sm text-slate-600">{help ?? t('preview.scenariosHelp')}</p>
+      {toScenario ? (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const s = toScenario(name.trim() || `Run ${list.length + 1}`);
+            if (!s) return;
+            void store.save(s);
+            setName('');
+          }}
         >
-          {t('preview.saveScenario')}
-        </button>
-      </form>
+          <label className="sr-only" htmlFor="scenario-name">
+            {t('preview.scenarioName')}
+          </label>
+          <input
+            id="scenario-name"
+            className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
+            placeholder={t('preview.scenarioName')}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t('preview.saveScenario')}
+          </button>
+        </form>
+      ) : null}
       <div className="flex flex-wrap gap-2 text-sm">
         <button
           type="button"
@@ -329,7 +371,7 @@ export function ScenariosPanel({
               const file = e.target.files?.[0];
               if (!file) return;
               const r = Scenario.safeParse(JSON.parse(await file.text()));
-              if (r.success) store([...list.filter((x) => x.name !== r.data.name), r.data]);
+              if (r.success) void store.save(r.data);
               e.target.value = '';
             }}
           />
@@ -372,7 +414,7 @@ export function ScenariosPanel({
                   <button
                     type="button"
                     className="rounded border border-slate-300 px-2 hover:bg-slate-50"
-                    onClick={() => store(list.filter((x) => x !== s))}
+                    onClick={() => void store.remove(s)}
                   >
                     {t('preview.remove')}
                   </button>

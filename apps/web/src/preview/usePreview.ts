@@ -12,7 +12,11 @@ import {
 import { Questionnaire, type AnswerValue, type Mode, type Scenario } from '@wansurvey/schema';
 import { useCallback, useMemo, useState } from 'react';
 
-export type Source = { kind: 'sample'; id: string } | { kind: 'json'; text: string; name: string };
+export type Source =
+  | { kind: 'sample'; id: string }
+  | { kind: 'json'; text: string; name: string }
+  /** A questionnaire object already in memory (the designer's draft). */
+  | { kind: 'draft'; questionnaire: unknown; name: string };
 
 export interface Loaded {
   questionnaire: Questionnaire | null;
@@ -45,6 +49,8 @@ export function loadSource(source: Source): Loaded {
   let raw: unknown;
   if (source.kind === 'sample') {
     raw = SAMPLES.find((s) => s.id === source.id)?.questionnaire;
+  } else if (source.kind === 'draft') {
+    raw = source.questionnaire;
   } else {
     try {
       raw = JSON.parse(source.text);
@@ -98,8 +104,8 @@ function newSession(
  * answers given so far (the interview is rebuilt from its state), so one run can be
  * inspected in every mode.
  */
-export function usePreview() {
-  const [source, setSourceState] = useState<Source>({ kind: 'sample', id: SAMPLES[0]!.id });
+export function usePreview(initial: Source = { kind: 'sample', id: SAMPLES[0]!.id }) {
+  const [source, setSourceState] = useState<Source>(initial);
   const loaded = useMemo(() => loadSource(source), [source]);
   const [options, setOptions] = useState<RunOptions>({
     mode: 'CATI',

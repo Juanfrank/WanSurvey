@@ -1,6 +1,7 @@
 import { rendererResources } from '@wansurvey/renderer';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { designerEn, designerEs } from './designer/i18n.js';
 
 export const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -15,6 +16,7 @@ const en = {
     organisation: 'Organisation',
     home: 'Home',
     preview: 'Questionnaire preview',
+    projects: 'Projects',
     skip: 'Skip to content',
   },
   login: {
@@ -126,6 +128,7 @@ const en = {
     noScenarios: 'No saved scenarios for this questionnaire.',
     printPaper: 'Print the paper form',
   },
+  designer: designerEn,
 };
 
 type Catalogue = typeof en;
@@ -138,6 +141,7 @@ const es: Catalogue = {
     organisation: 'Organización',
     home: 'Inicio',
     preview: 'Vista previa del cuestionario',
+    projects: 'Proyectos',
     skip: 'Ir al contenido',
   },
   login: {
@@ -251,6 +255,7 @@ const es: Catalogue = {
     noScenarios: 'No hay escenarios guardados para este cuestionario.',
     printPaper: 'Imprimir el formulario en papel',
   },
+  designer: designerEs,
 };
 
 export function initI18n(lng = 'en') {

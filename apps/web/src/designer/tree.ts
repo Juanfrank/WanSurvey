@@ -1,0 +1,307 @@
+import type {
+  ContainerItem,
+  LocalizedText,
+  Questionnaire,
+  QuestionType,
+  Section,
+} from '@wansurvey/schema';
+
+/**
+ * Pure edits on a questionnaire draft, addressed by item/section id. Every function returns a
+ * new draft; the input is never mutated (the designer keeps old drafts for undo).
+ */
+export type Draft = Questionnaire;
+export type TreeNode = Section | ContainerItem;
+
+export interface Located {
+  node: TreeNode;
+  /** The array holding the node: `sections` or a parent's `items`. */
+  siblings: TreeNode[];
+  index: number;
+  /** Id of the parent section/block/roster; null for sections. */
+  parentId: string | null;
+  depth: number;
+}
+
+const hasItems = (n: TreeNode): n is Extract<TreeNode, { items: ContainerItem[] }> =>
+  'items' in n && Array.isArray((n as { items?: unknown }).items);
+
+export const isSection = (n: TreeNode): n is Section => !('kind' in n);
+
+export function locate(draft: Draft, id: string): Located | null {
+  const walk = (list: TreeNode[], parentId: string | null, depth: number): Located | null => {
+    for (let i = 0; i < list.length; i++) {
+      const node = list[i]!;
+      if (node.id === id) return { node, siblings: list, index: i, parentId, depth };
+      if (hasItems(node)) {
+        const hit = walk(node.items, node.id, depth + 1);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  return walk(draft.sections, null, 0);
+}
+
+/** Depth-first list of every node, as the outline shows it. */
+export function flatten(
+  draft: Draft,
+  collapsed: ReadonlySet<string> = new Set(),
+): { node: TreeNode; depth: number; parentId: string | null }[] {
+  const out: { node: TreeNode; depth: number; parentId: string | null }[] = [];
+  const walk = (list: TreeNode[], depth: number, parentId: string | null) => {
+    for (const node of list) {
+      out.push({ node, depth, parentId });
+      if (hasItems(node) && !collapsed.has(node.id)) walk(node.items, depth + 1, node.id);
+    }
+  };
+  walk(draft.sections ?? [], 0, null);
+  return out;
+}
+
+function edit(draft: Draft, fn: (d: Draft) => void): Draft {
+  const copy = structuredClone(draft);
+  fn(copy);
+  return copy;
+}
+
+export function updateNode(draft: Draft, id: string, patch: (n: TreeNode) => TreeNode): Draft {
+  return edit(draft, (d) => {
+    const at = locate(d, id);
+    if (at) at.siblings[at.index] = patch(at.node);
+  });
+}
+
+/** Moves a node up or down among its siblings. */
+export function move(draft: Draft, id: string, delta: -1 | 1): Draft {
+  return edit(draft, (d) => {
+    const at = locate(d, id);
+    if (!at) return;
+    const to = at.index + delta;
+    if (to < 0 || to >= at.siblings.length) return;
+    const [n] = at.siblings.splice(at.index, 1);
+    at.siblings.splice(to, 0, n!);
+  });
+}
+
+/** Puts an item at the end of the block/roster just above it. */
+export function indent(draft: Draft, id: string): Draft {
+  return edit(draft, (d) => {
+    const at = locate(d, id);
+    if (!at || isSection(at.node) || at.index === 0) return;
+    const prev = at.siblings[at.index - 1]!;
+    if (isSection(prev) || !hasItems(prev)) return;
+    at.siblings.splice(at.index, 1);
+    prev.items.push(at.node as ContainerItem);
+  });
+}
+
+/** Moves an item out of its block/roster, right after it. */
+export function outdent(draft: Draft, id: string): Draft {
+  return edit(draft, (d) => {
+    const at = locate(d, id);
+    if (!at || isSection(at.node) || at.parentId === null) return;
+    const parent = locate(d, at.parentId)!;
+    if (isSection(parent.node)) return;
+    at.siblings.splice(at.index, 1);
+    parent.siblings.splice(parent.index + 1, 0, at.node);
+  });
+}
+
+export function remove(draft: Draft, id: string): Draft {
+  return edit(draft, (d) => {
+    const at = locate(d, id);
+    if (!at) return;
+    if (isSection(at.node) && d.sections.length <= 1) return;
+    at.siblings.splice(at.index, 1);
+  });
+}
+
+/** Every id and variable name in use, so new ones never collide. */
+export function usedNames(draft: Draft): Set<string> {
+  const used = new Set<string>();
+  for (const { node } of flatten(draft)) {
+    used.add(node.id);
+    if ('name' in node && typeof node.name === 'string') used.add(node.name);
+  }
+  return used;
+}
+
+export function freshName(used: Set<string>, base: string): string {
+  const stem = base.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[^A-Za-z]+/, '') || 'Q';
+  if (!used.has(stem)) return stem;
+  const m = /^(.*?)(\d+)$/.exec(stem);
+  const prefix = m ? m[1]! : `${stem}_`;
+  for (let i = m ? Number(m[2]) + 1 : 2; ; i++) {
+    if (!used.has(`${prefix}${i}`)) return `${prefix}${i}`;
+  }
+}
+
+/** A copy of a node with fresh ids/names (nested items too), placed right after it. */
+export function duplicate(draft: Draft, id: string): { draft: Draft; newId: string | null } {
+  let newId: string | null = null;
+  const next = edit(draft, (d) => {
+    const at = locate(d, id);
+    if (!at) return;
+    const used = usedNames(d);
+    const rename = (n: TreeNode): TreeNode => {
+      const copy = { ...n } as TreeNode & { name?: string; items?: ContainerItem[] };
+      copy.id = freshName(used, n.id);
+      used.add(copy.id);
+      if ('name' in n && typeof n.name === 'string') {
+        copy.name = n.name === n.id ? copy.id : freshName(used, n.name);
+        used.add(copy.name);
+      }
+      if (copy.items) copy.items = copy.items.map((c) => rename(c) as ContainerItem);
+      return copy;
+    };
+    const copy = rename(structuredClone(at.node));
+    newId = copy.id;
+    at.siblings.splice(at.index + 1, 0, copy);
+  });
+  return { draft: next, newId };
+}
+
+export type NewKind =
+  | { kind: 'question'; type: QuestionType }
+  | { kind: 'static' }
+  | { kind: 'computed' }
+  | { kind: 'pagebreak' }
+  | { kind: 'block' }
+  | { kind: 'roster' }
+  | { kind: 'section' };
+
+function text(draft: Draft, s: string): LocalizedText {
+  return Object.fromEntries((draft.languages ?? ['en']).map((l) => [l, s]));
+}
+
+export function newNode(draft: Draft, what: NewKind, used: Set<string>): TreeNode {
+  const name = (base: string) => {
+    const n = freshName(used, base);
+    used.add(n);
+    return n;
+  };
+  switch (what.kind) {
+    case 'section':
+      return { id: name('SEC_1'), title: text(draft, ''), items: [] };
+    case 'question': {
+      const id = name('Q1');
+      const q: ContainerItem = {
+        kind: 'question',
+        id,
+        name: id,
+        type: what.type,
+        text: text(draft, ''),
+      };
+      if (what.type === 'single' || what.type === 'multi' || what.type === 'ranking') {
+        q.options = [
+          { code: 1, label: text(draft, '') },
+          { code: 2, label: text(draft, '') },
+        ];
+      }
+      if (what.type === 'grid') {
+        q.rows = [{ code: 1, label: text(draft, '') }];
+        q.options = [
+          { code: 1, label: text(draft, '') },
+          { code: 2, label: text(draft, '') },
+        ];
+      }
+      if (what.type === 'scale') q.scale = { style: 'likert', min: 1, max: 5 };
+      return q;
+    }
+    case 'static':
+      return { kind: 'static', id: name('INFO_1'), text: text(draft, '') };
+    case 'computed': {
+      const id = name('CALC_1');
+      return { kind: 'computed', id, name: id, formula: '0', valueType: 'number' };
+    }
+    case 'pagebreak':
+      return { kind: 'pagebreak', id: name('PB_1') };
+    case 'block':
+      return { kind: 'block', id: name('BLOCK_1'), items: [] };
+    case 'roster': {
+      const id = name('ROSTER_1');
+      return { kind: 'roster', id, name: id, count: { type: 'open', max: 20 }, items: [] };
+    }
+  }
+}
+
+/**
+ * Inserts a new node after `afterId` (inside it, at the start, when it is a section, block or
+ * roster that is expanded). Sections always go after the current section.
+ */
+export function insert(
+  draft: Draft,
+  afterId: string | null,
+  what: NewKind,
+  opts: { inside?: boolean } = {},
+): { draft: Draft; newId: string } {
+  let newId = '';
+  const next = edit(draft, (d) => {
+    const used = usedNames(d);
+    const node = newNode(d, what, used);
+    newId = node.id;
+    if (what.kind === 'section') {
+      let sectionIndex = d.sections.length - 1;
+      if (afterId) {
+        let at = locate(d, afterId);
+        while (at && at.parentId !== null) at = locate(d, at.parentId);
+        if (at) sectionIndex = at.index;
+      }
+      d.sections.splice(sectionIndex + 1, 0, node as Section);
+      return;
+    }
+    const at = afterId ? locate(d, afterId) : null;
+    if (!at) {
+      (d.sections[d.sections.length - 1]!.items as TreeNode[]).push(node);
+      return;
+    }
+    if (hasItems(at.node) && (opts.inside || isSection(at.node))) {
+      (at.node.items as TreeNode[]).unshift(node);
+      return;
+    }
+    at.siblings.splice(at.index + 1, 0, node);
+  });
+  return { draft: next, newId };
+}
+
+/** Renames a variable (and its id when they matched), updating references in expressions. */
+export function renameVariable(draft: Draft, id: string, newName: string): Draft {
+  const at = locate(draft, id);
+  if (!at || !('name' in at.node) || typeof at.node.name !== 'string') return draft;
+  const old = at.node.name;
+  if (old === newName) return draft;
+  const re = new RegExp(`(?<![A-Za-z0-9_.])${old}(?![A-Za-z0-9_])`, 'g');
+  const sameId = at.node.id === old;
+  const json = JSON.stringify(draft, (key, value) => {
+    if (typeof value !== 'string') return value;
+    if (EXPRESSION_KEYS.has(key)) return value.replace(re, newName);
+    // Skip targets and script anchors name the item id.
+    if (sameId && (key === 'to' || key === 'itemId') && value === old) return newName;
+    // Pipes in texts: {{OLD}}, {{OLD | label}}, {{#if OLD == 1}}.
+    if (value.includes('{{')) {
+      return value.replace(
+        /\{\{([^}]*)\}\}/g,
+        (m, inner: string) => `{{${inner.replace(re, newName)}}}`,
+      );
+    }
+    return value;
+  });
+  const renamed = JSON.parse(json) as Draft;
+  return updateNode(renamed, id, (n) => ({
+    ...n,
+    name: newName,
+    ...(sameId ? { id: newName } : {}),
+  })) as Draft;
+}
+
+/** Keys whose string values are logic expressions. */
+export const EXPRESSION_KEYS = new Set([
+  'showIf',
+  'optionFilter',
+  'prefill',
+  'when',
+  'formula',
+  'expr',
+  'rowLabel',
+]);

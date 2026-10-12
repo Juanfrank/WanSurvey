@@ -33,7 +33,13 @@ export function HomePage() {
           <ul className="divide-y divide-slate-100">
             {projects.data.map((p) => (
               <li key={p.id} className="flex justify-between py-2">
-                <span>{p.name}</span>
+                <Link
+                  to="/projects/$projectId"
+                  params={{ projectId: p.id }}
+                  className="text-indigo-700 hover:underline"
+                >
+                  {p.name}
+                </Link>
                 <span className="font-mono text-sm text-slate-500">
                   {p.code} · {p.status}
                 </span>

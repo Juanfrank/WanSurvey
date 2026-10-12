@@ -61,6 +61,9 @@ export function AppLayout() {
               >
                 {t('app.home')}
               </Link>
+              <Link to="/projects" className="hover:underline [&.active]:font-semibold">
+                {t('app.projects')}
+              </Link>
               <Link to="/preview" className="hover:underline [&.active]:font-semibold">
                 {t('app.preview')}
               </Link>

@@ -45,11 +45,35 @@ const previewRoute = createRoute({
   component: lazyRouteComponent(() => import('./preview/PreviewPage.js'), 'PreviewPage'),
 });
 
+// The designer (editor, logic engine, preview) also loads only when opened.
+const projectsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects',
+  component: lazyRouteComponent(() => import('./designer/ProjectPages.js'), 'ProjectsPage'),
+});
+const projectRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId',
+  component: lazyRouteComponent(() => import('./designer/ProjectPages.js'), 'ProjectPage'),
+});
+const designerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId/questionnaires/$qid',
+  component: lazyRouteComponent(() => import('./designer/DesignerPage.js'), 'DesignerPage'),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
   twoFactorSetupRoute,
-  appRoute.addChildren([homeRoute, waitingRoute, previewRoute]),
+  appRoute.addChildren([
+    homeRoute,
+    waitingRoute,
+    previewRoute,
+    projectsRoute,
+    projectRoute,
+    designerRoute,
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });
