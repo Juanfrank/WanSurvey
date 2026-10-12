@@ -60,6 +60,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
   const shownFields = fields.filter((f) => shownNames.includes(f.name));
   const variables = useMemo(() => caseVariables(fields), [fields]);
   const pages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+  const pool = data?.assignmentMode === 'pool';
 
   const assign = useMutation({
     mutationFn: (body: object) =>
@@ -123,6 +124,20 @@ export function CasesTab({ projectId }: { projectId: string }) {
             ))}
           </select>
         </label>
+        {!canReadAll && pool ? (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">{t('cases.list.show')}</span>
+            <select
+              className={`${controlCls} w-auto`}
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+            >
+              <option value="">{t('cases.list.mineAndAvailable')}</option>
+              <option value="me">{t('cases.list.onlyMine')}</option>
+              <option value="none">{t('cases.list.available')}</option>
+            </select>
+          </label>
+        ) : null}
         {canReadAll ? (
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">{t('cases.list.assignedTo')}</span>
@@ -235,7 +250,14 @@ export function CasesTab({ projectId }: { projectId: string }) {
         </div>
       ) : null}
 
-      {data?.piiMasked ? <p className="text-xs text-slate-600">{t('cases.list.piiNote')}</p> : null}
+      {!canReadAll && pool ? (
+        <p className="text-xs text-slate-600">{t('cases.list.poolNote')}</p>
+      ) : null}
+      {data?.piiMasked ? (
+        <p className="text-xs text-slate-600">
+          {data.autoReveal ? t('cases.list.piiAuto') : t('cases.list.piiNote')}
+        </p>
+      ) : null}
 
       <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
         <table
@@ -319,6 +341,11 @@ export function CasesTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="px-2 py-1.5">
                   <StatusBadge status={r.status} />
+                  {!canReadAll && !r.assignedTo ? (
+                    <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-900">
+                      {t('cases.list.availableBadge')}
+                    </span>
+                  ) : null}
                 </td>
                 {canReadAll ? <td className="px-2 py-1.5">{r.assignedName ?? '—'}</td> : null}
                 <td className="px-2 py-1.5">{r.priority}</td>
@@ -392,7 +419,9 @@ function formatValue(v: unknown): string {
 interface CaseDetail extends CaseRow {
   contacts: { id: string; type: string; value: string; label: string | null; valid: boolean }[];
   history: { type: string; details: Record<string, unknown>; at: string; actor: string | null }[];
-  pii: { masked: boolean; canReveal: boolean };
+  pii: { masked: boolean; canReveal: boolean; auto: boolean };
+  canClaim: boolean;
+  canRelease: boolean;
 }
 
 function CaseDrawer({
@@ -420,6 +449,23 @@ function CaseDrawer({
   useEffect(() => {
     if (c) setPriority(String(c.priority));
   }, [c?.priority]);
+  const [note, setNote] = useState('');
+  const refresh = async () => {
+    await qc.invalidateQueries({ queryKey: ['case', caseId] });
+    await qc.invalidateQueries({ queryKey: ['cases', projectId] });
+  };
+  const hand = useMutation({
+    mutationFn: (action: 'claim' | 'release') =>
+      api(`/projects/${projectId}/cases/${caseId}/${action}`, { method: 'POST' }),
+    onSuccess: async (_r, action) => {
+      setNote(t(action === 'claim' ? 'cases.detail.claimed' : 'cases.detail.released'));
+      await refresh();
+    },
+    onError: async (e) => {
+      setNote(localiseError(t, e));
+      await refresh();
+    },
+  });
   const patch = useMutation({
     mutationFn: (body: object) =>
       api(`/projects/${projectId}/cases/${caseId}`, { method: 'PATCH', body }),
@@ -453,8 +499,37 @@ function CaseDrawer({
                   </button>
                 ) : null}
               </span>
+            ) : c.pii.auto ? (
+              <span className="ml-auto text-slate-600">{t('cases.detail.autoShown')}</span>
             ) : null}
           </div>
+          {c.canClaim || c.canRelease || note ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {c.canClaim ? (
+                <Button
+                  type="button"
+                  className="px-3 py-1 text-sm"
+                  disabled={hand.isPending}
+                  onClick={() => hand.mutate('claim')}
+                >
+                  {t('cases.detail.claim')}
+                </Button>
+              ) : null}
+              {c.canRelease ? (
+                <button
+                  type="button"
+                  className={smallBtn}
+                  disabled={hand.isPending}
+                  onClick={() => hand.mutate('release')}
+                >
+                  {t('cases.detail.release')}
+                </button>
+              ) : null}
+              <p role="status" aria-live="polite">
+                {note}
+              </p>
+            </div>
+          ) : null}
           <section aria-labelledby="cd-sample">
             <h3 id="cd-sample" className="mb-1 font-semibold">
               {t('cases.detail.sample')}

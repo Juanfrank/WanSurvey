@@ -24,7 +24,9 @@ export interface CaseList {
   limit: number;
   counts: Partial<Record<CaseStatus, number>>;
   fields: SampleField[];
+  assignmentMode: 'assigned' | 'pool';
   piiMasked: boolean;
+  autoReveal: boolean;
   canReveal: boolean;
   rows: CaseRow[];
 }

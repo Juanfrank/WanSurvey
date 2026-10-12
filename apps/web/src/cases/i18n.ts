@@ -6,6 +6,7 @@ export const casesEn = {
     cases: 'Cases',
     import: 'Import sample',
     assignments: 'Assignments',
+    settings: 'Settings',
   },
   list: {
     title: 'Cases',
@@ -41,6 +42,14 @@ export const casesEn = {
     open: 'Open case {{id}}',
     piiNote:
       'Personal fields are hidden in lists. Open a case to reveal them; each reveal is recorded.',
+    piiAuto:
+      'Personal data of your cases is shown. The first time you see each case is recorded in the audit log.',
+    show: 'Show',
+    mineAndAvailable: 'My cases and available ones',
+    onlyMine: 'Only my cases',
+    available: 'Available to claim',
+    availableBadge: 'Available',
+    poolNote: 'Cases are open to all interviewers here: claim one to work on it.',
     col: {
       externalId: 'Case id',
       status: 'Status',
@@ -65,6 +74,11 @@ export const casesEn = {
     reveal: 'Show personal data',
     revealNote: 'Showing personal data is recorded in the audit log.',
     masked: 'Personal data hidden',
+    autoShown: 'Shown because you hold this case. Your first view was recorded.',
+    claim: 'Take this case',
+    claimed: 'The case is yours now.',
+    release: 'Give the case back',
+    released: 'The case is available again.',
     priority: 'Priority',
     save: 'Save',
     withdraw: 'Withdraw case',
@@ -77,6 +91,8 @@ export const casesEn = {
       unassigned: 'Unassigned',
       edited: 'Edited',
       status_changed: 'Status changed',
+      claimed: 'Taken from the pool',
+      released: 'Given back',
     },
   },
   import: {
@@ -163,6 +179,8 @@ export const casesEn = {
     title: 'Assignments',
     intro:
       'Rules give matching unassigned cases to a person automatically, now and whenever a sample is imported. Rules run oldest first; a quota caps how many cases the person holds.',
+    poolMode:
+      'This project is in open pool mode: interviewers take free cases themselves, and rules do not run on new imports. You can still apply rules here.',
     workload: 'Workload',
     person: 'Person',
     noPeople:
@@ -183,6 +201,18 @@ export const casesEn = {
     applied_other: '{{count}} cases assigned.',
     unnamed: 'Rule {{n}}',
   },
+  settings: {
+    title: 'Project settings',
+    reveal: 'Show interviewers the personal data of their cases automatically',
+    revealHelp:
+      'Interviewers with access to personal data see names and contacts of the cases they hold without asking. The first view of each case is recorded. When off, they reveal it case by case.',
+    mode: 'How interviewers get cases',
+    assigned: 'Assigned by a supervisor or by assignment rules',
+    pool: 'Open pool: interviewers take free cases themselves; the first to take a case holds it',
+    poolHelp: 'Assignment rules do not run on new imports in this mode.',
+    save: 'Save settings',
+    saved: 'Settings saved.',
+  },
 };
 
 export type CasesCatalogue = typeof casesEn;
@@ -194,6 +224,7 @@ export const casesEs: CasesCatalogue = {
     cases: 'Casos',
     import: 'Importar muestra',
     assignments: 'Asignaciones',
+    settings: 'Configuración',
   },
   list: {
     title: 'Casos',
@@ -229,6 +260,15 @@ export const casesEs: CasesCatalogue = {
     open: 'Abrir el caso {{id}}',
     piiNote:
       'Los datos personales se ocultan en las listas. Abra un caso para mostrarlos; cada consulta queda registrada.',
+    piiAuto:
+      'Se muestran los datos personales de sus casos. La primera vez que ve cada caso queda registrada en la bitácora de auditoría.',
+    show: 'Mostrar',
+    mineAndAvailable: 'Mis casos y los disponibles',
+    onlyMine: 'Solo mis casos',
+    available: 'Disponibles para tomar',
+    availableBadge: 'Disponible',
+    poolNote:
+      'Aquí los casos están abiertos a todos los entrevistadores: tome uno para trabajarlo.',
     col: {
       externalId: 'Id del caso',
       status: 'Estado',
@@ -253,6 +293,11 @@ export const casesEs: CasesCatalogue = {
     reveal: 'Mostrar datos personales',
     revealNote: 'Mostrar datos personales queda registrado en la bitácora de auditoría.',
     masked: 'Datos personales ocultos',
+    autoShown: 'Se muestran porque usted tiene este caso. Su primera consulta quedó registrada.',
+    claim: 'Tomar este caso',
+    claimed: 'El caso ahora es suyo.',
+    release: 'Devolver el caso',
+    released: 'El caso vuelve a estar disponible.',
     priority: 'Prioridad',
     save: 'Guardar',
     withdraw: 'Retirar el caso',
@@ -265,6 +310,8 @@ export const casesEs: CasesCatalogue = {
       unassigned: 'Asignación quitada',
       edited: 'Editado',
       status_changed: 'Cambio de estado',
+      claimed: 'Tomado de los disponibles',
+      released: 'Devuelto',
     },
   },
   import: {
@@ -351,6 +398,8 @@ export const casesEs: CasesCatalogue = {
     title: 'Asignaciones',
     intro:
       'Las reglas entregan automáticamente los casos sin asignar que cumplen a una persona, ahora y en cada importación. Se aplican de la más antigua a la más reciente; una cuota limita cuántos casos tiene la persona.',
+    poolMode:
+      'Este proyecto está en modo de bolsa abierta: los entrevistadores toman los casos libres y las reglas no se aplican a las nuevas importaciones. Aún puede aplicar reglas aquí.',
     workload: 'Carga de trabajo',
     person: 'Persona',
     noPeople:
@@ -370,5 +419,17 @@ export const casesEs: CasesCatalogue = {
     applied_one: '{{count}} caso asignado.',
     applied_other: '{{count}} casos asignados.',
     unnamed: 'Regla {{n}}',
+  },
+  settings: {
+    title: 'Configuración del proyecto',
+    reveal: 'Mostrar automáticamente a los entrevistadores los datos personales de sus casos',
+    revealHelp:
+      'Los entrevistadores con acceso a datos personales ven los nombres y contactos de sus casos sin pedirlo. La primera consulta de cada caso queda registrada. Si está desactivado, los muestran caso por caso.',
+    mode: 'Cómo reciben casos los entrevistadores',
+    assigned: 'Asignados por un supervisor o por reglas de asignación',
+    pool: 'Bolsa abierta: los entrevistadores toman casos libres; quien toma primero un caso lo conserva',
+    poolHelp: 'En este modo las reglas de asignación no se aplican a las nuevas importaciones.',
+    save: 'Guardar configuración',
+    saved: 'Configuración guardada.',
   },
 };

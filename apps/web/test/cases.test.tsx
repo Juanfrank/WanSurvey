@@ -4,6 +4,7 @@ import { userEvent } from '@testing-library/user-event';
 import axe from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CasesTab } from '../src/cases/CasesTab.js';
+import { SettingsTab } from '../src/cases/SettingsTab.js';
 
 const me = {
   user: { id: 'u1', email: 'pm@x', name: 'PM', firstName: 'PM', totpEnabled: false },
@@ -94,6 +95,42 @@ describe('cases grid', () => {
       userId: 'i1',
     });
 
+    const result = await axe.run(container, {
+      rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
+    });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+});
+
+describe('project settings', () => {
+  it('saves the personal data and assignment mode switches', async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    const project = {
+      id: 'p',
+      name: 'P',
+      code: 'P',
+      status: 'active',
+      languages: ['en'],
+      modesEnabled: [],
+      settings: { revealToInterviewers: true, assignmentMode: 'assigned' as const },
+    };
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SettingsTab project={project} />
+      </QueryClientProvider>,
+    );
+    const reveal = screen.getByRole('checkbox', { name: /Show interviewers the personal data/ });
+    expect(reveal).toHaveProperty('checked', true);
+    await user.click(reveal);
+    await user.click(screen.getByRole('radio', { name: /Open pool/ }));
+    await user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await screen.findByText('Settings saved.');
+    const patch = calls.find((c) => c.init?.method === 'PATCH')!;
+    expect(patch.url).toMatch(/\/projects\/p$/);
+    expect(JSON.parse(String(patch.init!.body))).toEqual({
+      settings: { revealToInterviewers: false, assignmentMode: 'pool' },
+    });
     const result = await axe.run(container, {
       rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
     });

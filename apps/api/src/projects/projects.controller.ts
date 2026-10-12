@@ -9,7 +9,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { Mode } from '@wansurvey/schema';
+import { ASSIGNMENT_MODES, Mode, projectSettings } from '@wansurvey/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
@@ -18,15 +18,36 @@ import { ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
 import { projects } from '../db/schema.js';
 
-const ProjectBody = z.object({
+const ProjectFields = z.object({
   name: z.string().min(1).max(200),
   code: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/),
-  modesEnabled: z.array(Mode).default([]),
-  timezone: z.string().min(1).max(64).default('UTC'),
-  languages: z.array(z.string().min(2).max(16)).min(1).default(['en']),
+  modesEnabled: z.array(Mode),
+  timezone: z.string().min(1).max(64),
+  languages: z.array(z.string().min(2).max(16)).min(1),
 });
-const ProjectPatch = ProjectBody.partial().extend({
+const ProjectBody = ProjectFields.extend({
+  modesEnabled: ProjectFields.shape.modesEnabled.default([]),
+  timezone: ProjectFields.shape.timezone.default('UTC'),
+  languages: ProjectFields.shape.languages.default(['en']),
+});
+// No defaults here: fields left out of a PATCH keep their value.
+const ProjectPatch = ProjectFields.partial().extend({
   status: z.enum(['draft', 'active', 'closed', 'archived']).optional(),
+  /** Merged into the stored settings; keys left out keep their value. */
+  settings: z
+    .object({
+      revealToInterviewers: z.boolean(),
+      assignmentMode: z.enum(ASSIGNMENT_MODES),
+    })
+    .partial()
+    .strict()
+    .optional(),
+});
+
+/** A project row with its settings' defaults filled in. */
+const withSettings = <T extends { settings: unknown }>(p: T) => ({
+  ...p,
+  settings: projectSettings(p.settings),
 });
 
 @ApiTags('projects')
@@ -43,12 +64,14 @@ export class ProjectsController {
   list(@Auth() ctx: AuthContext) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       if (can(ctx.memberships, 'projects.read'))
-        return tx.select().from(projects).orderBy(projects.name);
+        return (await tx.select().from(projects).orderBy(projects.name)).map(withSettings);
       const ids = ctx.memberships
         .filter((m) => m.projectId !== null && can([m], 'projects.read', m.projectId))
         .map((m) => m.projectId!);
       return ids.length
-        ? tx.select().from(projects).where(inArray(projects.id, ids)).orderBy(projects.name)
+        ? (
+            await tx.select().from(projects).where(inArray(projects.id, ids)).orderBy(projects.name)
+          ).map(withSettings)
         : [];
     });
   }
@@ -80,7 +103,7 @@ export class ProjectsController {
           details: body,
         }),
       );
-      return project;
+      return withSettings(project!);
     });
   }
 
@@ -90,7 +113,7 @@ export class ProjectsController {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const [project] = await tx.select().from(projects).where(eq(projects.id, id));
       if (!project) throw new NotFoundException('Project not found');
-      return project;
+      return withSettings(project);
     });
   }
 
@@ -103,8 +126,20 @@ export class ProjectsController {
     @Body(new ZodPipe(ProjectPatch)) body: z.infer<typeof ProjectPatch>,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [project] = await tx.update(projects).set(body).where(eq(projects.id, id)).returning();
-      if (!project) throw new NotFoundException('Project not found');
+      const { settings, ...fields } = body;
+      const [current] = await tx
+        .select({ settings: projects.settings })
+        .from(projects)
+        .where(eq(projects.id, id));
+      if (!current) throw new NotFoundException('Project not found');
+      const [project] = await tx
+        .update(projects)
+        .set({
+          ...fields,
+          ...(settings ? { settings: { ...projectSettings(current.settings), ...settings } } : {}),
+        })
+        .where(eq(projects.id, id))
+        .returning();
       await this.audit.record(
         tx,
         ctx.tenantId,
@@ -115,7 +150,7 @@ export class ProjectsController {
           details: body,
         }),
       );
-      return project;
+      return withSettings(project!);
     });
   }
 }

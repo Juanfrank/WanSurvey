@@ -2,6 +2,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { SAMPLES } from '@wansurvey/fixtures';
+import type { ProjectSettings } from '@wansurvey/schema';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -11,6 +12,7 @@ import { Button, Card, ErrorText, Field } from '../routes/ui.js';
 import { AssignmentsTab } from '../cases/AssignmentsTab.js';
 import { CasesTab } from '../cases/CasesTab.js';
 import { ImportTab } from '../cases/ImportTab.js';
+import { SettingsTab } from '../cases/SettingsTab.js';
 import { inputCls } from './fields.js';
 import { useCan } from './hooks.js';
 
@@ -21,6 +23,7 @@ export interface Project {
   status: string;
   languages: string[];
   modesEnabled: string[];
+  settings: ProjectSettings;
 }
 
 interface QuestionnaireRow {
@@ -238,7 +241,7 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
 const tabCls =
   '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
 
-type ProjectTab = 'questionnaires' | 'cases' | 'import' | 'assignments';
+type ProjectTab = 'questionnaires' | 'cases' | 'import' | 'assignments' | 'settings';
 
 /** A project: its questionnaires, cases, sample import and assignments, as allowed by role. */
 export function ProjectPage() {
@@ -253,11 +256,13 @@ export function ProjectPage() {
   const canCasesOwn = useCan('cases.read_assigned', projectId);
   const canImport = useCan('cases.import', projectId);
   const canAssign = useCan('cases.assign', projectId);
+  const canSettings = useCan('projects.update', projectId);
   const tabs: ProjectTab[] = [
     ...(canQuestionnaires ? (['questionnaires'] as const) : []),
     ...(canCasesAll || canCasesOwn ? (['cases'] as const) : []),
     ...(canImport ? (['import'] as const) : []),
     ...(canAssign ? (['assignments'] as const) : []),
+    ...(canSettings ? (['settings'] as const) : []),
   ];
   const [tab, setTab] = useState<ProjectTab | null>(null);
   const current = tab && tabs.includes(tab) ? tab : (tabs[0] ?? null);
@@ -297,6 +302,9 @@ export function ProjectPage() {
           </Tabs.Content>
           <Tabs.Content value="assignments">
             <AssignmentsTab projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="settings">
+            {project.data ? <SettingsTab project={project.data} /> : null}
           </Tabs.Content>
         </Tabs.Root>
       ) : null}

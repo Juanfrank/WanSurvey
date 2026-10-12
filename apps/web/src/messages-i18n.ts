@@ -95,6 +95,8 @@ export const messagesEn = {
     NOT_AN_ASSIGNEE:
       'Cases can only go to active interviewers or data entry clerks of this project.',
     ALREADY_TAKEN: 'Someone else has just taken this case.',
+    NOT_POOL: 'Cases of this project are handed out by a supervisor.',
+    NOT_RELEASABLE: 'Only cases not yet started can be given back.',
     FORBIDDEN: 'You do not have permission to do this.',
     generic: 'Something went wrong. Please try again.',
   },
@@ -193,6 +195,8 @@ export const messagesEs: MessagesCatalogue = {
     NOT_AN_ASSIGNEE:
       'Los casos solo se pueden dar a entrevistadores o digitadores activos de este proyecto.',
     ALREADY_TAKEN: 'Otra persona acaba de tomar este caso.',
+    NOT_POOL: 'Los casos de este proyecto los reparte un supervisor.',
+    NOT_RELEASABLE: 'Solo se pueden devolver casos que aún no se han empezado.',
     FORBIDDEN: 'No tiene permiso para hacer esto.',
     generic: 'Algo salió mal. Intente de nuevo.',
   },

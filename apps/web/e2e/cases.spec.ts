@@ -138,3 +138,72 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await shot(page, 'cases-assignments');
   await expectAccessible(page);
 });
+
+test('interviewers see their cases automatically; in pool mode the first to take a case holds it', async ({
+  page,
+  browser,
+}) => {
+  const INTERVIEWER = 'interviewer@demo.wansurvey.test';
+  await openProject(page);
+  await page.getByRole('tab', { name: 'Cases' }).click();
+  await page.getByLabel('Search id or sample data').fill('XHH0007');
+  await page.getByLabel('Select case XHH0007').check();
+  await page.locator('#assign-to').selectOption({ label: 'Demo interviewer' });
+  await page.getByRole('button', { name: 'Assign', exact: true }).click();
+  await expect(page.getByText(/cases? assigned\./)).toBeVisible();
+  await expect(page.locator('tr[data-case="XHH0007"]')).toContainText('Demo interviewer');
+
+  // The interviewer sees names and contacts of their case without asking.
+  const interviewer = await browser.newPage();
+  await openProject(interviewer, INTERVIEWER);
+  await interviewer.getByRole('tab', { name: 'My cases' }).click();
+  await interviewer.getByLabel('Search id or sample data').fill('XHH0007');
+  const row = interviewer.locator('tr[data-case="XHH0007"]');
+  await expect(row).toBeVisible();
+  await expect(row).not.toContainText('•••');
+  await expect(interviewer.getByText(/Personal data of your cases is shown/)).toBeVisible();
+  await interviewer.getByRole('button', { name: 'Open case XHH0007' }).click();
+  const drawer = interviewer.getByRole('dialog', { name: 'Case XHH0007' });
+  await expect(drawer.getByTestId('contacts')).toContainText('@example.org');
+  await expect(drawer).toContainText('Shown because you hold this case');
+  await expect(drawer.getByRole('button', { name: 'Show personal data' })).toHaveCount(0);
+  await drawer.getByRole('button', { name: 'Close' }).click();
+  // The audit entry for this first view is asserted in the API tests (admins need MFA here).
+
+  // The project manager switches the project to an open pool.
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByRole('radio', { name: /Open pool/ }).check();
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Settings saved.')).toBeVisible();
+  await shot(page, 'project-settings');
+  await expectAccessible(page);
+
+  // Two people open the same free case; the first to take it holds it.
+  const clerk = await browser.newPage();
+  await openProject(clerk, CLERK);
+  for (const p of [interviewer, clerk]) {
+    await p.reload();
+    await p.getByRole('tab', { name: 'My cases' }).click();
+    await p.getByLabel('Show').selectOption({ label: 'Available to claim' });
+  }
+  const free = interviewer.locator('[data-testid="cases-table"] tbody tr').first();
+  await expect(free).toContainText('Available');
+  const id = (await free.getAttribute('data-case'))!;
+  const drawers = [];
+  for (const p of [interviewer, clerk]) {
+    await p.getByRole('button', { name: `Open case ${id}`, exact: true }).click();
+    drawers.push(p.getByRole('dialog', { name: `Case ${id}` }));
+  }
+  await drawers[0]!.getByRole('button', { name: 'Take this case' }).click();
+  await expect(drawers[0]!).toContainText('The case is yours now.');
+  await expect(drawers[0]!.getByRole('button', { name: 'Give the case back' })).toBeVisible();
+  await shot(interviewer, 'cases-pool-claimed');
+  await expectAccessible(interviewer);
+  await drawers[1]!.getByRole('button', { name: 'Take this case' }).click();
+  await expect(drawers[1]!).toContainText('Someone else has just taken this case.');
+
+  // Back to supervisor assignment for the other tests.
+  await page.getByRole('radio', { name: /Assigned by a supervisor/ }).check();
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Settings saved.')).toBeVisible();
+});

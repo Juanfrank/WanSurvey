@@ -2,6 +2,7 @@ import { sampleTable, toCsv } from '@wansurvey/fixtures';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseSampleFile, sniffDelimiter } from '../src/cases/sample-file.js';
+import { ruleStrategy, STRATEGIES } from '../src/cases/strategies.js';
 import {
   normalisePhone,
   parseDate,
@@ -97,6 +98,43 @@ describe('sample files', () => {
     expect(normalisePhone('abc')).toBeNull();
     expect(parseDate('17/05/1990')).toBe('1990-05-17');
     expect(parseDate('1990-02-30')).toBeNull();
+  });
+});
+
+describe('assignment strategies', () => {
+  const rule = (id: string, userId: string, filter: string, quota: number | null, at: number) => ({
+    id,
+    kind: 'rule',
+    userId,
+    filter,
+    quota,
+    createdAt: new Date(at),
+  });
+  const pool = [1, 2, 1, 1, 2].map((region, i) => ({
+    id: `c${i}`,
+    sample: { region },
+    status: 'fresh',
+    priority: 0,
+    modePreference: null,
+  }));
+
+  it('runs rules oldest first, each taking what earlier rules left, within quotas', () => {
+    const held = new Map([['u1', 1]]);
+    const hands = ruleStrategy.plan({
+      rules: [
+        rule('late', 'u2', 'case.region == 1', null, 2),
+        rule('early', 'u1', 'case.region == 1', 3, 1),
+      ],
+      pool,
+      held,
+      taken: new Set(),
+    });
+    expect(hands).toEqual([
+      { ruleId: 'early', userId: 'u1', caseIds: ['c0', 'c2'] },
+      { ruleId: 'late', userId: 'u2', caseIds: ['c3'] },
+    ]);
+    expect(held.get('u1')).toBe(3);
+    expect(STRATEGIES.map((s) => s.kind)).toEqual(['rule']);
   });
 });
 
@@ -224,7 +262,7 @@ describe('cases API', () => {
       await t.admin`select id from cases where project_id = ${project} and external_id = 'HH0004'`;
     const masked = await pm.agent.get(`${base}/cases/${c!.id}`);
     expect(masked.body.contacts[0].value).toBe('•••');
-    expect(masked.body.pii).toEqual({ masked: true, canReveal: true });
+    expect(masked.body.pii).toEqual({ masked: true, canReveal: true, auto: false });
     const shown = await pm.agent.get(`${base}/cases/${c!.id}`).query({ reveal: 'pii' });
     expect(shown.body.sample.first_name).toBe('Luis');
     expect(shown.body.contacts.map((x: { value: string }) => x.value)).toContain(
@@ -327,6 +365,132 @@ describe('cases API', () => {
     await expect(
       t.admin`update case_events set type = 'x' where case_id = ${c!.id}`,
     ).rejects.toThrow(/append-only/);
+  });
+
+  const patchProject = (s: Session, settings: object) =>
+    s.agent.patch(`/api/v1/projects/${project}`).set('x-csrf-token', s.csrf).send({ settings });
+  const autoViews = async (userId: string) =>
+    (
+      await t.admin`select target_id from audit_log where action = 'case.pii_viewed'
+        and actor_user_id = ${userId} and details->>'auto' = 'true'`
+    ).map((r) => r.target_id as string);
+
+  it('shows interviewers the personal data of their cases, recording the first view of each', async () => {
+    await t.admin`update projects set languages = '{en,es}', timezone = 'America/Lima' where id = ${project}`;
+    const project0 = await pm.agent.get(`/api/v1/projects/${project}`);
+    expect(project0.body.settings).toEqual({
+      revealToInterviewers: true,
+      assignmentMode: 'assigned',
+    });
+    const list = await interviewerS.agent.get(`${base}/cases`);
+    expect(list.body.total).toBeGreaterThan(0);
+    expect(
+      list.body.rows.every(
+        (r: { sample: { first_name: string } }) => r.sample.first_name !== '•••',
+      ),
+    ).toBe(true);
+    const seen = await autoViews(interviewer.id);
+    expect(new Set(seen).size).toBe(seen.length);
+    // Every case listed to them is recorded (including ones they held earlier in this file).
+    expect(seen).toEqual(expect.arrayContaining(list.body.rows.map((r: { id: string }) => r.id)));
+
+    const id = list.body.rows[0].id as string;
+    const d1 = await interviewerS.agent.get(`${base}/cases/${id}`);
+    await interviewerS.agent.get(`${base}/cases/${id}`);
+    expect(d1.body.pii).toEqual({ masked: false, canReveal: false, auto: true });
+    expect(d1.body.contacts[0].value).not.toBe('•••');
+    expect((await autoViews(interviewer.id)).filter((x) => x === id)).toHaveLength(1);
+    // Supervisors and managers still reveal case by case.
+    const byPm = await pm.agent.get(`${base}/cases/${id}`);
+    expect(byPm.body.pii.masked).toBe(true);
+
+    // Only project managers and admins change settings; unknown keys are refused.
+    expect((await patchProject(supervisor, { revealToInterviewers: false })).status).toBe(403);
+    expect((await patchProject(pm, { revealAll: true })).status).toBe(400);
+    const off = await patchProject(pm, { revealToInterviewers: false });
+    expect(off.body.settings).toEqual({ revealToInterviewers: false, assignmentMode: 'assigned' });
+    // Other project fields are left alone.
+    expect(off.body).toMatchObject({ languages: ['en', 'es'], timezone: 'America/Lima' });
+    const masked = await interviewerS.agent.get(`${base}/cases/${id}`);
+    expect(masked.body.pii).toEqual({ masked: true, canReveal: true, auto: false });
+    expect((await interviewerS.agent.get(`${base}/cases`)).body.rows[0].sample.first_name).toBe(
+      '•••',
+    );
+    await patchProject(pm, { revealToInterviewers: true });
+  });
+
+  it('pool mode: free cases are open to interviewers, the first claim wins', async () => {
+    const free = (
+      await pm.agent.get(`${base}/cases`).query({ assignedTo: 'none', status: 'fresh' })
+    ).body.rows as { id: string }[];
+    expect(free.length).toBeGreaterThan(1);
+    const notPool = await post(interviewerS, `${base}/cases/${free[0]!.id}/claim`);
+    expect(notPool.status).toBe(400);
+    expect(notPool.body.code).toBe('NOT_POOL');
+    expect((await interviewerS.agent.get(`${base}/cases/${free[0]!.id}`)).status).toBe(404);
+
+    const on = await patchProject(pm, { assignmentMode: 'pool' });
+    expect(on.body.settings.assignmentMode).toBe('pool');
+    const other = await login(t.app, interviewer2);
+    const visible = await interviewerS.agent.get(`${base}/cases`).query({ limit: 200 });
+    expect(visible.body.assignmentMode).toBe('pool');
+    const ids = visible.body.rows.map((r: { id: string }) => r.id);
+    expect(ids).toEqual(expect.arrayContaining(free.map((f) => f.id)));
+    // Free cases are not theirs yet: masked, and no view is recorded.
+    const freeRow = visible.body.rows.find((r: { id: string }) => r.id === free[0]!.id);
+    expect(freeRow.sample.first_name).toBe('•••');
+    expect(await autoViews(interviewer.id)).not.toContain(free[0]!.id);
+    const before = await interviewerS.agent.get(`${base}/cases/${free[0]!.id}`);
+    expect(before.body).toMatchObject({ canClaim: true, canRelease: false });
+    expect(before.body.pii.masked).toBe(true);
+
+    const target = free[0]!.id;
+    // Roles that do not work cases may neither claim nor release.
+    const reviewer = await login(
+      t.app,
+      await createUser(t.admin, tenant.id, [{ role: 'reviewer' }]),
+    );
+    expect((await post(reviewer, `${base}/cases/${target}/claim`)).status).toBe(403);
+    expect((await post(reviewer, `${base}/cases/${target}/release`)).status).toBe(403);
+    const [a, b] = await Promise.all([
+      post(interviewerS, `${base}/cases/${target}/claim`),
+      post(other, `${base}/cases/${target}/claim`),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const loser = a.status === 409 ? a : b;
+    expect(loser.body.code).toBe('ALREADY_TAKEN');
+    const [winner, winnerUser, loserS] =
+      a.status === 200 ? [interviewerS, interviewer, other] : [other, interviewer2, interviewerS];
+    expect((await loserS.agent.get(`${base}/cases/${target}`)).status).toBe(404);
+    const held = await winner.agent.get(`${base}/cases/${target}`);
+    expect(held.body).toMatchObject({
+      status: 'assigned',
+      assignedTo: winnerUser.id,
+      canRelease: true,
+      canClaim: false,
+    });
+    expect(held.body.history[0]).toMatchObject({ type: 'claimed' });
+
+    // Someone else's case cannot be released by another interviewer; the holder can.
+    expect((await post(loserS, `${base}/cases/${target}/release`)).status).toBe(404);
+    const rel = await post(winner, `${base}/cases/${target}/release`);
+    expect(rel.body).toEqual({ released: true });
+    const back = await pm.agent.get(`${base}/cases/${target}`);
+    expect(back.body).toMatchObject({ status: 'fresh', assignedTo: null });
+    expect(back.body.history[0]).toMatchObject({ type: 'released' });
+    const audit =
+      await t.admin`select action from audit_log where target_id = ${target} and action in ('case.claimed', 'case.released')`;
+    expect(audit.map((r) => r.action).sort()).toEqual(['case.claimed', 'case.released']);
+
+    // Imports do not run the rules in pool mode.
+    const table = [
+      [...sampleTable(0)[0]!],
+      ['POOL1', 'Eva', 'R', '3', 'Cusco', '41', '987654322', 'e@example.org', '0'],
+    ];
+    const { id } = await importTable(table);
+    const done = await post(pm, `${base}/imports/${id}/commit`);
+    expect(done.body).toMatchObject({ created: 1, assigned: 0 });
+    await patchProject(pm, { assignmentMode: 'assigned' });
   });
 
   it('keeps cases inside their tenant', async () => {

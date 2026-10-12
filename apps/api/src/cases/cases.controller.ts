@@ -19,7 +19,7 @@ import { MODES } from '@wansurvey/schema';
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
+import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
 import { assignments, caseEvents, cases, contacts, sampleFields, users } from '../db/schema.js';
@@ -86,8 +86,9 @@ export class CasesController {
   ) {}
 
   /**
-   * Paged list with counts per status. Interviewers and clerks only see cases assigned to them.
-   * Personal fields and contacts are masked without `pii.view`.
+   * Paged list with counts per status. Interviewers and clerks only see cases assigned to them
+   * and, in pool mode, the unassigned fresh cases they may claim. Personal fields are masked,
+   * except an interviewer's own cases when the project shows them automatically (C4b).
    */
   @Get('cases')
   @RequirePermission(READ, PERM)
@@ -97,10 +98,10 @@ export class CasesController {
     @Query(new ZodPipe(ListQuery)) q: z.infer<typeof ListQuery>,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
+      const settings = await this.svc.settings(tx, projectId);
       const own = this.svc.restrictedToOwn(ctx, projectId);
       const base: SQL[] = [eq(cases.projectId, projectId)];
-      if (own) base.push(eq(cases.assignedTo, ctx.userId));
+      if (own) base.push(this.visibleToOwn(ctx, settings.assignmentMode === 'pool'));
       const conds = [...base];
       if (q.status) conds.push(eq(cases.status, q.status));
       if (q.assignedTo === 'none') conds.push(isNull(cases.assignedTo));
@@ -158,18 +159,25 @@ export class CasesController {
         .where(and(...base))
         .groupBy(cases.status);
       const fields = await this.fields(tx, projectId);
+      // Lists mask personal fields; clear values come from an audited reveal per case, or,
+      // for an interviewer's own cases, automatically with the first view recorded.
+      const auto = this.svc.autoReveal(ctx, projectId, settings);
+      const clear = (r: { assignedTo: string | null }) => auto && r.assignedTo === ctx.userId;
+      if (pii.size) await this.svc.recordAutoViews(tx, ctx, projectId, rows.filter(clear), 'list');
       return {
         total,
         page: q.page,
         limit: q.limit,
         counts: Object.fromEntries(counts.map((c) => [c.status, c.n])),
         fields,
-        // Lists always mask personal fields; clear values come from an audited reveal per case.
+        assignmentMode: settings.assignmentMode,
         piiMasked: pii.size > 0,
+        /** The caller's own cases are listed with personal data shown. */
+        autoReveal: auto && pii.size > 0,
         canReveal: canSee,
         rows: rows.map((r) => ({
           ...r,
-          sample: maskSample(r.sample as Record<string, unknown>, pii, false),
+          sample: maskSample(r.sample as Record<string, unknown>, pii, clear(r)),
         })),
       };
     });
@@ -184,7 +192,9 @@ export class CasesController {
     @Query('reveal') reveal?: string,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const c = await this.loadCase(tx, ctx, projectId, caseId);
+      const settings = await this.svc.settings(tx, projectId);
+      const pool = settings.assignmentMode === 'pool';
+      const c = await this.loadCase(tx, ctx, projectId, caseId, pool);
       const canSee = this.svc.canSeePii(ctx, projectId);
       const pii = await this.svc.piiFields(tx, projectId);
       const revealed = reveal === 'pii' && canSee;
@@ -193,8 +203,11 @@ export class CasesController {
           code: 'FORBIDDEN',
           message: 'You may not see personal data',
         });
-      // Clear values are only sent on an explicit, audited reveal.
-      const show = revealed;
+      // Clear values are sent on an explicit, audited reveal, or automatically to the
+      // interviewer holding the case when the project allows it (recorded once).
+      const auto = this.svc.autoReveal(ctx, projectId, settings) && c.assignedTo === ctx.userId;
+      const show = revealed || auto;
+      if (auto && !revealed) await this.svc.recordAutoViews(tx, ctx, projectId, [c], 'detail');
       if (revealed) {
         await this.audit.record(
           tx,
@@ -232,12 +245,18 @@ export class CasesController {
         .orderBy(desc(caseEvents.at))
         .limit(200);
       const hasPii = pii.size > 0 || cs.length > 0;
+      const free = !c.assignedTo && c.status === 'fresh';
       return {
         ...c,
         sample: maskSample(c.sample as Record<string, unknown>, pii, show),
         contacts: cs.map((x) => maskContact(x, show)),
         history,
-        pii: { masked: hasPii && !show, canReveal: canSee && hasPii && !show },
+        pii: { masked: hasPii && !show, canReveal: canSee && hasPii && !show, auto },
+        assignmentMode: settings.assignmentMode,
+        canClaim: pool && free && can(ctx.memberships, 'cases.read_assigned', projectId),
+        canRelease:
+          c.status === 'assigned' &&
+          (c.assignedTo === ctx.userId || can(ctx.memberships, 'cases.assign', projectId)),
       };
     });
   }
@@ -305,6 +324,57 @@ export class CasesController {
         }),
       );
       return row;
+    });
+  }
+
+  /** Pool mode: take an unassigned case. 409 `ALREADY_TAKEN` when someone was quicker. */
+  @Post('cases/:caseId/claim')
+  @HttpCode(200)
+  @RequirePermission('cases.read_assigned', PERM)
+  claim(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const row = await this.svc.claim(tx, ctx, projectId, caseId);
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'case.claimed',
+          targetType: 'case',
+          targetId: caseId,
+          details: { projectId, externalId: row.externalId },
+        }),
+      );
+      return { claimed: true };
+    });
+  }
+
+  /** Give a case back: its holder, or someone who assigns cases. Only before it is started. */
+  @Post('cases/:caseId/release')
+  @HttpCode(200)
+  @RequirePermission(['cases.read_assigned', 'cases.assign'], PERM)
+  release(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const out = await this.svc.release(tx, ctx, projectId, caseId);
+      if (out.released)
+        await this.audit.record(
+          tx,
+          ctx.tenantId,
+          this.audit.fromContext(ctx, {
+            action: 'case.released',
+            targetType: 'case',
+            targetId: caseId,
+            details: { projectId },
+          }),
+        );
+      return out;
     });
   }
 
@@ -662,12 +732,23 @@ export class CasesController {
       .orderBy(asc(sampleFields.position), asc(sampleFields.name));
   }
 
-  private async loadCase(tx: Tx, ctx: AuthContext, projectId: string, caseId: string) {
-    const [c] = await this.selectCases(tx).where(
-      and(eq(cases.id, caseId), eq(cases.projectId, projectId)),
-    );
-    if (!c || (this.svc.restrictedToOwn(ctx, projectId) && c.assignedTo !== ctx.userId))
-      throw new NotFoundException('Case not found');
+  /** Cases someone without `cases.read_all` may see: theirs, and in pool mode the free ones. */
+  private visibleToOwn(ctx: AuthContext, pool: boolean): SQL {
+    const mine = eq(cases.assignedTo, ctx.userId);
+    return pool ? or(mine, and(isNull(cases.assignedTo), eq(cases.status, 'fresh')))! : mine;
+  }
+
+  private async loadCase(
+    tx: Tx,
+    ctx: AuthContext,
+    projectId: string,
+    caseId: string,
+    pool = false,
+  ) {
+    const conds = [eq(cases.id, caseId), eq(cases.projectId, projectId)];
+    if (this.svc.restrictedToOwn(ctx, projectId)) conds.push(this.visibleToOwn(ctx, pool));
+    const [c] = await this.selectCases(tx).where(and(...conds));
+    if (!c) throw new NotFoundException('Case not found');
     return c;
   }
 }

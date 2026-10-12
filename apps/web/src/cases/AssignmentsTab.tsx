@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
 import { controlCls, NumberField, smallBtn, TextField } from '../designer/fields.js';
+import type { Project } from '../designer/ProjectPages.js';
 import { caseVariables } from '../designer/vars.js';
 import { Button, Card, ErrorText } from '../routes/ui.js';
 import { STATUSES, useAssignees, useSampleFields } from './hooks.js';
@@ -28,6 +29,10 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const people = useAssignees(projectId, true);
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<Project>(`/projects/${projectId}`),
+  });
   const fields = useSampleFields(projectId);
   const variables = useMemo(() => caseVariables(fields.data ?? []), [fields.data]);
   const rules = useQuery({
@@ -117,6 +122,14 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {project.data?.settings.assignmentMode === 'pool' ? (
+        <p
+          className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"
+          data-testid="pool-mode"
+        >
+          {t('cases.rules.poolMode')}
+        </p>
+      ) : null}
       <Card>
         <h2 className="mb-1 text-lg font-semibold">{t('cases.rules.workload')}</h2>
         {people.data?.length ? (

@@ -1,11 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { roleHasPermission, type Role } from '@wansurvey/schema';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  projectSettings,
+  roleHasPermission,
+  type ProjectSettings,
+  type Role,
+} from '@wansurvey/schema';
 import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { can } from '../common/auth-context.js';
 import type { Tx } from '../db/database.js';
 import {
   assignments,
+  auditLog,
   caseEvents,
   cases,
   memberships,
@@ -14,7 +26,7 @@ import {
   tenantMembers,
   users,
 } from '../db/schema.js';
-import { compileRule } from './case-logic.js';
+import { STRATEGIES } from './strategies.js';
 
 export interface Assignee {
   userId: string;
@@ -34,6 +46,8 @@ export function chunks<T>(xs: T[], n = BATCH): T[][] {
 
 @Injectable()
 export class CasesService {
+  constructor(private readonly audit: AuditService) {}
+
   async project(tx: Tx, projectId: string) {
     const [p] = await tx.select().from(projects).where(eq(projects.id, projectId));
     if (!p) throw new NotFoundException('Project not found');
@@ -171,9 +185,70 @@ export class CasesService {
     return changed.length;
   }
 
+  /** The project's settings, with defaults. */
+  async settings(tx: Tx, projectId: string): Promise<ProjectSettings> {
+    return projectSettings((await this.project(tx, projectId)).settings);
+  }
+
   /**
-   * Applies the project's active rules, oldest first, to unassigned fresh cases (optionally
-   * only `onlyCaseIds`, or only one rule). Quotas cap the cases a rule's person holds in total.
+   * Interviewers see the personal data of the cases they hold without asking, when the project
+   * allows it and they hold `pii.view`. Supervisors and managers still reveal per case.
+   */
+  autoReveal(ctx: AuthContext, projectId: string, settings: ProjectSettings) {
+    return (
+      settings.revealToInterviewers &&
+      this.restrictedToOwn(ctx, projectId) &&
+      this.canSeePii(ctx, projectId)
+    );
+  }
+
+  /**
+   * Records `case.pii_viewed` for the cases this person has not been shown before. Automatic
+   * views are recorded once per person and case; explicit reveals are recorded every time.
+   */
+  async recordAutoViews(
+    tx: Tx,
+    ctx: AuthContext,
+    projectId: string,
+    shown: { id: string; externalId: string }[],
+    via: 'detail' | 'list',
+  ) {
+    if (!shown.length) return;
+    const seen = new Set(
+      (
+        await tx
+          .select({ id: auditLog.targetId })
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.action, 'case.pii_viewed'),
+              eq(auditLog.actorUserId, ctx.userId),
+              inArray(
+                auditLog.targetId,
+                shown.map((c) => c.id),
+              ),
+            ),
+          )
+      ).map((r) => r.id),
+    );
+    for (const c of shown) {
+      if (seen.has(c.id)) continue;
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'case.pii_viewed',
+          targetType: 'case',
+          targetId: c.id,
+          details: { projectId, externalId: c.externalId, auto: true, via },
+        }),
+      );
+    }
+  }
+
+  /**
+   * Hands out unassigned fresh cases (optionally only `onlyCaseIds`, or only one rule) with the
+   * project's active assignments, each kind by its strategy. Returns the number assigned.
    */
   async applyRules(
     tx: Tx,
@@ -181,17 +256,20 @@ export class CasesService {
     projectId: string,
     opts: { onlyCaseIds?: string[]; ruleId?: string } = {},
   ): Promise<number> {
-    const rules = await tx
-      .select()
-      .from(assignments)
-      .where(
-        and(
-          eq(assignments.projectId, projectId),
-          eq(assignments.active, true),
-          ...(opts.ruleId ? [eq(assignments.id, opts.ruleId)] : []),
-        ),
-      )
-      .orderBy(asc(assignments.createdAt));
+    const eligible = new Set((await this.assignees(tx, projectId)).map((a) => a.userId));
+    const rules = (
+      await tx
+        .select()
+        .from(assignments)
+        .where(
+          and(
+            eq(assignments.projectId, projectId),
+            eq(assignments.active, true),
+            ...(opts.ruleId ? [eq(assignments.id, opts.ruleId)] : []),
+          ),
+        )
+        .orderBy(asc(assignments.createdAt))
+    ).filter((r) => eligible.has(r.userId));
     if (!rules.length) return 0;
     const pool = await tx
       .select({
@@ -211,29 +289,93 @@ export class CasesService {
         ),
       )
       .orderBy(sql`${cases.priority} desc`, asc(cases.id));
+    const load = await tx
+      .select({ userId: cases.assignedTo, n: sql<number>`count(*)::int` })
+      .from(cases)
+      .where(eq(cases.projectId, projectId))
+      .groupBy(cases.assignedTo);
+    const held = new Map(load.filter((l) => l.userId).map((l) => [l.userId!, l.n]));
     const taken = new Set<string>();
     let total = 0;
-    const eligible = new Set((await this.assignees(tx, projectId)).map((a) => a.userId));
-    for (const rule of rules) {
-      if (!eligible.has(rule.userId)) continue;
-      const match = compileRule(rule.filter);
-      let room = Infinity;
-      if (rule.quota !== null) {
-        const [held] = await tx
-          .select({ n: sql<number>`count(*)::int` })
-          .from(cases)
-          .where(and(eq(cases.projectId, projectId), eq(cases.assignedTo, rule.userId)));
-        room = Math.max(0, rule.quota - (held?.n ?? 0));
-      }
-      const ids: string[] = [];
-      for (const c of pool) {
-        if (ids.length >= room) break;
-        if (!taken.has(c.id) && match(c)) ids.push(c.id);
-      }
-      ids.forEach((id) => taken.add(id));
-      if (ids.length)
-        total += await this.assign(tx, ctx, projectId, ids, rule.userId, `rule:${rule.id}`);
+    for (const strategy of STRATEGIES) {
+      const mine = rules.filter((r) => r.kind === strategy.kind);
+      if (!mine.length) continue;
+      for (const hand of strategy.plan({ rules: mine, pool, held, taken }))
+        total += await this.assign(
+          tx,
+          ctx,
+          projectId,
+          hand.caseIds,
+          hand.userId,
+          `rule:${hand.ruleId}`,
+        );
     }
     return total;
+  }
+
+  /**
+   * Pool mode: the caller takes an unassigned fresh case. The conditional update makes two
+   * simultaneous claims safe: only one finds the case still free.
+   */
+  async claim(tx: Tx, ctx: AuthContext, projectId: string, caseId: string) {
+    const settings = await this.settings(tx, projectId);
+    if (settings.assignmentMode !== 'pool')
+      throw new BadRequestException({
+        code: 'NOT_POOL',
+        message: 'Cases of this project are assigned by a supervisor',
+      });
+    await this.assertAssignee(tx, projectId, ctx.userId);
+    const [row] = await tx
+      .update(cases)
+      .set({ assignedTo: ctx.userId, status: 'assigned', updatedAt: new Date() })
+      .where(
+        and(
+          eq(cases.id, caseId),
+          eq(cases.projectId, projectId),
+          isNull(cases.assignedTo),
+          eq(cases.status, 'fresh'),
+        ),
+      )
+      .returning({ id: cases.id, externalId: cases.externalId });
+    if (!row) {
+      const [exists] = await tx
+        .select({ id: cases.id })
+        .from(cases)
+        .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)));
+      if (!exists) throw new NotFoundException('Case not found');
+      throw new ConflictException({
+        code: 'ALREADY_TAKEN',
+        message: 'Someone else has taken this case',
+      });
+    }
+    await this.events(tx, ctx.tenantId, ctx.userId, [
+      { caseId, type: 'claimed', details: { to: ctx.userId } },
+    ]);
+    return row;
+  }
+
+  /** Returns a case to the unassigned cases. Its holder, or someone with `cases.assign`. */
+  async release(tx: Tx, ctx: AuthContext, projectId: string, caseId: string) {
+    const [c] = await tx
+      .select({ id: cases.id, assignedTo: cases.assignedTo, status: cases.status })
+      .from(cases)
+      .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)));
+    const manager = can(ctx.memberships, 'cases.assign', projectId);
+    if (!c || (!manager && c.assignedTo !== ctx.userId))
+      throw new NotFoundException('Case not found');
+    if (!c.assignedTo) return { released: false };
+    if (c.status !== 'assigned')
+      throw new BadRequestException({
+        code: 'NOT_RELEASABLE',
+        message: 'Only cases not yet started can be released',
+      });
+    await tx
+      .update(cases)
+      .set({ assignedTo: null, status: 'fresh', updatedAt: new Date() })
+      .where(eq(cases.id, caseId));
+    await this.events(tx, ctx.tenantId, ctx.userId, [
+      { caseId, type: 'released', details: { from: c.assignedTo } },
+    ]);
+    return { released: true };
   }
 }

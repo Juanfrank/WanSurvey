@@ -106,6 +106,8 @@ export const projects = pgTable(
       .array()
       .notNull()
       .default(sql`'{en}'::text[]`),
+    /** `ProjectSettings` from @wansurvey/schema; read through `projectSettings()` for defaults. */
+    settings: jsonb('settings').notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('projects_tenant_code_uq').on(t.tenantId, t.code)],

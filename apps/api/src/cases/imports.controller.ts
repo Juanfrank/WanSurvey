@@ -308,9 +308,12 @@ export class ImportsController {
         ...created.map((caseId) => ({ caseId, type: 'imported', details: { importId } })),
         ...updated.map((caseId) => ({ caseId, type: 'updated_by_import', details: { importId } })),
       ]);
-      const assigned = created.length
-        ? await this.casesService.applyRules(tx, ctx, projectId, { onlyCaseIds: created })
-        : 0;
+      // In pool mode interviewers claim cases themselves; rules only run when asked.
+      const pool = (await this.casesService.settings(tx, projectId)).assignmentMode === 'pool';
+      const assigned =
+        created.length && !pool
+          ? await this.casesService.applyRules(tx, ctx, projectId, { onlyCaseIds: created })
+          : 0;
       await tx.delete(sampleImportRows).where(eq(sampleImportRows.importId, importId));
       const summary = {
         created: created.length,

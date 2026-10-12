@@ -5,3 +5,4 @@ export * from './interview.js';
 export * from './rbac.js';
 export * from './scenario.js';
 export * from './mapping.js';
+export * from './project.js';
