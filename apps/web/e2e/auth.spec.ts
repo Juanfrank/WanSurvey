@@ -59,6 +59,7 @@ test.describe('a first visit', () => {
     await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
     await expect(page.getByLabel('Correo electrónico')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.lang)).toBe('es');
+    await shot(page, 'login-es');
     await expectAccessible(page);
   });
 });
