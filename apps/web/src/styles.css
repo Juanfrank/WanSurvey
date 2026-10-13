@@ -157,11 +157,118 @@
   --color-violet-800: #4b2fc7;
   --color-violet-900: #3b2599;
 
+  /* Fills that keep their colour in both themes: white text on coloured buttons and badges,
+     and the navy side panel. */
+  --color-on-fill: #ffffff;
+  --color-navy-fill: #0a2e7a;
+
+  /* Coloured text ("ink"): the same as the shade in the light theme, lighter in the dark one,
+     so the shades themselves stay fills (buttons) in both. */
+  --color-indigo-ink-600: #0050dd;
+  --color-indigo-ink-700: #0a42b8;
+  --color-indigo-ink-800: #0a2e7a;
+  --color-indigo-ink-900: #06215c;
+  --color-indigo-ink-950: #041640;
+  --color-emerald-ink-700: #0f744f;
+  --color-emerald-ink-800: #0c5e41;
+  --color-emerald-ink-900: #0a4b34;
+  --color-amber-ink-600: #b86405;
+  --color-amber-ink-700: #965107;
+  --color-amber-ink-800: #7a420b;
+  --color-amber-ink-900: #64370d;
+  --color-amber-ink-950: #3b1f05;
+  --color-red-ink-700: #b41824;
+  --color-red-ink-800: #92151f;
+  --color-red-ink-900: #77141c;
+  --color-sky-ink-800: #075985;
+  --color-sky-ink-900: #0c4a6e;
+  --color-sky-ink-950: #082f49;
+  --color-violet-ink-800: #4b2fc7;
+  --color-violet-ink-900: #3b2599;
+
   --radius-md: 8px;
   --radius-lg: 10px;
   --radius-xl: 12px;
   --shadow-sm: 0 1px 3px rgb(10 46 122 / 0.06);
   --shadow-card: 0 1px 2px rgb(10 46 122 / 0.05), 0 12px 32px rgb(10 46 122 / 0.08);
+}
+
+/* `dark:` for the rare rule that needs it; the palette below does nearly all of the work. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Dark theme (the person's choice, or the system's): the same classes, other values. Light
+ * tints become dark tints, neutrals invert, coloured text lightens; fills (buttons, badges,
+ * the side panel) keep their colour and white text. Not when printing: paper is light.
+ */
+@media screen {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --color-white: #121a2b;
+    --color-ground: #0b1220;
+    --color-navy: #bbd3ff;
+    --color-navy-2: #9cbcf5;
+
+    --color-slate-50: #0f1626;
+    --color-slate-100: #1a2338;
+    --color-slate-200: #2a3650;
+    --color-slate-300: #3a4766;
+    --color-slate-400: #6b7896;
+    --color-slate-500: #9ca7c0;
+    --color-slate-600: #b4bed6;
+    --color-slate-700: #cbd3e6;
+    --color-slate-800: #e8ecf6;
+    --color-slate-900: #f2f5fb;
+    --color-slate-950: #ffffff;
+
+    --color-indigo-50: #16233f;
+    --color-indigo-100: #1c2d52;
+    --color-indigo-200: #24407a;
+    --color-indigo-300: #3b5ca8;
+    --color-indigo-ink-600: #8db6ff;
+    --color-indigo-ink-700: #a9c6ff;
+    --color-indigo-ink-800: #bbd3ff;
+    --color-indigo-ink-900: #d2e1ff;
+    --color-indigo-ink-950: #e6eeff;
+
+    --color-emerald-50: #0f2a21;
+    --color-emerald-100: #12362b;
+    --color-emerald-200: #1b4d3d;
+    --color-emerald-ink-700: #5ee0b0;
+    --color-emerald-ink-800: #7fe7c1;
+    --color-emerald-ink-900: #a6f0d4;
+
+    --color-amber-50: #2b1f0c;
+    --color-amber-100: #3b2a10;
+    --color-amber-200: #5a4015;
+    --color-amber-300: #7a5719;
+    --color-amber-ink-600: #f6b95b;
+    --color-amber-ink-700: #f8c470;
+    --color-amber-ink-800: #fad08a;
+    --color-amber-ink-900: #fcdda6;
+    --color-amber-ink-950: #fdeac8;
+
+    --color-red-50: #2e1418;
+    --color-red-100: #40191e;
+    --color-red-200: #5e232b;
+    --color-red-ink-700: #ff9aa2;
+    --color-red-ink-800: #ffb0b6;
+    --color-red-ink-900: #ffc6cb;
+
+    --color-sky-50: #0e2233;
+    --color-sky-100: #12304a;
+    --color-sky-200: #1a4466;
+    --color-sky-ink-800: #9cd7ff;
+    --color-sky-ink-900: #b8e3ff;
+    --color-sky-ink-950: #d4eeff;
+
+    --color-violet-100: #2a2350;
+    --color-violet-ink-800: #b5a6ff;
+    --color-violet-ink-900: #cbc0ff;
+
+    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.4);
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.35);
+  }
 }
 
 @layer base {

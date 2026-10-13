@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Me } from '../api.js';
 import { LANGUAGES, setLanguage } from '../i18n.js';
+import { THEMES, useTheme, type ThemePref } from '../theme.js';
 import { ChevronDownIcon, LogoutIcon } from './icons.js';
 
 /** Up to two initials from a person's name, or the first letter of their e-mail. */
@@ -30,6 +31,7 @@ export function AccountMenu({
 }) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
   const button = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -73,7 +75,7 @@ export function AccountMenu({
         >
           <span
             aria-hidden="true"
-            className="grid h-8 w-8 flex-none place-items-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600"
+            className="grid h-8 w-8 flex-none place-items-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-ink-600"
           >
             {initialsOf(me.user.name, me.user.email)}
           </span>
@@ -89,7 +91,7 @@ export function AccountMenu({
           aria-label={t('app.signOut')}
           title={t('app.signOut')}
           onClick={onSignOut}
-          className="grid h-9 w-9 place-items-center rounded-full text-navy hover:bg-indigo-50 hover:text-indigo-600"
+          className="grid h-9 w-9 place-items-center rounded-full text-navy hover:bg-indigo-50 hover:text-indigo-ink-600"
         >
           <LogoutIcon className="h-[18px] w-[18px]" />
         </button>
@@ -125,8 +127,22 @@ export function AccountMenu({
             onChange={(e) => void setLanguage(e.target.value)}
           >
             {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
+              <option key={l.code} value={l.code} lang={l.code}>
                 {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="eyebrow">{t('app.theme')}</span>
+          <select
+            className={field}
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as ThemePref)}
+          >
+            {THEMES.map((v) => (
+              <option key={v} value={v}>
+                {t(`app.themes.${v}`)}
               </option>
             ))}
           </select>

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectAccessible, login, PM, shot, pickOrganisation } from './helpers.js';
+import { expectAccessible, login, openAccount, PM, shot, pickOrganisation } from './helpers.js';
 
 async function openProject(page: Page) {
   await login(page, PM);
@@ -139,4 +139,48 @@ test("a data subject's personal data is downloaded and erased from the case", as
   await expect(drawer).toContainText('Personal data removed');
   await shot(page, 'case-personal-data');
   await expectAccessible(page);
+});
+
+test('the dark theme: chosen in the account menu, remembered, and readable on every main page', async ({
+  page,
+}) => {
+  await openProject(page);
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-theme', 'light');
+  await openAccount(page);
+  await page.getByRole('combobox', { name: 'Theme' }).selectOption('dark');
+  await expect(html).toHaveAttribute('data-theme', 'dark');
+  await page.keyboard.press('Escape');
+  // Every main page passes the accessibility checks (colour contrast included) in the dark.
+  const tabs = ['Questionnaires', 'Cases', 'Dashboard', 'Results', 'Settings'];
+  for (const tab of tabs) {
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await expect(page.getByRole('tabpanel')).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await expectAccessible(page);
+  }
+  await page.getByRole('tab', { name: 'Dashboard', exact: true }).click();
+  await shot(page, 'dark-dashboard', { fullPage: false });
+  await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
+  await page.getByRole('link', { name: 'Household questionnaire' }).click();
+  await expect(page.getByRole('tree', { name: 'Outline' })).toBeVisible();
+  await expectAccessible(page);
+  await shot(page, 'dark-designer', { fullPage: false });
+  // Remembered on this device, and applied before the page paints.
+  await page.reload();
+  await expect(html).toHaveAttribute('data-theme', 'dark');
+  await page.goto('/preview');
+  await expect(page.locator('[data-qkey]').first()).toBeVisible();
+  await expectAccessible(page);
+  await shot(page, 'dark-preview', { fullPage: false });
+});
+
+test('the theme follows the device until one is chosen', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/login');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expectAccessible(page);
+  await shot(page, 'dark-login', { fullPage: false });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });

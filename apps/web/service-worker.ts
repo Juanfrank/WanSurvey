@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 import type { Plugin } from 'vite';
 
 /** Files in `public/` the app shell needs offline. */
-const PUBLIC = ['/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
+const PUBLIC = [
+  '/manifest.webmanifest',
+  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/theme.js',
+];
 
 /**
  * The service worker (D3), written at build time with the list of built files so the whole

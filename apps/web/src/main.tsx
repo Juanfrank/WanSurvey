@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { initI18n, previewLanguage } from './i18n.js';
 import { router } from './router.js';
+import { applyTheme, themePref } from './theme.js';
 import './styles.css';
 
 const queryClient = new QueryClient({
@@ -11,6 +12,12 @@ const queryClient = new QueryClient({
 });
 
 await initI18n();
+// The colour theme: set before the first paint by public/theme.js; here it follows the system
+// while the person has not chosen one.
+applyTheme();
+window
+  .matchMedia?.('(prefers-color-scheme: dark)')
+  .addEventListener('change', () => themePref() === 'system' && applyTheme());
 // Screenshots switch the language for one picture (`ws:lang`); nothing is stored.
 window.addEventListener('ws:lang', (e) => void previewLanguage((e as CustomEvent<string>).detail));
 
