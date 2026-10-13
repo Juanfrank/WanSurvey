@@ -76,6 +76,39 @@ describe('sync loop', () => {
     store.close();
   });
 
+  it('never sends changes without their snapshot when one is written during a send', async () => {
+    const store = await freshStore();
+    await store.record('i1', [answer('A', 1)], snap(1));
+    // A change lands while the sync is reading (the respondent answers again just then).
+    const get = store.get.bind(store);
+    let once = true;
+    vi.spyOn(store, 'get').mockImplementation(async (id) => {
+      const local = await get(id);
+      if (once) {
+        once = false;
+        await store.record('i1', [answer('A', 2)], snap(2));
+      }
+      return local;
+    });
+    const sent: { interviews: { ops: { seq: number }[]; state?: unknown }[] }[] = [];
+    const syncer = new Syncer(store, 'dev-1', async (body) => {
+      const b = body as (typeof sent)[number];
+      sent.push(b);
+      const last = b.interviews[0]!.ops.at(-1)!.seq;
+      return { acks: { i1: last }, errors: {}, serverTime: '2026-10-12T10:00:00Z' };
+    });
+    // Each send's snapshot matches its last change; the newer change follows with its own.
+    await syncer.flush(['i1']);
+    await syncer.flush(['i1']);
+    expect(await store.pending('i1')).toEqual([]);
+    const withState = sent.map((b) => b.interviews[0]!).filter((x) => 'state' in x);
+    expect(withState.at(-1)).toMatchObject({
+      ops: [{ seq: 2 }],
+      state: { answers: { N: 2 } },
+    });
+    store.close();
+  });
+
   it('records what the server refuses', async () => {
     const store = await freshStore();
     await store.record('i1', [answer('A', 1)], snap(1));

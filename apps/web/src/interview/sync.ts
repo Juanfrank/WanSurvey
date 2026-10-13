@@ -52,9 +52,14 @@ export class Syncer {
     const items: { local: LocalInterview; ops: Awaited<ReturnType<InterviewStore['pending']>> }[] =
       [];
     for (const id of ids) {
+      // The outbox first, then the interview: a change written between the two reads then
+      // shows as a newer seq than the last op read, so the snapshot (which is that change's)
+      // is held back and the change stays pending for the next send. Read the other way
+      // round, its ops would go without any snapshot and the server keep an older state.
+      const ops = await this.store.pending(id, BATCH);
       const local = await this.store.get(id);
       if (!local || (local.seq <= local.acked && !local.start)) continue;
-      items.push({ local, ops: await this.store.pending(id, BATCH) });
+      items.push({ local, ops });
     }
     if (!items.length) return null;
     try {
