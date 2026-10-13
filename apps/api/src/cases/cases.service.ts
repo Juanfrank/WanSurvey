@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { can } from '../common/auth-context.js';
+import { CONFIG, type AppConfig } from '../config.js';
 import type { Tx } from '../db/database.js';
 import {
   assignments,
@@ -27,6 +29,7 @@ import {
   tenantMembers,
   users,
 } from '../db/schema.js';
+import { PiiCipher } from './pii.js';
 import { STRATEGIES } from './strategies.js';
 
 export interface Assignee {
@@ -47,7 +50,15 @@ export function chunks<T>(xs: T[], n = BATCH): T[][] {
 
 @Injectable()
 export class CasesService {
-  constructor(private readonly audit: AuditService) {}
+  /** Seals and opens personal sample fields (H1). */
+  readonly pii: PiiCipher;
+
+  constructor(
+    private readonly audit: AuditService,
+    @Inject(CONFIG) config: AppConfig,
+  ) {
+    this.pii = new PiiCipher(config.APP_ENCRYPTION_KEY);
+  }
 
   async project(tx: Tx, projectId: string) {
     const [p] = await tx.select().from(projects).where(eq(projects.id, projectId));
@@ -348,24 +359,30 @@ export class CasesService {
         .orderBy(asc(assignments.createdAt))
     ).filter((r) => eligible.has(r.userId));
     if (!rules.length) return 0;
-    const pool = await tx
-      .select({
-        id: cases.id,
-        sample: cases.sample,
-        status: cases.status,
-        priority: cases.priority,
-        modePreference: cases.modePreference,
-      })
-      .from(cases)
-      .where(
-        and(
-          eq(cases.projectId, projectId),
-          isNull(cases.assignedTo),
-          eq(cases.status, 'fresh'),
-          ...(opts.onlyCaseIds ? [inArray(cases.id, opts.onlyCaseIds)] : []),
-        ),
-      )
-      .orderBy(sql`${cases.priority} desc`, asc(cases.id));
+    const pool = (
+      await tx
+        .select({
+          id: cases.id,
+          sample: cases.sample,
+          samplePii: cases.samplePii,
+          status: cases.status,
+          priority: cases.priority,
+          modePreference: cases.modePreference,
+        })
+        .from(cases)
+        .where(
+          and(
+            eq(cases.projectId, projectId),
+            isNull(cases.assignedTo),
+            eq(cases.status, 'fresh'),
+            ...(opts.onlyCaseIds ? [inArray(cases.id, opts.onlyCaseIds)] : []),
+          ),
+        )
+        .orderBy(sql`${cases.priority} desc`, asc(cases.id))
+    ).map(({ samplePii, ...r }) => ({
+      ...r,
+      sample: this.pii.read({ sample: r.sample, samplePii }),
+    }));
     const load = await tx
       .select({ userId: cases.assignedTo, n: sql<number>`count(*)::int` })
       .from(cases)

@@ -392,6 +392,12 @@ export const cases = pgTable(
       .references(() => projects.id),
     externalId: text('external_id').notNull(),
     sample: jsonb('sample').notNull().default({}),
+    /** Personal sample fields, sealed with AES-256-GCM (H1); see `PiiCipher`. */
+    samplePii: text('sample_pii'),
+    /** Keyed hashes of the words of the personal fields, for search. */
+    samplePiiIndex: text('sample_pii_index').array(),
+    /** Personal data removed (retention or a data subject's request); kept for statistics. */
+    anonymisedAt: timestamp('anonymised_at', { withTimezone: true }),
     /** fresh | assigned | in_progress | finalised | withdrawn */
     status: text('status').notNull().default('fresh'),
     disposition: text('disposition'),

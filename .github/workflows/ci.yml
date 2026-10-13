@@ -30,6 +30,8 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm build
+      - name: Respondent bundle budget
+        run: pnpm --filter @wansurvey/web bundle-budget
       - run: pnpm typecheck
       # SPSS/Stata files are read back with pyreadstat and pandas (round-trip tests).
       - uses: actions/setup-python@v5

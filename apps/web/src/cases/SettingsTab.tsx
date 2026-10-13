@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { AssignmentMode, ProjectSettings } from '@wansurvey/schema';
+import { FUNCTION_KEYS, type AssignmentMode, type ProjectSettings } from '@wansurvey/schema';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -242,6 +242,79 @@ export function SettingsTab({ project }: { project: Project }) {
           />
           {t('analysis.settings.target')}
         </label>
+      </fieldset>
+      <fieldset className="flex flex-col gap-2" data-testid="shortcut-settings">
+        <legend className="mb-1 font-medium">{t('interview.shortcutSettings.title')}</legend>
+        <div className="flex flex-wrap gap-4">
+          {(['dontKnow', 'refused'] as const).map((k) => (
+            <label key={k} className="flex flex-col gap-1">
+              {t(`interview.shortcutSettings.${k}`)}
+              <select
+                className={controlCls}
+                value={form.shortcuts[k]}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    shortcuts: {
+                      ...form.shortcuts,
+                      [k]: e.target.value as typeof form.shortcuts.dontKnow,
+                    },
+                  })
+                }
+              >
+                {FUNCTION_KEYS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          {(['note', 'navigator', 'pause'] as const).map((k) => (
+            <label key={k} className="flex flex-col gap-1">
+              {t(`interview.shortcutSettings.${k}`)}
+              <span className="flex items-center gap-1">
+                Ctrl +
+                <input
+                  className={`${controlCls} w-14 uppercase`}
+                  maxLength={1}
+                  pattern="[A-Za-z]"
+                  required
+                  value={form.shortcuts[k]}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      shortcuts: { ...form.shortcuts, [k]: e.target.value.toLowerCase() },
+                    })
+                  }
+                />
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset className="flex flex-col gap-2" data-testid="retention-settings">
+        <legend className="mb-1 font-medium">{t('cases.privacy.retentionTitle')}</legend>
+        <label className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={3650}
+            className={`${controlCls} w-28`}
+            value={form.retention.anonymiseAfterDays ?? ''}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                retention: {
+                  anonymiseAfterDays:
+                    e.target.value === '' ? null : Math.max(1, Number(e.target.value)),
+                },
+              })
+            }
+          />
+          {t('cases.privacy.retentionDays')}
+        </label>
+        <p className="text-slate-600">{t('cases.privacy.retentionHelp')}</p>
       </fieldset>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={save.isPending}>

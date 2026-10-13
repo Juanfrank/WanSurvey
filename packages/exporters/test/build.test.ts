@@ -182,3 +182,57 @@ describe('export dataset', () => {
     ]);
   });
 });
+
+describe('personal answers', () => {
+  const withPhone = compile(
+    Questionnaire.parse({
+      id: 'P',
+      title: es('P'),
+      defaultLanguage: 'es',
+      languages: ['es'],
+      sections: [
+        {
+          id: 'S',
+          title: es('S'),
+          items: [
+            { kind: 'question', id: 'AGE', name: 'AGE', type: 'numeric', text: es('¿Edad?') },
+            {
+              kind: 'question',
+              id: 'PHONE',
+              name: 'PHONE',
+              type: 'text',
+              personal: true,
+              text: es('¿Teléfono?'),
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  const one: ExportInterview = {
+    id: 'i1',
+    caseId: null,
+    mode: 'CAWI',
+    status: 'submitted',
+    disposition: 'COMPLETE',
+    interviewer: null,
+    startedAt: '2026-01-01T00:00:00Z',
+    submittedAt: '2026-01-01T00:10:00Z',
+    activeMs: 600_000,
+    version: 1,
+    language: 'es',
+    answers: { AGE: 30, PHONE: '987654321' },
+  };
+  const names = (personal?: boolean) =>
+    buildTables(withPhone, [one], {
+      rosters: 'wide',
+      paradata: false,
+      ...(personal === undefined ? {} : { personal }),
+    }).main.columns.map((c) => c.name);
+
+  it('are left out for people without access to personal data', () => {
+    expect(names()).toContain('PHONE');
+    expect(names(false)).not.toContain('PHONE');
+    expect(names(false)).toContain('AGE');
+  });
+});

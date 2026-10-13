@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { own, type InterviewSession } from '@wansurvey/logic';
 import { InterviewRunner, ScriptBox } from '@wansurvey/renderer';
-import type { LocalizedText } from '@wansurvey/schema';
+import { DEFAULT_SHORTCUTS, type LocalizedText } from '@wansurvey/schema';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../designer/Dialog.js';
@@ -124,20 +124,22 @@ export function InterviewPage() {
     .filter((v) => typeof v === 'string' && v && v !== MASK)
     .join(' ');
 
+  // The project's shortcut keys (A11).
+  const keys = payload.settings?.shortcuts ?? DEFAULT_SHORTCUTS;
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     // Choice buttons are not typing: `?` on a radio still opens the help.
     const typing = (e.target as HTMLElement).closest(
       'textarea, select, input:not([type=radio]):not([type=checkbox])',
     );
     const k = e.key.toLowerCase();
-    if ((e.ctrlKey || e.metaKey) && k === 'm') {
+    if ((e.ctrlKey || e.metaKey) && k === keys.note) {
       e.preventDefault();
       setNoteOpen(true);
-    } else if ((e.ctrlKey || e.metaKey) && k === 'g') {
+    } else if ((e.ctrlKey || e.metaKey) && k === keys.navigator) {
       e.preventDefault();
       setSide(true);
       requestAnimationFrame(() => navRef.current?.querySelector<HTMLElement>('button')?.focus());
-    } else if ((e.ctrlKey || e.metaKey) && k === 'p') {
+    } else if ((e.ctrlKey || e.metaKey) && k === keys.pause) {
       e.preventDefault();
       if (paused) iv.resume();
       else iv.pause();
@@ -359,6 +361,7 @@ export function InterviewPage() {
               mode={payload.interview.mode}
               lang={lang}
               onChange={iv.onChange}
+              specialKeys={{ DK: keys.dontKnow, RF: keys.refused }}
             />
           )}
           {finished ? (
@@ -456,7 +459,15 @@ export function InterviewPage() {
           <ul className="flex flex-col gap-1 text-sm" data-testid="shortcuts">
             {(['next', 'back', 'codes', 'special', 'note', 'goTo', 'pause', 'help'] as const).map(
               (k) => (
-                <li key={k}>{t(`interview.keys.${k}`)}</li>
+                <li key={k}>
+                  {t(`interview.keys.${k}`, {
+                    dk: keys.dontKnow,
+                    rf: keys.refused,
+                    note: keys.note.toUpperCase(),
+                    nav: keys.navigator.toUpperCase(),
+                    pause: keys.pause.toUpperCase(),
+                  })}
+                </li>
               ),
             )}
           </ul>

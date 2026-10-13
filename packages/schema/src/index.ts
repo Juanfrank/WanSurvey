@@ -1,3 +1,5 @@
+// First: how schemas validate in browsers (before any schema below parses defaults).
+import './runtime.js';
 export * from './common.js';
 export * from './disposition.js';
 export * from './questionnaire.js';

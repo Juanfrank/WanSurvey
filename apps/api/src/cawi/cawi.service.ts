@@ -332,6 +332,7 @@ export class CawiService implements OnModuleInit {
         .select({
           id: cases.id,
           sample: cases.sample,
+          samplePii: cases.samplePii,
           status: cases.status,
           priority: cases.priority,
           modePreference: cases.modePreference,
@@ -339,7 +340,9 @@ export class CawiService implements OnModuleInit {
         .from(cases)
         .where(and(eq(cases.projectId, projectId), inArray(cases.status, ['fresh', 'assigned'])))
         .orderBy(asc(cases.externalId))
-    ).filter(match);
+    )
+      .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
+      .filter(match);
     const emails = candidates.length
       ? await tx
           .select({
@@ -515,12 +518,15 @@ export class CawiService implements OnModuleInit {
       return false;
     }
     const [c] = inv.caseId
-      ? await tx.select({ sample: cases.sample }).from(cases).where(eq(cases.id, inv.caseId))
+      ? await tx
+          .select({ sample: cases.sample, samplePii: cases.samplePii })
+          .from(cases)
+          .where(eq(cases.id, inv.caseId))
       : [];
     const settings = await this.cases.settings(tx, inv.projectId);
     const token = decryptField(inv.tokenEnc, this.config.APP_ENCRYPTION_KEY);
     const t = renderTemplate(await this.templateFor(tx, inv.projectId, kind, inv.language), {
-      case: (c?.sample ?? {}) as Record<string, unknown>,
+      case: c ? this.cases.pii.read(c) : {},
       link: this.clickUrl(token),
       unsubscribe: this.unsubscribeUrl(token),
     });
@@ -770,11 +776,11 @@ export class CawiService implements OnModuleInit {
     let sample: Record<string, unknown> = {};
     if (inv.caseId) {
       const [c] = await tx
-        .select({ sample: cases.sample, externalId: cases.externalId })
+        .select({ sample: cases.sample, samplePii: cases.samplePii, externalId: cases.externalId })
         .from(cases)
         .where(eq(cases.id, inv.caseId));
       // The respondent's own record, for piping (W1).
-      sample = (c?.sample ?? {}) as Record<string, unknown>;
+      sample = c ? this.cases.pii.read(c) : {};
     }
     const [row] = (await tx
       .insert(interviews)

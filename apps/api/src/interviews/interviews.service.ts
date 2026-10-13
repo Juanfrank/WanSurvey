@@ -461,7 +461,7 @@ export class InterviewsService {
       );
     return {
       externalId: c.externalId,
-      case: maskSample(c.sample as Record<string, unknown>, pii, show),
+      case: maskSample(this.cases.pii.read(c), pii, show),
       contacts: cs.map((x) => maskContact(x, show)),
     };
   }
@@ -518,7 +518,9 @@ export class InterviewsService {
       },
       context: row.context,
       compiled: v!.compiled,
-      settings: { capi: (await this.cases.settings(tx, row.projectId)).capi },
+      settings: await this.cases
+        .settings(tx, row.projectId)
+        .then((x) => ({ capi: x.capi, shortcuts: x.shortcuts })),
       lastSeq: dev?.lastSeq ?? 0,
       serverTime: new Date().toISOString(),
     };

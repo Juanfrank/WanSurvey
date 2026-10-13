@@ -17,7 +17,9 @@ import {
   FieldworkSettings,
   Mode,
   PapiSettings,
+  RetentionSettings,
   ReviewSettings,
+  ShortcutSettings,
   projectSettings,
 } from '@wansurvey/schema';
 import { eq, inArray } from 'drizzle-orm';
@@ -54,6 +56,8 @@ const ProjectPatch = ProjectFields.partial().extend({
       papi: PapiSettings,
       review: ReviewSettings,
       fieldwork: FieldworkSettings,
+      retention: RetentionSettings,
+      shortcuts: ShortcutSettings,
     })
     .partial()
     .strict()

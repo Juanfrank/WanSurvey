@@ -16,6 +16,22 @@ export const casesEn = {
     exports: 'Exports',
     settings: 'Settings',
   },
+  privacy: {
+    title: 'Personal data',
+    download: 'Download what is held (JSON)',
+    erase: 'Erase personal data…',
+    eraseHelp:
+      'Removes the personal sample fields, contacts, answers marked personal, notes and e-mail addresses of this case. Answers that are not personal stay for statistics. This cannot be undone.',
+    note: 'Request reference (kept in the audit log)',
+    confirm: 'Erase',
+    cancel: 'Cancel',
+    erased: 'Personal data erased.',
+    anonymised: 'Personal data removed on {{date}}.',
+    retentionTitle: 'Personal data retention',
+    retentionDays: 'Remove personal data this many days after a case is finished (empty: keep)',
+    retentionHelp:
+      'Each night, finished and withdrawn cases older than this lose their personal sample fields, contacts, personal answers, notes and e-mail addresses. Recorded in the audit log.',
+  },
   list: {
     title: 'Cases',
     mine: 'My cases',
@@ -101,6 +117,7 @@ export const casesEn = {
     reinstate: 'Reinstate case',
     close: 'Close',
     event: {
+      anonymised: 'Personal data removed',
       imported: 'Imported',
       updated_by_import: 'Updated by an import',
       assigned: 'Assigned',
@@ -278,6 +295,23 @@ export const casesEs: CasesCatalogue = {
     exports: 'Exportar',
     settings: 'Configuración',
   },
+  privacy: {
+    title: 'Datos personales',
+    download: 'Descargar lo que se guarda (JSON)',
+    erase: 'Borrar datos personales…',
+    eraseHelp:
+      'Elimina los campos personales de la muestra, los contactos, las respuestas marcadas como personales, las notas y los correos de este caso. Las respuestas no personales se conservan para las estadísticas. No se puede deshacer.',
+    note: 'Referencia de la solicitud (queda en la bitácora)',
+    confirm: 'Borrar',
+    cancel: 'Cancelar',
+    erased: 'Datos personales borrados.',
+    anonymised: 'Datos personales eliminados el {{date}}.',
+    retentionTitle: 'Conservación de datos personales',
+    retentionDays:
+      'Eliminar los datos personales estos días después de terminar un caso (vacío: conservar)',
+    retentionHelp:
+      'Cada noche, los casos terminados o retirados más antiguos pierden sus campos personales, contactos, respuestas personales, notas y correos. Queda registrado en la bitácora.',
+  },
   list: {
     title: 'Casos',
     mine: 'Mis casos',
@@ -364,6 +398,7 @@ export const casesEs: CasesCatalogue = {
     reinstate: 'Reactivar el caso',
     close: 'Cerrar',
     event: {
+      anonymised: 'Datos personales eliminados',
       imported: 'Importado',
       updated_by_import: 'Actualizado por una importación',
       assigned: 'Asignado',

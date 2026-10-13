@@ -12,7 +12,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import type { AuthContext } from '../common/auth-context.js';
+import { can, type AuthContext } from '../common/auth-context.js';
 import { Database, type Tx } from '../db/database.js';
 import { exports } from '../db/schema.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
@@ -118,7 +118,12 @@ export class ExportsService implements OnModuleInit {
         projectId,
         questionnaireId: qid,
         requestedBy: ctx.userId,
-        options: { ...body, questionnaireId: qid },
+        // Answers marked personal go only to people allowed to see personal data.
+        options: {
+          ...body,
+          questionnaireId: qid,
+          personal: can(ctx.memberships, 'pii.view', projectId),
+        },
       })
       .returning({ id: exports.id, status: exports.status, createdAt: exports.createdAt });
     await this.audit.record(
@@ -191,6 +196,7 @@ export class ExportsService implements OnModuleInit {
     if (!job) return;
     try {
       const opts = ExportBody.parse(job.options);
+      const personal = (job.options as { personal?: boolean }).personal === true;
       const result = await this.database.withTenant(tenantId, async (tx) => {
         const data = await this.datasets.load(tx, job.projectId, opts, {
           paradata: opts.paradata,
@@ -198,6 +204,7 @@ export class ExportsService implements OnModuleInit {
         const built = buildTables(data.compiled, data.interviews, {
           rosters: opts.rosters,
           paradata: opts.paradata,
+          personal,
           ...(opts.language ? { language: opts.language } : {}),
         });
         return { data, built, ...(await this.render(data.name, built, opts)) };

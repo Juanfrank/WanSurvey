@@ -1,4 +1,9 @@
-export { InterviewRunner, type InterviewRunnerProps } from './InterviewRunner.js';
+export {
+  InterviewRunner,
+  DEFAULT_SPECIAL_KEYS,
+  type InterviewRunnerProps,
+  type SpecialKeys,
+} from './InterviewRunner.js';
 export { QuestionView, type QuestionViewProps } from './QuestionView.js';
 export { PaperForm, paperText, type PaperFormProps } from './PaperForm.js';
 export { describeCondition, printExpr, type DescribeContext } from './describe.js';

@@ -117,6 +117,7 @@ export class PublicSurveyController {
 
   /** Delivery events from the mail provider, authenticated by a shared secret (W3). */
   @Public()
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
   @Post('webhooks/mail')
   @HttpCode(200)
   @ApiBody({ schema: z.toJSONSchema(WebhookBody) as object })

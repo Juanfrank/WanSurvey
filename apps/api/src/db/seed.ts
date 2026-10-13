@@ -5,6 +5,7 @@ import { Questionnaire, ROLES } from '@wansurvey/schema';
 import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
+import { PiiCipher } from '../cases/pii.js';
 
 /**
  * Demo organisation "demo" with one user per role (password from SEED_PASSWORD) and a second
@@ -77,13 +78,27 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
                  values (${uuidv7()}, ${tenantId}, ${projectId}, ${name}, ${type}, ${pii}, ${i})`;
       }
       const interviewer = userIds.interviewer!;
+      // Personal fields are sealed (H1) when the encryption key is at hand; otherwise the
+      // worker's `pii.encrypt` job seals them.
+      const key = process.env.APP_ENCRYPTION_KEY;
+      const cipher = key ? new PiiCipher(key) : null;
+      const pii = new Set(fields.filter(([, , p]) => p).map(([n]) => n));
       for (const r of sampleRows(50)) {
         const caseId = uuidv7();
         const mine = r.region === 1;
-        await tx`insert into cases (id, tenant_id, project_id, external_id, sample, status, priority, assigned_to)
-                 values (${caseId}, ${tenantId}, ${projectId}, ${r.id},
-                         ${tx.json({ first_name: r.first_name, last_name: r.last_name, region: r.region, city: r.city, age: r.age })},
-                         ${mine ? 'assigned' : 'fresh'}, ${r.priority}, ${mine ? interviewer : null})`;
+        const sample = {
+          first_name: r.first_name,
+          last_name: r.last_name,
+          region: r.region,
+          city: r.city,
+          age: r.age,
+        };
+        const sealed = cipher
+          ? cipher.seal(sample, pii)
+          : { sample, samplePii: null, samplePiiIndex: null };
+        await tx`insert into cases (id, tenant_id, project_id, external_id, sample, sample_pii, sample_pii_index, status, priority, assigned_to)
+                 values (${caseId}, ${tenantId}, ${projectId}, ${r.id}, ${tx.json(sealed.sample as never)},
+                         ${sealed.samplePii}, ${sealed.samplePiiIndex}, ${mine ? 'assigned' : 'fresh'}, ${r.priority}, ${mine ? interviewer : null})`;
         await tx`insert into contacts (id, tenant_id, case_id, type, value, label)
                  values (${uuidv7()}, ${tenantId}, ${caseId}, 'phone', ${'+51' + r.phone}, 'phone'),
                         (${uuidv7()}, ${tenantId}, ${caseId}, 'email', ${r.email}, 'email')`;

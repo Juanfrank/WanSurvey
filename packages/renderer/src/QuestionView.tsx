@@ -37,6 +37,8 @@ export interface QuestionViewProps {
   showAllErrors: boolean;
   /** Respondent modes on small screens get larger targets. */
   touch?: boolean;
+  /** Keys shown on the don't know / refused buttons. */
+  specialKeys?: { DK: string; RF: string };
 }
 
 const INTERVIEWER_MODES: Mode[] = ['CATI', 'CAPI', 'PAPI'];
@@ -193,7 +195,9 @@ export function QuestionView(p: QuestionViewProps) {
                 onClick={() => p.onSpecial(entry.key, pressed ? null : kind)}
               >
                 {t(`special.${kind}`)}
-                <span className="ml-1 text-xs opacity-70">{kind === 'DK' ? 'F7' : 'F8'}</span>
+                <span className="ml-1 text-xs opacity-70">
+                  {(p.specialKeys ?? { DK: 'F7', RF: 'F8' })[kind as 'DK' | 'RF']}
+                </span>
               </button>
             );
           })}

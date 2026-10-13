@@ -25,6 +25,8 @@ import { BUS, LocalBus, RedisBus, type Bus } from './jobs/bus.js';
 import { JobsService, PROCESS_ROLE, type ProcessRole } from './jobs/jobs.service.js';
 import { MetricsService } from './metrics/metrics.service.js';
 import { StatsService } from './stats/stats.service.js';
+import { PrivacyController } from './privacy/privacy.controller.js';
+import { PrivacyService } from './privacy/privacy.service.js';
 import { ReviewController } from './review/review.controller.js';
 import { ReviewService } from './review/review.service.js';
 import { CatiController } from './cati/cati.controller.js';
@@ -108,6 +110,7 @@ export class AppModule {
         ReviewController,
         AnalysisController,
         PublicShareController,
+        PrivacyController,
         CasesController,
         ImportsController,
         AuditController,
@@ -154,6 +157,7 @@ export class AppModule {
         AnalysisService,
         ExportsService,
         ShareService,
+        PrivacyService,
         {
           provide: GEOCODER,
           useValue:

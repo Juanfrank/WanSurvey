@@ -1,5 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { createInterview, type CompiledQuestionnaire } from '@wansurvey/logic';
+import ExcelJS from 'exceljs';
 import request from 'supertest';
 import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -370,6 +371,37 @@ describe('metrics, live dashboard, topline, exports and share links', () => {
       expect(r[cols.indexOf('WORK')]).toBe('No');
       expect(r[cols.indexOf('MEDIA_1')]).toBe('Sí');
     }
+  });
+
+  it('exports Excel with labels and the variables and values sheets', async () => {
+    const e = await post(pm, `/projects/${project}/exports`, { format: 'xlsx', labels: 'labels' });
+    await jobs.drain();
+    const file = await get(pm, `/projects/${project}/exports/${e.body.id}/file`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(file.body as never);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['data', 'variables', 'values']);
+    const data = wb.getWorksheet('data')!;
+    const header = (data.getRow(1).values as unknown[]).slice(1);
+    const work = header.indexOf('WORK') + 1;
+    const labels = new Set<unknown>();
+    data.eachRow((row, n) => {
+      if (n > 1) labels.add(row.getCell(work).value);
+    });
+    expect([...labels].sort()).toEqual(['No', 'Sí']);
+    const values = wb.getWorksheet('values')!;
+    const rows: unknown[][] = [];
+    values.eachRow((row) => rows.push((row.values as unknown[]).slice(1)));
+    expect(rows).toContainEqual(['WORK', 1, 'Sí', '']);
+    const vars: unknown[][] = [];
+    wb.getWorksheet('variables')!.eachRow((row) => vars.push((row.values as unknown[]).slice(1)));
+    expect(vars).toContainEqual(['WORK', '¿Trabaja?', 'numeric', 'nominal']);
   });
 
   it('shares a read-only summary by link until it is revoked', async () => {

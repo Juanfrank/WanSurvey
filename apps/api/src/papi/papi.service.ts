@@ -83,6 +83,7 @@ export class PapiService implements OnModuleInit {
           id: cases.id,
           externalId: cases.externalId,
           sample: cases.sample,
+          samplePii: cases.samplePii,
           status: cases.status,
           priority: cases.priority,
           modePreference: cases.modePreference,
@@ -92,6 +93,7 @@ export class PapiService implements OnModuleInit {
         .where(and(...conds))
         .orderBy(asc(cases.externalId))
     )
+      .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
       .filter(compileRule(q.filter))
       .slice(0, q.caseIds?.length ? 200 : q.limit);
     const auto = this.cases.autoReveal(ctx, projectId, settings);

@@ -4,7 +4,7 @@ import { Syncer } from './sync.js';
 
 interface CheckoutResponse {
   project: { id: string; name: string };
-  settings: { capi: DeviceCase['capi'] };
+  settings: { capi: DeviceCase['capi']; shortcuts?: DeviceCase['shortcuts'] };
   versions: { id: string; version: number; compiled: unknown }[];
   cases: {
     caseId: string;
@@ -91,6 +91,7 @@ export function downloadCases(projectId: string, caseIds: string[]) {
         problem: null,
         downloadedAt: existing?.downloadedAt ?? now,
         capi: r.settings.capi,
+        ...(r.settings.shortcuts ? { shortcuts: r.settings.shortcuts } : {}),
       });
     }
     return { downloaded: r.cases.length, refused: r.refused };

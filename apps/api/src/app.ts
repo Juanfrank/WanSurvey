@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule, type AppModuleOptions } from './app.module.js';
+import { loadConfig } from './config.js';
 
 export async function createApp(opts: AppModuleOptions = {}): Promise<INestApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(opts), {
@@ -20,6 +21,7 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(cookieParser());
+  const production = loadConfig().NODE_ENV === 'production';
   app.use((req: Request, res: Response, next: NextFunction) => {
     // API responses are JSON only; a strict CSP and no sniffing are safe defaults.
     // The Swagger UI page (/docs) needs its own scripts and styles.
@@ -28,6 +30,14 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
     }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    // The e-mail open pixel and click links are loaded from mail clients on other origins.
+    if (!req.path.startsWith('/api/v1/t/'))
+      res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
+    // Behind TLS in production (H4); browsers ignore it over plain HTTP anyway.
+    if (production)
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
   app.setGlobalPrefix('api/v1', { exclude: ['health'] });

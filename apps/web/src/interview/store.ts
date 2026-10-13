@@ -1,3 +1,4 @@
+import type { ShortcutSettings } from '@wansurvey/schema';
 /**
  * The interview's copy on this device (IndexedDB): the engine snapshot and an outbox of
  * numbered changes waiting for the server. Every change is written here before the screen
@@ -76,6 +77,8 @@ export interface DeviceCase {
   problem: string | null;
   downloadedAt: string;
   capi: { gps: 'off' | 'start_end'; gpsNotice: string };
+  /** The project's keyboard shortcuts, kept for interviews started offline. */
+  shortcuts?: ShortcutSettings;
 }
 
 export interface LocalInterview {

@@ -26,6 +26,21 @@ services:
     environment:
       DATABASE_URL: postgres://wansurvey_app:wansurvey_app@postgres:5432/wansurvey
       DATABASE_ADMIN_URL: postgres://postgres:postgres@postgres:5432/wansurvey
+      REDIS_URL: redis://redis:6379
     ports: ['3000:3000']
+  worker:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    profiles: ['full']
+    command: ['node', 'dist/worker.js']
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_started } }
+    env_file: apps/api/.env
+    environment:
+      DATABASE_URL: postgres://wansurvey_app:wansurvey_app@postgres:5432/wansurvey
+      REDIS_URL: redis://redis:6379
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    profiles: ['full']
+    depends_on: [api]
+    ports: ['8080:8080']
 volumes:
   pgdata:

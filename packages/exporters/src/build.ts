@@ -27,6 +27,8 @@ export interface BuildOptions {
   paradata: boolean;
   /** Language of labels; the questionnaire's default when left out. */
   language?: string;
+  /** Answers marked personal are left out unless this is true (people without `pii.view`). */
+  personal?: boolean;
 }
 
 type Special = { $special: string };
@@ -59,7 +61,7 @@ interface Field {
 
 const numericCodes = (codes: (string | number)[]) => codes.every((c) => typeof c === 'number');
 
-function fieldsOf(compiled: CompiledQuestionnaire, lang: string): Field[] {
+function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boolean): Field[] {
   const q = compiled.questionnaire;
   const special = q.settings.specialCodes;
   const specialCode = (kind: string) =>
@@ -88,6 +90,7 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string): Field[] {
       continue;
     }
     const def = node.def as Question;
+    if (def.personal && !personal) continue;
     const label = plain(def.text, lang, name);
     const opts = questionOptions(def, q);
     const optLabels = new Map<number, string>(specialLabels);
@@ -309,7 +312,7 @@ export function buildTables(
   opts: BuildOptions,
 ): { main: Table; rosters: Table[] } {
   const lang = opts.language ?? compiled.questionnaire.defaultLanguage;
-  const fields = fieldsOf(compiled, lang);
+  const fields = fieldsOf(compiled, lang, opts.personal ?? true);
   // Text of "other" and coding results are separate answer keys.
   const top = fields.filter((f) => !f.chain.length);
   const nested = fields.filter((f) => f.chain.length);

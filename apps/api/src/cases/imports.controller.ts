@@ -249,6 +249,8 @@ export class ImportsController {
       const fresh = rows.filter((r) => !r.exists);
       const updates = mapping.existing === 'update' ? rows.filter((r) => r.exists) : [];
       const created: string[] = [];
+      // Personal fields are sealed (H1); the field list is the one just saved.
+      const pii = await this.casesService.piiFields(tx, projectId);
       for (const part of chunks(fresh)) {
         const ins = await tx
           .insert(cases)
@@ -257,7 +259,7 @@ export class ImportsController {
               tenantId: ctx.tenantId,
               projectId,
               externalId: r.externalId,
-              sample: r.sample,
+              ...this.casesService.pii.seal(r.sample, pii),
               priority: r.priority ?? 0,
               modePreference: r.modePreference ?? null,
               importId,
@@ -271,7 +273,12 @@ export class ImportsController {
       const updated: string[] = [];
       for (const part of chunks(updates)) {
         const existing = await tx
-          .select({ id: cases.id, externalId: cases.externalId })
+          .select({
+            id: cases.id,
+            externalId: cases.externalId,
+            sample: cases.sample,
+            samplePii: cases.samplePii,
+          })
           .from(cases)
           .where(
             and(
@@ -282,13 +289,17 @@ export class ImportsController {
               ),
             ),
           );
-        const byExt = new Map(existing.map((x) => [x.externalId, x.id]));
+        const byExt = new Map(existing.map((x) => [x.externalId, x]));
         for (const r of part) {
-          const id = byExt.get(r.externalId)!;
+          const old = byExt.get(r.externalId)!;
+          const id = old.id;
           await tx
             .update(cases)
             .set({
-              sample: sql`${cases.sample} || ${JSON.stringify(r.sample)}::jsonb`,
+              ...this.casesService.pii.seal(
+                { ...this.casesService.pii.read(old), ...r.sample },
+                pii,
+              ),
               ...(r.priority !== undefined ? { priority: r.priority } : {}),
               ...(r.modePreference ? { modePreference: r.modePreference } : {}),
               updatedAt: new Date(),
@@ -300,7 +311,7 @@ export class ImportsController {
           tx,
           ctx.tenantId,
           part.filter((r) => r.contacts.length),
-          byExt,
+          new Map([...byExt].map(([k, v]) => [k, v.id])),
         );
         updated.push(...existing.map((x) => x.id));
       }

@@ -15,7 +15,10 @@ const context = {
   interviewer: { firstName: 'Juan' },
 };
 
-function setup(mode: Mode, opts: { narrow?: boolean; lang?: string } = {}) {
+function setup(
+  mode: Mode,
+  opts: { narrow?: boolean; lang?: string; specialKeys?: { DK: string; RF: string } } = {},
+) {
   const session = createInterview(compiled, {
     mode,
     context,
@@ -29,6 +32,7 @@ function setup(mode: Mode, opts: { narrow?: boolean; lang?: string } = {}) {
       mode={mode}
       lang={opts.lang ?? 'en'}
       narrow={opts.narrow ?? false}
+      {...(opts.specialKeys ? { specialKeys: opts.specialKeys } : {})}
     />,
   );
   return { session, user, ...utils };
@@ -78,6 +82,18 @@ describe('InterviewRunner (interviewer modes)', () => {
       'true',
     );
     await user.keyboard('{F8}');
+    expect(session.getAnswer('A2_AGE')).toEqual({ $special: 'RF' });
+  });
+
+  it("uses the project's keys for don't know and refused, and shows them", async () => {
+    const { user, session } = setup('CATI', { specialKeys: { DK: 'F2', RF: 'F4' } });
+    await user.keyboard('{Enter}1{Enter}');
+    await user.keyboard('{F7}');
+    expect(session.getAnswer('A2_AGE')).toBeNull();
+    await user.keyboard('{F2}');
+    expect(session.getAnswer('A2_AGE')).toEqual({ $special: 'DK' });
+    expect(screen.getByRole('button', { name: /Don't know/ }).textContent).toContain('F2');
+    await user.keyboard('{F4}');
     expect(session.getAnswer('A2_AGE')).toEqual({ $special: 'RF' });
   });
 

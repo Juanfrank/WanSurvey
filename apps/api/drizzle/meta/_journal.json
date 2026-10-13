@@ -127,6 +127,13 @@
       "when": 1791880737923,
       "tag": "0017_stats_exports",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791883098730,
+      "tag": "0018_privacy",
+      "breakpoints": true
     }
   ]
 }

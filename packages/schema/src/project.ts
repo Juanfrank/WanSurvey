@@ -52,6 +52,45 @@ export const FieldworkSettings = z.object({
 });
 export type FieldworkSettings = z.infer<typeof FieldworkSettings>;
 
+export const RetentionSettings = z.object({
+  /**
+   * Days after a case is finished (or withdrawn) when its personal data is removed: personal
+   * sample fields, contacts, personal answers, notes and e-mail addresses. Null keeps it.
+   */
+  anonymiseAfterDays: z.number().int().min(1).max(3650).nullable().default(null),
+});
+export type RetentionSettings = z.infer<typeof RetentionSettings>;
+
+export const FUNCTION_KEYS = ['F1', 'F2', 'F3', 'F4', 'F6', 'F7', 'F8', 'F9', 'F10'] as const;
+/** Ctrl+N, Ctrl+T and Ctrl+W belong to the browser: a page cannot take them over. */
+export const RESERVED_LETTERS = ['n', 't', 'w'] as const;
+const Letter = z
+  .string()
+  .regex(/^[a-z]$/)
+  .refine((l) => !(RESERVED_LETTERS as readonly string[]).includes(l), {
+    message: 'The browser keeps this key',
+  });
+
+/**
+ * Interviewer keyboard shortcuts (A11): the keys for don't know and refused, and the letters
+ * used with Ctrl (⌘ on Mac) for a note, the section navigator and pause.
+ */
+export const ShortcutSettings = z
+  .object({
+    dontKnow: z.enum(FUNCTION_KEYS).default('F7'),
+    refused: z.enum(FUNCTION_KEYS).default('F8'),
+    note: Letter.default('m'),
+    navigator: Letter.default('g'),
+    pause: Letter.default('p'),
+  })
+  .refine((s) => s.dontKnow !== s.refused, { message: 'Use different keys', path: ['refused'] })
+  .refine((s) => new Set([s.note, s.navigator, s.pause]).size === 3, {
+    message: 'Use different letters',
+    path: ['pause'],
+  });
+export type ShortcutSettings = z.infer<typeof ShortcutSettings>;
+export const DEFAULT_SHORTCUTS: ShortcutSettings = ShortcutSettings.parse({});
+
 /** Per-project settings, stored as jsonb on `projects.settings`. Missing keys take defaults. */
 export const ProjectSettings = z.object({
   /**
@@ -73,6 +112,10 @@ export const ProjectSettings = z.object({
   review: ReviewSettings.default(ReviewSettings.parse({})),
   /** Targets for the dashboard (slice 12). */
   fieldwork: FieldworkSettings.default(FieldworkSettings.parse({})),
+  /** Personal data retention (slice 13). */
+  retention: RetentionSettings.default(RetentionSettings.parse({})),
+  /** Interviewer keyboard shortcuts (slice 13). */
+  shortcuts: ShortcutSettings.default(DEFAULT_SHORTCUTS),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

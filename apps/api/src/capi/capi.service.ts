@@ -180,7 +180,7 @@ export class CapiService implements OnModuleInit {
     }
     return {
       project: { id: projectId, name: project.name },
-      settings: { capi: settings.capi },
+      settings: { capi: settings.capi, shortcuts: settings.shortcuts },
       versions: [...versions.values()].map((v) => ({
         id: v.id,
         version: v.version,

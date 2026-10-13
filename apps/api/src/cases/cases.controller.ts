@@ -25,6 +25,7 @@ import { Database, type Tx } from '../db/database.js';
 import { assignments, caseEvents, cases, contacts, sampleFields, users } from '../db/schema.js';
 import { compileRule, maskContact, maskSample, ruleError } from './case-logic.js';
 import { CasesService } from './cases.service.js';
+import { words } from './pii.js';
 
 const PERM = { projectParam: 'projectId' } as const;
 const READ = ['cases.read_all', 'cases.read_assigned'] as const;
@@ -111,11 +112,21 @@ export class CasesController {
       const canSee = this.svc.canSeePii(ctx, projectId);
       if (q.q) {
         const term = `%${q.q.replace(/[%_\\]/g, '\\$&')}%`;
-        // Personal fields are searchable only by people allowed to see them.
+        // Personal fields are searchable only by people allowed to see them: sealed ones by
+        // whole words, through their keyed hashes (H1).
         const searchable = canSee
           ? sql`${cases.sample}::text`
           : sql`(${cases.sample} - ${sql.raw(`'{${[...pii].map((f) => f.replace(/[^A-Za-z0-9_]/g, '')).join(',')}}'::text[]`)})::text`;
-        conds.push(or(ilike(cases.externalId, term), sql`${searchable} ilike ${term}`)!);
+        const tokens = canSee ? words(q.q).map((w) => this.svc.pii.token(w)) : [];
+        conds.push(
+          or(
+            ilike(cases.externalId, term),
+            sql`${searchable} ilike ${term}`,
+            ...(tokens.length
+              ? [sql`${cases.samplePiiIndex} @> ${sql.param(tokens)}::text[]`]
+              : []),
+          )!,
+        );
       }
       if (q.filter) {
         const err = ruleError(q.filter);
@@ -134,10 +145,10 @@ export class CasesController {
       if (q.filter) {
         // Rule filters run in the engine, over the already narrowed set.
         const match = compileRule(q.filter);
-        const all = (
+        const all = this.open(
           await this.selectCases(tx)
             .where(and(...conds))
-            .orderBy(by, asc(cases.id))
+            .orderBy(by, asc(cases.id)),
         ).filter(match);
         total = all.length;
         rows = all.slice((q.page - 1) * q.limit, q.page * q.limit);
@@ -147,11 +158,13 @@ export class CasesController {
           .from(cases)
           .where(and(...conds));
         total = c?.n ?? 0;
-        rows = await this.selectCases(tx)
-          .where(and(...conds))
-          .orderBy(by, asc(cases.id))
-          .limit(q.limit)
-          .offset((q.page - 1) * q.limit);
+        rows = this.open(
+          await this.selectCases(tx)
+            .where(and(...conds))
+            .orderBy(by, asc(cases.id))
+            .limit(q.limit)
+            .offset((q.page - 1) * q.limit),
+        );
       }
       const counts = await tx
         .select({ status: cases.status, n: sql<number>`count(*)::int` })
@@ -304,7 +317,10 @@ export class CasesController {
           ...(body.modePreference !== undefined ? { modePreference: body.modePreference } : {}),
           ...(status ? { status } : {}),
           ...(body.sample
-            ? { sample: sql`${cases.sample} || ${JSON.stringify(body.sample)}::jsonb` }
+            ? this.svc.pii.seal(
+                { ...(before.sample as Record<string, unknown>), ...body.sample },
+                await this.svc.piiFields(tx, projectId),
+              )
             : {}),
           updatedAt: new Date(),
         })
@@ -408,7 +424,7 @@ export class CasesController {
         const err = ruleError(body.filter || 'true');
         if (body.filter && err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
         const match = compileRule(body.filter);
-        const all = await this.selectCases(tx).where(eq(cases.projectId, projectId));
+        const all = this.open(await this.selectCases(tx).where(eq(cases.projectId, projectId)));
         ids = all.filter(match).map((c) => c.id);
       }
       if (body.onlyUnassigned && ids?.length) {
@@ -498,7 +514,7 @@ export class CasesController {
         .innerJoin(users, eq(users.id, assignments.userId))
         .where(eq(assignments.projectId, projectId))
         .orderBy(asc(assignments.createdAt));
-      const all = await this.selectCases(tx).where(eq(cases.projectId, projectId));
+      const all = this.open(await this.selectCases(tx).where(eq(cases.projectId, projectId)));
       return rows.map((r) => {
         const match = compileRule(r.filter);
         const matching = all.filter(match);
@@ -525,7 +541,9 @@ export class CasesController {
     if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const match = compileRule(body.filter);
-      const all = (await this.selectCases(tx).where(eq(cases.projectId, projectId))).filter(match);
+      const all = this.open(
+        await this.selectCases(tx).where(eq(cases.projectId, projectId)),
+      ).filter(match);
       return {
         matching: all.length,
         unassigned: all.filter((c) => !c.assignedTo && c.status === 'fresh').length,
@@ -713,12 +731,21 @@ export class CasesController {
 
   // -------------------------------------------------------------------------
 
+  /** Rows with the whole sample: plain fields and the sealed personal ones (H1). */
+  private open<T extends { sample: unknown; samplePii: string | null }>(rows: T[]) {
+    return rows.map(({ samplePii, ...r }) => ({
+      ...r,
+      sample: this.svc.pii.read({ sample: r.sample, samplePii }),
+    }));
+  }
+
   private selectCases(tx: Tx) {
     return tx
       .select({
         id: cases.id,
         externalId: cases.externalId,
         sample: cases.sample,
+        samplePii: cases.samplePii,
         status: cases.status,
         disposition: cases.disposition,
         priority: cases.priority,
@@ -726,6 +753,7 @@ export class CasesController {
         assignedTo: cases.assignedTo,
         assignedName: users.name,
         checkedOutAt: cases.checkedOutAt,
+        anonymisedAt: cases.anonymisedAt,
         updatedAt: cases.updatedAt,
       })
       .from(cases)
@@ -761,7 +789,7 @@ export class CasesController {
   ) {
     const conds = [eq(cases.id, caseId), eq(cases.projectId, projectId)];
     if (this.svc.restrictedToOwn(ctx, projectId)) conds.push(this.visibleToOwn(ctx, pool));
-    const [c] = await this.selectCases(tx).where(and(...conds));
+    const [c] = this.open(await this.selectCases(tx).where(and(...conds)));
     if (!c) throw new NotFoundException('Case not found');
     return c;
   }

@@ -10,6 +10,7 @@ import { useCan } from '../designer/hooks.js';
 import { caseVariables } from '../designer/vars.js';
 import { Button } from '../routes/ui.js';
 import { CaseMap } from './CaseMap.js';
+import { PersonalData } from './PersonalData.js';
 import { ReturnedToMe } from '../review/ReturnedToMe.js';
 import { CallHistory, InterviewHistory, StartInterview } from './CaseInterviews.js';
 import { useMe } from '../routes/AppLayout.js';
@@ -465,6 +466,7 @@ interface CaseDetail extends CaseRow {
   elsewhere?: { projectId: string; name: string; cases: number }[];
   history: { type: string; details: Record<string, unknown>; at: string; actor: string | null }[];
   pii: { masked: boolean; canReveal: boolean; auto: boolean };
+  anonymisedAt: string | null;
   canClaim: boolean;
   canRelease: boolean;
   canForceRelease?: boolean;
@@ -723,6 +725,12 @@ function CaseDrawer({
           ) : null}
           <InterviewHistory projectId={projectId} caseId={caseId} />
           <CallHistory projectId={projectId} caseId={caseId} />
+          <PersonalData
+            projectId={projectId}
+            caseId={caseId}
+            externalId={c.externalId}
+            anonymisedAt={c.anonymisedAt}
+          />
           <section aria-labelledby="cd-history">
             <h3 id="cd-history" className="mb-1 font-semibold">
               {t('cases.detail.history')}

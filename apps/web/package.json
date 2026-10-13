@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "bundle-budget": "node scripts/bundle-budget.mjs"
   },
   "dependencies": {
     "@radix-ui/react-tabs": "1.1.21",

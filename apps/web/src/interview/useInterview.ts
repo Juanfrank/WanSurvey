@@ -1,3 +1,4 @@
+import type { ShortcutSettings } from '@wansurvey/schema';
 import {
   createInterview,
   respondentFromCase,
@@ -38,7 +39,10 @@ export interface InterviewPayload {
     contacts?: { type: string; value: string; label: string | null }[];
   };
   compiled: CompiledQuestionnaire;
-  settings?: { capi?: { gps: 'off' | 'start_end'; gpsNotice: string } };
+  settings?: {
+    capi?: { gps: 'off' | 'start_end'; gpsNotice: string };
+    shortcuts?: ShortcutSettings;
+  };
   lastSeq: number;
   serverTime: string;
   /** Opened from this device's copy, with no connection. */
@@ -135,7 +139,9 @@ async function localPayload(
     },
     context: m.context as InterviewPayload['context'],
     compiled: v.compiled as CompiledQuestionnaire,
-    ...(c ? { settings: { capi: c.capi } } : {}),
+    ...(c
+      ? { settings: { capi: c.capi, ...(c.shortcuts ? { shortcuts: c.shortcuts } : {}) } }
+      : {}),
     lastSeq: local.acked,
     serverTime: new Date().toISOString(),
     offline: true,

@@ -25,7 +25,15 @@ export interface InterviewRunnerProps {
   layout?: 'item' | 'page';
   /** Force the narrow (phone) layout; detected from the viewport otherwise. */
   narrow?: boolean;
+  /** Keys for don't know and refused (a project setting); F7 and F8 by default. */
+  specialKeys?: SpecialKeys;
 }
+
+export interface SpecialKeys {
+  DK: string;
+  RF: string;
+}
+export const DEFAULT_SPECIAL_KEYS: SpecialKeys = { DK: 'F7', RF: 'F8' };
 
 function useNarrow(force?: boolean): boolean {
   const query = '(max-width: 640px)';
@@ -85,7 +93,8 @@ function openRostersBefore(session: InterviewSession, key: string | null): Trace
 
 /**
  * Runs an interview for one mode: one question per screen for interviewers, pages for
- * respondents. Keyboard: digits pick codes, Enter = next, Shift+Enter / Alt+← = back, F7/F8 = DK/RF.
+ * respondents. Keyboard: digits pick codes, Enter = next, Shift+Enter / Alt+← = back, F7/F8 = DK/RF
+ * (or the project's keys).
  */
 export function InterviewRunner(p: InterviewRunnerProps) {
   const { i18n } = useTranslation(RENDERER_NS);
@@ -265,12 +274,12 @@ function Runner(p: InterviewRunnerProps) {
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
-    if (e.key === 'F7' || e.key === 'F8') {
+    const keys = p.specialKeys ?? DEFAULT_SPECIAL_KEYS;
+    if (e.key === keys.DK || e.key === keys.RF) {
       e.preventDefault();
+      const kind = e.key === keys.DK ? 'DK' : 'RF';
       const key = focusedKey(target);
-      if (key && session.optionsFor(key).special.includes(e.key === 'F7' ? 'DK' : 'RF')) {
-        special(key, e.key === 'F7' ? 'DK' : 'RF');
-      }
+      if (key && session.optionsFor(key).special.includes(kind)) special(key, kind);
       return;
     }
     if ((e.key === 'Enter' && e.shiftKey) || (e.key === 'ArrowLeft' && e.altKey)) {
@@ -352,6 +361,7 @@ function Runner(p: InterviewRunnerProps) {
       className="flex flex-col gap-6"
       onKeyDown={onKeyDown}
       data-mode={p.mode}
+      data-testid="runner"
     >
       <div>
         <div className="flex justify-between text-sm text-slate-600">
@@ -422,6 +432,7 @@ function Runner(p: InterviewRunnerProps) {
               onRevertPrefill={revert}
               showAllErrors={showErrors}
               touch={respondent}
+              specialKeys={p.specialKeys ?? DEFAULT_SPECIAL_KEYS}
             />
           ))}
         </div>
@@ -450,7 +461,7 @@ function Runner(p: InterviewRunnerProps) {
         <div className="flex justify-between gap-3 border-t border-slate-200 pt-4">
           <button
             type="button"
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 disabled:opacity-40"
+            className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 disabled:opacity-40"
             onClick={back}
             disabled={session.path()[0]?.key === currentKey}
           >
@@ -459,7 +470,7 @@ function Runner(p: InterviewRunnerProps) {
           </button>
           <button
             type="button"
-            className="rounded-md bg-indigo-600 px-5 py-2 font-medium text-white hover:bg-indigo-700"
+            className="min-h-11 rounded-md bg-indigo-600 px-5 py-2 font-medium text-white hover:bg-indigo-700"
             onClick={next}
           >
             {t('nav.next')}

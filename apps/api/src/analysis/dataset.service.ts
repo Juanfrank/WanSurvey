@@ -123,11 +123,12 @@ export class DatasetService {
     };
   }
 
-  /** The main table, rosters left out (they are exported, not tabulated). */
+  /** The main table, rosters and personal answers left out (they are exported, not tabulated). */
   table(d: Dataset, language?: string) {
     return buildTables(d.compiled, d.interviews, {
       rosters: 'long',
       paradata: false,
+      personal: false,
       ...(language ? { language } : {}),
     }).main;
   }

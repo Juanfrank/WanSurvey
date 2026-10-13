@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { expect, type Page } from '@playwright/test';
 
@@ -13,9 +14,13 @@ export async function login(page: Page, email = PM) {
 
 const require = createRequire(import.meta.url);
 
+const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+
 /** axe-core in the real browser, including colour contrast. */
 export async function expectAccessible(page: Page, include?: string) {
-  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  // Evaluated through DevTools, which the page's Content-Security-Policy does not apply to
+  // (a script tag would be refused, as it should be).
+  await page.evaluate(axeSource);
   const violations = await page.evaluate(async (sel) => {
     const axe = (
       window as unknown as {

@@ -4,7 +4,7 @@ WanSurvey is a multi-tenant platform for survey data collection. A questionnaire
 
 ## Status
 
-The MVP is built in 13 vertical slices; twelve are done so far.
+The MVP is built in 13 vertical slices; all thirteen are done.
 
 | Slice | Scope                                                                                                                                                                                                                                                                                                                                                                                                                 | State |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
@@ -21,7 +21,7 @@ The MVP is built in 13 vertical slices; twelve are done so far.
 | 10    | **PAPI**: printable forms per case with a QR code and the paper form, keying by clerks (typed or scanned case id, numeric codes, the date and duration written on the form), and double entry with a supervisor's list of differences to resolve                                                                                                                                                                      | ✅    |
 | 11    | **Review**: statuses (in review, approved, returned with comments, rejected), a queue with quality flags and a random sample, a review screen with timings, notes, history and comment threads per question, corrections that re-run the logic, and coding of “other” answers                                                                                                                                         | ✅    |
 | 12    | **Metrics, dashboards and exports**: a background worker (BullMQ, Redis), a live dashboard (Server-Sent Events), interviewer metrics with AAPOR rates and outliers, topline and crosstabs, a printable summary and read-only links for clients, and exports to CSV, Excel, SPSS, Stata and a codebook                                                                                                                 | ✅    |
-| 13    | Hardening                                                                                                                                                                                                                                                                                                                                                                                                             |       |
+| 13    | **Hardening**: accessibility audit (keyboard-only web survey, 44 px targets, 200% zoom, reduced motion, shortcut map per project), strict Content-Security-Policy and security headers, encrypted personal fields, retention with anonymisation, data subject export and erasure, a bundle budget, k6 load scripts, and the operations, security (ASVS L2) and accessibility guides                                   | ✅    |
 
 Background reading:
 
@@ -29,6 +29,10 @@ Background reading:
 - [`docs/logic-language.md`](docs/logic-language.md): the expression language
 - [`docs/decisions.md`](docs/decisions.md): assumptions taken where the spec was ambiguous
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
+- [`docs/operations.md`](docs/operations.md): running it in production (processes, configuration, jobs, backups, retention)
+- [`docs/security.md`](docs/security.md): the OWASP ASVS level 2 checklist and personal data handling
+- [`docs/accessibility.md`](docs/accessibility.md): WCAG 2.2 AA audit results and the keyboard map
+- [`docs/acceptance.md`](docs/acceptance.md): the MVP acceptance criteria and the tests that prove them
 
 Questionnaires are written and conducted in Spanish; other languages can be added and are edited one at a time. The interface is in Spanish by default, with English available.
 
