@@ -129,6 +129,8 @@ test('team metrics, topline, crosstab, summary and a client link', async ({ page
   await shot(client, 'summary');
   await expectAccessible(client);
   await page.getByTestId('share-links').getByRole('button', { name: 'Revoke' }).first().click();
+  // Only once the revocation is recorded (the list says so) does the link stop working.
+  await expect(page.getByTestId('share-links')).toContainText('revoked');
   await client.reload();
   await expect(client.getByRole('alert')).toHaveText('This link is not valid or has expired.');
 });
