@@ -1,9 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, type Me } from '../api.js';
-import { LANGUAGES, setLanguage } from '../i18n.js';
+import { AccountMenu } from './AccountMenu.js';
+import { EyeIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
+import { useMedia, useStoredFlag } from './SideDrawer.js';
 
 const ME_KEY = 'wansurvey.me';
 
@@ -51,7 +53,7 @@ export function forgetCachedMe() {
 
 /** Signed-in area: organisation switcher, language, sign out. Sends people where their session needs them. */
 export function AppLayout() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -80,96 +82,121 @@ export function AppLayout() {
   if (!me.data) return <main className="p-8 text-slate-500" aria-busy="true" />;
   const waiting = me.data.access.state === 'no_role';
 
-  // Navy side panel on wide screens; below 900 px it becomes a top bar with pill tabs.
-  const navLink =
-    'flex-none rounded-full px-3 py-1.5 text-sm font-medium text-sidebar hover:bg-white/10 hover:text-white min-[900px]:rounded-lg min-[900px]:px-3 min-[900px]:py-2.5 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-white';
-  const control =
-    'w-full rounded-md border border-white/20 bg-white/10 px-2 py-1.5 text-sm text-white [&_option]:text-slate-800';
   return (
     <div className="min-h-screen min-[900px]:flex">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-10 focus:rounded focus:bg-white focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2"
       >
         {t('app.skip')}
       </a>
-      <header className="no-print bg-navy text-white min-[900px]:w-74 min-[900px]:flex-none">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:flex-col min-[900px]:overflow-y-auto min-[900px]:flex-nowrap min-[900px]:items-stretch min-[900px]:gap-6 min-[900px]:px-4 min-[900px]:py-6">
-          <Link
-            to="/"
-            className="px-1 text-lg font-bold uppercase tracking-wide text-white min-[900px]:px-3 min-[900px]:text-xl"
-          >
-            {t('app.name')}
-          </Link>
-          {!waiting ? (
-            <nav
-              aria-label="Main"
-              className="flex min-w-0 gap-1 overflow-x-auto min-[900px]:flex-col min-[900px]:overflow-visible"
-            >
-              <Link to="/" className={navLink} activeOptions={{ exact: true }}>
-                {t('app.home')}
-              </Link>
-              <Link to="/projects" className={navLink}>
-                {t('app.projects')}
-              </Link>
-              <Link to="/preview" className={navLink}>
-                {t('app.preview')}
-              </Link>
-            </nav>
-          ) : null}
-          <div className="flex w-full flex-wrap items-end gap-3 text-sm min-[900px]:mt-auto min-[900px]:flex-col min-[900px]:flex-nowrap min-[900px]:items-stretch min-[900px]:border-t min-[900px]:border-white/15 min-[900px]:pt-5">
-            <label className="flex min-w-40 flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-sidebar">
-                {t('app.organisation')}
-              </span>
-              <select
-                className={control}
-                value={me.data.tenantId}
-                onChange={(e) => void switchTenant(e.target.value)}
-              >
-                {me.data.tenants.map((tn) => (
-                  <option key={tn.id} value={tn.id}>
-                    {tn.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-32 flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-sidebar">
-                {t('app.language')}
-              </span>
-              <select
-                className={control}
-                value={i18n.resolvedLanguage}
-                onChange={(e) => void setLanguage(e.target.value)}
-              >
-                {LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex w-full min-w-0 items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sidebar" title={me.data.user.email}>
-                {me.data.user.email}
-              </span>
-              <button
-                type="button"
-                className="flex-none rounded-md border border-white/25 px-3 py-1.5 font-semibold text-white hover:bg-white/10"
-                onClick={() => void logout()}
-              >
-                {t('app.signOut')}
-              </button>
-            </div>
+      <SidePanel waiting={waiting} />
+      <main id="main" className="min-w-0 flex-1 px-4 py-4 min-[900px]:px-8 min-[900px]:py-5">
+        <div className="mx-auto flex max-w-7xl flex-col">
+          <div className="no-print mb-3 flex justify-end">
+            <AccountMenu
+              me={me.data}
+              onSwitchTenant={(id) => void switchTenant(id)}
+              onSignOut={() => void logout()}
+            />
           </div>
-        </div>
-      </header>
-      <main id="main" className="min-w-0 flex-1 px-4 py-6 min-[900px]:px-8 min-[900px]:py-7">
-        <div className="mx-auto max-w-7xl">
           <Outlet />
         </div>
       </main>
     </div>
+  );
+}
+
+/** Wide screens with no saved choice start compact on small laptops and tablets. */
+const COMPACT_UP_TO = '(max-width: 1180px)';
+
+/**
+ * The navy side panel. On wide screens it is pinned open (296 px) or compact (a 72 px rail of
+ * icons that opens over the content while the pointer or keyboard focus is on it); the burger
+ * switches between the two and the choice is remembered. Below 900 px it is a top bar with
+ * the pages as pill tabs.
+ */
+function SidePanel({ waiting }: { waiting: boolean }) {
+  const { t } = useTranslation();
+  const wide = useMedia('(min-width: 900px)');
+  const small = useMedia(COMPACT_UP_TO);
+  const [compact, setCompact] = useStoredFlag('ws.sidebar.compact', small);
+  const [over, setOver] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const isCompact = wide && compact;
+  const rail = isCompact && !over && !focused;
+
+  const link = (to: string, label: string, icon: ReactNode, exact = false) => (
+    <Link
+      to={to}
+      activeOptions={exact ? { exact: true } : undefined}
+      title={rail ? label : undefined}
+      className={`flex flex-none items-center gap-3 rounded-full border border-white/20 px-3.5 py-1.5 text-sm font-medium text-sidebar hover:bg-white/10 hover:text-white min-[900px]:rounded-lg min-[900px]:border-0 min-[900px]:py-2.5 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-white ${
+        rail ? 'min-[900px]:h-10 min-[900px]:w-10 min-[900px]:justify-center min-[900px]:px-0' : ''
+      }`}
+    >
+      <span className="hidden min-[900px]:inline">{icon}</span>
+      <span className={rail ? 'sr-only' : 'truncate'}>{label}</span>
+    </Link>
+  );
+
+  return (
+    <header
+      className={`no-print relative z-30 flex-none bg-navy text-white min-[900px]:transition-[width] min-[900px]:duration-200 ${
+        isCompact ? 'min-[900px]:w-18' : 'min-[900px]:w-74'
+      }`}
+      onMouseEnter={() => setOver(true)}
+      onMouseLeave={() => setOver(false)}
+      onFocus={(e) => setFocused(e.target.matches(':focus-visible'))}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+      }}
+    >
+      <div
+        className={`flex flex-col gap-3 bg-navy px-4 py-3 min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:gap-6 min-[900px]:overflow-y-auto min-[900px]:overflow-x-hidden min-[900px]:py-6 min-[900px]:transition-[width] min-[900px]:duration-200 ${
+          rail ? 'min-[900px]:w-18 min-[900px]:items-center min-[900px]:px-4' : 'min-[900px]:w-74'
+        } ${isCompact && !rail ? 'min-[900px]:shadow-card' : ''}`}
+      >
+        <div className={`flex items-center gap-2 ${rail ? 'min-[900px]:flex-col' : ''}`}>
+          <Link
+            to="/"
+            className={`flex-1 truncate px-1 text-lg font-bold uppercase tracking-wide text-white min-[900px]:px-3 min-[900px]:text-xl ${
+              rail ? 'min-[900px]:sr-only' : ''
+            }`}
+          >
+            {t('app.name')}
+          </Link>
+          {wide ? (
+            <button
+              type="button"
+              aria-pressed={!compact}
+              aria-label={compact ? t('app.expandPanel') : t('app.compactPanel')}
+              title={compact ? t('app.expandPanel') : t('app.compactPanel')}
+              onClick={() => {
+                setCompact(!compact);
+                setOver(false);
+              }}
+              className={`grid h-10 w-10 flex-none place-items-center rounded-lg text-white ${
+                compact
+                  ? 'bg-white/10 hover:bg-white/20'
+                  : 'bg-indigo-600 shadow-[0_0_0_2px_rgb(255_255_255/0.28)] hover:bg-indigo-500'
+              }`}
+            >
+              <MenuIcon className="h-5 w-5" />
+            </button>
+          ) : null}
+        </div>
+        {!waiting ? (
+          <nav
+            aria-label="Main"
+            className="-mx-4 flex min-w-0 gap-2 overflow-x-auto px-4 pb-1 min-[900px]:mx-0 min-[900px]:flex-col min-[900px]:gap-1 min-[900px]:overflow-visible min-[900px]:px-0"
+          >
+            {link('/', t('app.home'), <HomeIcon />, true)}
+            {link('/projects', t('app.projects'), <FolderIcon />)}
+            {link('/preview', t('app.preview'), <EyeIcon />)}
+          </nav>
+        ) : null}
+      </div>
+    </header>
   );
 }

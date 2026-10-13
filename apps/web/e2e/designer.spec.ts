@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { expectAccessible, login, shot } from './helpers.js';
+import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const outlineItem = (page: Page, name: string) =>
   page.getByRole('treeitem').filter({ has: page.locator(`span.font-mono:text-is("${name}")`) });
@@ -15,14 +15,7 @@ async function saved(page: Page) {
 async function newQuestionnaire(page: Page, name: string, untick: string[] = []) {
   await login(page);
   // Other specs switch organisation, and the last one used opens by default.
-  const org = page.getByRole('combobox', { name: 'Organisation' });
-  await expect(org).toBeVisible();
-  if (
-    (await org.inputValue()) !==
-    (await org.locator('option', { hasText: 'Demo Research' }).getAttribute('value'))
-  )
-    await org.selectOption({ label: 'Demo Research' });
-  await expect(org.locator('option:checked')).toHaveText('Demo Research');
+  await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Projects' })
@@ -213,6 +206,51 @@ test('a questionnaire takes its modes at creation (Q1)', async ({ page }) => {
   await expect(chips).not.toContainText('PAPI');
 });
 
+test('the outline collapses to a rail whose pane opens over the editor, and pins back', async ({
+  page,
+}) => {
+  await newQuestionnaire(page, 'Outline drawer');
+  const tree = page.getByRole('tree', { name: 'Outline' });
+  const editor = page.getByRole('region', { name: 'Item editor' });
+  await page.getByRole('button', { name: 'Unpin: Outline' }).click();
+  await expect(tree).toBeHidden();
+  const rail = page.getByRole('button', { name: 'Outline', exact: true });
+  await expect(rail).toHaveAttribute('aria-expanded', 'false');
+  await shot(page, 'designer-outline-rail', { fullPage: false });
+  const before = await editor.boundingBox();
+
+  // Alt+O opens the pane over the editor (which does not move), focus on the current row.
+  await page.keyboard.press('Alt+o');
+  await expect(tree).toBeVisible();
+  await expect(page.getByRole('treeitem', { selected: true })).toBeFocused();
+  expect(await editor.boundingBox()).toEqual(before);
+  await shot(page, 'designer-outline-over', { fullPage: false });
+  await expectAccessible(page);
+  // Enter goes to the editor and the pane collapses.
+  await outlineItem(page, 'SEC_A').focus();
+  await page.keyboard.press('Enter');
+  await expect(tree).toBeHidden();
+  await expect(editor.locator(':focus')).toHaveCount(1);
+
+  // Pointing at the rail opens it; moving away closes it.
+  await rail.hover();
+  await expect(tree).toBeVisible();
+  await page.mouse.move(900, 600);
+  await expect(tree).toBeHidden();
+  // A click keeps it open until Escape.
+  await rail.click();
+  await page.mouse.move(900, 600);
+  await expect(tree).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tree).toBeHidden();
+
+  // Pinned again, it is a column beside the editor.
+  await rail.click();
+  await page.getByRole('button', { name: 'Keep open: Outline' }).click();
+  await expect(tree).toBeVisible();
+  await expect(rail).toHaveCount(0);
+});
+
 test('a failing saved scenario blocks publishing', async ({ page }) => {
   await newQuestionnaire(page, 'Scenario guard');
   await outlineItem(page, 'SEC_A').focus();
@@ -370,10 +408,7 @@ test('the routing map, outline arcs and nested condition builder on the househol
   page,
 }) => {
   await login(page);
-  const org = page.getByRole('combobox', { name: 'Organisation' });
-  await expect(org).toBeVisible();
-  if ((await org.locator('option:checked').textContent()) !== 'Demo Research')
-    await org.selectOption({ label: 'Demo Research' });
+  await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Projects' })

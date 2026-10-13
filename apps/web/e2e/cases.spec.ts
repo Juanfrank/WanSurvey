@@ -1,16 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { sampleTable } from '@wansurvey/fixtures';
 import ExcelJS from 'exceljs';
-import { expectAccessible, login, shot } from './helpers.js';
+import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
 
 async function openProject(page: Page, email?: string) {
   await login(page, email);
-  const org = page.getByRole('combobox', { name: 'Organisation' });
-  await expect(org).toBeVisible();
-  if ((await org.locator('option:checked').textContent()) !== 'Demo Research')
-    await org.selectOption({ label: 'Demo Research' });
+  await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Projects' })

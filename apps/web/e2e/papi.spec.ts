@@ -2,7 +2,7 @@ import { hash } from '@node-rs/argon2';
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
-import { PASSWORD, PM, expectAccessible, login, shot } from './helpers.js';
+import { PASSWORD, PM, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
 const CLERK2 = 'second.clerk@demo.wansurvey.test';
@@ -12,10 +12,7 @@ const adminUrl =
 
 async function openPaper(page: Page, email: string) {
   await login(page, email);
-  const org = page.getByRole('combobox', { name: 'Organisation' });
-  await expect(org).toBeVisible();
-  if ((await org.locator('option:checked').textContent()) !== 'Demo Research')
-    await org.selectOption({ label: 'Demo Research' });
+  await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Projects' })

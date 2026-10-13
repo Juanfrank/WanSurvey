@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectAccessible, login, PM, shot } from './helpers.js';
+import { expectAccessible, login, openAccount, pickOrganisation, PM, shot } from './helpers.js';
 
 test('sign in, switch organisation, sign out', async ({ page }) => {
   await page.goto('/login');
@@ -8,13 +8,38 @@ test('sign in, switch organisation, sign out', async ({ page }) => {
   await login(page);
   await expect(page.getByRole('heading', { name: /Welcome, project_manager/ })).toBeVisible();
   await expect(page.getByText('Household Survey 2026')).toBeVisible();
-  await page.getByLabel('Organisation').selectOption({ label: 'Second Agency' });
+  await pickOrganisation(page, 'Second Agency');
   await expect(page.getByText('Business Panel')).toBeVisible();
   await expect(page.getByText('Household Survey 2026')).toHaveCount(0);
-  await page.getByLabel('Language').selectOption('es');
+  await openAccount(page);
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('es');
   await expect(page.getByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
   await expect(page).toHaveURL(/\/login$/);
+});
+
+test('the side panel compacts to a rail of icons, opens over the page on hover, and is remembered', async ({
+  page,
+}) => {
+  await login(page);
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const panel = page.locator('header').first();
+  const wide = (await panel.boundingBox())!.width;
+  expect(wide).toBeGreaterThan(280);
+  await openAccount(page);
+  await shot(page, 'account-menu');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Compact the side panel' }).click();
+  await page.mouse.move(800, 400);
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(80);
+  // The links keep their names for screen readers.
+  await expect(nav.getByRole('link', { name: 'Projects' })).toBeVisible();
+  await shot(page, 'side-panel-compact');
+  await expectAccessible(page);
+  await page.reload();
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(80);
+  await page.getByRole('button', { name: 'Keep the side panel open' }).click();
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(280);
 });
 
 test('wrong password shows a clear error', async ({ page }) => {

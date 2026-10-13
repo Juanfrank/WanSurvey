@@ -27,6 +27,12 @@ const en = {
     preview: 'Questionnaire preview',
     projects: 'Projects',
     skip: 'Skip to content',
+    account: 'Account: {{name}}',
+    compactPanel: 'Compact the side panel',
+    expandPanel: 'Keep the side panel open',
+    pin: 'Keep open',
+    unpin: 'Unpin',
+    close: 'Close',
   },
   login: {
     title: 'Sign in',
@@ -161,6 +167,12 @@ const es: Catalogue = {
     preview: 'Vista previa del cuestionario',
     projects: 'Proyectos',
     skip: 'Ir al contenido',
+    account: 'Cuenta: {{name}}',
+    compactPanel: 'Compactar el panel lateral',
+    expandPanel: 'Mantener abierto el panel lateral',
+    pin: 'Mantener fijo',
+    unpin: 'Desfijar',
+    close: 'Cerrar',
   },
   login: {
     title: 'Iniciar sesión',
@@ -316,6 +328,15 @@ export function setLanguage(lng: string) {
   } catch {
     /* private mode: the choice just isn't remembered */
   }
+  document.documentElement.lang = lng;
+  return i18next.changeLanguage(lng);
+}
+
+/**
+ * Shows the interface in another language for a moment without remembering it: screenshots
+ * are taken in Spanish while tests drive the English interface.
+ */
+export function previewLanguage(lng: string) {
   document.documentElement.lang = lng;
   return i18next.changeLanguage(lng);
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
-import { expectAccessible, login, shot } from './helpers.js';
+import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const adminUrl =
@@ -25,10 +25,7 @@ test('download cases, interview offline after a reload, and everything arrives o
   const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
   try {
     await login(page, INTERVIEWER);
-    const org = page.getByRole('combobox', { name: 'Organisation' });
-    await expect(org).toBeVisible();
-    if ((await org.locator('option:checked').textContent()) !== 'Demo Research')
-      await org.selectOption({ label: 'Demo Research' });
+    await pickOrganisation(page, 'Demo Research');
     await page
       .getByRole('navigation', { name: 'Main' })
       .getByRole('link', { name: 'Projects' })

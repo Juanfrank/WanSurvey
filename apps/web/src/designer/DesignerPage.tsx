@@ -8,6 +8,8 @@ import { api } from '../api.js';
 import { DiagnosticsPanel, ScenariosPanel } from '../preview/panels.js';
 import { PreviewWorkbench } from '../preview/PreviewPage.js';
 import { usePreview } from '../preview/usePreview.js';
+import { ListIcon } from '../routes/icons.js';
+import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button, Card } from '../routes/ui.js';
 import { TypeEnvContext } from './context.js';
 import { Dialog } from './Dialog.js';
@@ -49,6 +51,24 @@ export function DesignerPage() {
   );
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const editorRef = useRef<HTMLElement>(null);
+  const outline = useDrawer('ws.outline.pinned');
+  // Alt+O, anywhere on the Design tab: the outline (opens the drawer when it is not pinned,
+  // closes it when open, and puts focus on the current row).
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.code !== 'KeyO' || tab !== 'design') return;
+      e.preventDefault();
+      if (!outline.inline && outline.open) return outline.setOpen(false);
+      if (!outline.inline) outline.setOpen(true);
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>('#designer-outline [role=treeitem][tabindex="0"]')
+          ?.focus(),
+      );
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [outline, tab]);
   const canComment = useCan('questionnaires.comment', projectId) || canEdit;
   const comments = useComments(projectId, qid);
   const commentCounts = useMemo(() => openCounts(comments.data), [comments.data]);
@@ -116,6 +136,7 @@ export function DesignerPage() {
   };
 
   const focusEditor = () => {
+    outline.setOpen(false);
     const first = editorRef.current?.querySelector<HTMLElement>(
       'input:not([type=hidden]), select, textarea, button[role=tab]',
     );
@@ -255,23 +276,34 @@ export function DesignerPage() {
               </Tabs.Trigger>
             </Tabs.List>
 
-            <Tabs.Content value="design" className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-              <Outline
-                draft={draft}
-                selected={selected}
-                onSelect={setSelected}
-                change={d.change}
-                errorsById={errorsById}
-                routing={routing}
-                lang={lang}
-                readOnly={!canEdit}
-                onRename={() => setRenameTick((n) => n + 1)}
-                onEnter={focusEditor}
-                announce={setMessage}
-                others={others}
-                commentCounts={commentCounts}
-                onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
-              />
+            <Tabs.Content
+              value="design"
+              className={`grid gap-4 lg:gap-6 ${outline.inline ? 'lg:grid-cols-[22rem_minmax(0,1fr)]' : 'grid-cols-[3rem_minmax(0,1fr)]'}`}
+            >
+              <SideDrawer
+                id="designer-outline"
+                drawer={outline}
+                side="left"
+                label={t('designer.outline.title')}
+                icon={<ListIcon />}
+              >
+                <Outline
+                  draft={draft}
+                  selected={selected}
+                  onSelect={setSelected}
+                  change={d.change}
+                  errorsById={errorsById}
+                  routing={routing}
+                  lang={lang}
+                  readOnly={!canEdit}
+                  onRename={() => setRenameTick((n) => n + 1)}
+                  onEnter={focusEditor}
+                  announce={setMessage}
+                  others={others}
+                  commentCounts={commentCounts}
+                  onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
+                />
+              </SideDrawer>
               <div className="flex min-w-0 flex-col gap-4">
                 <section
                   ref={editorRef}

@@ -15,6 +15,8 @@ import { api, apiFull } from '../api.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
+import { PhoneIcon } from '../routes/icons.js';
+import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button } from '../routes/ui.js';
 
 interface Script {
@@ -56,8 +58,16 @@ interface Callback {
   caseId: string;
   externalId: string;
   at: string;
+  due: boolean;
   mine: boolean;
+  forUserName: string | null;
   timezone: string;
+  kind: 'callback' | 'appointment';
+  bookedBy: string | null;
+  note: string | null;
+  attempts: number;
+  callableNow: boolean;
+  reason: string | null;
 }
 
 /** Outcomes an answered call can still end with, when its interview stopped early. */
@@ -119,6 +129,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
     return () => clearInterval(timer);
   }, []);
 
+  const drawer = useDrawer('ws.callbacks.pinned');
   const callbacks = useQuery({
     queryKey: ['cati-callbacks', projectId],
     queryFn: () => api<Callback[]>(`/projects/${projectId}/cati/callbacks`),
@@ -130,7 +141,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
     for (const c of callbacks.data ?? []) {
       if (new Date(c.at).getTime() <= now && !announced.current.has(c.caseId)) {
         announced.current.add(c.caseId);
-        setDue(t('cati.callbackDue', { id: c.externalId }));
+        setDue(c.externalId);
       }
     }
   }, [callbacks.data, now, t]);
@@ -146,7 +157,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
 
   /** `current`: only the caller's open call, if any (opening the tab never takes a case). */
   const next = useCallback(
-    async (current = false) => {
+    async (current = false, caseId?: string) => {
       if (busy) return;
       setBusy(true);
       if (!current) setMessage('');
@@ -156,7 +167,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
           ? await apiFull<Served>(`/projects/${projectId}/cati/current`)
           : await apiFull<Served>(`/projects/${projectId}/cati/next`, {
               method: 'POST',
-              body: qid ? { questionnaireId: qid } : {},
+              body: { ...(qid ? { questionnaireId: qid } : {}), ...(caseId ? { caseId } : {}) },
             });
         if (current && r.status === 204) return;
         reset();
@@ -177,11 +188,12 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
         }
       } catch (e) {
         setMessage(localiseError(t, e));
+        if (caseId) void qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
       } finally {
         setBusy(false);
       }
     },
-    [busy, projectId, qid, t],
+    [busy, projectId, qid, t, qc],
   );
 
   // An open call (after a reload or coming back from the interview) is shown straight away.
@@ -354,7 +366,10 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
     });
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]" data-testid="calls">
+    <div
+      className={`grid gap-4 ${drawer.inline ? 'lg:grid-cols-[minmax(0,1fr)_20rem]' : 'grid-cols-[minmax(0,1fr)_3rem]'}`}
+      data-testid="calls"
+    >
       <section aria-labelledby="calls-title" className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <h2 id="calls-title" className="text-lg font-semibold">
@@ -388,7 +403,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
           className="empty:hidden rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"
           data-testid="callback-due"
         >
-          {due}
+          {due ? t('cati.callbackDue', { id: due }) : ''}
         </p>
         {!served && idle ? (
           <p className="text-slate-700" data-testid="queue-empty">
@@ -640,38 +655,149 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
         ) : null}
       </section>
 
-      <aside aria-labelledby="calls-callbacks" className="text-sm">
-        <h3 id="calls-callbacks" className="mb-2 font-semibold">
-          {t('cati.callbacks')}
-        </h3>
-        {callbacks.data?.length ? (
-          <ul className="flex flex-col gap-1" data-testid="callbacks">
-            {callbacks.data.map((c) => {
-              const at = new Date(c.at);
-              const isDue = at.getTime() <= now;
-              return (
-                <li
-                  key={c.caseId}
-                  className={`rounded-md border px-2 py-1 ${isDue ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}
-                >
-                  <span className="font-medium">{c.externalId}</span> ·{' '}
-                  {at.toLocaleString(i18n.language, {
-                    dateStyle: 'short',
-                    timeStyle: 'short',
-                  })}
-                  {isDue ? <span className="ml-1 font-semibold">({t('cati.due')})</span> : null}
-                  <span className="block text-xs text-slate-600">
-                    {t('cati.theirTime', { time: theirTime(at, c.timezone), tz: c.timezone })}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-slate-600">{t('cati.noCallbacks')}</p>
-        )}
-      </aside>
+      <SideDrawer
+        id="calls-callbacks-drawer"
+        drawer={drawer}
+        side="right"
+        label={t('cati.callbacks')}
+        icon={<PhoneIcon className="h-[18px] w-[18px]" />}
+        badge={callbacks.data?.filter((c) => new Date(c.at).getTime() <= now).length}
+        className="text-sm"
+      >
+        <Callbacks
+          rows={callbacks.data ?? []}
+          now={now}
+          canCall={!served && !busy}
+          onCall={(c) => {
+            drawer.setOpen(false);
+            void next(false, c.caseId);
+          }}
+        />
+      </SideDrawer>
     </div>
+  );
+}
+
+/**
+ * The caller's callbacks and appointments, in three groups: due now, later today and coming
+ * up. Each says when (in the caller's and the respondent's time), for whom, who booked it and
+ * why, and can be called straight away when the queue rules allow it.
+ */
+function Callbacks({
+  rows,
+  now,
+  canCall,
+  onCall,
+}: {
+  rows: Callback[];
+  now: number;
+  canCall: boolean;
+  onCall(c: Callback): void;
+}) {
+  const { t, i18n } = useTranslation();
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+  const group = (c: Callback) => {
+    const at = new Date(c.at).getTime();
+    return at <= now ? 'overdue' : at <= endOfDay.getTime() ? 'today' : 'later';
+  };
+  const groups = (['overdue', 'today', 'later'] as const)
+    .map((g) => ({ g, items: rows.filter((c) => group(c) === g) }))
+    .filter((x) => x.items.length);
+  const fmt = (at: Date, opts: Intl.DateTimeFormatOptions) =>
+    at.toLocaleString(i18n.language, opts);
+
+  return (
+    <section aria-labelledby="calls-callbacks" className="flex flex-col gap-3">
+      <h3 id="calls-callbacks" className="text-base font-bold">
+        {t('cati.callbacks')}
+      </h3>
+      {!groups.length ? <p className="text-slate-600">{t('cati.noCallbacks')}</p> : null}
+      <div className="flex flex-col gap-4" data-testid="callbacks">
+        {groups.map(({ g, items }) => (
+          <section key={g} aria-labelledby={`cb-${g}`} data-testid={`callbacks-${g}`}>
+            <h4 id={`cb-${g}`} className="eyebrow mb-1.5">
+              {t(`cati.callbacksGroup.${g}`)} · {items.length}
+            </h4>
+            <ul className="flex flex-col gap-2">
+              {items.map((c) => {
+                const at = new Date(c.at);
+                const sameDay = at.toDateString() === new Date(now).toDateString();
+                const when = fmt(
+                  at,
+                  sameDay ? { timeStyle: 'short' } : { dateStyle: 'medium', timeStyle: 'short' },
+                );
+                return (
+                  <li
+                    key={c.caseId}
+                    data-case-id={c.caseId}
+                    className={`flex flex-col gap-1 rounded-lg border bg-white p-3 shadow-sm ${
+                      g === 'overdue' ? 'border-amber-300 bg-amber-50' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <b className="text-navy">{c.externalId}</b>
+                      <span className="rounded-full bg-indigo-50 px-2 text-xs font-semibold text-indigo-700">
+                        {t(`cati.kind.${c.kind}`)}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 text-xs font-semibold text-slate-700">
+                        {c.mine
+                          ? t('cati.forMeTag')
+                          : c.forUserName
+                            ? t('cati.forOther', { name: c.forUserName })
+                            : t('cati.forAnyoneTag')}
+                      </span>
+                      {g === 'overdue' ? (
+                        <span className="text-xs font-semibold text-amber-900">
+                          ({t('cati.due')})
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="tabular-nums">
+                      {t('cati.yourTime', { time: when })}
+                      <span className="block text-xs text-slate-600">
+                        {t('cati.theirTime', {
+                          time: fmt(at, {
+                            timeZone: c.timezone,
+                            weekday: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }),
+                          tz: c.timezone,
+                        })}
+                      </span>
+                    </p>
+                    {c.bookedBy || c.note ? (
+                      <p className="text-xs text-slate-600">
+                        {c.bookedBy ? t('cati.bookedBy', { name: c.bookedBy }) : null}
+                        {c.note ? <span className="block italic">“{c.note}”</span> : null}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:bg-slate-200 disabled:text-slate-600"
+                        disabled={!canCall || !c.callableNow}
+                        aria-label={t('cati.callNowCase', { id: c.externalId })}
+                        onClick={() => onCall(c)}
+                      >
+                        <PhoneIcon className="h-3.5 w-3.5" />
+                        {t('cati.callNow')}
+                      </button>
+                      {!c.callableNow && c.reason ? (
+                        <span className="text-xs text-slate-600">
+                          {t(`cati.notCallable.${c.reason}`, { defaultValue: c.reason })}
+                        </span>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
-import { PM, expectAccessible, login, shot } from './helpers.js';
+import { PM, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const adminUrl =
@@ -8,10 +8,7 @@ const adminUrl =
 
 async function openProject(page: Page, email: string) {
   await login(page, email);
-  const org = page.getByRole('combobox', { name: 'Organisation' });
-  await expect(org).toBeVisible();
-  if ((await org.locator('option:checked').textContent()) !== 'Demo Research')
-    await org.selectOption({ label: 'Demo Research' });
+  await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Projects' })
@@ -76,14 +73,26 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await shot(page, 'cati-callback');
     await page.keyboard.press('Control+Enter');
     await expect(page.getByTestId('calls-message')).toContainText('Saved: Call back later');
-    await expect(page.getByTestId('callbacks')).toContainText(caseId);
+    const mine = page.getByTestId('callbacks').locator('li').filter({ hasText: caseId });
+    await expect(mine).toContainText('For me');
+    await expect(mine).toContainText('Booked by');
 
-    // Time passes: the callback is due, announced, and served before new cases.
+    // Time passes: the callback is due, announced, listed as due now, and called from the list.
     await sql`update cases set next_contact_at = now() - interval '1 minute' where external_id = ${caseId}`;
     await page.reload();
     await page.getByRole('tab', { name: 'Phone calls' }).click();
     await expect(page.getByTestId('callback-due')).toContainText(`Callback due: case ${caseId}`);
-    await page.keyboard.press('n');
+    await expect(page.getByTestId('callbacks-overdue')).toContainText(caseId);
+    await shot(page, 'cati-callbacks');
+    await expectAccessible(page);
+    // Collapsed, a rail beside the calls counts what is due; it opens over the call area.
+    await page.getByRole('button', { name: 'Unpin: My callbacks' }).click();
+    const rail = page.getByRole('complementary', { name: 'My callbacks' });
+    await expect(rail).toContainText('1');
+    await shot(page, 'cati-callbacks-rail', { fullPage: false });
+    await rail.getByRole('button', { name: 'My callbacks', exact: true }).click();
+    await shot(page, 'cati-callbacks-over', { fullPage: false });
+    await page.getByRole('button', { name: `Call now: case ${caseId}` }).click();
     await expect(calls.locator('form[data-case]')).toHaveAttribute('data-case', caseId);
 
     // 1: answered — the telephone interview opens; consent No ends it.

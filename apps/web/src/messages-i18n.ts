@@ -86,6 +86,9 @@ export const messagesEn = {
     not_a_code: '{{to}} is not a code of this question',
   },
   apiError: {
+    CALL_OPEN: 'Finish the call in progress first.',
+    CANNOT_CALL: 'This case cannot be called now.',
+    MODE_NOT_IN_QUESTIONNAIRE: 'This questionnaire is not fielded in this mode.',
     COMMENT_REQUIRED: 'Say what the interviewer should fix.',
     BAD_TRANSITION: 'The interview cannot change to that status now.',
     PATH_INCOMPLETE: 'This change opens questions with no answer; return the interview instead.',
@@ -211,6 +214,9 @@ export const messagesEs: MessagesCatalogue = {
     not_a_code: '{{to}} no es un código de esta pregunta',
   },
   apiError: {
+    CALL_OPEN: 'Termine primero la llamada en curso.',
+    CANNOT_CALL: 'Este caso no se puede llamar ahora.',
+    MODE_NOT_IN_QUESTIONNAIRE: 'Este cuestionario no se aplica en este modo.',
     COMMENT_REQUIRED: 'Indique qué debe corregir el entrevistador.',
     BAD_TRANSITION: 'La entrevista no puede pasar a ese estado ahora.',
     PATH_INCOMPLETE: 'Este cambio abre preguntas sin respuesta; devuelva la entrevista.',
