@@ -51,8 +51,18 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
   await expect(r.locator('[data-qkey^="A0_CONSENT_TEXT"]')).toContainText('estamos realizando');
   await shot(r, 'respondent-phone');
   await expectAccessible(r);
+  // The move to the next page is written on the phone and then sent: wait for the send,
+  // since the status already read "saved" before the click.
+  const sent = r.waitForResponse(
+    (res) =>
+      res.url().includes('/sync') &&
+      res.request().method() === 'POST' &&
+      (res.request().postData() ?? '').includes('"key":"A1') &&
+      res.ok(),
+  );
   await r.getByRole('button', { name: 'Siguiente' }).click();
   await expect(r.locator('[data-qkey^="A1"]')).toBeVisible();
+  await sent;
   await expect(r.getByTestId('respondent-save')).toHaveText('Respuestas guardadas');
 
   // Reload: the survey continues where it was.
