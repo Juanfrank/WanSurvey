@@ -93,8 +93,8 @@ export function AppLayout() {
       >
         {t('app.skip')}
       </a>
-      <header className="no-print bg-navy text-white min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:w-74 min-[900px]:flex-none min-[900px]:overflow-y-auto">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 min-[900px]:h-full min-[900px]:flex-col min-[900px]:flex-nowrap min-[900px]:items-stretch min-[900px]:gap-6 min-[900px]:px-4 min-[900px]:py-6">
+      <header className="no-print bg-navy text-white min-[900px]:w-74 min-[900px]:flex-none">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:flex-col min-[900px]:overflow-y-auto min-[900px]:flex-nowrap min-[900px]:items-stretch min-[900px]:gap-6 min-[900px]:px-4 min-[900px]:py-6">
           <Link
             to="/"
             className="px-1 text-lg font-bold uppercase tracking-wide text-white min-[900px]:px-3 min-[900px]:text-xl"

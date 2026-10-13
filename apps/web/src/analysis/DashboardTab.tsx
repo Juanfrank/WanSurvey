@@ -116,10 +116,10 @@ export function DashboardTab({ projectId }: { projectId: string }) {
                 <thead>
                   <tr className="text-left text-slate-600">
                     <th scope="col">{t('analysis.live.quotaCell')}</th>
-                    <th scope="col" className="text-right">
+                    <th scope="col" className="pl-3 text-right">
                       {t('analysis.live.quotaCount')}
                     </th>
-                    <th scope="col" className="text-right">
+                    <th scope="col" className="pl-3 text-right">
                       {t('analysis.live.quotaMax')}
                     </th>
                     <th scope="col" className="w-1/3">
@@ -133,8 +133,8 @@ export function DashboardTab({ projectId }: { projectId: string }) {
                       <th scope="row" className="py-1 text-left font-normal">
                         {q.name}
                       </th>
-                      <td className="text-right tabular-nums">{q.count}</td>
-                      <td className="text-right tabular-nums">{q.max}</td>
+                      <td className="pl-3 text-right tabular-nums">{q.count}</td>
+                      <td className="pl-3 text-right tabular-nums">{q.max}</td>
                       <td className="pl-3">
                         <Progress value={q.count} max={q.max} label={q.name} />
                       </td>
