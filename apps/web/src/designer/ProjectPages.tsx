@@ -55,7 +55,7 @@ export function ProjectsPage() {
   });
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">{t('designer.projects')}</h1>
+      <h1 className="text-2xl font-bold">{t('designer.projects')}</h1>
       <Card>
         {projects.data?.length ? (
           <ul className="divide-y divide-slate-100" data-testid="projects">
@@ -312,7 +312,7 @@ export function ModeChips({ modes }: { modes: readonly string[] }) {
 }
 
 const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
+  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-600';
 
 type ProjectTab =
   | 'questionnaires'
@@ -391,7 +391,7 @@ export function ProjectPage() {
         </Link>
       </nav>
       <div className="flex flex-wrap items-center gap-4">
-        <h1 className="text-2xl font-semibold">{project.data?.name ?? '…'}</h1>
+        <h1 className="text-2xl font-bold">{project.data?.name ?? '…'}</h1>
         {canDevice ? (
           <Link
             to="/projects/$projectId/device"

@@ -54,7 +54,7 @@ export interface EditorProps {
 }
 
 const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-1.5 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
+  '-mb-px border-b-2 border-transparent px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-600';
 
 /** Property panel for the node selected in the outline. */
 export function ItemEditor(props: EditorProps) {

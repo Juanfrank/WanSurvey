@@ -29,7 +29,7 @@ export function PreviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">{t('preview.title')}</h1>
+      <h1 className="text-2xl font-bold">{t('preview.title')}</h1>
 
       <Card className="no-print flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-4">

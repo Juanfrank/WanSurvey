@@ -74,9 +74,9 @@ export function DashboardTab({ projectId }: { projectId: string }) {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="flex flex-col gap-3">
-            <h3 className="font-medium">{t('analysis.live.completes')}</h3>
+            <h3 className="eyebrow">{t('analysis.live.completes')}</h3>
             <p className="flex flex-wrap items-baseline gap-2">
-              <span className="text-4xl font-semibold tabular-nums" data-testid="completes">
+              <span className="text-4xl font-bold tabular-nums text-navy" data-testid="completes">
                 {snap.completes}
               </span>
               <span className="text-slate-600">

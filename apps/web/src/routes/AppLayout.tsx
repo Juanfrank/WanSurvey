@@ -80,41 +80,50 @@ export function AppLayout() {
   if (!me.data) return <main className="p-8 text-slate-500" aria-busy="true" />;
   const waiting = me.data.access.state === 'no_role';
 
+  // Navy side panel on wide screens; below 900 px it becomes a top bar with pill tabs.
+  const navLink =
+    'flex-none rounded-full px-3 py-1.5 text-sm font-medium text-sidebar hover:bg-white/10 hover:text-white min-[900px]:rounded-lg min-[900px]:px-3 min-[900px]:py-2.5 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-white';
+  const control =
+    'w-full rounded-md border border-white/20 bg-white/10 px-2 py-1.5 text-sm text-white [&_option]:text-slate-800';
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen min-[900px]:flex">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:rounded focus:bg-white focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-10 focus:rounded focus:bg-white focus:px-3 focus:py-2"
       >
         {t('app.skip')}
       </a>
-      <header className="no-print border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link to="/" className="text-lg font-bold tracking-tight text-indigo-700">
+      <header className="no-print bg-navy text-white min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:w-74 min-[900px]:flex-none min-[900px]:overflow-y-auto">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 min-[900px]:h-full min-[900px]:flex-col min-[900px]:flex-nowrap min-[900px]:items-stretch min-[900px]:gap-6 min-[900px]:px-4 min-[900px]:py-6">
+          <Link
+            to="/"
+            className="px-1 text-lg font-bold uppercase tracking-wide text-white min-[900px]:px-3 min-[900px]:text-xl"
+          >
             {t('app.name')}
           </Link>
           {!waiting ? (
-            <nav aria-label="Main" className="flex gap-4 text-sm">
-              <Link
-                to="/"
-                className="hover:underline [&.active]:font-semibold"
-                activeOptions={{ exact: true }}
-              >
+            <nav
+              aria-label="Main"
+              className="flex min-w-0 gap-1 overflow-x-auto min-[900px]:flex-col min-[900px]:overflow-visible"
+            >
+              <Link to="/" className={navLink} activeOptions={{ exact: true }}>
                 {t('app.home')}
               </Link>
-              <Link to="/projects" className="hover:underline [&.active]:font-semibold">
+              <Link to="/projects" className={navLink}>
                 {t('app.projects')}
               </Link>
-              <Link to="/preview" className="hover:underline [&.active]:font-semibold">
+              <Link to="/preview" className={navLink}>
                 {t('app.preview')}
               </Link>
             </nav>
           ) : null}
-          <div className="ml-auto flex flex-wrap items-center gap-3 text-sm">
-            <label className="flex items-center gap-2">
-              <span className="text-slate-600">{t('app.organisation')}</span>
+          <div className="flex w-full flex-wrap items-end gap-3 text-sm min-[900px]:mt-auto min-[900px]:flex-col min-[900px]:flex-nowrap min-[900px]:items-stretch min-[900px]:border-t min-[900px]:border-white/15 min-[900px]:pt-5">
+            <label className="flex min-w-40 flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-sidebar">
+                {t('app.organisation')}
+              </span>
               <select
-                className="rounded-md border border-slate-300 bg-white px-2 py-1"
+                className={control}
                 value={me.data.tenantId}
                 onChange={(e) => void switchTenant(e.target.value)}
               >
@@ -125,10 +134,12 @@ export function AppLayout() {
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-2">
-              <span className="text-slate-600">{t('app.language')}</span>
+            <label className="flex min-w-32 flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-sidebar">
+                {t('app.language')}
+              </span>
               <select
-                className="rounded-md border border-slate-300 bg-white px-2 py-1"
+                className={control}
                 value={i18n.resolvedLanguage}
                 onChange={(e) => void setLanguage(e.target.value)}
               >
@@ -139,19 +150,25 @@ export function AppLayout() {
                 ))}
               </select>
             </label>
-            <span className="text-slate-600">{me.data.user.email}</span>
-            <button
-              type="button"
-              className="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50"
-              onClick={() => void logout()}
-            >
-              {t('app.signOut')}
-            </button>
+            <div className="flex w-full min-w-0 items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-sidebar" title={me.data.user.email}>
+                {me.data.user.email}
+              </span>
+              <button
+                type="button"
+                className="flex-none rounded-md border border-white/25 px-3 py-1.5 font-semibold text-white hover:bg-white/10"
+                onClick={() => void logout()}
+              >
+                {t('app.signOut')}
+              </button>
+            </div>
           </div>
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-7xl px-4 py-6">
-        <Outlet />
+      <main id="main" className="min-w-0 flex-1 px-4 py-6 min-[900px]:px-8 min-[900px]:py-7">
+        <div className="mx-auto max-w-7xl">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

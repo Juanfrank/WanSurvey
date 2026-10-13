@@ -29,7 +29,7 @@ import { caseVariables, variablesOf, type SampleField } from './vars.js';
 import { localiseDiagnostic } from '../i18n-messages.js';
 
 const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
+  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-600';
 
 /** The questionnaire designer: outline + editor, logic check, preview, scenarios and versions. */
 export function DesignerPage() {

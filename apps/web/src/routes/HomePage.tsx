@@ -15,7 +15,7 @@ export function HomePage() {
   });
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">
+      <h1 className="text-2xl font-bold">
         {t('home.welcome', { name: me.data?.user.firstName ?? me.data?.user.name ?? '' })}
       </h1>
       <Card>

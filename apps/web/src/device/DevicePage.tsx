@@ -204,7 +204,7 @@ export function DevicePage() {
         </Link>
       </nav>
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h1 className="text-2xl font-semibold">{t('device.title')}</h1>
+        <h1 className="text-2xl font-bold">{t('device.title')}</h1>
         <span
           data-testid="connection"
           data-online={online}

@@ -50,7 +50,7 @@ export function PrintPage() {
         >
           {t('papi.print.back')}
         </Link>
-        <h1 className="text-2xl font-semibold">{t('papi.print.title')}</h1>
+        <h1 className="text-2xl font-bold">{t('papi.print.title')}</h1>
         {f ? (
           <span className="text-sm text-slate-700">
             {f.questionnaire.name} · v{f.version} ·{' '}

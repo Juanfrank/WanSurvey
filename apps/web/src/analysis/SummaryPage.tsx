@@ -37,7 +37,7 @@ export function SummaryView({ s, readOnly = false }: { s: Summary; readOnly?: bo
     >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-2xl font-semibold">
+          <h1 className="text-2xl font-bold">
             {t('analysis.summary.title', { name: s.project.name })}
           </h1>
           <p className="text-slate-600">
@@ -79,9 +79,12 @@ export function SummaryView({ s, readOnly = false }: { s: Summary; readOnly?: bo
             ],
           ] as const
         ).map(([k, v]) => (
-          <div key={k} className="rounded-lg border border-slate-200 p-3">
-            <p className="text-sm text-slate-600">{t(`analysis.summary.${k}`)}</p>
-            <p className="text-xl font-semibold tabular-nums">{v}</p>
+          <div
+            key={k}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm"
+          >
+            <p className="eyebrow">{t(`analysis.summary.${k}`)}</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums text-navy">{v}</p>
           </div>
         ))}
       </section>
