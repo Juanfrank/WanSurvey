@@ -13,14 +13,7 @@ import { compileRule, maskSample, ruleError } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
 import type { Tx } from '../db/database.js';
-import {
-  cases,
-  entryMismatches,
-  interviewAnswerEvents,
-  interviews,
-  questionnaires,
-  users,
-} from '../db/schema.js';
+import { cases, entryMismatches, interviewAnswerEvents, interviews, users } from '../db/schema.js';
 import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
 
 export const FormsQuery = z.object({
@@ -63,14 +56,11 @@ export class PapiService implements OnModuleInit {
       const err = ruleError(q.filter);
       if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
     }
-    const list = await tx
-      .selectDistinct({ id: questionnaires.id, name: questionnaires.name })
-      .from(questionnaires)
-      .where(eq(questionnaires.projectId, projectId))
-      .orderBy(asc(questionnaires.name));
+    // Only questionnaires fielded on paper (Q1).
+    const list = await this.runtime.questionnairesFor(tx, projectId, 'PAPI');
     const chosen = q.questionnaireId ? list.find((x) => x.id === q.questionnaireId) : list[0];
     if (!chosen) throw new NotFoundException('Questionnaire not found');
-    const version = await this.runtime.latestVersion(tx, projectId, chosen.id);
+    const version = await this.runtime.latestVersion(tx, projectId, chosen.id, 'PAPI');
     const all = can(ctx.memberships, 'cases.read_all', projectId);
     const settings = await this.cases.settings(tx, projectId);
     const pii = await this.cases.piiFields(tx, projectId);

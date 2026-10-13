@@ -13,7 +13,7 @@ import {
   type InterviewOptions,
 } from '@wansurvey/logic';
 import type { ContainerItem, Mode } from '@wansurvey/schema';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
@@ -36,6 +36,12 @@ export type InterviewRow = typeof interviews.$inferSelect;
 
 /** Statuses in which the interviewer can still change answers: open, or returned by review. */
 export const EDITABLE = new Set(['in_progress', 'returned']);
+
+/** Whether a version is fielded in a mode; versions published before modes existed are in all (Q1). */
+export function fieldedIn(compiled: CompiledQuestionnaire, mode: string): boolean {
+  const modes = (compiled.questionnaire as { modes?: string[] }).modes;
+  return !modes?.length || modes.includes(mode);
+}
 
 /** Who writes: a signed-in person, or a respondent through a link (no user). */
 export interface Writer {
@@ -136,7 +142,7 @@ export class InterviewsService {
     } else {
       const [taken] = await tx.select().from(interviews).where(eq(interviews.id, body.id));
       if (taken) throw new ConflictException({ code: 'ID_IN_USE', message: 'Interview id in use' });
-      const version = await this.latestVersion(tx, projectId, body.questionnaireId);
+      const version = await this.latestVersion(tx, projectId, body.questionnaireId, body.mode);
       const context = await this.caseContext(tx, ctx, projectId, c, settings.revealToInterviewers);
       [row] = (await tx
         .insert(interviews)
@@ -402,7 +408,11 @@ export class InterviewsService {
     ]);
   }
 
-  async latestVersion(tx: Tx, projectId: string, qid: string) {
+  /**
+   * The version in use of a questionnaire; with `mode`, refused unless the questionnaire is
+   * fielded in that mode (Q1).
+   */
+  async latestVersion(tx: Tx, projectId: string, qid: string, mode?: Mode) {
     const [v] = await tx
       .select({
         id: questionnaireVersions.id,
@@ -425,7 +435,38 @@ export class InterviewsService {
         code: 'NO_PUBLISHED_VERSION',
         message: 'This questionnaire has no version in use',
       });
+    if (mode && !fieldedIn(v.compiled as CompiledQuestionnaire, mode))
+      throw new ConflictException({
+        code: 'MODE_NOT_IN_QUESTIONNAIRE',
+        message: `This questionnaire is not fielded in ${mode}`,
+        mode,
+      });
     return v;
+  }
+
+  /** Questionnaires of a project whose version in use is fielded in `mode`, by name. */
+  async questionnairesFor(tx: Tx, projectId: string, mode: Mode) {
+    const rows = await tx
+      .selectDistinctOn([questionnaires.id], {
+        id: questionnaires.id,
+        name: questionnaires.name,
+        modes: sql<
+          string[] | null
+        >`${questionnaireVersions.compiled} -> 'questionnaire' -> 'modes'`,
+      })
+      .from(questionnaires)
+      .innerJoin(
+        questionnaireVersions,
+        eq(questionnaireVersions.questionnaireId, questionnaires.id),
+      )
+      .where(
+        and(eq(questionnaires.projectId, projectId), eq(questionnaireVersions.status, 'published')),
+      )
+      .orderBy(questionnaires.id, desc(questionnaireVersions.version));
+    return rows
+      .filter((r) => (Array.isArray(r.modes) ? r.modes.includes(mode) : true))
+      .map(({ id, name }) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async compiledOf(tx: Tx, versionId: string) {

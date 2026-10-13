@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -16,7 +17,7 @@ import {
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { analyze } from '@wansurvey/logic';
-import { Questionnaire, Scenario, VersionMapping } from '@wansurvey/schema';
+import { Mode, Questionnaire, Scenario, VersionMapping } from '@wansurvey/schema';
 import { and, desc, eq, gte, inArray, max, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
@@ -37,6 +38,11 @@ const Definition = z.record(z.string(), z.unknown());
 
 const CreateBody = z.object({
   name: z.string().min(1).max(200),
+  /** The modes it is fielded in, chosen at creation (Q1); within the project's modes. */
+  modes: z
+    .array(Mode)
+    .min(1)
+    .refine((m) => new Set(m).size === m.length, { message: 'Each mode once' }),
   source: z
     .discriminatedUnion('kind', [
       z.object({ kind: z.literal('blank') }),
@@ -90,6 +96,7 @@ export class QuestionnairesController {
           name: questionnaires.name,
           draftRevision: questionnaires.draftRevision,
           updatedAt: questionnaires.updatedAt,
+          modes: sql<string[] | null>`${questionnaires.draft} -> 'modes'`,
         })
         .from(questionnaires)
         .where(eq(questionnaires.projectId, projectId))
@@ -115,6 +122,9 @@ export class QuestionnairesController {
         const own = versions.filter((v) => v.questionnaireId === r.id);
         return {
           ...r,
+          // Drafts written before modes existed are fielded in all four.
+          modes:
+            Array.isArray(r.modes) && r.modes.length ? r.modes : ['CATI', 'CAPI', 'CAWI', 'PAPI'],
           latestVersion: own[0] ?? null,
           publishedVersions: own.filter((v) => v.status === 'published').length,
         };
@@ -131,7 +141,16 @@ export class QuestionnairesController {
     @Body(new ZodPipe(CreateBody)) body: z.infer<typeof CreateBody>,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.project(tx, projectId);
+      const project = await this.project(tx, projectId);
+      const outside = project.modesEnabled.length
+        ? body.modes.filter((m) => !project.modesEnabled.includes(m))
+        : [];
+      if (outside.length)
+        throw new BadRequestException({
+          code: 'MODES_NOT_IN_PROJECT',
+          message: `The project does not use ${outside.join(', ')}`,
+          modes: outside,
+        });
       let definition: Record<string, unknown>;
       const src = body.source;
       if (src.kind === 'sample') {
@@ -158,6 +177,8 @@ export class QuestionnairesController {
       } else {
         definition = blankQuestionnaire(body.name);
       }
+      // The chosen modes replace those of a sample, a copied version or a file.
+      definition = { ...definition, modes: body.modes };
       const [row] = await tx
         .insert(questionnaires)
         .values({
@@ -539,7 +560,11 @@ export class QuestionnairesController {
 
   private async project(tx: Tx, projectId: string) {
     const [p] = await tx
-      .select({ id: projects.id, languages: projects.languages })
+      .select({
+        id: projects.id,
+        languages: projects.languages,
+        modesEnabled: projects.modesEnabled,
+      })
       .from(projects)
       .where(eq(projects.id, projectId));
     if (!p) throw new NotFoundException('Project not found');

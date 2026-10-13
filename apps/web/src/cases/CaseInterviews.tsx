@@ -14,6 +14,7 @@ interface QuestionnaireRow {
   id: string;
   name: string;
   publishedVersions: number;
+  modes?: Mode[];
 }
 
 const MODES: Mode[] = ['CAPI', 'CATI'];
@@ -37,15 +38,20 @@ export function StartInterview({
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [qid, setQid] = useState('');
-  const [mode, setMode] = useState<Mode>('CAPI');
+  const [picked, setMode] = useState<Mode>('CAPI');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const list = useQuery({
     queryKey: ['questionnaires', projectId],
     queryFn: () => api<QuestionnaireRow[]>(`/projects/${projectId}/questionnaires`),
   });
-  const usable = (list.data ?? []).filter((q) => q.publishedVersions > 0);
+  // Interviewers start face-to-face or phone interviews, in the questionnaire's modes (Q1).
+  const modesOf = (q?: QuestionnaireRow) =>
+    MODES.filter((m) => !q?.modes?.length || q.modes.includes(m));
+  const usable = (list.data ?? []).filter((q) => q.publishedVersions > 0 && modesOf(q).length > 0);
   const chosen = qid || usable[0]?.id || '';
+  const offered = modesOf(usable.find((q) => q.id === chosen));
+  const mode = offered.includes(picked) ? picked : (offered[0] ?? 'CAPI');
 
   const go = async () => {
     setBusy(true);
@@ -105,7 +111,7 @@ export function StartInterview({
                 value={mode}
                 onChange={(e) => setMode(e.target.value as Mode)}
               >
-                {MODES.map((m) => (
+                {offered.map((m) => (
                   <option key={m} value={m}>
                     {m}
                   </option>

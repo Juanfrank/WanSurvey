@@ -14,7 +14,11 @@ import {
   questionnaireVersions,
   questionnaires,
 } from '../db/schema.js';
-import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
+import {
+  fieldedIn,
+  InterviewsService,
+  type InterviewRow,
+} from '../interviews/interviews.service.js';
 import { DeviceId, type SyncItem } from '../interviews/schemas.js';
 
 export const CheckoutBody = z.strictObject({
@@ -64,19 +68,10 @@ export class CapiService implements OnModuleInit {
       .from(projects)
       .where(eq(projects.id, projectId));
     if (!project) throw new NotFoundException('Project not found');
-    const usable = await tx
-      .selectDistinct({ id: questionnaires.id, name: questionnaires.name })
-      .from(questionnaires)
-      .innerJoin(
-        questionnaireVersions,
-        eq(questionnaireVersions.questionnaireId, questionnaires.id),
-      )
-      .where(
-        and(eq(questionnaires.projectId, projectId), eq(questionnaireVersions.status, 'published')),
-      )
-      .orderBy(questionnaires.name);
+    // Only questionnaires fielded face to face (Q1).
+    const usable = await this.runtime.questionnairesFor(tx, projectId, 'CAPI');
     const qid = usable.find((q) => q.id === body.questionnaireId)?.id ?? usable[0]?.id;
-    const latest = qid ? await this.runtime.latestVersion(tx, projectId, qid) : null;
+    const latest = qid ? await this.runtime.latestVersion(tx, projectId, qid, 'CAPI') : null;
 
     const rows = await tx
       .select()
@@ -267,7 +262,11 @@ export class CapiService implements OnModuleInit {
       .where(and(eq(interviews.caseId, c.id), eq(interviews.status, 'in_progress')));
     if (open) return 'CASE_IN_PROGRESS';
     const [v] = await tx
-      .select({ id: questionnaireVersions.id, version: questionnaireVersions.version })
+      .select({
+        id: questionnaireVersions.id,
+        version: questionnaireVersions.version,
+        compiled: questionnaireVersions.compiled,
+      })
       .from(questionnaireVersions)
       .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
       .where(
@@ -278,6 +277,7 @@ export class CapiService implements OnModuleInit {
         ),
       );
     if (!v) return 'NO_PUBLISHED_VERSION';
+    if (!fieldedIn(v.compiled as CompiledQuestionnaire, 'CAPI')) return 'MODE_NOT_IN_QUESTIONNAIRE';
     const settings = await this.cases.settings(tx, c.projectId);
     const context = await this.runtime.caseContext(
       tx,

@@ -235,3 +235,35 @@ describe('static analysis', () => {
     expect(() => compile(q([single('A', { showIf: 'NOPE == 1' })]))).toThrow(CompileError);
   });
 });
+
+describe('questionnaire modes (Q1)', () => {
+  const only = (modes: string[]) => Questionnaire.parse({ ...household, modes } as never);
+
+  it('default to all four for older definitions', () => {
+    expect(Questionnaire.parse(household).modes).toEqual(['CATI', 'CAPI', 'CAWI', 'PAPI']);
+    expect(Questionnaire.safeParse({ ...household, modes: [] }).success).toBe(false);
+    expect(Questionnaire.safeParse({ ...household, modes: ['CATI', 'CATI'] }).success).toBe(false);
+  });
+
+  it('warn about wording and scripts for modes the questionnaire does not use', () => {
+    const all = codes(Questionnaire.parse(household));
+    expect(all).not.toContain('variant_unused_mode');
+    const webOnly = analyze(only(['CAWI'])).diagnostics;
+    // The household survey has CATI and CAPI wording and CATI/CAPI scripts.
+    expect(
+      webOnly.filter((d) => d.code === 'variant_unused_mode').map((d) => d.msg?.params),
+    ).toContainEqual({
+      name: 'A2',
+      mode: 'CATI',
+    });
+    expect(webOnly.some((d) => d.code === 'script_unused_mode')).toBe(true);
+    expect(webOnly.every((d) => d.severity !== 'error' || !d.code.endsWith('unused_mode'))).toBe(
+      true,
+    );
+    const phone = analyze(only(['CATI', 'CAPI'])).diagnostics;
+    expect(
+      phone.filter((d) => d.code === 'variant_unused_mode').map((d) => d.msg?.params?.mode),
+    ).toContain('CAWI');
+    expect(phone.some((d) => d.code === 'script_unused_mode')).toBe(false);
+  });
+});

@@ -12,7 +12,7 @@ async function saved(page: Page) {
 }
 
 /** Creates a blank questionnaire in the demo project and opens it in the designer. */
-async function newQuestionnaire(page: Page, name: string) {
+async function newQuestionnaire(page: Page, name: string, untick: string[] = []) {
   await login(page);
   // Other specs switch organisation, and the last one used opens by default.
   const org = page.getByRole('combobox', { name: 'Organisation' });
@@ -30,6 +30,10 @@ async function newQuestionnaire(page: Page, name: string) {
   await page.getByRole('link', { name: 'Household Survey 2026' }).click();
   await expect(page.getByRole('link', { name: 'Household questionnaire' })).toBeVisible();
   await page.getByLabel('Questionnaire name').fill(name);
+  // Every mode the project uses is ticked to begin with.
+  const modes = page.getByTestId('new-q-modes');
+  for (const m of untick)
+    await modes.getByRole('checkbox', { name: new RegExp(`^${m}`) }).uncheck();
   await page.getByRole('button', { name: 'Create and open' }).click();
   await expect(page.getByRole('tree', { name: 'Outline' })).toBeVisible();
   return page.url();
@@ -196,6 +200,17 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await outlineItem(page, 'SEC_A').click();
   await expect(page.getByText('Missing translation: en').first()).toBeVisible();
   await saved(page);
+});
+
+test('a questionnaire takes its modes at creation (Q1)', async ({ page }) => {
+  await newQuestionnaire(page, 'Phone and web', ['CAPI', 'PAPI']);
+  await page.goBack();
+  const row = page.getByRole('row').filter({ hasText: 'Phone and web' });
+  const chips = row.getByTestId('mode-chips');
+  await expect(chips).toContainText('CATI');
+  await expect(chips).toContainText('CAWI');
+  await expect(chips).not.toContainText('CAPI');
+  await expect(chips).not.toContainText('PAPI');
 });
 
 test('a failing saved scenario blocks publishing', async ({ page }) => {

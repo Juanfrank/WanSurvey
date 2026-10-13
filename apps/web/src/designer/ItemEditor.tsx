@@ -344,6 +344,7 @@ function StaticEditor(props: EditorProps & { node: StaticText; patch: Patch }) {
           variants={props.node.variants}
           baseText={props.node.text}
           languages={props.draft.languages}
+          modes={props.draft.modes}
           isQuestion={false}
           onChange={(variants) => props.patch<StaticText>({ variants }, 'variants')}
         />
@@ -650,6 +651,7 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
           variants={q.variants}
           baseText={q.text}
           languages={langs}
+          modes={props.draft.modes}
           isQuestion
           onChange={(variants) => p({ variants }, 'variants')}
         />

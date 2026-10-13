@@ -142,7 +142,7 @@ const ENDPOINTS: Endpoint[] = [
       s.agent
         .post(`/api/v1/projects/${ids.project}/questionnaires`)
         .set('x-csrf-token', s.csrf)
-        .send({ name: 'New' }),
+        .send({ name: 'New', modes: ['CAPI'] }),
   },
   {
     name: 'GET questionnaire',

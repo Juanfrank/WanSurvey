@@ -1,6 +1,7 @@
 import {
   DEFAULT_SPECIAL_CODES,
   DISPOSITIONS,
+  MODES,
   SPECIAL_KINDS,
   type Disposition,
   type LocalizedText,
@@ -119,6 +120,37 @@ export function SettingsEditor({
           hint={t('designer.settings.idHelp')}
           onCommit={(id) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(id) && set({ id })}
         />
+      </Group>
+
+      <Group title={t('designer.modes')}>
+        <p className="text-sm text-slate-600">{t('designer.settings.modesHelp')}</p>
+        <div className="flex flex-wrap gap-2" data-testid="q-modes">
+          {MODES.map((m) => {
+            const on = (draft.modes ?? MODES).includes(m);
+            const only = on && (draft.modes ?? MODES).length === 1;
+            return (
+              <label
+                key={m}
+                className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={only}
+                  onChange={(e) =>
+                    set({
+                      modes: MODES.filter((x) =>
+                        x === m ? e.target.checked : (draft.modes ?? MODES).includes(x),
+                      ),
+                    })
+                  }
+                />
+                <span className="font-semibold">{m}</span>
+                <span className="text-slate-600">{t(`designer.modeNames.${m}`)}</span>
+              </label>
+            );
+          })}
+        </div>
       </Group>
 
       <Group title={t('designer.settings.languages')}>

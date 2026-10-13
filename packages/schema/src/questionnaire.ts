@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { Disposition } from './disposition.js';
-import { Expression, ItemId, LanguageCode, LocalizedText, Mode, VariableName } from './common.js';
+import {
+  Expression,
+  ItemId,
+  LanguageCode,
+  LocalizedText,
+  Mode,
+  MODES,
+  VariableName,
+} from './common.js';
 
 // ---------------------------------------------------------------------------
 // Answer sets and special codes
@@ -357,6 +365,16 @@ export const Questionnaire = z.strictObject({
   title: LocalizedText,
   defaultLanguage: LanguageCode,
   languages: z.array(LanguageCode).min(1),
+  /**
+   * The modes this questionnaire is fielded in, chosen when it is created (Q1): mode variants,
+   * the preview, interviews, web waves and paper forms are limited to them. Definitions
+   * written before the field existed are taken as all four.
+   */
+  modes: z
+    .array(Mode)
+    .min(1)
+    .refine((m) => new Set(m).size === m.length, { message: 'Each mode once' })
+    .default([...MODES]),
   settings: QuestionnaireSettings.default({
     specialCodes: DEFAULT_SPECIAL_CODES,
     cawiShowSpecialCodes: false,

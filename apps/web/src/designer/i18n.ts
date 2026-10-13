@@ -24,6 +24,17 @@ export const designerEn = {
     submit: 'Create and open',
     nameRequired: 'Give the questionnaire a name.',
     fileRequired: 'Choose a JSON file.',
+    modes: 'Modes',
+    modesHelp:
+      'How this questionnaire will be fielded. Wording per mode, the preview, interviews, web waves and paper forms follow this choice; it can be changed in the questionnaire settings.',
+    modesRequired: 'Choose at least one mode.',
+  },
+  modes: 'Modes',
+  modeNames: {
+    CATI: 'Phone',
+    CAPI: 'Face to face',
+    CAWI: 'Web',
+    PAPI: 'Paper',
   },
   tabs: 'Designer sections',
   tab: {
@@ -276,6 +287,10 @@ export const designerEn = {
     prefillHelp: 'An expression, e.g. case.region.',
   },
   variants: {
+    unusedMode: 'not used',
+    unusedModeHelp:
+      'This questionnaire is not fielded in {{mode}}, so this wording is never shown.',
+    removeVariant: 'Remove it',
     help: 'Change how the question looks in one mode. Empty fields use the base question; variables and codes never change.',
     mode: 'Mode',
     overrides_one: '{{count}} change',
@@ -407,6 +422,8 @@ export const designerEn = {
     cancel: 'Cancel',
   },
   settings: {
+    modesHelp:
+      'The modes this questionnaire is fielded in. Wording per mode and the preview follow them; interviews, web waves and paper forms use only the published version’s modes.',
     title: 'Questionnaire settings',
     general: 'General',
     id: 'Questionnaire id',
@@ -586,6 +603,17 @@ export const designerEs: DesignerCatalogue = {
     submit: 'Crear y abrir',
     nameRequired: 'Escriba un nombre para el cuestionario.',
     fileRequired: 'Elija un archivo JSON.',
+    modes: 'Modos',
+    modesHelp:
+      'Cómo se aplicará este cuestionario. Los textos por modo, la vista previa, las entrevistas, las olas web y los formularios en papel siguen esta elección; puede cambiarse en la configuración del cuestionario.',
+    modesRequired: 'Elija al menos un modo.',
+  },
+  modes: 'Modos',
+  modeNames: {
+    CATI: 'Teléfono',
+    CAPI: 'Presencial',
+    CAWI: 'Web',
+    PAPI: 'Papel',
   },
   tabs: 'Secciones del diseñador',
   tab: {
@@ -845,6 +873,9 @@ export const designerEs: DesignerCatalogue = {
     prefillHelp: 'Una expresión, por ejemplo case.region.',
   },
   variants: {
+    unusedMode: 'no se usa',
+    unusedModeHelp: 'Este cuestionario no se aplica en {{mode}}: este texto nunca se muestra.',
+    removeVariant: 'Quitarlo',
     help: 'Cambie cómo se ve la pregunta en un modo. Los campos vacíos usan la pregunta base; variables y códigos nunca cambian.',
     mode: 'Modo',
     overrides_one: '{{count}} cambio',
@@ -977,6 +1008,8 @@ export const designerEs: DesignerCatalogue = {
     cancel: 'Cancelar',
   },
   settings: {
+    modesHelp:
+      'Los modos en que se aplica este cuestionario. Los textos por modo y la vista previa los siguen; las entrevistas, las olas web y los formularios en papel usan solo los modos de la versión publicada.',
     title: 'Configuración del cuestionario',
     general: 'General',
     id: 'Id del cuestionario',

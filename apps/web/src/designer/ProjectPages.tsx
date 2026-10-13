@@ -2,7 +2,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { SAMPLES } from '@wansurvey/fixtures';
-import type { ProjectSettings } from '@wansurvey/schema';
+import { MODES, type Mode, type ProjectSettings } from '@wansurvey/schema';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -37,6 +37,8 @@ export interface Project {
 interface QuestionnaireRow {
   id: string;
   name: string;
+  /** Modes it is fielded in (Q1). */
+  modes: Mode[];
   draftRevision: number;
   updatedAt: string;
   latestVersion: { version: number; status: string; publishedAt: string } | null;
@@ -96,6 +98,16 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
   const [sample, setSample] = useState(SAMPLES[0]!.id);
   const [json, setJson] = useState<{ name: string; definition: unknown } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The modes the questionnaire is fielded in, chosen now (Q1): the project's, all ticked.
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<Project>(`/projects/${projectId}`),
+  });
+  const offered: readonly Mode[] = project.data?.modesEnabled.length
+    ? MODES.filter((m) => project.data!.modesEnabled.includes(m))
+    : MODES;
+  const [modes, setModes] = useState<Mode[] | null>(null);
+  const chosen = modes ?? [...offered];
 
   const create = useMutation({
     mutationFn: () =>
@@ -103,6 +115,7 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
         method: 'POST',
         body: {
           name: name.trim(),
+          modes: chosen,
           source:
             kind === 'sample'
               ? { kind, id: sample }
@@ -132,6 +145,7 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
                 <th scope="col" className="py-1">
                   {t('designer.name')}
                 </th>
+                <th scope="col">{t('designer.modes')}</th>
                 <th scope="col">{t('designer.latestVersion')}</th>
                 <th scope="col">{t('designer.lastEdited')}</th>
               </tr>
@@ -147,6 +161,9 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
                     >
                       {q.name}
                     </Link>
+                  </td>
+                  <td>
+                    <ModeChips modes={q.modes} />
                   </td>
                   <td>
                     {q.latestVersion
@@ -172,6 +189,7 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
               setError(null);
               if (!name.trim()) return setError(t('designer.create.nameRequired'));
               if (kind === 'json' && !json) return setError(t('designer.create.fileRequired'));
+              if (!chosen.length) return setError(t('designer.create.modesRequired'));
               create.mutate();
             }}
           >
@@ -181,6 +199,34 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+            <fieldset className="flex flex-col gap-2 text-sm" data-testid="new-q-modes">
+              <legend className="mb-1 font-medium text-slate-700">
+                {t('designer.create.modes')}
+              </legend>
+              <p className="text-slate-600">{t('designer.create.modesHelp')}</p>
+              <div className="flex flex-wrap gap-2">
+                {offered.map((m) => (
+                  <label
+                    key={m}
+                    className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={chosen.includes(m)}
+                      onChange={(e) =>
+                        setModes(
+                          e.target.checked
+                            ? MODES.filter((x) => x === m || chosen.includes(x))
+                            : chosen.filter((x) => x !== m),
+                        )
+                      }
+                    />
+                    <span className="font-semibold">{m}</span>
+                    <span className="text-slate-600">{t(`designer.modeNames.${m}`)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <fieldset className="flex flex-col gap-2 text-sm">
               <legend className="mb-1 font-medium text-slate-700">
                 {t('designer.create.start')}
@@ -243,6 +289,25 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
         </Card>
       ) : null}
     </div>
+  );
+}
+
+/** The modes of a questionnaire as small labels, with their names for screen readers. */
+export function ModeChips({ modes }: { modes: readonly string[] }) {
+  const { t } = useTranslation();
+  return (
+    <span className="flex flex-wrap gap-1" data-testid="mode-chips">
+      {modes.map((m) => (
+        <span
+          key={m}
+          title={t(`designer.modeNames.${m}`)}
+          className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-800"
+        >
+          {m}
+          <span className="sr-only"> ({t(`designer.modeNames.${m}`)})</span>
+        </span>
+      ))}
+    </span>
   );
 }
 

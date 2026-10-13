@@ -18,6 +18,10 @@ import {
   TextField,
 } from './fields.js';
 
+/** Every field of a variant set to undefined: `clean` then drops the variant. */
+const emptyVariant = (v: ModeVariant) =>
+  Object.fromEntries(Object.keys(v).map((k) => [k, undefined])) as Partial<ModeVariant>;
+
 const DISPLAY_AS = [
   'radio',
   'dropdown',
@@ -37,16 +41,22 @@ export function VariantsEditor({
   baseText,
   languages,
   isQuestion,
+  modes: fielded,
   onChange,
 }: {
   variants: Variants | undefined;
   baseText: LocalizedText | undefined;
   languages: string[];
   isQuestion: boolean;
+  /** The questionnaire's modes (Q1); wording left for another mode is shown to be removed. */
+  modes?: readonly Mode[] | undefined;
   onChange(v: Variants | undefined): void;
 }) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<Mode>('CATI');
+  const used = fielded?.length ? fielded : MODES;
+  const shown = MODES.filter((m) => used.includes(m) || variants?.[m]);
+  const [picked, setMode] = useState<Mode>(shown[0] ?? 'CATI');
+  const mode = shown.includes(picked) ? picked : (shown[0] ?? 'CATI');
   const v: ModeVariant = variants?.[mode] ?? {};
   const set = (patch: Partial<ModeVariant>) => {
     const next = clean({ ...v, ...patch });
@@ -66,7 +76,7 @@ export function VariantsEditor({
         aria-label={t('designer.variants.mode')}
         className="flex flex-wrap gap-1"
       >
-        {MODES.map((m) => (
+        {shown.map((m) => (
           <label
             key={m}
             className={`cursor-pointer rounded-md border px-3 py-1 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${mode === m ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-800' : 'border-slate-300'}`}
@@ -79,6 +89,11 @@ export function VariantsEditor({
               onChange={() => setMode(m)}
             />
             {m}
+            {!used.includes(m) ? (
+              <span className="ml-1 rounded bg-red-100 px-1 text-xs text-red-900">
+                {t('designer.variants.unusedMode')}
+              </span>
+            ) : null}
             {count(m) ? (
               <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-900">
                 {t('designer.variants.overrides', { count: count(m) })}
@@ -87,6 +102,14 @@ export function VariantsEditor({
           </label>
         ))}
       </div>
+      {!used.includes(mode) ? (
+        <p role="note" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
+          {t('designer.variants.unusedModeHelp', { mode })}{' '}
+          <button type="button" className={smallBtn} onClick={() => set({ ...emptyVariant(v) })}>
+            {t('designer.variants.removeVariant')}
+          </button>
+        </p>
+      ) : null}
       <CheckField
         label={t('designer.variants.visible', { mode })}
         checked={v.visibleInMode !== false}

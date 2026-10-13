@@ -238,7 +238,7 @@ export class CawiService implements OnModuleInit {
         and(eq(questionnaires.id, body.questionnaireId), eq(questionnaires.projectId, projectId)),
       );
     if (!q) throw new BadRequestException({ code: 'NOT_FOUND', message: 'Unknown questionnaire' });
-    await this.runtime.latestVersion(tx, projectId, body.questionnaireId);
+    await this.runtime.latestVersion(tx, projectId, body.questionnaireId, 'CAWI');
     const [w] = await tx
       .insert(waves)
       .values({
@@ -324,7 +324,7 @@ export class CawiService implements OnModuleInit {
     if (!w) throw new NotFoundException('Wave not found');
     if (w.status !== 'draft')
       throw new ConflictException({ code: 'WAVE_SENT', message: 'This wave has been sent' });
-    const v = await this.runtime.latestVersion(tx, projectId, w.questionnaireId);
+    const v = await this.runtime.latestVersion(tx, projectId, w.questionnaireId, 'CAWI');
     const compiled = v.compiled as CompiledQuestionnaire;
     const match = compileRule(w.filter);
     const candidates = (
@@ -443,7 +443,7 @@ export class CawiService implements OnModuleInit {
     } else {
       if (!body.questionnaireId)
         throw new BadRequestException({ code: 'NOT_FOUND', message: 'Choose a questionnaire' });
-      await this.runtime.latestVersion(tx, projectId, body.questionnaireId);
+      await this.runtime.latestVersion(tx, projectId, body.questionnaireId, 'CAWI');
       await tx.insert(openLinks).values({
         tenantId: ctx.tenantId,
         projectId,
@@ -772,7 +772,12 @@ export class CawiService implements OnModuleInit {
   }
 
   private async createInterview(tx: Tx, inv: InvitationRow, deviceId: string) {
-    const version = await this.runtime.latestVersion(tx, inv.projectId, inv.questionnaireId);
+    const version = await this.runtime.latestVersion(
+      tx,
+      inv.projectId,
+      inv.questionnaireId,
+      'CAWI',
+    );
     let sample: Record<string, unknown> = {};
     if (inv.caseId) {
       const [c] = await tx
@@ -847,7 +852,7 @@ export class CawiService implements OnModuleInit {
     if (!found) throw new NotFoundException('Link not found');
     return this.database.withTenant(found.tenantId, async (tx) => {
       const [l] = await tx.select().from(openLinks).where(eq(openLinks.id, found.id));
-      const v = await this.runtime.latestVersion(tx, l!.projectId, l!.questionnaireId);
+      const v = await this.runtime.latestVersion(tx, l!.projectId, l!.questionnaireId, 'CAWI');
       const { token, tokenHash, tokenEnc } = this.newToken();
       await tx.insert(invitations).values({
         tenantId: found.tenantId,

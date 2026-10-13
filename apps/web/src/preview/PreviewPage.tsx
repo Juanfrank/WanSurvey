@@ -2,7 +2,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { InterviewRunner, PaperForm, pick } from '@wansurvey/renderer';
 import { MODES, type Mode } from '@wansurvey/schema';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../routes/ui.js';
 import {
@@ -129,6 +129,12 @@ export function PreviewWorkbench({
   const [contextText, setContextText] = useState(() => JSON.stringify(p.options.context, null, 2));
   const [contextError, setContextError] = useState<string | null>(null);
   const q = p.loaded.questionnaire;
+  // Only the questionnaire's modes (Q1); switch to one of them if the current mode is not.
+  const modes = q?.modes?.length ? q.modes : MODES;
+  const off = !!q && !modes.includes(p.options.mode);
+  useEffect(() => {
+    if (off) p.update({ mode: modes[0]! });
+  }, [off]);
   if (!q || !p.loaded.compiled || !p.session) return null;
   return (
     <>
@@ -141,9 +147,9 @@ export function PreviewWorkbench({
             onChange={(e) => p.update({ mode: e.target.value as Mode })}
             data-testid="mode"
           >
-            {MODES.map((m) => (
+            {modes.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {m} · {t(`designer.modeNames.${m}`)}
               </option>
             ))}
           </select>

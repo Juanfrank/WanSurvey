@@ -1,4 +1,4 @@
-import { household } from '@wansurvey/fixtures';
+import { household, SAMPLES } from '@wansurvey/fixtures';
 import type { QuestionnaireInput } from '@wansurvey/schema';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -70,14 +70,37 @@ describe('questionnaires', () => {
   const put = (s: Session, path: string, body: object) =>
     s.agent.put(path).set('x-csrf-token', s.csrf).send(body);
 
+  const ALL_MODES = ['CATI', 'CAPI', 'CAWI', 'PAPI'];
   async function create(definition: QuestionnaireInput = small()) {
-    const res = await post(pm, base, { name: 'Small', source: { kind: 'json', definition } });
+    const res = await post(pm, base, {
+      modes: ALL_MODES,
+      name: 'Small',
+      source: { kind: 'json', definition },
+    });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     return res.body as { id: string; draftRevision: number };
   }
 
+  it('takes its modes at creation, within the project’s modes (Q1)', async () => {
+    expect((await post(pm, base, { name: 'No modes' })).status).toBe(400);
+    expect((await post(pm, base, { name: 'Twice', modes: ['CATI', 'CATI'] })).status).toBe(400);
+    const web = await post(pm, base, {
+      name: 'Web only',
+      modes: ['CAWI'],
+      source: { kind: 'sample', id: SAMPLES[0]!.id },
+    });
+    expect(web.status, JSON.stringify(web.body)).toBe(201);
+    expect(web.body.draft.modes).toEqual(['CAWI']);
+    const list = await pm.agent.get(base).expect(200);
+    expect(list.body.find((q: { id: string }) => q.id === web.body.id).modes).toEqual(['CAWI']);
+    await t.admin`update projects set modes_enabled = ${['CATI', 'CAWI']} where id = ${project}`;
+    const refused = await post(pm, base, { name: 'Paper', modes: ['CATI', 'PAPI'] });
+    expect(refused.body).toMatchObject({ code: 'MODES_NOT_IN_PROJECT', modes: ['PAPI'] });
+    await t.admin`update projects set modes_enabled = '{}' where id = ${project}`;
+  });
+
   it('creates from blank, a sample or JSON and lists them', async () => {
-    const blank = await post(pm, base, { name: 'Blank one' });
+    const blank = await post(pm, base, { modes: ALL_MODES, name: 'Blank one' });
     expect(blank.status).toBe(201);
     expect(blank.body.draft.sections).toHaveLength(1);
     // New questionnaires are in Spanish; other languages are added later.
@@ -89,12 +112,19 @@ describe('questionnaires', () => {
     expect(blank.body.draftRevision).toBe(1);
 
     const sample = await post(pm, base, {
+      modes: ALL_MODES,
       name: 'Household',
       source: { kind: 'sample', id: 'household' },
     });
     expect(sample.body.draft.id).toBe(household.id);
     expect(
-      (await post(pm, base, { name: 'x', source: { kind: 'sample', id: 'nope' } })).status,
+      (
+        await post(pm, base, {
+          modes: ALL_MODES,
+          name: 'x',
+          source: { kind: 'sample', id: 'nope' },
+        })
+      ).status,
     ).toBe(404);
 
     const list = await pm.agent.get(base);
@@ -269,6 +299,7 @@ describe('questionnaires', () => {
   it('copies a published version into a new questionnaire', async () => {
     const qid = await createQuestionnaire(t.admin, tenant.id, project, { publish: true });
     const copy = await post(pm, base, {
+      modes: ALL_MODES,
       name: 'Copy',
       source: { kind: 'version', questionnaireId: qid, version: 1 },
     });

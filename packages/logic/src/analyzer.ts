@@ -62,7 +62,7 @@ export function analyze(questionnaire: Questionnaire): AnalysisResult {
     checkSkips(model, node, add);
     if (node.kind === 'question') checkQuestion(model, node, specialCodes, add);
     if (node.kind === 'roster') checkRoster(node, add);
-    checkVariants(node, add);
+    checkVariants(node, questionnaire.modes, add);
     checkTexts(model, node, specialCodes, add);
   }
   checkUnreachable(model, add);
@@ -332,10 +332,22 @@ function checkRoster(node: CompiledNode, add: (d: Diagnostic) => void) {
     });
 }
 
-function checkVariants(node: CompiledNode, add: (d: Diagnostic) => void) {
+function checkVariants(node: CompiledNode, modes: readonly string[], add: (d: Diagnostic) => void) {
   const def = node.def as { variants?: Partial<Record<string, { visibleInMode?: boolean }>> };
   if (!def.variants) return;
-  const hiddenEverywhere = MODES.every((m) => def.variants?.[m]?.visibleInMode === false);
+  // Wording for a mode the questionnaire is not fielded in is never shown (Q1).
+  for (const m of Object.keys(def.variants))
+    if (!modes.includes(m))
+      add({
+        severity: 'warning',
+        code: 'variant_unused_mode',
+        message: `${node.id} has wording for ${m}, which this questionnaire does not use`,
+        msg: { id: 'variant_unused_mode', params: { name: node.id, mode: m } },
+        itemId: node.id,
+      });
+  const hiddenEverywhere = (modes.length ? modes : MODES).every(
+    (m) => def.variants?.[m]?.visibleInMode === false,
+  );
   if (hiddenEverywhere) {
     add({
       severity: 'warning',
@@ -506,6 +518,14 @@ function checkScripts(
   add: (d: Diagnostic) => void,
 ) {
   for (const script of model.questionnaire.scripts) {
+    if (!script.modes.some((m) => model.questionnaire.modes.includes(m)))
+      add({
+        severity: 'warning',
+        code: 'script_unused_mode',
+        message: `Script ${script.id} is for modes this questionnaire does not use`,
+        msg: { id: 'script_unused_mode', params: { name: script.id } },
+        field: `scripts.${script.id}`,
+      });
     const anchorIndex = scriptAnchorIndex(model, script);
     if (anchorIndex === null) {
       add({

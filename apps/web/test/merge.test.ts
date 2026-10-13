@@ -24,6 +24,7 @@ const base = (): Draft =>
     title: { en: 'T' },
     defaultLanguage: 'en',
     languages: ['en'],
+    modes: ['CATI', 'CAPI', 'CAWI', 'PAPI'],
     settings: {
       specialCodes: {
         DK: { code: -8, label: { en: 'DK' }, offeredIn: [] },
