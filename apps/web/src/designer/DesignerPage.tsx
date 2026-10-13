@@ -278,7 +278,7 @@ export function DesignerPage() {
 
             <Tabs.Content
               value="design"
-              className={`grid gap-4 lg:gap-6 ${outline.inline ? 'lg:grid-cols-[22rem_minmax(0,1fr)]' : 'grid-cols-[3rem_minmax(0,1fr)]'}`}
+              className="grid grid-cols-[3rem_minmax(0,1fr)] gap-4 min-[900px]:grid-cols-1"
             >
               <SideDrawer
                 id="designer-outline"

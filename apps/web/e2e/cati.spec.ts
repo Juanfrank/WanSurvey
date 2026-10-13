@@ -89,6 +89,12 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await page.getByRole('button', { name: 'Unpin: My callbacks' }).click();
     const rail = page.getByRole('complementary', { name: 'My callbacks' });
     await expect(rail).toContainText('1');
+    // The pointer was on the pin, now over the rail: move it away to see the rail alone.
+    await page.mouse.move(500, 500);
+    await expect(rail.getByRole('button', { name: 'My callbacks', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     await shot(page, 'cati-callbacks-rail', { fullPage: false });
     await rail.getByRole('button', { name: 'My callbacks', exact: true }).click();
     await shot(page, 'cati-callbacks-over', { fullPage: false });

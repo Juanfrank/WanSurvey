@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, type Me } from '../api.js';
 import { AccountMenu } from './AccountMenu.js';
@@ -91,7 +91,10 @@ export function AppLayout() {
         {t('app.skip')}
       </a>
       <SidePanel waiting={waiting} />
-      <main id="main" className="min-w-0 flex-1 px-4 py-4 min-[900px]:px-8 min-[900px]:py-5">
+      <main
+        id="main"
+        className="min-w-0 flex-1 px-4 py-4 min-[900px]:py-5 min-[900px]:pl-[calc(var(--pane-left,0px)+2rem)] min-[900px]:pr-[calc(var(--pane-right,0px)+2rem)]"
+      >
         <div className="mx-auto flex max-w-7xl flex-col">
           <div className="no-print mb-3 flex justify-end">
             <AccountMenu
@@ -125,6 +128,13 @@ function SidePanel({ waiting }: { waiting: boolean }) {
   const [focused, setFocused] = useState(false);
   const isCompact = wide && compact;
   const rail = isCompact && !over && !focused;
+  // The width the panel keeps for itself, so side panes can sit right against it.
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty(
+      '--side-w',
+      !wide ? '0px' : isCompact ? '72px' : '296px',
+    );
+  }, [wide, isCompact]);
 
   const link = (to: string, label: string, icon: ReactNode, exact = false) => (
     <Link

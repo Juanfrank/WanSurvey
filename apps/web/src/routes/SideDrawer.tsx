@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CloseIcon, PinIcon } from './icons.js';
 
@@ -98,6 +98,7 @@ export function SideDrawer({
   label,
   icon,
   badge,
+  width = '22rem',
   className = '',
   children,
 }: {
@@ -107,6 +108,8 @@ export function SideDrawer({
   label: string;
   icon: ReactNode;
   badge?: number;
+  /** Width when pinned. */
+  width?: string;
   className?: string;
   children: ReactNode;
 }) {
@@ -154,12 +157,23 @@ export function SideDrawer({
     </button>
   );
 
+  // From 900 px the pane is glued to its edge: the left one to the side panel, the right one
+  // to the window's edge; the page leaves room for it (main reads --pane-left/--pane-right).
+  const place = side === 'left' ? 'min-[900px]:left-[var(--side-w,0px)]' : 'min-[900px]:right-0';
+  const line = side === 'left' ? 'min-[900px]:border-r' : 'min-[900px]:border-l';
+  useLayoutEffect(() => {
+    const root = document.documentElement.style;
+    root.setProperty(`--pane-${side}`, inline ? width : '3rem');
+    return () => void root.removeProperty(`--pane-${side}`);
+  }, [side, inline, width]);
+
   if (inline)
     return (
       <aside
         id={id}
         aria-label={label}
-        className={`sticky top-4 flex max-h-[calc(100vh-2rem)] min-w-0 flex-col gap-1 self-start overflow-y-auto ${className}`}
+        style={{ width }}
+        className={`fixed inset-y-0 z-20 flex min-w-0 flex-col gap-1 overflow-y-auto border-slate-200 bg-white p-4 ${place} ${line} ${className}`}
       >
         <div className="no-print flex justify-end">{pin}</div>
         {children}
@@ -170,7 +184,7 @@ export function SideDrawer({
     <aside
       ref={box}
       aria-label={label}
-      className="no-print sticky top-4 z-20 h-[calc(100vh-2rem)] w-12 self-start"
+      className={`no-print sticky top-4 z-20 h-[calc(100vh-2rem)] w-12 self-start min-[900px]:fixed min-[900px]:top-0 min-[900px]:bottom-0 min-[900px]:h-screen ${place}`}
       onMouseEnter={() => {
         clearTimeout(leave.current);
         drawer.peek(true);
@@ -190,7 +204,11 @@ export function SideDrawer({
         }
       }}
     >
-      <div className="flex h-full flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 shadow-sm">
+      <div
+        className={`flex h-full flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 shadow-sm min-[900px]:rounded-none min-[900px]:border-y-0 min-[900px]:shadow-none ${
+          side === 'left' ? 'min-[900px]:border-l-0' : 'min-[900px]:border-r-0'
+        }`}
+      >
         <button
           ref={button}
           type="button"
@@ -221,8 +239,8 @@ export function SideDrawer({
       <div
         id={id}
         hidden={!open}
-        className={`absolute top-0 flex h-full w-[min(26rem,calc(100vw-5rem))] flex-col gap-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-card ${
-          side === 'left' ? 'left-full ml-2' : 'right-full mr-2'
+        className={`absolute top-0 flex h-full w-[min(26rem,calc(100vw-5rem))] flex-col gap-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-card min-[900px]:rounded-none min-[900px]:border-y-0 ${
+          side === 'left' ? 'left-full ml-2 min-[900px]:ml-0' : 'right-full mr-2 min-[900px]:mr-0'
         } ${className}`}
       >
         <div className="flex items-center justify-end gap-1">

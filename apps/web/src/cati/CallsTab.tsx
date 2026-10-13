@@ -110,6 +110,10 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
   const [message, setMessage] = useState(
     notice === 'interview_done' ? t('cati.interviewDone') : '',
   );
+  // Also when the workspace was already open as the interview ended.
+  useEffect(() => {
+    if (notice === 'interview_done') setMessage(t('cati.interviewDone'));
+  }, [notice, t]);
   const [phone, setPhone] = useState(0);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [callback, setCallback] = useState('');
@@ -155,10 +159,17 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
     setOutcomeAt(0);
   };
 
+  // A request for a case made while another request runs (N pressed as the tab opens and
+  // checks for an open call, say) is served when that one ends, not dropped.
+  const pending = useRef<{ caseId?: string } | null>(null);
+
   /** `current`: only the caller's open call, if any (opening the tab never takes a case). */
   const next = useCallback(
     async (current = false, caseId?: string) => {
-      if (busy) return;
+      if (busy) {
+        if (!current) pending.current = { caseId };
+        return;
+      }
       setBusy(true);
       if (!current) setMessage('');
       setDue('');
@@ -202,6 +213,13 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
   useEffect(() => {
     void latest.current(true);
   }, [projectId]);
+  useEffect(() => {
+    if (busy || !pending.current) return;
+    const p = pending.current;
+    pending.current = null;
+    // An open call shown meanwhile is kept: the queue returns it again rather than a new case.
+    void latest.current(false, p.caseId);
+  }, [busy]);
 
   const interrupted = served?.attempt.outcome === 'answered';
   const choices = interrupted ? INTERRUPTED : [...CALL_OUTCOMES];
@@ -367,7 +385,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
 
   return (
     <div
-      className={`grid gap-4 ${drawer.inline ? 'lg:grid-cols-[minmax(0,1fr)_20rem]' : 'grid-cols-[minmax(0,1fr)_3rem]'}`}
+      className="grid grid-cols-[minmax(0,1fr)_3rem] gap-4 min-[900px]:grid-cols-1"
       data-testid="calls"
     >
       <section aria-labelledby="calls-title" className="flex min-w-0 flex-col gap-4">
@@ -660,6 +678,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
         drawer={drawer}
         side="right"
         label={t('cati.callbacks')}
+        width="21rem"
         icon={<PhoneIcon className="h-[18px] w-[18px]" />}
         badge={callbacks.data?.filter((c) => new Date(c.at).getTime() <= now).length}
         className="text-sm"
