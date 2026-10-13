@@ -233,11 +233,11 @@ export function PreviewWorkbench({
         </details>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <Tabs.Root defaultValue="interview" className="flex min-w-0 flex-col gap-4">
           <Tabs.List
             aria-label={t('preview.title')}
-            className="no-print flex gap-1 border-b border-slate-200"
+            className="no-print flex flex-wrap gap-1 border-b border-slate-200"
           >
             {(['interview', 'compare', 'answers'] as const).map((tab) => (
               <Tabs.Trigger
