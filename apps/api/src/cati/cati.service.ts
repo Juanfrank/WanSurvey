@@ -46,7 +46,11 @@ export const INTERVIEW_LOCK_MS = 4 * 60 * 60_000;
 /** Candidates read per request; the best ones by the SQL order come first. */
 const CANDIDATES = 200;
 
-export const NextBody = z.strictObject({ questionnaireId: z.uuid().optional() });
+export const NextBody = z.strictObject({
+  questionnaireId: z.uuid().optional(),
+  /** Call this case now (from the caller's callbacks), if the queue rules allow it. */
+  caseId: z.uuid().optional(),
+});
 
 export const OutcomeBody = z.strictObject({
   outcome: z.enum(CALL_OUTCOMES),
@@ -138,7 +142,13 @@ export class CatiService implements OnModuleInit {
    * eligible case (K1), locked to the caller (K2). Simultaneous requests skip each other's
    * rows, so a case is never served twice.
    */
-  async next(tx: Tx, ctx: AuthContext, projectId: string, questionnaireId?: string) {
+  async next(
+    tx: Tx,
+    ctx: AuthContext,
+    projectId: string,
+    questionnaireId?: string,
+    caseId?: string,
+  ) {
     const settings = await this.cases.settings(tx, projectId);
     const tz = await this.projectTimezone(tx, projectId);
     const now = new Date();
@@ -148,10 +158,32 @@ export class CatiService implements OnModuleInit {
     );
     const open = await this.openAttempt(tx, ctx, projectId);
     if (open) {
+      if (caseId && caseId !== open.caseId)
+        throw new ConflictException({
+          code: 'CALL_OPEN',
+          message: 'Finish the open call before calling another case',
+        });
       const [c] = await tx.select().from(cases).where(eq(cases.id, open.caseId));
       return this.serve(tx, ctx, projectId, c!, open, questionnaireId);
     }
     const pool = settings.assignmentMode === 'pool';
+    if (caseId) {
+      const c = await this.callable(tx, projectId, caseId, true);
+      const reason = ineligible(this.earlyAllowed(this.queueCase(c), now), {
+        me: ctx.userId,
+        now,
+        settings: settings.cati,
+        pool,
+        projectTimezone: tz,
+      });
+      if (reason)
+        throw new ConflictException({
+          code: 'CANNOT_CALL',
+          message: 'This case cannot be called now',
+          reason,
+        });
+      return this.open(tx, ctx, projectId, c, now, questionnaireId);
+    }
     const rows = await tx
       .select()
       .from(cases)
@@ -216,6 +248,18 @@ export class CatiService implements OnModuleInit {
         ...(await this.upcoming(tx, ctx, projectId)),
       };
     }
+    return this.open(tx, ctx, projectId, c, now, questionnaireId);
+  }
+
+  /** Locks the case to the caller and opens a call on it. */
+  private async open(
+    tx: Tx,
+    ctx: AuthContext,
+    projectId: string,
+    c: typeof cases.$inferSelect,
+    now: Date,
+    questionnaireId?: string,
+  ) {
     await tx
       .update(cases)
       .set({ callLockUserId: ctx.userId, callLockUntil: new Date(now.getTime() + CALL_LOCK_MS) })
@@ -230,6 +274,37 @@ export class CatiService implements OnModuleInit {
       })
       .returning();
     return this.serve(tx, ctx, projectId, c, attempt!, questionnaireId);
+  }
+
+  /**
+   * A case of the project that can be called by phone at all: open, not on a device, not being
+   * interviewed in another mode, with a valid number. Locked for update when asked.
+   */
+  private async callable(tx: Tx, projectId: string, caseId: string, lock: boolean) {
+    const q = tx
+      .select()
+      .from(cases)
+      .where(
+        and(
+          eq(cases.id, caseId),
+          eq(cases.projectId, projectId),
+          inArray(cases.status, ['fresh', 'assigned', 'in_progress']),
+          or(isNull(cases.modePreference), eq(cases.modePreference, 'CATI')),
+          isNull(cases.checkedOutDevice),
+          sql`exists (select 1 from contacts ct where ct.case_id = ${cases.id}
+                and ct.type = 'phone' and ct.valid)`,
+          sql`not exists (select 1 from interviews iv where iv.case_id = ${cases.id}
+                and iv.status = 'in_progress' and iv.mode <> 'CATI')`,
+        ),
+      );
+    const [c] = lock ? await q.for('update') : await q;
+    if (!c) throw new NotFoundException('Case not found or not callable by phone');
+    return c;
+  }
+
+  /** A callback may be called before its time when the caller chooses to (still in calling hours). */
+  private earlyAllowed(q: QueueCase, now: Date): QueueCase {
+    return q.nextContactAt && q.nextContactAt > now ? { ...q, nextContactAt: now } : q;
   }
 
   private queueCase(r: typeof cases.$inferSelect): QueueCase {
@@ -602,18 +677,34 @@ export class CatiService implements OnModuleInit {
     return { released: true };
   }
 
-  /** Callbacks and appointments for the caller (theirs, or open to anyone on cases they may call). */
+  /**
+   * Callbacks and appointments for the caller (theirs, or open to anyone on cases they may
+   * call), soonest first, with whether each can be called now and, if not, why; and who booked
+   * it, with their note. No phone numbers: those come with the call, where showing them is
+   * recorded.
+   */
   async callbacks(tx: Tx, ctx: AuthContext, projectId: string) {
     const settings = await this.cases.settings(tx, projectId);
     const tz = await this.projectTimezone(tx, projectId);
     const pool = settings.assignmentMode === 'pool';
+    const now = new Date();
+    const forUser = sql<
+      string | null
+    >`(select u.name from users u where u.id = cases.callback_user_id)`;
+    const booking = sql<{ outcome: string; note: string | null; by: string | null } | null>`(
+      select json_build_object('outcome', a.outcome, 'note', a.note, 'by', u.name)
+        from call_attempts a left join users u on u.id = a.interviewer_id
+       where a.case_id = cases.id and a.callback_at is not null
+       order by a.ended_at desc nulls last limit 1)`;
     const rows = await tx
       .select({
-        id: cases.id,
-        externalId: cases.externalId,
-        at: cases.nextContactAt,
-        forUser: cases.callbackUserId,
-        sample: cases.sample,
+        c: cases,
+        forUserName: forUser,
+        booking,
+        phone: sql<boolean>`exists (select 1 from contacts ct where ct.case_id = cases.id
+                and ct.type = 'phone' and ct.valid)`,
+        otherMode: sql<boolean>`exists (select 1 from interviews iv where iv.case_id = cases.id
+                and iv.status = 'in_progress' and iv.mode <> 'CATI')`,
       })
       .from(cases)
       .where(
@@ -634,12 +725,28 @@ export class CatiService implements OnModuleInit {
       )
       .orderBy(asc(cases.nextContactAt))
       .limit(200);
-    return rows.map((r) => ({
-      caseId: r.id,
-      externalId: r.externalId,
-      at: r.at,
-      mine: r.forUser === ctx.userId,
-      timezone: caseTimezone((r.sample as Record<string, unknown>).timezone, tz),
-    }));
+    const options = { me: ctx.userId, now, settings: settings.cati, pool, projectTimezone: tz };
+    return rows.map(({ c, forUserName, booking: b, phone, otherMode }) => {
+      const reason = !phone
+        ? 'no_phone'
+        : otherMode || c.checkedOutDevice
+          ? 'other_mode'
+          : ineligible(this.earlyAllowed(this.queueCase(c), now), options);
+      return {
+        caseId: c.id,
+        externalId: c.externalId,
+        at: c.nextContactAt,
+        due: !!c.nextContactAt && c.nextContactAt <= now,
+        mine: c.callbackUserId === ctx.userId,
+        forUserName,
+        timezone: caseTimezone((c.sample as Record<string, unknown>).timezone, tz),
+        kind: b?.outcome === 'appointment' ? 'appointment' : 'callback',
+        bookedBy: b?.by ?? null,
+        note: b?.note ?? null,
+        attempts: c.attempts,
+        callableNow: !reason,
+        reason,
+      };
+    });
   }
 }

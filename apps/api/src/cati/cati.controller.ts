@@ -46,7 +46,7 @@ export class CatiController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const out = await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.cati.next(tx, ctx, projectId, body.questionnaireId),
+      this.cati.next(tx, ctx, projectId, body.questionnaireId, body.caseId),
     );
     if ('reason' in out) {
       res.status(204);

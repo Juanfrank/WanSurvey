@@ -217,6 +217,69 @@ describe('telephone interviewing', () => {
     ]);
   });
 
+  it('lists callbacks with who booked them, and calls one now within the queue rules', async () => {
+    const { project, users, sessions, newCase } = await setup();
+    const [u, v] = users;
+    const [me, other] = sessions;
+    const first = await newCase(u!.id, { priority: 5, timezone: 'UTC' });
+    const second = await newCase(u!.id);
+    const a = await post(me!, `/projects/${project}/cati/next`);
+    expect(a.body.case.id).toBe(first);
+    const inAnHour = new Date(Date.now() + 3_600_000).toISOString();
+    await post(me!, `/cati/attempts/${a.body.attempt.id}/outcome`, {
+      outcome: 'callback',
+      callbackAt: inAnHour,
+      callbackFor: 'me',
+      note: 'Llamar después del almuerzo',
+    }).expect(200);
+
+    const list = await me!.agent.get(`/api/v1/projects/${project}/cati/callbacks`).expect(200);
+    expect(list.body).toEqual([
+      expect.objectContaining({
+        caseId: first,
+        mine: true,
+        forUserName: u!.email,
+        kind: 'callback',
+        bookedBy: u!.email,
+        note: 'Llamar después del almuerzo',
+        due: false,
+        attempts: 1,
+        // Not due yet, but in calling hours: the caller may call it early.
+        callableNow: true,
+        reason: null,
+      }),
+    ]);
+    expect(list.body[0]).not.toHaveProperty('phones');
+
+    // Someone else cannot call a case that is not theirs.
+    const theirs = await post(other!, `/projects/${project}/cati/next`, { caseId: first });
+    expect(theirs.status).toBe(409);
+    expect(theirs.body).toMatchObject({ code: 'CANNOT_CALL', reason: 'not_yours' });
+
+    // Call now: that case is served, ahead of the queue, and locked to the caller.
+    const now = await post(me!, `/projects/${project}/cati/next`, { caseId: first });
+    expect(now.status, JSON.stringify(now.body)).toBe(200);
+    expect(now.body.case.id).toBe(first);
+    const [locked] = await t.admin`select call_lock_user_id from cases where id = ${first}`;
+    expect(locked!.call_lock_user_id).toBe(u!.id);
+    // While that call is open, another case cannot be started.
+    const busy = await post(me!, `/projects/${project}/cati/next`, { caseId: second });
+    expect(busy.status).toBe(409);
+    expect(busy.body.code).toBe('CALL_OPEN');
+    await post(me!, `/cati/attempts/${now.body.attempt.id}/release`).expect(200);
+
+    // Outside the respondent's calling hours it is listed as such and refused.
+    const h = new Date(Date.now() + 2 * 3_600_000).getUTCHours();
+    const hh = (n: number) => `${String(n % 24).padStart(2, '0')}:00`;
+    await t.admin`update projects set settings = jsonb_set(settings, '{cati,callingHours}', ${t.admin.json({ from: hh(h), to: hh(h + 1) })}) where id = ${project}`;
+    const closed = await me!.agent.get(`/api/v1/projects/${project}/cati/callbacks`);
+    expect(closed.body[0]).toMatchObject({ callableNow: false, reason: 'outside_hours' });
+    const refused = await post(me!, `/projects/${project}/cati/next`, { caseId: first });
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ code: 'CANNOT_CALL', reason: 'outside_hours' });
+    void v;
+  });
+
   it('answered starts the telephone interview; submitting closes the call', async () => {
     const { project, qid, users, sessions, newCase } = await setup();
     const [u] = users;
