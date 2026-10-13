@@ -516,6 +516,7 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
           rows={q.rows ?? []}
           languages={langs}
           flags={false}
+          addLabel={t('designer.opt.addRow')}
           onChange={(rows) => p({ rows }, 'rows')}
         />
       ) : null}

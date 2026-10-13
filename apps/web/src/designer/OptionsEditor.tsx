@@ -23,6 +23,7 @@ export function OptionsEditor({
   languages,
   onChange,
   flags = true,
+  addLabel,
 }: {
   label: string;
   rows: Row[];
@@ -30,6 +31,8 @@ export function OptionsEditor({
   onChange(rows: Row[]): void;
   /** Show exclusive / other-specify / fixed flags (not for grid rows). */
   flags?: boolean;
+  /** Text of the add button (default "Add option"). */
+  addLabel?: string;
 }) {
   const { t } = useTranslation();
   const table = useRef<HTMLTableElement>(null);
@@ -184,7 +187,7 @@ export function OptionsEditor({
       ) : null}
       <div>
         <button type="button" className={smallBtn} onClick={add}>
-          {t('designer.opt.add')}
+          {addLabel ?? t('designer.opt.add')}
         </button>
         <span className="ml-2 text-xs text-slate-600">{t('designer.opt.keys')}</span>
       </div>
