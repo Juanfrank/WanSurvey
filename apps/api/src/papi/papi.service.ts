@@ -177,7 +177,8 @@ export class PapiService implements OnModuleInit {
     row: InterviewRow,
     writer: { tenantId: string; userId: string | null },
   ) {
-    if (row.mode !== 'PAPI' || !row.caseId) return;
+    // A resubmission after review is not a new entry.
+    if (row.mode !== 'PAPI' || !row.caseId || row.submissions > 1) return;
     const settings = await this.cases.settings(tx, row.projectId);
     if (!settings.papi.doubleEntry) return;
     const reopen = () =>

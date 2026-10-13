@@ -34,6 +34,18 @@ export const PapiSettings = z.object({
 });
 export type PapiSettings = z.infer<typeof PapiSettings>;
 
+export const ReviewSettings = z.object({
+  /** Share of each interviewer's completes picked at random for review (R2). */
+  samplePercent: z.number().int().min(0).max(100).default(10),
+  /** Faster than this per answered question is flagged as speeding. */
+  speedingMsPerQuestion: z.number().int().min(0).max(600_000).default(1500),
+  /** The same answer on at least this many grid rows (or consecutive items) is straight-lining. */
+  straightlineMinItems: z.number().int().min(2).max(100).default(5),
+  /** A rejected interview sends its case back to be interviewed again. */
+  rejectReopensCase: z.boolean().default(true),
+});
+export type ReviewSettings = z.infer<typeof ReviewSettings>;
+
 /** Per-project settings, stored as jsonb on `projects.settings`. Missing keys take defaults. */
 export const ProjectSettings = z.object({
   /**
@@ -51,6 +63,8 @@ export const ProjectSettings = z.object({
   cawi: CawiSettings.default(CawiSettings.parse({})),
   /** Paper forms keyed by data-entry clerks. */
   papi: PapiSettings.default(PapiSettings.parse({})),
+  /** Answer review (slice 11). */
+  review: ReviewSettings.default(ReviewSettings.parse({})),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

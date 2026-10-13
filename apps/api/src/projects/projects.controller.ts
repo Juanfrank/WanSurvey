@@ -16,6 +16,7 @@ import {
   CawiSettings,
   Mode,
   PapiSettings,
+  ReviewSettings,
   projectSettings,
 } from '@wansurvey/schema';
 import { eq, inArray } from 'drizzle-orm';
@@ -50,6 +51,7 @@ const ProjectPatch = ProjectFields.partial().extend({
       capi: CapiSettings,
       cawi: CawiSettings,
       papi: PapiSettings,
+      review: ReviewSettings,
     })
     .partial()
     .strict()

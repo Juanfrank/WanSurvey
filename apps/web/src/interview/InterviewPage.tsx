@@ -8,6 +8,8 @@ import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
+import { api } from '../api.js';
+import type { ReviewComment } from '../review/ReviewPage.js';
 import { useInterview, type SaveState } from './useInterview.js';
 
 const MASK = '•••';
@@ -235,6 +237,9 @@ export function InterviewPage() {
         ) : null}
         <SaveBadge state={iv.save} />
       </header>
+      {payload.interview.status === 'returned' ? (
+        <ReturnedComments interviewId={interviewId} />
+      ) : null}
       {payload.interview.mode === 'PAPI' ? (
         <PaperMeta
           second={payload.interview.entryPass === 2}
@@ -533,6 +538,36 @@ function PaperMeta({
           onBlur={() => save(date, minutes)}
         />
       </label>
+    </section>
+  );
+}
+
+/** What the reviewer asked to fix, beside the interview being corrected (R1). */
+function ReturnedComments({ interviewId }: { interviewId: string }) {
+  const { t } = useTranslation();
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  useEffect(() => {
+    void api<{ comments: ReviewComment[] }>(`/review/interviews/${interviewId}`).then(
+      (d) => setComments(d.comments),
+      () => setComments([]),
+    );
+  }, [interviewId]);
+  if (!comments.length) return null;
+  return (
+    <section
+      aria-label={t('review.returned.comments')}
+      className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm"
+      data-testid="returned-comments"
+    >
+      <h2 className="mb-1 font-semibold">{t('review.returned.comments')}</h2>
+      <ul className="flex flex-col gap-1">
+        {comments.map((c) => (
+          <li key={c.id}>
+            {c.variable ? <span className="mr-1 font-mono text-xs">{c.variable}</span> : null}
+            {c.body} <span className="text-xs text-slate-600">— {c.author}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

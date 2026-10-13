@@ -295,6 +295,16 @@ const ENDPOINTS: Endpoint[] = [
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/papi/mismatches`),
   },
   {
+    name: 'GET review/queue',
+    permission: ['interviews.review', 'interviews.approve'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/review/queue`),
+  },
+  {
+    name: 'GET coding',
+    permission: ['interviews.correct', 'interviews.review'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/coding`),
+  },
+  {
     name: 'GET cases',
     permission: ['cases.read_all', 'cases.read_assigned'],
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cases`),

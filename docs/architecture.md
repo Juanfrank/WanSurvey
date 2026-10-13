@@ -195,3 +195,16 @@ submit (pass 2) ─▶ compare with pass 1 ─▶ entry_mismatches ─▶ superv
 
 - `interviews.entry_pass` tells the first and second entries apart; the start endpoint picks the pass (`PapiService.nextPass`) and refuses a second entry by the same clerk.
 - The comparison runs in a submit hook; until every difference is resolved the case stays _in progress_.
+
+## Answer review (slice 11)
+
+```
+submit ─▶ hooks: flags + sample (R2, R3) ─▶ review queue ─▶ review screen (engine rebuilt from state)
+                                                   │ in review / approve / reject / return (comment)
+                                                   ▼
+                     returned ─▶ "Returned to me" ─▶ takeover on this device ─▶ fix ─▶ resubmit
+correction ─▶ engine setAnswer + validate + walk the path ─▶ reviewer answer events (+ cleared)
+```
+
+- Interview columns: `flags`, `sampled`, `submitted_at`, `submissions`, `reviewed_by`, `reviewed_at`; tables `review_comments`, `open_codes`, `coded_texts`.
+- The runtime accepts changes and submissions for interviews that are in progress or returned.

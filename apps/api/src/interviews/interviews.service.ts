@@ -34,6 +34,9 @@ import type { StartBody, SubmitBody, SyncItem } from './schemas.js';
 
 export type InterviewRow = typeof interviews.$inferSelect;
 
+/** Statuses in which the interviewer can still change answers: open, or returned by review. */
+export const EDITABLE = new Set(['in_progress', 'returned']);
+
 /** Who writes: a signed-in person, or a respondent through a link (no user). */
 export interface Writer {
   tenantId: string;
@@ -223,7 +226,7 @@ export class InterviewsService {
         })
         .returning({ lastSeq: interviewDevices.lastSeq });
       let last = dev!.lastSeq;
-      if (row.status !== 'in_progress') {
+      if (!EDITABLE.has(row.status)) {
         acks[item.id] = last;
         errors[item.id] = 'SUBMITTED';
         continue;
@@ -308,7 +311,7 @@ export class InterviewsService {
    * answers reaches the end on the same path, then the case is finalised and hooks run.
    */
   async submit(tx: Tx, row: InterviewRow, body: SubmitBody, writer: Writer) {
-    if (row.status !== 'in_progress')
+    if (!EDITABLE.has(row.status))
       throw new ConflictException({ code: 'SUBMITTED', message: 'Already submitted' });
     if (row.deviceId !== body.deviceId)
       throw new ConflictException({
@@ -348,7 +351,14 @@ export class InterviewsService {
     const disposition = status.disposition ?? 'COMPLETE';
     const [done] = (await tx
       .update(interviews)
-      .set({ status: 'submitted', disposition, endedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status: 'submitted',
+        disposition,
+        endedAt: row.endedAt ?? new Date(),
+        submittedAt: new Date(),
+        submissions: row.submissions + 1,
+        updatedAt: new Date(),
+      })
       .where(eq(interviews.id, row.id))
       .returning()) as [InterviewRow];
     if (row.caseId) {

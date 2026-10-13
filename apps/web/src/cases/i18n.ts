@@ -9,6 +9,7 @@ export const casesEn = {
     calls: 'Phone calls',
     web: 'Web survey',
     paper: 'Paper forms',
+    review: 'Review',
     settings: 'Settings',
   },
   list: {
@@ -266,6 +267,7 @@ export const casesEs: CasesCatalogue = {
     calls: 'Llamadas',
     web: 'Encuesta web',
     paper: 'Formularios en papel',
+    review: 'Revisión',
     settings: 'Configuración',
   },
   list: {

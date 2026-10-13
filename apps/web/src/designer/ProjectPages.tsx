@@ -16,6 +16,7 @@ import { SettingsTab } from '../cases/SettingsTab.js';
 import { CallsTab } from '../cati/CallsTab.js';
 import { CawiTab } from '../cawi/CawiTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
+import { ReviewTab } from '../review/ReviewTab.js';
 import { inputCls } from './fields.js';
 import { useCan } from './hooks.js';
 
@@ -245,7 +246,15 @@ const tabCls =
   '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700';
 
 type ProjectTab =
-  'questionnaires' | 'cases' | 'calls' | 'web' | 'paper' | 'import' | 'assignments' | 'settings';
+  | 'questionnaires'
+  | 'cases'
+  | 'calls'
+  | 'web'
+  | 'paper'
+  | 'review'
+  | 'import'
+  | 'assignments'
+  | 'settings';
 
 /** A project: its questionnaires, cases, sample import and assignments, as allowed by role. */
 export function ProjectPage() {
@@ -267,6 +276,7 @@ export function ProjectPage() {
     (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CAWI'));
   const canKeyForms = useCan('dataentry.key', projectId);
   const canReview = useCan('interviews.review', projectId);
+  const canApprove = useCan('interviews.approve', projectId);
   const canPaperRole = canKeyForms || canReview || canCasesAll;
   const canPaper =
     canPaperRole &&
@@ -283,6 +293,7 @@ export function ProjectPage() {
     ...(canCall ? (['calls'] as const) : []),
     ...(canWeb ? (['web'] as const) : []),
     ...(canPaper ? (['paper'] as const) : []),
+    ...(canReview || canApprove ? (['review'] as const) : []),
     ...(canImport ? (['import'] as const) : []),
     ...(canAssign ? (['assignments'] as const) : []),
     ...(canSettings ? (['settings'] as const) : []),
@@ -339,6 +350,9 @@ export function ProjectPage() {
           </Tabs.Content>
           <Tabs.Content value="paper">
             <PaperTab projectId={projectId} notice={search.notice} />
+          </Tabs.Content>
+          <Tabs.Content value="review">
+            <ReviewTab projectId={projectId} />
           </Tabs.Content>
           <Tabs.Content value="import">
             <ImportTab projectId={projectId} onDone={() => setTab('cases')} />

@@ -10,6 +10,7 @@ import { useCan } from '../designer/hooks.js';
 import { caseVariables } from '../designer/vars.js';
 import { Button } from '../routes/ui.js';
 import { CaseMap } from './CaseMap.js';
+import { ReturnedToMe } from '../review/ReturnedToMe.js';
 import { CallHistory, InterviewHistory, StartInterview } from './CaseInterviews.js';
 import { useMe } from '../routes/AppLayout.js';
 import { qs, STATUSES, useAssignees, type CaseList, type CaseRow } from './hooks.js';
@@ -25,6 +26,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const canAssign = useCan('cases.assign', projectId);
   const canReadAll = useCan('cases.read_all', projectId);
+  const canConductHere = useCan('interviews.conduct', projectId);
   const [status, setStatus] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [search, setSearch] = useState('');
@@ -130,6 +132,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {canConductHere ? <ReturnedToMe projectId={projectId} /> : null}
       {viewSwitch}
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">

@@ -547,7 +547,7 @@ export const interviews = pgTable(
       .references(() => questionnaireVersions.id),
     mode: text('mode').notNull(),
     interviewerId: uuid('interviewer_id'),
-    /** in_progress | submitted (review statuses come with the review workflow) */
+    /** in_progress | submitted | in_review | approved | returned | rejected | broken_off */
     status: text('status').notNull().default('in_progress'),
     disposition: text('disposition'),
     language: text('language').notNull(),
@@ -565,6 +565,16 @@ export const interviews = pgTable(
     entryPass: integer('entry_pass').notNull().default(1),
     activeMs: integer('active_ms').notNull().default(0),
     totalMs: integer('total_ms').notNull().default(0),
+    // Review (slice 11)
+    /** Quality flags computed at each submission (R3). */
+    flags: jsonb('flags').notNull().default({}),
+    /** Picked in the random review sample (R2). */
+    sampled: boolean('sampled').notNull().default(false),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    /** How many times it was submitted (more than one after a return). */
+    submissions: integer('submissions').notNull().default(0),
+    reviewedBy: uuid('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -858,6 +868,62 @@ export const entryMismatches = pgTable(
   ],
 );
 
+/** Reviewers' comments on an interview, per question or on the whole interview. */
+export const reviewComments = pgTable(
+  'review_comments',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    interviewId: uuid('interview_id')
+      .notNull()
+      .references(() => interviews.id),
+    /** The answer key commented on; null for the whole interview. */
+    variable: text('variable'),
+    body: text('body').notNull(),
+    authorId: uuid('author_id').notNull(),
+    createdAt: createdAt(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (t) => [index('review_comments_interview_idx').on(t.interviewId, t.createdAt)],
+);
+
+/** Codes for the free text of "Other, specify" answers (R6). */
+export const openCodes = pgTable(
+  'open_codes',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    /** The text variable, e.g. `A6_OCC_OTHER`. */
+    variable: text('variable').notNull(),
+    code: integer('code').notNull(),
+    label: text('label').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('open_codes_uq').on(t.projectId, t.variable, t.code)],
+);
+
+/** Which code each distinct "other" text was given (R6). */
+export const codedTexts = pgTable(
+  'coded_texts',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    variable: text('variable').notNull(),
+    /** Trimmed and lower-cased, so the same text written differently gets one code. */
+    text: text('text').notNull(),
+    code: integer('code').notNull(),
+    codedBy: uuid('coded_by'),
+    codedAt: timestamp('coded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('coded_texts_uq').on(t.projectId, t.variable, t.text)],
+);
+
 /** Tables protected by tenant row-level security. */
 export const TENANT_TABLES = [
   'tenant_members',
@@ -889,5 +955,8 @@ export const TENANT_TABLES = [
   'suppressions',
   'open_links',
   'entry_mismatches',
+  'review_comments',
+  'open_codes',
+  'coded_texts',
   'audit_log',
 ] as const;

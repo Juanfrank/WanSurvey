@@ -183,6 +183,45 @@ export function SettingsTab({ project }: { project: Project }) {
           {t('papi.settings.doubleEntry')}
         </label>
       </fieldset>
+      <fieldset className="flex flex-col gap-2" data-testid="review-settings">
+        <legend className="mb-1 font-medium">{t('review.settings.title')}</legend>
+        {(
+          [
+            ['sample', 'samplePercent', 1, 0, 100],
+            ['speeding', 'speedingMsPerQuestion', 1000, 0, 600],
+            ['straight', 'straightlineMinItems', 1, 2, 100],
+          ] as const
+        ).map(([label, key, scale, min, max]) => (
+          <label key={key} className="flex items-center gap-2">
+            <input
+              type="number"
+              min={min}
+              max={max}
+              step={scale === 1000 ? 0.1 : 1}
+              className={`${controlCls} w-24`}
+              value={form.review[key] / scale}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  review: { ...form.review, [key]: Math.round(Number(e.target.value) * scale) },
+                })
+              }
+            />
+            {t(`review.settings.${label}`)}
+          </label>
+        ))}
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.review.rejectReopensCase}
+            onChange={(e) =>
+              setForm({ ...form, review: { ...form.review, rejectReopensCase: e.target.checked } })
+            }
+          />
+          {t('review.settings.rejectReopens')}
+        </label>
+      </fieldset>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={save.isPending}>
           {t('cases.settings.save')}

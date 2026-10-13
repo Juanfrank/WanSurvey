@@ -4,7 +4,7 @@ WanSurvey is a multi-tenant platform for survey data collection. A questionnaire
 
 ## Status
 
-The MVP is built in 13 vertical slices; ten are done so far.
+The MVP is built in 13 vertical slices; eleven are done so far.
 
 | Slice | Scope                                                                                                                                                                                                                                                                                                                                                                                                                 | State   |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -19,7 +19,8 @@ The MVP is built in 13 vertical slices; ten are done so far.
 | 8     | **CAPI offline**: installable app with a service worker, cases downloaded to one device, interviews started, continued and submitted with no connection and sent automatically when back online, optional location at start and end, and supervisor release of a lost device                                                                                                                                          | ✅      |
 | 9     | **CAWI and e-mail**: invitation and reminder wording with preview, waves with reminders and a send funnel, tracking of opens and clicks, bounce webhook and do-not-e-mail list, unsubscribe, lawful-basis check, and the respondent survey (phone-friendly, resumable on any device) plus open links                                                                                                                  | ✅      |
 | 10    | **PAPI**: printable forms per case with a QR code and the paper form, keying by clerks (typed or scanned case id, numeric codes, the date and duration written on the form), and double entry with a supervisor's list of differences to resolve                                                                                                                                                                      | ✅      |
-| 11–13 | Review, metrics and exports, hardening                                                                                                                                                                                                                                                                                                                                                                                | planned |
+| 11    | **Review**: statuses (in review, approved, returned with comments, rejected), a queue with quality flags and a random sample, a review screen with timings, notes, history and comment threads per question, corrections that re-run the logic, and coding of “other” answers                                                                                                                                         | ✅      |
+| 12–13 | Metrics, live dashboards and exports; hardening                                                                                                                                                                                                                                                                                                                                                                       | planned |
 
 Background reading:
 

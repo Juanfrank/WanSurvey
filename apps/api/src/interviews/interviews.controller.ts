@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -20,13 +21,16 @@ import { Database, type Tx } from '../db/database.js';
 import {
   cases,
   interviewAnswerEvents,
+  interviewDevices,
   interviews,
   questionnaireVersions,
   users,
 } from '../db/schema.js';
-import { StartBody, SubmitBody, SyncBody } from './schemas.js';
+import { DeviceId, StartBody, SubmitBody, SyncBody } from './schemas.js';
+
+const TakeoverBody = z.object({ deviceId: DeviceId });
 import { PapiService } from '../papi/papi.service.js';
-import { InterviewsService, personalVariables } from './interviews.service.js';
+import { EDITABLE, InterviewsService, personalVariables } from './interviews.service.js';
 
 export { personalVariables };
 
@@ -135,6 +139,36 @@ export class InterviewsController {
         userId: ctx.userId,
         ctx,
       });
+    });
+  }
+
+  /**
+   * Continues one of the caller's interviews on this device (a returned interview, or one
+   * open elsewhere): the device takes it over and the other one's unsent changes are refused.
+   */
+  @Post('interviews/:id/takeover')
+  @HttpCode(200)
+  @RequirePermission(CONDUCT_OR_KEY, { anyProject: true })
+  @ApiBody({ schema: z.toJSONSchema(TakeoverBody) as object })
+  takeover(
+    @Auth() ctx: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(TakeoverBody)) body: z.infer<typeof TakeoverBody>,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const row = await this.own(tx, ctx, id, true);
+      if (!EDITABLE.has(row.status))
+        throw new ConflictException({ code: 'SUBMITTED', message: 'Already submitted' });
+      const [moved] = await tx
+        .update(interviews)
+        .set({ deviceId: body.deviceId, updatedAt: new Date() })
+        .where(eq(interviews.id, id))
+        .returning();
+      await tx
+        .insert(interviewDevices)
+        .values({ tenantId: ctx.tenantId, interviewId: id, deviceId: body.deviceId })
+        .onConflictDoNothing();
+      return this.runtime.payload(tx, moved!, body.deviceId);
     });
   }
 

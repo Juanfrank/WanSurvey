@@ -112,6 +112,13 @@ const printRoute = createRoute({
   }),
 });
 
+// Answer review (slice 11).
+const reviewRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId/review/$interviewId',
+  component: lazyRouteComponent(() => import('./review/ReviewPage.js'), 'ReviewPage'),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
@@ -129,6 +136,7 @@ const routeTree = rootRoute.addChildren([
     interviewRoute,
     deviceRoute,
     printRoute,
+    reviewRoute,
   ]),
 ]);
 
