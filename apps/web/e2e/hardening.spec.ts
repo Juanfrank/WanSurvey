@@ -42,6 +42,7 @@ test('the app is served with a strict Content-Security-Policy and breaks none of
   expect(headers['permissions-policy']).toContain('geolocation=(self)');
 
   await openProject(page);
+  await shot(page, 'project-home');
   for (const tab of ['Cases', 'Dashboard', 'Metrics', 'Results', 'Exports', 'Settings']) {
     await page.getByRole('tab', { name: tab }).click();
     await page.waitForLoadState('networkidle');
@@ -139,5 +140,6 @@ test("a data subject's personal data is downloaded and erased from the case", as
   await expect(section.getByRole('status')).toHaveText('Personal data erased.');
   await expect(section).toContainText('Personal data removed on');
   await expect(drawer).toContainText('Personal data removed');
+  await shot(page, 'case-personal-data');
   await expectAccessible(page);
 });

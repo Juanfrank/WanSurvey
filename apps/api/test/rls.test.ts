@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
+import { TENANT_TABLES } from '../src/db/schema.js';
 import { bootstrap, createProject, createTenant, createUser, type TestApp } from './harness.js';
 
 /** Row-level security, tested directly against the restricted application role. */
@@ -62,6 +63,20 @@ describe('tenant isolation (Postgres RLS)', () => {
       (sql) => sql`update users set password_hash = 'x' where id = ${both.id} returning id`,
     );
     expect(updated).toHaveLength(0);
+  });
+
+  it('the application role cannot bypass row-level security, and every tenant table has it', async () => {
+    const [app] = await t.admin`
+      select rolsuper, rolbypassrls from pg_roles where rolname = 'wansurvey_app'`;
+    expect(app).toEqual({ rolsuper: false, rolbypassrls: false });
+    const owners = await t.admin`
+      select distinct pg_get_userbyid(relowner) as owner from pg_class
+      where relnamespace = 'public'::regnamespace and relkind = 'r'`;
+    expect(owners.map((o) => o.owner)).not.toContain('wansurvey_app');
+    const unprotected = await t.admin`
+      select relname from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'
+        and relname = any(${TENANT_TABLES as unknown as string[]}) and not relrowsecurity`;
+    expect(unprotected).toEqual([]);
   });
 
   it('sees nothing without a tenant context', async () => {

@@ -9,6 +9,8 @@ RUN pnpm install --frozen-lockfile --filter @wansurvey/web... \
   && pnpm --filter @wansurvey/web... build
 
 FROM nginx:1.27-alpine
-COPY infra/nginx/web.conf /etc/nginx/conf.d/default.conf
+# Filled in at start: where /api goes (see infra/nginx/templates/default.conf.template).
+ENV API_UPSTREAM=http://api:3000
+COPY infra/nginx/templates /etc/nginx/templates
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 8080

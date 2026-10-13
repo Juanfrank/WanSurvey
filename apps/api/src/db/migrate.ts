@@ -22,12 +22,23 @@ export async function runMigrations(adminUrl: string, appUrl: string): Promise<v
       { exists: boolean }[]
     >`select exists(select 1 from pg_roles where rolname = ${role})`;
     const exists = row!.exists;
-    const opts = 'LOGIN PASSWORD %L NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE';
-    const template = `${exists ? 'ALTER' : 'CREATE'} ROLE %I ${opts}`;
+    // Only a superuser may write NOSUPERUSER / NOBYPASSRLS, even to restate the defaults, and
+    // managed Postgres (Azure Flexible Server, RDS) gives no superuser: create the role with the
+    // defaults (NOSUPERUSER, NOBYPASSRLS, NOCREATEDB, NOCREATEROLE), then check them.
+    const template = exists
+      ? 'ALTER ROLE %I LOGIN PASSWORD %L'
+      : 'CREATE ROLE %I LOGIN PASSWORD %L';
     const [fmt] = await sql<
       { stmt: string }[]
     >`select format(${template}::text, ${role}::text, ${password}::text) as stmt`;
     await sql.unsafe(fmt!.stmt);
+    const [attrs] = await sql<{ unsafe: boolean }[]>`
+      select (rolsuper or rolbypassrls or rolcreatedb or rolcreaterole) as unsafe
+      from pg_roles where rolname = ${role}`;
+    if (attrs?.unsafe)
+      throw new Error(
+        `${role} must not be a superuser, bypass row-level security, or create databases or roles`,
+      );
     await migrate(drizzle(sql), { migrationsFolder: MIGRATIONS });
   } finally {
     await sql.end({ timeout: 5 });

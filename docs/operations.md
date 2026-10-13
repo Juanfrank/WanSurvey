@@ -12,9 +12,9 @@ How to run WanSurvey in production: what runs, how it is configured, and the rou
 | Postgres 16 | managed service                                        | primary + standby              | encrypted disks, daily backups |
 | Redis 7     | managed service                                        | 1 (with persistence)           | —                              |
 
-TLS terminates at the load balancer, which sends `/` to the web containers. nginx serves the app with its security headers and proxies `/api/` to the API, so the session cookie stays first-party. Server-Sent Events (`/api/v1/projects/:id/live`) need proxy buffering off and a long read timeout; `infra/nginx/web.conf` sets both, and a load balancer in front needs an idle timeout above 30 s.
+TLS terminates at the load balancer, which sends `/` to the web containers. nginx serves the app with its security headers and proxies `/api/` to the API, so the session cookie stays first-party. Server-Sent Events (`/api/v1/projects/:id/live`) need proxy buffering off and a long read timeout; `infra/nginx/templates/default.conf.template` sets both, and a load balancer in front needs an idle timeout above 30 s.
 
-`docker compose --profile full up` runs the whole stack locally (Postgres, Redis, API, worker, web on http://localhost:8080).
+On Azure App Service, see [`azure.md`](azure.md). `docker compose --profile full up` runs the whole stack locally (Postgres, Redis, API, worker, web on http://localhost:8080).
 
 ## Configuration
 

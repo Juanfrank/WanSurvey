@@ -10,7 +10,7 @@ How WanSurvey meets spec §12, checked against the [OWASP ASVS 4.0.3](https://ow
 | Encryption at rest      | ◐      | Database and backups: the hosting provider's disk encryption. Secrets and personal sample fields: AES-256-GCM in the application (H1) |
 | Sessions and CSRF       | ✅     | httpOnly session cookie, hashed session ids, CSRF header on writes                                                                    |
 | Rate limits             | ✅     | Login, CAWI links and open links, webhooks (`test/security.test.ts`, `test/rbac.test.ts`)                                             |
-| Content-Security-Policy | ✅     | `apps/web/security-headers.ts`, `infra/nginx/web.conf`; no violations on any page (`e2e/hardening.spec.ts`)                           |
+| Content-Security-Policy | ✅     | `apps/web/security-headers.ts`, `infra/nginx/templates/default.conf.template`; no violations on any page (`e2e/hardening.spec.ts`)    |
 | Dependency scanning     | ✅     | `pnpm audit --prod` in CI                                                                                                             |
 | Tenant isolation        | ✅     | Postgres row-level security on every tenant table (`test/rls.test.ts`)                                                                |
 | Access control          | ✅     | Role matrix enforced on every endpoint (`test/rbac.test.ts`, 470+ cases)                                                              |

@@ -226,6 +226,6 @@ API ── enqueue ──▶ Redis (BullMQ "wansurvey") ──▶ worker: mail.d
 ## Hardening (slice 13)
 
 - Personal sample fields: `CasesService.pii` (`PiiCipher`) seals on write and opens on read; `PrivacyService` seals leftovers (`pii.encrypt`), applies retention (`privacy.retention`) and answers data subject requests (`PrivacyController`). Erasing answer history goes through `erase_interview_history()`, the only exception to append-only history.
-- Headers: the API sets its own; the web app's are in `apps/web/security-headers.ts` (vite preview) and `infra/nginx/web.conf` (production).
+- Headers: the API sets its own; the web app's are in `apps/web/security-headers.ts` (vite preview) and `infra/nginx/templates/default.conf.template` (production).
 - Project settings `shortcuts` reach the interviewer screen in the interview payload and in downloaded CAPI cases.
 - Docs: [`operations.md`](operations.md), [`security.md`](security.md) (ASVS L2), [`accessibility.md`](accessibility.md), [`acceptance.md`](acceptance.md).

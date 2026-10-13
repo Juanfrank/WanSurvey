@@ -1,6 +1,6 @@
 /**
  * Response headers for the web app (H4), used by `vite preview` and mirrored in
- * `infra/nginx/web.conf` for production. The build has no inline scripts or styles, so the
+ * `infra/nginx/templates/default.conf.template` for production. The build has no inline scripts or styles, so the
  * policy needs no nonces: scripts and styles come only from this origin.
  */
 export const CONTENT_SECURITY_POLICY = [

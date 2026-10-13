@@ -45,6 +45,13 @@ const Env = z.object({
    * process (development and tests); production sets it and runs `node dist/worker.js` too.
    */
   REDIS_URL: z.string().url().optional(),
+  /**
+   * The worker answers `GET /health` on this port when set: hosts such as Azure App Service
+   * restart a container that does not answer HTTP.
+   */
+  WORKER_HEALTH_PORT: z.coerce.number().int().positive().optional(),
+  /** Proxies in front of the API (load balancer, nginx…), for the client address. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),

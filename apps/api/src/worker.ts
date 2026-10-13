@@ -1,8 +1,10 @@
 import 'reflect-metadata';
+import { createServer } from 'node:http';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { loadConfig } from './config.js';
+import { Database } from './db/database.js';
 import { initObservability } from './observability.js';
 
 /**
@@ -21,3 +23,20 @@ const app = await NestFactory.createApplicationContext(AppModule.register({ role
 app.useLogger(app.get(Logger));
 app.enableShutdownHooks();
 await app.init();
+
+// Health for hosts that expect every container to answer HTTP (Azure App Service).
+if (config.WORKER_HEALTH_PORT) {
+  const database = app.get(Database);
+  const server = createServer((req, res) => {
+    if (req.url !== '/health') {
+      res.writeHead(404).end();
+      return;
+    }
+    database.client`select 1`.then(
+      () => res.writeHead(200, { 'content-type': 'application/json' }).end('{"status":"ok"}'),
+      () => res.writeHead(503, { 'content-type': 'application/json' }).end('{"status":"db"}'),
+    );
+  });
+  server.listen(config.WORKER_HEALTH_PORT);
+  process.once('SIGTERM', () => server.close());
+}

@@ -18,7 +18,7 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
   app.useBodyParser('json', { limit: '5mb' });
   app.useBodyParser('urlencoded', { extended: false, limit: '100kb' });
   app.useLogger(app.get(Logger));
-  app.set('trust proxy', 1);
+  app.set('trust proxy', loadConfig().TRUST_PROXY_HOPS);
   app.disable('x-powered-by');
   app.use(cookieParser());
   const production = loadConfig().NODE_ENV === 'production';

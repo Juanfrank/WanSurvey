@@ -134,6 +134,13 @@
       "when": 1791883098730,
       "tag": "0018_privacy",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791904628746,
+      "tag": "0019_owner_bypasses_rls",
+      "breakpoints": true
     }
   ]
 }

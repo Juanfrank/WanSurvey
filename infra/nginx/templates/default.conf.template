@@ -1,6 +1,9 @@
 # The web app in production (H4): static files with the security headers of
 # apps/web/security-headers.ts, and /api proxied to the API on the same origin, so the
 # session cookie stays first-party. TLS terminates in front of this (load balancer or ingress).
+# The nginx image fills ${API_UPSTREAM} from the environment when it starts: http://api:3000
+# in docker compose, or the API app's own address on Azure App Service
+# (https://<api-app>.azurewebsites.net). nginx's own $variables are left alone.
 server {
   listen 8080;
   root /usr/share/nginx/html;
@@ -10,8 +13,11 @@ server {
   # served (the app shell); the API sends its own.
 
   location /api/ {
-    proxy_pass http://api:3000;
-    proxy_set_header Host $host;
+    proxy_pass ${API_UPSTREAM};
+    # The API's host name (App Service routes by it); the browser's host goes in X-Forwarded-Host.
+    proxy_set_header Host $proxy_host;
+    proxy_ssl_server_name on;
+    proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     # Live dashboards (Server-Sent Events) must not be buffered.
