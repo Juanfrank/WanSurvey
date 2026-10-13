@@ -76,8 +76,15 @@ test('the supervisor dashboard updates live when an interview is submitted elsew
   await expect(iv.getByTestId('save-status')).toHaveAttribute('data-status', 'saved', {
     timeout: 10_000,
   });
+  // The first submission of the run, on freshly started servers: wait for the server's answer
+  // (and show it if it is not a success) before the page goes back to the project.
+  const submitted = iv.waitForResponse((r) => /\/interviews\/[^/]+\/submit$/.test(r.url()));
   await iv.getByRole('button', { name: 'Submit interview' }).click();
-  await expect(iv.getByRole('tablist', { name: 'Project sections' })).toBeVisible();
+  const res = await submitted;
+  expect(res.status(), await res.text()).toBe(200);
+  await expect(iv.getByRole('tablist', { name: 'Project sections' })).toBeVisible({
+    timeout: 15_000,
+  });
 
   // Without reloading, the dashboard shows the finished case and who is working.
   await expect.poll(() => barValue(sup, 'Finalised'), { timeout: 15_000 }).toBe(finalised + 1);

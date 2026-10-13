@@ -3,6 +3,7 @@ import { type CompiledQuestionnaire } from '@wansurvey/logic';
 import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
+import { PiiCipher } from '../cases/pii.js';
 import { simulateInterview } from './simulate.js';
 
 const MODES = ['CAPI', 'CATI', 'CAWI', 'PAPI'] as const;
@@ -42,6 +43,15 @@ export async function seedDemoData(adminUrl: string, password: string, count = 6
         await tx`insert into memberships (id, tenant_id, user_id, role, project_id) values (${uuidv7()}, ${p.tenant_id}, ${id}, 'interviewer', ${p.id})`;
         team.push(id);
       }
+      // Personal fields sealed as the API would (H1) when the key is at hand.
+      const piiRows = await tx<{ name: string }[]>`
+        select name from sample_fields where project_id = ${p.id} and pii`;
+      const pii = new Set(piiRows.map((r) => r.name));
+      const cipher = process.env.APP_ENCRYPTION_KEY
+        ? new PiiCipher(process.env.APP_ENCRYPTION_KEY)
+        : null;
+      const seal = (sample: Record<string, unknown>) =>
+        cipher ? cipher.seal(sample, pii) : { sample, samplePii: null, samplePiiIndex: null };
       const day = 86_400_000;
       const start = Date.now() - 14 * day;
       for (let n = 0; n < count + LOST.length * 2; n++) {
@@ -58,9 +68,16 @@ export async function seedDemoData(adminUrl: string, password: string, count = 6
             : team[n % team.length]!;
         const at = new Date(start + (n / (count + 12)) * 14 * day + (n % 5) * 3_600_000);
         const finalLost = lost && !['NO_ANSWER'].includes(lost);
-        await tx`insert into cases (id, tenant_id, project_id, external_id, sample, status, disposition, assigned_to, attempts, last_attempt_at)
-                 values (${caseId}, ${p.tenant_id}, ${p.id}, ${external},
-                         ${tx.json({ first_name: 'Demo', last_name: external, region: 9, city: 'Lima', age: 30 + (n % 40) })},
+        const sealed = seal({
+          first_name: 'Demo',
+          last_name: external,
+          region: 9,
+          city: 'Lima',
+          age: 30 + (n % 40),
+        });
+        await tx`insert into cases (id, tenant_id, project_id, external_id, sample, sample_pii, sample_pii_index, status, disposition, assigned_to, attempts, last_attempt_at)
+                 values (${caseId}, ${p.tenant_id}, ${p.id}, ${external}, ${tx.json(sealed.sample as never)},
+                         ${sealed.samplePii}, ${sealed.samplePiiIndex},
                          ${lost ? (finalLost ? 'finalised' : 'assigned') : 'finalised'}, ${lost ?? 'COMPLETE'},
                          ${interviewer}, ${mode === 'CATI' || lost ? 1 + (n % 3) : 0}, ${at})`;
         if (mode === 'CATI' || lost) {
