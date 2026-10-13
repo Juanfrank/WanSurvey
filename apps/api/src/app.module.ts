@@ -1,4 +1,10 @@
-import { Module, type DynamicModule } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Module,
+  type DynamicModule,
+  type OnModuleDestroy,
+} from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
@@ -59,6 +65,7 @@ import { QuestionnairesController } from './questionnaires/questionnaires.contro
 import { TenantsController } from './tenants/tenants.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
+import { sessionOrIp, throttleStorage } from './common/throttle.js';
 
 export interface AppModuleOptions {
   mailer?: Mailer;
@@ -68,6 +75,20 @@ export interface AppModuleOptions {
   role?: ProcessRole;
   /** Replaces the configured bus (tests). */
   bus?: Bus;
+}
+
+const BUS_OWNED = Symbol('BUS_OWNED');
+
+@Injectable()
+class BusShutdown implements OnModuleDestroy {
+  constructor(
+    @Inject(BUS) private readonly bus: Bus,
+    @Inject(BUS_OWNED) private readonly owned: boolean,
+  ) {}
+
+  async onModuleDestroy() {
+    if (this.owned) await this.bus.close();
+  }
 }
 
 @Module({})
@@ -87,7 +108,15 @@ export class AppModule {
             ],
           },
         }),
-        ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 600 }]),
+        // Per session (or IP on public routes) with the route's own limits, and an overall
+        // ceiling per IP; counters shared through Redis when it is configured.
+        ThrottlerModule.forRoot({
+          throttlers: [
+            { name: 'default', ttl: 60_000, limit: 600, getTracker: sessionOrIp },
+            { name: 'ip', ttl: 60_000, limit: config.RATE_LIMIT_PER_IP },
+          ],
+          storage: throttleStorage(config.REDIS_URL),
+        }),
       ],
       controllers: [
         HealthController,
@@ -149,6 +178,9 @@ export class AppModule {
           useFactory: () =>
             opts.bus ?? (config.REDIS_URL ? new RedisBus(config.REDIS_URL) : new LocalBus()),
         },
+        // The bus this module made is closed with it (its Redis connections), a given one is not.
+        { provide: BUS_OWNED, useValue: !opts.bus },
+        BusShutdown,
         JobsService,
         StatsService,
         MetricsService,

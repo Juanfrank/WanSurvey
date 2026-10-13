@@ -68,7 +68,8 @@ Before each later release, run step 2 with the new image, then swap deployment s
 
 - **Memory**: the three apps share 1.75 GB per instance; together they use about 350 MB at rest (measured: API and worker about 165 MB each, nginx a few MB). Exports are built in memory (up to 100 MB of file), so large exports can briefly take several hundred MB more. `NODE_OPTIONS` caps each Node process; for heavy exporting, put the worker on its own plan.
 - **CPU**: one vCPU per instance. For 300 interviewers syncing or a 50-per-second web survey burst, scale out to 2–3 instances (autoscale rule on CPU > 70%). Check the numbers with `load/` (k6) before a large wave.
-- **Scale-out is safe**: sessions are in Postgres, exports in Postgres, and live dashboards are fanned out through Redis, so any instance can serve any request. Rate limits are kept per instance, so with N instances the effective limit is N times the setting.
+- **Concurrency settings** (pool sizes, timeouts, PgBouncer, rate limits, job concurrency): see [`docs/concurrency.md`](concurrency.md), including how to size pools against the server's `max_connections`.
+- **Scale-out is safe**: sessions are in Postgres, exports in Postgres, and live dashboards are fanned out through Redis, so any instance can serve any request. Rate limits are counted in Redis, so they hold across instances.
 - **Live dashboards**: Server-Sent Events work through App Service; the 15-second heartbeat stays well under the 230-second idle timeout, and nginx has buffering off for `/api/`.
 - **Files**: nothing is written to local disk (exports are stored in the database), so the read-only, ephemeral container storage of App Service is fine.
 

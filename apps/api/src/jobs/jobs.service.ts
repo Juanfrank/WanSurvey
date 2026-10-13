@@ -7,15 +7,24 @@ import {
 } from '@nestjs/common';
 import { Queue, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
+import { closeThrottleStorage } from '../common/throttle.js';
 import { CONFIG, type AppConfig } from '../config.js';
+import { PROCESS_ROLE, type ProcessRole } from './role.js';
+
+/** Which part of the system this process is (M1). */
+export { PROCESS_ROLE, type ProcessRole };
 
 export type JobHandler = (data: Record<string, unknown>) => Promise<unknown>;
 
-/** Which part of the system this process is (M1). */
-export type ProcessRole = 'api' | 'worker';
-export const PROCESS_ROLE = Symbol('PROCESS_ROLE');
-
 const QUEUE = 'wansurvey';
+/**
+ * Long, memory-hungry jobs (building exports) have a queue and workers of their own, so a big
+ * export never delays e-mail sending or the live figures queued behind it.
+ */
+const HEAVY_QUEUE = 'wansurvey-heavy';
+const HEAVY = new Set(['exports.build']);
+/** Failed jobs are kept a week (at most 500) to look into, then dropped. */
+const KEEP_FAILED = { count: 500, age: 7 * 24 * 3600 };
 
 interface Schedule {
   name: string;
@@ -37,7 +46,8 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly handlers = new Map<string, JobHandler>();
   private readonly schedules: Schedule[] = [];
   private queue: Queue | null = null;
-  private worker: Worker | null = null;
+  private heavyQueue: Queue | null = null;
+  private readonly workers: Worker[] = [];
   private connection: Redis | null = null;
   private readonly intervals = new Set<ReturnType<typeof setInterval>>();
   /** Inline mode: jobs waiting for their delay (by key) and jobs running. */
@@ -52,6 +62,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     if (config.REDIS_URL) {
       this.connection = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
       this.queue = new Queue(QUEUE, { connection: this.connection });
+      this.heavyQueue = new Queue(HEAVY_QUEUE, { connection: this.connection });
     }
   }
 
@@ -74,14 +85,15 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     opts: { jobId?: string; delayMs?: number } = {},
   ): Promise<void> {
     if (this.queue) {
-      await this.queue.add(name, data, {
+      const queue = HEAVY.has(name) ? this.heavyQueue! : this.queue;
+      await queue.add(name, data, {
         // BullMQ job ids may not contain ':' (it separates Redis keys).
         ...(opts.jobId ? { jobId: `${name}.${opts.jobId}`.replaceAll(':', '_') } : {}),
         delay: opts.delayMs ?? 0,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: true,
-        removeOnFail: 100,
+        removeOnFail: KEEP_FAILED,
       });
       return;
     }
@@ -125,16 +137,24 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
         await this.queue.upsertJobScheduler(
           s.name,
           s.everyMs ? { every: s.everyMs } : { pattern: s.cron!, tz: 'UTC' },
-          { name: s.name, opts: { removeOnComplete: true, removeOnFail: 100 } },
+          { name: s.name, opts: { removeOnComplete: true, removeOnFail: KEEP_FAILED } },
         );
-      this.worker = new Worker(QUEUE, (job: Job) => this.run(job.name, job.data), {
-        connection: this.connection!.duplicate({ maxRetriesPerRequest: null }),
-        concurrency: 4,
-      });
-      this.worker.on('failed', (job, err) =>
-        this.logger.warn(`Job ${job?.name} attempt ${job?.attemptsMade} failed: ${err.message}`),
-      );
-      this.logger.log(`Worker listening on queue ${QUEUE}`);
+      // Each worker takes at most `concurrency` jobs at a time from its queue (pulling, so
+      // extra worker instances share the load); jobs keep within the database pool.
+      for (const [queue, concurrency] of [
+        [QUEUE, this.config.JOB_CONCURRENCY],
+        [HEAVY_QUEUE, this.config.HEAVY_JOB_CONCURRENCY],
+      ] as const) {
+        const worker = new Worker(queue, (job: Job) => this.run(job.name, job.data), {
+          connection: this.connection!.duplicate({ maxRetriesPerRequest: null }),
+          concurrency,
+        });
+        worker.on('failed', (job, err) =>
+          this.logger.warn(`Job ${job?.name} attempt ${job?.attemptsMade} failed: ${err.message}`),
+        );
+        this.workers.push(worker);
+        this.logger.log(`Worker listening on queue ${queue} (${concurrency} at a time)`);
+      }
       return;
     }
     // Inline: schedules run on timers, except in tests (which call `run` directly).
@@ -150,8 +170,10 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   async onModuleDestroy() {
     for (const t of this.intervals) clearInterval(t);
     await this.drain();
-    await this.worker?.close();
+    await Promise.all(this.workers.map((w) => w.close()));
     await this.queue?.close();
+    await this.heavyQueue?.close();
     this.connection?.disconnect();
+    await closeThrottleStorage();
   }
 }

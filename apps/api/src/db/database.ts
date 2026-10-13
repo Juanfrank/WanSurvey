@@ -1,12 +1,34 @@
-import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Optional,
+  ServiceUnavailableException,
+  type OnModuleDestroy,
+} from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { CONFIG, type AppConfig } from '../config.js';
+import { PROCESS_ROLE, type ProcessRole } from '../jobs/role.js';
 import * as schema from './schema.js';
 
 export type Db = PostgresJsDatabase<typeof schema>;
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** Errors a transaction can simply be run again after (serialization failure, deadlock). */
+const RETRYABLE = new Set(['40001', '40P01']);
+/** The database is too busy for this request now: a lock or the statement took too long. */
+const BUSY = new Set(['55P03', '57014']);
+const ATTEMPTS = 3;
+
+/** The Postgres error code of a (possibly wrapped) driver error. */
+export function pgCode(e: unknown): string | undefined {
+  for (let x = e as { code?: unknown; cause?: unknown } | undefined, i = 0; x && i < 4; i++) {
+    if (typeof x.code === 'string' && /^[0-9A-Z]{5}$/.test(x.code)) return x.code;
+    x = x.cause as typeof x;
+  }
+  return undefined;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -46,9 +68,37 @@ export class Database implements OnModuleDestroy {
   readonly client: postgres.Sql;
   readonly db: Db;
 
-  constructor(@Inject(CONFIG) config: AppConfig) {
-    this.client = postgres(config.DATABASE_URL, { max: 10, onnotice: () => {} });
+  /** Per transaction: statement and lock time limits ('0' = none), as strings for set_config. */
+  private readonly statementTimeout: string;
+  private readonly lockTimeout: string;
+  private readonly idleInTransaction: string;
+
+  constructor(
+    @Inject(CONFIG) config: AppConfig,
+    @Optional() @Inject(PROCESS_ROLE) role: ProcessRole = 'api',
+  ) {
+    const worker = role === 'worker';
+    // A bounded pool per process. Idle connections are released and old ones renewed, so a
+    // pooler or a failover never leaves the app holding dead connections.
+    this.client = postgres(config.DATABASE_URL, {
+      max: worker ? config.DB_WORKER_POOL_MAX : config.DB_POOL_MAX,
+      idle_timeout: config.DB_IDLE_TIMEOUT_S,
+      max_lifetime: config.DB_MAX_LIFETIME_S,
+      connect_timeout: config.DB_CONNECT_TIMEOUT_S,
+      prepare: config.DB_PREPARE,
+      onnotice: () => {},
+    });
     this.db = drizzle(this.client, { schema });
+    this.statementTimeout = String(
+      worker ? config.DB_WORKER_STATEMENT_TIMEOUT_MS : config.DB_STATEMENT_TIMEOUT_MS,
+    );
+    this.lockTimeout = String(config.DB_LOCK_TIMEOUT_MS);
+    // A job may think for a while between statements (building an export): give it its time.
+    this.idleInTransaction = String(
+      worker
+        ? Math.max(config.DB_IDLE_IN_TRANSACTION_MS, config.DB_WORKER_STATEMENT_TIMEOUT_MS)
+        : config.DB_IDLE_IN_TRANSACTION_MS,
+    );
   }
 
   /**
@@ -65,17 +115,44 @@ export class Database implements OnModuleDestroy {
     return this.withContext({ userId }, fn);
   }
 
+  /**
+   * One transaction with the context pinned by transaction-local settings (`set_config(…,
+   * true)`, never session-level SET), so it works through a pooler in transaction mode. Time
+   * limits are set the same way. A deadlock or serialization failure runs it again (it rolled
+   * back entirely); a lock or statement timeout becomes 503 BUSY, for the client to retry.
+   */
   private async withContext<T>(
     ctx: { tenantId?: string; userId?: string },
     fn: (tx: Tx) => Promise<T>,
   ): Promise<T> {
     if (ctx.userId !== undefined && !isUuid(ctx.userId)) throw new Error('Invalid user id');
-    return this.db.transaction(async (tx) => {
-      if (ctx.tenantId)
-        await tx.execute(sql`select set_config('app.tenant_id', ${ctx.tenantId}, true)`);
-      if (ctx.userId) await tx.execute(sql`select set_config('app.user_id', ${ctx.userId}, true)`);
-      return fn(tx);
-    });
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`select set_config('statement_timeout', ${this.statementTimeout}, true),
+                       set_config('lock_timeout', ${this.lockTimeout}, true),
+                       set_config('idle_in_transaction_session_timeout', ${this.idleInTransaction}, true)
+                       ${ctx.tenantId ? sql`, set_config('app.tenant_id', ${ctx.tenantId}, true)` : sql``}
+                       ${ctx.userId ? sql`, set_config('app.user_id', ${ctx.userId}, true)` : sql``}`,
+          );
+          return fn(tx);
+        });
+      } catch (e) {
+        const code = pgCode(e);
+        if (code && RETRYABLE.has(code) && attempt < ATTEMPTS) {
+          // A short random pause, so the transactions that collided do not collide again.
+          await new Promise((ok) => setTimeout(ok, 20 * attempt + Math.random() * 50));
+          continue;
+        }
+        if (code && BUSY.has(code))
+          throw new ServiceUnavailableException({
+            code: 'BUSY',
+            message: 'The server is busy; please try again in a moment',
+          });
+        throw e;
+      }
+    }
   }
 
   // Login-time lookups run before any tenant context exists, through security-definer functions.

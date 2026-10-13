@@ -11,6 +11,7 @@ const env = {
     'postgres://postgres:postgres@localhost:5432/wansurvey_test',
   APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   LOGIN_RATE_LIMIT: '1000',
+  RATE_LIMIT_PER_IP: '100000',
   LOG_LEVEL: 'silent',
 };
 // globalSetup runs in the main process, so it needs the same variables.

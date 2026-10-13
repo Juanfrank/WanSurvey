@@ -7,6 +7,40 @@ const Env = z.object({
   DATABASE_URL: z.string().url(),
   /** Owner/superuser connection, used only for migrations and seeding. */
   DATABASE_ADMIN_URL: z.string().url().optional(),
+  /**
+   * Database connections per process (API, worker). Size them so that, over every instance of
+   * both, they stay under the server's max_connections (or the pooler's pool size).
+   */
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
+  DB_WORKER_POOL_MAX: z.coerce.number().int().min(1).max(200).default(5),
+  /** Idle connections are closed after this many seconds; connections are renewed after 30 min. */
+  DB_IDLE_TIMEOUT_S: z.coerce.number().int().min(0).default(30),
+  DB_MAX_LIFETIME_S: z.coerce.number().int().min(60).default(1800),
+  DB_CONNECT_TIMEOUT_S: z.coerce.number().int().min(1).default(10),
+  /**
+   * Server-side prepared statements. Turn off (false) behind a pooler in transaction mode, such
+   * as Azure's built-in PgBouncer on port 6432, unless it supports them.
+   */
+  DB_PREPARE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** A request's statement and lock waits are cut after these (ms); jobs get a longer statement time. */
+  DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
+  DB_WORKER_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(600_000),
+  DB_LOCK_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
+  /** A transaction left idle this long (ms) is ended by the server, releasing its locks. */
+  DB_IDLE_IN_TRANSACTION_MS: z.coerce.number().int().min(0).default(60_000),
+  /**
+   * Requests handled at once per API process; beyond it the API answers 503 with Retry-After
+   * instead of queueing without limit (load shedding). 0 turns it off.
+   */
+  MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(0).default(200),
+  /**
+   * HTTP keep-alive (ms): longer than the load balancer's idle timeout in front of the API, so
+   * the balancer never reuses a connection the API has just closed (sporadic 502s).
+   */
+  HTTP_KEEPALIVE_MS: z.coerce.number().int().min(1000).default(65_000),
   /** 32-byte key (base64) for field-level encryption of secrets such as TOTP seeds. */
   APP_ENCRYPTION_KEY: z
     .string()
@@ -19,6 +53,11 @@ const Env = z.object({
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  /**
+   * Requests per minute from one IP address over all routes: a ceiling against floods. A field
+   * office behind one address shares it, so it is well above one person's needs.
+   */
+  RATE_LIMIT_PER_IP: z.coerce.number().int().positive().default(5000),
   /** Sample import limits. */
   IMPORT_MAX_MB: z.coerce.number().positive().default(20),
   IMPORT_MAX_ROWS: z.coerce.number().int().positive().default(200_000),
@@ -52,6 +91,12 @@ const Env = z.object({
   WORKER_HEALTH_PORT: z.coerce.number().int().positive().optional(),
   /** Proxies in front of the API (load balancer, nginx…), for the client address. */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+  /**
+   * Jobs a worker process runs at once: light ones (e-mail, figures, privacy) and heavy ones
+   * (exports, which hold a file in memory). Keep the sum within DB_WORKER_POOL_MAX.
+   */
+  JOB_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(4),
+  HEAVY_JOB_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),

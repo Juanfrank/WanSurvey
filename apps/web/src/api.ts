@@ -34,13 +34,22 @@ export async function apiFull<T = unknown>(
   if (init.body !== undefined) headers['content-type'] = 'application/json';
   const csrf = readCookie('ws_csrf');
   if (method !== 'GET' && csrf) headers['x-csrf-token'] = csrf;
-  const res = await fetch(`/api/v1${path}`, {
-    method,
-    headers,
-    credentials: 'include',
-    ...(init.keepalive ? { keepalive: true } : {}),
-    ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-  });
+  const send = () =>
+    fetch(`/api/v1${path}`, {
+      method,
+      headers,
+      credentials: 'include',
+      ...(init.keepalive ? { keepalive: true } : {}),
+      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+    });
+  let res = await send();
+  // A busy server (503) asks to come back shortly: reads are tried again, twice at most, after
+  // the time it gives (capped, with a little jitter). Writes are left to the caller.
+  for (let i = 0; i < 2 && res.status === 503 && method === 'GET'; i++) {
+    const after = Math.min(Number(res.headers.get('retry-after')) || 1, 5);
+    await new Promise((ok) => setTimeout(ok, after * 1000 + Math.random() * 300));
+    res = await send();
+  }
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
   if (!res.ok) throw new ApiError(res.status, body ?? {});

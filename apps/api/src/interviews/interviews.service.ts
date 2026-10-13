@@ -31,6 +31,7 @@ import {
   users,
 } from '../db/schema.js';
 import type { StartBody, SubmitBody, SyncItem } from './schemas.js';
+import { compiledCache } from './compiled-cache.js';
 
 export type InterviewRow = typeof interviews.$inferSelect;
 
@@ -196,7 +197,10 @@ export class InterviewsService {
   ) {
     const acks: Record<string, number> = {};
     const errors: Record<string, string> = {};
-    for (const item of items) {
+    // Rows are locked in one global order (by id), so two devices syncing overlapping
+    // interviews at once wait for each other instead of deadlocking.
+    const ordered = [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const item of ordered) {
       let [row] = await tx
         .select()
         .from(interviews)
@@ -469,12 +473,22 @@ export class InterviewsService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /**
+   * A version's compiled questionnaire. Versions never change once written (a trigger refuses
+   * updates), so they are kept in memory, the most used first: the respondent page, every sync
+   * and every submit need it, and it is the largest thing they read. Ids reach here only from
+   * rows the caller's tenant can see (RLS), so the cache never crosses organisations.
+   */
   async compiledOf(tx: Tx, versionId: string) {
+    const hit = compiledCache.get(versionId);
+    if (hit) return hit;
     const [v] = await tx
       .select({ compiled: questionnaireVersions.compiled })
       .from(questionnaireVersions)
       .where(eq(questionnaireVersions.id, versionId));
-    return v!.compiled as CompiledQuestionnaire;
+    const compiled = v!.compiled as CompiledQuestionnaire;
+    compiledCache.set(versionId, compiled);
+    return compiled;
   }
 
   /** Case data for the engine and the screen, masked as the interviewer would see it. */
@@ -529,11 +543,11 @@ export class InterviewsService {
     const [v] = await tx
       .select({
         version: questionnaireVersions.version,
-        compiled: questionnaireVersions.compiled,
         questionnaireId: questionnaireVersions.questionnaireId,
       })
       .from(questionnaireVersions)
       .where(eq(questionnaireVersions.id, row.questionnaireVersionId));
+    const compiled = await this.compiledOf(tx, row.questionnaireVersionId);
     const [who] = row.interviewerId
       ? await tx.select({ name: users.name }).from(users).where(eq(users.id, row.interviewerId))
       : [];
@@ -558,7 +572,7 @@ export class InterviewsService {
         interviewer: who?.name ?? null,
       },
       context: row.context,
-      compiled: v!.compiled,
+      compiled,
       settings: await this.cases
         .settings(tx, row.projectId)
         .then((x) => ({ capi: x.capi, shortcuts: x.shortcuts })),

@@ -11,7 +11,8 @@ const url = process.env.TEST_REDIS_URL;
 if (process.env.REQUIRE_REDIS === '1' && !url) throw new Error('TEST_REDIS_URL is required');
 
 describe.skipIf(!url)('jobs on Redis', () => {
-  const config = { ...loadConfig(), REDIS_URL: url! };
+  // One light job at a time: a light job can only run alongside an export if they use different queues.
+  const config = { ...loadConfig(), REDIS_URL: url!, JOB_CONCURRENCY: 1 };
   const api = new JobsService(config, 'api');
   const worker = new JobsService(config, 'worker');
   const bus = new RedisBus(url!);
@@ -37,6 +38,33 @@ describe.skipIf(!url)('jobs on Redis', () => {
     await finished;
     await new Promise((r) => setTimeout(r, 500));
     expect(seen).toEqual([1]);
+  });
+
+  it('runs exports on their own queue, so other jobs do not wait behind them', async () => {
+    const order: string[] = [];
+    let releaseExport!: () => void;
+    const exportHeld = new Promise<void>((r) => (releaseExport = r));
+    let lightDone!: () => void;
+    const light = new Promise<void>((r) => (lightDone = r));
+    const name = `light.${Date.now()}`;
+    worker.register('exports.build', async () => {
+      order.push('export started');
+      await exportHeld;
+      order.push('export done');
+    });
+    worker.register(name, async () => {
+      order.push('light');
+      lightDone();
+    });
+    await api.enqueue('exports.build', { id: 'x' });
+    await new Promise((r) => setTimeout(r, 300));
+    await api.enqueue(name, {});
+    // The light job runs while the export is still working.
+    await light;
+    expect(order).toEqual(['export started', 'light']);
+    releaseExport();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(order.at(-1)).toBe('export done');
   });
 
   it('carries bus messages between connections', async () => {

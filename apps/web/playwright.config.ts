@@ -19,6 +19,7 @@ function apiEnv(): Record<string, string> {
     PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
     API_PUBLIC_URL: `http://localhost:${WEB_PORT}`,
     LOGIN_RATE_LIMIT: '1000',
+    RATE_LIMIT_PER_IP: '100000',
     GEOCODER: 'nominatim',
     GEOCODER_URL: `http://localhost:${GEO_PORT}`,
     GEOCODER_EMAIL: 'e2e@example.org',

@@ -18,6 +18,8 @@ const HEARTBEAT_MS = 15_000;
 /** Figures that are not announced (case outcomes, invitations) are re-read this often. */
 const REFRESH_MS = 60_000;
 /** Bursts of changes produce one snapshot. */
+/** How long a computed snapshot is served to other viewers of the same project. */
+const SHARE_MS = 1_000;
 const DEBOUNCE_MS = 300;
 
 /** Variables from saved answers, enough to tell which quota cell an interview is in. */
@@ -175,6 +177,33 @@ export class LiveService {
     };
   }
 
+  /** Snapshots being computed, and the last ones, per organisation and project. */
+  private readonly inFlight = new Map<string, Promise<LiveSnapshot>>();
+  private readonly recent = new Map<string, { at: number; snap: LiveSnapshot }>();
+
+  /**
+   * One snapshot shared by every open dashboard of a project in this process: a change wakes
+   * all of them at once, and N viewers would otherwise run N identical queries. Requests that
+   * arrive while one is being computed wait for it; a result serves for a second.
+   */
+  private shared(tenantId: string, projectId: string) {
+    const key = `${tenantId}:${projectId}`;
+    const r = this.recent.get(key);
+    if (r && Date.now() - r.at < SHARE_MS) return Promise.resolve(r.snap);
+    let p = this.inFlight.get(key);
+    if (!p) {
+      p = this.database
+        .withTenant(tenantId, (tx) => this.snapshot(tx, projectId))
+        .then((snap) => {
+          this.recent.set(key, { at: Date.now(), snap });
+          return snap;
+        })
+        .finally(() => this.inFlight.delete(key));
+      this.inFlight.set(key, p);
+    }
+    return p;
+  }
+
   /** The SSE stream: a snapshot now, after each announced change, and every minute. */
   stream(tenantId: string, projectId: string): Observable<MessageEvent> {
     return new Observable<MessageEvent>((sub) => {
@@ -183,9 +212,7 @@ export class LiveService {
       const send = async () => {
         timer = null;
         try {
-          const snap = await this.database.withTenant(tenantId, (tx) =>
-            this.snapshot(tx, projectId),
-          );
+          const snap = await this.shared(tenantId, projectId);
           if (!closed) sub.next({ type: 'snapshot', data: snap });
         } catch (e) {
           if (!closed) sub.next({ type: 'error', data: { message: (e as Error).message } });

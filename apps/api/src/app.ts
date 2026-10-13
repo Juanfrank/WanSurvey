@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import type { Server } from 'node:http';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -7,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule, type AppModuleOptions } from './app.module.js';
+import { loadShedding } from './common/load-shed.js';
 import { loadConfig } from './config.js';
 
 export async function createApp(opts: AppModuleOptions = {}): Promise<INestApplication> {
@@ -18,10 +20,17 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
   app.useBodyParser('json', { limit: '5mb' });
   app.useBodyParser('urlencoded', { extended: false, limit: '100kb' });
   app.useLogger(app.get(Logger));
-  app.set('trust proxy', loadConfig().TRUST_PROXY_HOPS);
+  const config = loadConfig();
+  app.set('trust proxy', config.TRUST_PROXY_HOPS);
+  // Keep-alive longer than the load balancer's idle timeout (and headers a little longer
+  // still), so the balancer never sends a request down a connection the API just closed.
+  const server = app.getHttpServer() as Server;
+  server.keepAliveTimeout = config.HTTP_KEEPALIVE_MS;
+  server.headersTimeout = config.HTTP_KEEPALIVE_MS + 1_000;
+  app.use(loadShedding(config.MAX_CONCURRENT_REQUESTS));
   app.disable('x-powered-by');
   app.use(cookieParser());
-  const production = loadConfig().NODE_ENV === 'production';
+  const production = config.NODE_ENV === 'production';
   app.use((req: Request, res: Response, next: NextFunction) => {
     // API responses are JSON only; a strict CSP and no sniffing are safe defaults.
     // The Swagger UI page (/docs) needs its own scripts and styles.

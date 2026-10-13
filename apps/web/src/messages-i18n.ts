@@ -86,6 +86,7 @@ export const messagesEn = {
     not_a_code: '{{to}} is not a code of this question',
   },
   apiError: {
+    BUSY: 'The server is busy right now. Please try again in a moment.',
     CALL_OPEN: 'Finish the call in progress first.',
     NO_OFFLINE_STORAGE: 'This browser cannot store data offline.',
     CASE_NOT_ON_DEVICE: 'This case is not on this device.',
@@ -217,6 +218,7 @@ export const messagesEs: MessagesCatalogue = {
     not_a_code: '{{to}} no es un código de esta pregunta',
   },
   apiError: {
+    BUSY: 'El servidor está ocupado en este momento. Inténtelo de nuevo en unos segundos.',
     CALL_OPEN: 'Termine primero la llamada en curso.',
     NO_OFFLINE_STORAGE: 'Este navegador no puede guardar datos sin conexión.',
     CASE_NOT_ON_DEVICE: 'Este caso no está en este dispositivo.',
