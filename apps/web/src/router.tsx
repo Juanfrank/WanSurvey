@@ -119,6 +119,24 @@ const reviewRoute = createRoute({
   component: lazyRouteComponent(() => import('./review/ReviewPage.js'), 'ReviewPage'),
 });
 
+// Results (slice 12): the printable summary, and the read-only summary shared with clients.
+const summaryRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId/summary',
+  component: lazyRouteComponent(() => import('./analysis/SummaryPage.js'), 'SummaryPage'),
+  validateSearch: (s: Record<string, unknown>) =>
+    Object.fromEntries(
+      ['questionnaireId', 'mode', 'from', 'to', 'where', 'approvedOnly']
+        .filter((k) => typeof s[k] === 'string' || typeof s[k] === 'boolean')
+        .map((k) => [k, s[k]]),
+    ) as Record<string, string | boolean>,
+});
+const shareRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/share/$token',
+  component: lazyRouteComponent(() => import('./analysis/SummaryPage.js'), 'SharePage'),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
@@ -126,6 +144,7 @@ const routeTree = rootRoute.addChildren([
   respondentRoute,
   openLinkRoute,
   unsubscribeRoute,
+  shareRoute,
   appRoute.addChildren([
     homeRoute,
     waitingRoute,
@@ -137,6 +156,7 @@ const routeTree = rootRoute.addChildren([
     deviceRoute,
     printRoute,
     reviewRoute,
+    summaryRoute,
   ]),
 ]);
 

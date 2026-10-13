@@ -1,5 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
+  customType,
+  date,
   doublePrecision,
   boolean,
   index,
@@ -20,6 +23,7 @@ const id = () =>
     .primaryKey()
     .$defaultFn(() => uuidv7());
 const tenantId = () => uuid('tenant_id').notNull();
+const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
 export const tenants = pgTable(
@@ -617,6 +621,8 @@ export const interviewAnswerEvents = pgTable(
     newValue: jsonb('new_value'),
     at: timestamp('at', { withTimezone: true }).notNull(),
     byUserId: uuid('by_user_id'),
+    /** When the server received it (the device's time is `at`): sync latency (M4). */
+    receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow(),
     /** interviewer | respondent | reviewer | system */
     source: text('source').notNull(),
     /** Why the engine changed it (path_change, prefill, …); null for a typed answer. */
@@ -924,6 +930,75 @@ export const codedTexts = pgTable(
   (t) => [uniqueIndex('coded_texts_uq').on(t.projectId, t.variable, t.text)],
 );
 
+/**
+ * Completed interviews per project, day, mode and interviewer (M3): kept current by a job
+ * after each submission or review decision, and recomputed nightly.
+ */
+export const statsDaily = pgTable(
+  'stats_daily',
+  {
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    /** The project's local day of submission. */
+    day: date('day').notNull(),
+    mode: text('mode').notNull(),
+    interviewerId: uuid('interviewer_id'),
+    submitted: integer('submitted').notNull().default(0),
+    completes: integer('completes').notNull().default(0),
+    approved: integer('approved').notNull().default(0),
+    rejected: integer('rejected').notNull().default(0),
+    activeMs: bigint('active_ms', { mode: 'number' }).notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // NULLS NOT DISTINCT is added by hand in the migration (drizzle-kit 0.31 has no option).
+    uniqueIndex('stats_daily_uq').on(t.projectId, t.day, t.mode, t.interviewerId),
+  ],
+);
+
+/** Data exports, built by the worker (M6). */
+export const exports = pgTable(
+  'exports',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    questionnaireId: uuid('questionnaire_id').notNull(),
+    requestedBy: uuid('requested_by').notNull(),
+    options: jsonb('options').notNull(),
+    /** queued | running | done | failed */
+    status: text('status').notNull().default('queued'),
+    fileName: text('file_name'),
+    contentType: text('content_type'),
+    file: bytea('file'),
+    size: integer('size'),
+    rows: integer('rows'),
+    error: text('error'),
+    createdAt: createdAt(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [index('exports_project_idx').on(t.tenantId, t.projectId, t.createdAt)],
+);
+
+/** Read-only links to a project's summary for clients (M7). */
+export const shareLinks = pgTable('share_links', {
+  id: id(),
+  tenantId: tenantId().references(() => tenants.id),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id),
+  tokenHash: text('token_hash').notNull().unique(),
+  tokenEnc: text('token_enc').notNull(),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});
+
 /** Tables protected by tenant row-level security. */
 export const TENANT_TABLES = [
   'tenant_members',
@@ -958,5 +1033,8 @@ export const TENANT_TABLES = [
   'review_comments',
   'open_codes',
   'coded_texts',
+  'stats_daily',
+  'exports',
+  'share_links',
   'audit_log',
 ] as const;

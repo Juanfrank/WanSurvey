@@ -222,6 +222,27 @@ export function SettingsTab({ project }: { project: Project }) {
           {t('review.settings.rejectReopens')}
         </label>
       </fieldset>
+      <fieldset className="flex flex-col gap-2" data-testid="fieldwork-settings">
+        <legend className="mb-1 font-medium">{t('analysis.settings.title')}</legend>
+        <label className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            className={`${controlCls} w-28`}
+            value={form.fieldwork.targetCompletes ?? ''}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                fieldwork: {
+                  targetCompletes:
+                    e.target.value === '' ? null : Math.max(0, Number(e.target.value)),
+                },
+              })
+            }
+          />
+          {t('analysis.settings.target')}
+        </label>
+      </fieldset>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={save.isPending}>
           {t('cases.settings.save')}

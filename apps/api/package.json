@@ -11,7 +11,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start:worker": "node dist/worker.js",
+    "dev:worker": "tsx watch src/worker.ts",
+    "db:seed-demo": "tsx src/db/seed-demo.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
@@ -20,13 +23,16 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.4.0",
     "@node-rs/argon2": "^2.0.2",
+    "@wansurvey/exporters": "workspace:*",
     "@wansurvey/fixtures": "workspace:*",
     "@wansurvey/logic": "workspace:*",
     "@wansurvey/schema": "workspace:*",
+    "bullmq": "5.81.5",
     "cookie-parser": "^1.4.7",
     "csv-parse": "7.0.3",
     "drizzle-orm": "^0.44.0",
     "exceljs": "4.4.0",
+    "ioredis": "5.11.1",
     "jose": "^6.2.12",
     "nestjs-pino": "^4.4.0",
     "nodemailer": "6.10.1",

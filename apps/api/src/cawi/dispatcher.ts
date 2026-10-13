@@ -1,39 +1,30 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  type OnApplicationBootstrap,
-  type OnModuleDestroy,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database } from '../db/database.js';
+import { JobsService } from '../jobs/jobs.service.js';
 import { CawiService } from './cawi.service.js';
 
 /**
- * Sends invitations and reminders in the background (W5): every few seconds it looks for
- * organisations with mail due and sends a batch for each. In-process for now; it moves to the
- * worker with the job queue later. Tests call `tick` directly.
+ * Sends invitations and reminders in the background (W5): every few seconds the worker runs
+ * the `mail.dispatch` job, which looks for organisations with mail due and sends a batch for
+ * each (M1). Tests call `tick` directly.
  */
 @Injectable()
-export class WaveDispatcher implements OnApplicationBootstrap, OnModuleDestroy {
+export class WaveDispatcher implements OnModuleInit {
   private readonly logger = new Logger('WaveDispatcher');
-  private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
 
   constructor(
     private readonly database: Database,
     private readonly cawi: CawiService,
+    private readonly jobs: JobsService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
-  onApplicationBootstrap() {
-    if (this.config.NODE_ENV === 'test' || !this.config.DISPATCH_INTERVAL_MS) return;
-    this.timer = setInterval(() => void this.tick(), this.config.DISPATCH_INTERVAL_MS);
-    this.timer.unref();
-  }
-
-  onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
+  onModuleInit() {
+    this.jobs.register('mail.dispatch', () => this.tick());
+    if (this.config.DISPATCH_INTERVAL_MS)
+      this.jobs.schedule('mail.dispatch', { everyMs: this.config.DISPATCH_INTERVAL_MS });
   }
 
   /** One run: a batch per organisation. Returns how many e-mails went out. */

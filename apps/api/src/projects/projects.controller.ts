@@ -14,6 +14,7 @@ import {
   CapiSettings,
   CatiSettings,
   CawiSettings,
+  FieldworkSettings,
   Mode,
   PapiSettings,
   ReviewSettings,
@@ -52,6 +53,7 @@ const ProjectPatch = ProjectFields.partial().extend({
       cawi: CawiSettings,
       papi: PapiSettings,
       review: ReviewSettings,
+      fieldwork: FieldworkSettings,
     })
     .partial()
     .strict()

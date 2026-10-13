@@ -26,6 +26,7 @@ import {
   users,
 } from '../db/schema.js';
 import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
+import { StatsService } from '../stats/stats.service.js';
 import { FLAG_KINDS, computeFlags, inSample } from './flags.js';
 
 export const QueueQuery = z.object({
@@ -125,6 +126,7 @@ export class ReviewService implements OnModuleInit {
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
     private readonly audit: AuditService,
+    private readonly stats: StatsService,
   ) {}
 
   onModuleInit() {
@@ -451,6 +453,7 @@ export class ReviewService implements OnModuleInit {
         details: { from: row.status, to: body.to },
       }),
     );
+    if (row.submittedAt) await this.stats.touched(tx, row.tenantId, row.projectId, row.submittedAt);
     return { status: body.to };
   }
 

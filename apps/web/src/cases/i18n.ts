@@ -10,6 +10,10 @@ export const casesEn = {
     web: 'Web survey',
     paper: 'Paper forms',
     review: 'Review',
+    dashboard: 'Dashboard',
+    metrics: 'Metrics',
+    results: 'Results',
+    exports: 'Exports',
     settings: 'Settings',
   },
   list: {
@@ -268,6 +272,10 @@ export const casesEs: CasesCatalogue = {
     web: 'Encuesta web',
     paper: 'Formularios en papel',
     review: 'Revisión',
+    dashboard: 'Tablero',
+    metrics: 'Métricas',
+    results: 'Resultados',
+    exports: 'Exportar',
     settings: 'Configuración',
   },
   list: {

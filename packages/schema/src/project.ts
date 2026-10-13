@@ -46,6 +46,12 @@ export const ReviewSettings = z.object({
 });
 export type ReviewSettings = z.infer<typeof ReviewSettings>;
 
+export const FieldworkSettings = z.object({
+  /** Completed interviews the project aims for; the dashboard shows progress against it. */
+  targetCompletes: z.number().int().min(0).max(10_000_000).nullable().default(null),
+});
+export type FieldworkSettings = z.infer<typeof FieldworkSettings>;
+
 /** Per-project settings, stored as jsonb on `projects.settings`. Missing keys take defaults. */
 export const ProjectSettings = z.object({
   /**
@@ -65,6 +71,8 @@ export const ProjectSettings = z.object({
   papi: PapiSettings.default(PapiSettings.parse({})),
   /** Answer review (slice 11). */
   review: ReviewSettings.default(ReviewSettings.parse({})),
+  /** Targets for the dashboard (slice 12). */
+  fieldwork: FieldworkSettings.default(FieldworkSettings.parse({})),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

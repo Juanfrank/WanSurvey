@@ -305,6 +305,31 @@ const ENDPOINTS: Endpoint[] = [
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/coding`),
   },
   {
+    name: 'GET metrics/interviewers',
+    permission: ['metrics.team', 'metrics.own'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/metrics/interviewers`),
+  },
+  {
+    name: 'GET live/snapshot',
+    permission: 'dashboards.read',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/live/snapshot`),
+  },
+  {
+    name: 'GET topline',
+    permission: 'dashboards.read',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/topline`),
+  },
+  {
+    name: 'GET exports',
+    permission: 'exports.run',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/exports`),
+  },
+  {
+    name: 'GET share-links',
+    permission: 'projects.update',
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/share-links`),
+  },
+  {
     name: 'GET cases',
     permission: ['cases.read_all', 'cases.read_assigned'],
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/cases`),

@@ -6,9 +6,31 @@ const WEB_PORT = 4173;
 const GEO_PORT = 3200;
 const adminUrl =
   process.env.E2E_DATABASE_ADMIN_URL ?? 'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';
+const redisUrl = process.env.E2E_REDIS_URL ?? 'redis://localhost:6379/1';
 const appUrl =
   process.env.E2E_DATABASE_URL ??
   'postgres://wansurvey_app:wansurvey_app@localhost:5432/wansurvey_e2e';
+
+function apiEnv(): Record<string, string> {
+  return {
+    DATABASE_URL: appUrl,
+    DATABASE_ADMIN_URL: adminUrl,
+    APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+    PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
+    API_PUBLIC_URL: `http://localhost:${WEB_PORT}`,
+    LOGIN_RATE_LIMIT: '1000',
+    GEOCODER: 'nominatim',
+    GEOCODER_URL: `http://localhost:${GEO_PORT}`,
+    GEOCODER_EMAIL: 'e2e@example.org',
+    LOG_LEVEL: 'warn',
+    // E-mail goes to files the tests read; the dispatcher runs every second.
+    MAILER: 'file',
+    MAIL_OUTBOX_DIR: MAIL_DIR,
+    DISPATCH_INTERVAL_MS: '1000',
+    MAIL_WEBHOOK_SECRET: 'e2e-webhook-secret-0123456789',
+    REDIS_URL: redisUrl,
+  };
+}
 
 /**
  * End-to-end tests against the built API and web app on a fresh `wansurvey_e2e` database.
@@ -35,29 +57,18 @@ export default defineConfig({
       reuseExistingServer: false,
       env: { PORT: String(GEO_PORT) },
     },
+    // The background worker (jobs: e-mail, stats, exports) with the same settings as the API.
+    {
+      command: 'node ../api/dist/worker.js',
+      reuseExistingServer: false,
+      env: apiEnv(),
+    },
     {
       command: 'node ../api/dist/main.js',
       // /health needs the database, which global setup creates after the servers start.
       url: `http://localhost:${API_PORT}/docs/openapi.json`,
       reuseExistingServer: false,
-      env: {
-        PORT: String(API_PORT),
-        DATABASE_URL: appUrl,
-        DATABASE_ADMIN_URL: adminUrl,
-        APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-        PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
-        API_PUBLIC_URL: `http://localhost:${WEB_PORT}`,
-        LOGIN_RATE_LIMIT: '1000',
-        GEOCODER: 'nominatim',
-        GEOCODER_URL: `http://localhost:${GEO_PORT}`,
-        GEOCODER_EMAIL: 'e2e@example.org',
-        LOG_LEVEL: 'warn',
-        // E-mail goes to files the tests read; the dispatcher runs every second.
-        MAILER: 'file',
-        MAIL_OUTBOX_DIR: MAIL_DIR,
-        DISPATCH_INTERVAL_MS: '1000',
-        MAIL_WEBHOOK_SECRET: 'e2e-webhook-secret-0123456789',
-      },
+      env: { PORT: String(API_PORT), ...apiEnv() },
     },
     {
       command: `pnpm exec vite preview --port ${WEB_PORT} --strictPort`,

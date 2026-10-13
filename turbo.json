@@ -11,7 +11,13 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL", "DATABASE_ADMIN_URL"]
+      "env": [
+        "DATABASE_URL",
+        "DATABASE_ADMIN_URL",
+        "TEST_REDIS_URL",
+        "REQUIRE_REDIS",
+        "REQUIRE_PYREADSTAT"
+      ]
     }
   }
 }

@@ -17,6 +17,10 @@ import { CallsTab } from '../cati/CallsTab.js';
 import { CawiTab } from '../cawi/CawiTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
 import { ReviewTab } from '../review/ReviewTab.js';
+import { DashboardTab } from '../analysis/DashboardTab.js';
+import { ExportsTab } from '../analysis/ExportsTab.js';
+import { MetricsTab } from '../analysis/MetricsTab.js';
+import { ResultsTab } from '../analysis/ResultsTab.js';
 import { inputCls } from './fields.js';
 import { useCan } from './hooks.js';
 
@@ -252,6 +256,10 @@ type ProjectTab =
   | 'web'
   | 'paper'
   | 'review'
+  | 'dashboard'
+  | 'metrics'
+  | 'results'
+  | 'exports'
   | 'import'
   | 'assignments'
   | 'settings';
@@ -277,6 +285,11 @@ export function ProjectPage() {
   const canKeyForms = useCan('dataentry.key', projectId);
   const canReview = useCan('interviews.review', projectId);
   const canApprove = useCan('interviews.approve', projectId);
+  const canDashboard = useCan('dashboards.read', projectId);
+  const canMetricsTeam = useCan('metrics.team', projectId);
+  const canMetricsOwn = useCan('metrics.own', projectId);
+  const canMetrics = canMetricsTeam || canMetricsOwn;
+  const canExport = useCan('exports.run', projectId);
   const canPaperRole = canKeyForms || canReview || canCasesAll;
   const canPaper =
     canPaperRole &&
@@ -294,6 +307,10 @@ export function ProjectPage() {
     ...(canWeb ? (['web'] as const) : []),
     ...(canPaper ? (['paper'] as const) : []),
     ...(canReview || canApprove ? (['review'] as const) : []),
+    ...(canDashboard ? (['dashboard'] as const) : []),
+    ...(canMetrics ? (['metrics'] as const) : []),
+    ...(canDashboard ? (['results'] as const) : []),
+    ...(canExport ? (['exports'] as const) : []),
     ...(canImport ? (['import'] as const) : []),
     ...(canAssign ? (['assignments'] as const) : []),
     ...(canSettings ? (['settings'] as const) : []),
@@ -353,6 +370,18 @@ export function ProjectPage() {
           </Tabs.Content>
           <Tabs.Content value="review">
             <ReviewTab projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="dashboard">
+            {current === 'dashboard' ? <DashboardTab projectId={projectId} /> : null}
+          </Tabs.Content>
+          <Tabs.Content value="metrics">
+            <MetricsTab projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="results">
+            <ResultsTab projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="exports">
+            <ExportsTab projectId={projectId} />
           </Tabs.Content>
           <Tabs.Content value="import">
             <ImportTab projectId={projectId} onDone={() => setTab('cases')} />

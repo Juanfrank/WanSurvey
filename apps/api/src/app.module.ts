@@ -15,6 +15,16 @@ import { WaveDispatcher } from './cawi/dispatcher.js';
 import { PublicSurveyController } from './cawi/public.controller.js';
 import { PapiController } from './papi/papi.controller.js';
 import { PapiService } from './papi/papi.service.js';
+import { AnalysisController, PublicShareController } from './analysis/analysis.controller.js';
+import { AnalysisService } from './analysis/analysis.service.js';
+import { DatasetService } from './analysis/dataset.service.js';
+import { ShareService } from './analysis/share.service.js';
+import { LiveService } from './dashboard/live.service.js';
+import { ExportsService } from './exports/exports.service.js';
+import { BUS, LocalBus, RedisBus, type Bus } from './jobs/bus.js';
+import { JobsService, PROCESS_ROLE, type ProcessRole } from './jobs/jobs.service.js';
+import { MetricsService } from './metrics/metrics.service.js';
+import { StatsService } from './stats/stats.service.js';
 import { ReviewController } from './review/review.controller.js';
 import { ReviewService } from './review/review.service.js';
 import { CatiController } from './cati/cati.controller.js';
@@ -52,6 +62,10 @@ export interface AppModuleOptions {
   mailer?: Mailer;
   /** Replaces the configured geocoder (tests use a mock Nominatim). */
   geocoder?: Geocoder | null;
+  /** The background worker runs the same services without HTTP (M1). */
+  role?: ProcessRole;
+  /** Replaces the configured bus (tests). */
+  bus?: Bus;
 }
 
 @Module({})
@@ -92,6 +106,8 @@ export class AppModule {
         PublicSurveyController,
         PapiController,
         ReviewController,
+        AnalysisController,
+        PublicShareController,
         CasesController,
         ImportsController,
         AuditController,
@@ -124,6 +140,20 @@ export class AppModule {
         WaveDispatcher,
         PapiService,
         ReviewService,
+        { provide: PROCESS_ROLE, useValue: opts.role ?? 'api' },
+        {
+          provide: BUS,
+          useFactory: () =>
+            opts.bus ?? (config.REDIS_URL ? new RedisBus(config.REDIS_URL) : new LocalBus()),
+        },
+        JobsService,
+        StatsService,
+        MetricsService,
+        LiveService,
+        DatasetService,
+        AnalysisService,
+        ExportsService,
+        ShareService,
         {
           provide: GEOCODER,
           useValue:

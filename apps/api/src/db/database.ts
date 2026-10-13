@@ -153,6 +153,19 @@ export class Database implements OnModuleDestroy {
     return rows.map((r) => r.tenant_id);
   }
 
+  /** Every organisation, for nightly jobs. */
+  async allTenantIds(): Promise<string[]> {
+    const rows = await this.client<{ tenant_id: string }[]>`select * from all_tenant_ids()`;
+    return rows.map((r) => r.tenant_id);
+  }
+
+  /** The organisation of a live summary link. */
+  async shareLinkByHash(hash: string): Promise<{ id: string; tenantId: string } | null> {
+    const [r] = await this.client<{ id: string; tenant_id: string }[]>`
+      select * from share_link_by_hash(${hash})`;
+    return r ? { id: r.id, tenantId: r.tenant_id } : null;
+  }
+
   async onModuleDestroy() {
     await this.client.end({ timeout: 5 });
   }

@@ -1,0 +1,134 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { buildTables, type ExportInterview } from '@wansurvey/exporters';
+import type { CompiledQuestionnaire } from '@wansurvey/logic';
+import { sql } from 'drizzle-orm';
+import { z } from 'zod';
+import type { Tx } from '../db/database.js';
+
+const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+/** Which interviews a topline, summary or export reads. */
+export const DataFilter = z.object({
+  questionnaireId: z.uuid().optional(),
+  mode: z.enum(['CATI', 'CAPI', 'CAWI', 'PAPI']).optional(),
+  from: Day.optional(),
+  to: Day.optional(),
+  interviewerId: z.uuid().optional(),
+  approvedOnly: z.coerce.boolean().optional(),
+});
+export type DataFilter = z.infer<typeof DataFilter>;
+
+export interface Dataset {
+  questionnaireId: string;
+  name: string;
+  compiled: CompiledQuestionnaire;
+  interviews: ExportInterview[];
+}
+
+/**
+ * The data of a questionnaire (S1, M6): its submitted interviews in every mode (first
+ * keying only; returned and rejected ones left out), read against the latest version so all
+ * modes and versions share one set of variables.
+ */
+@Injectable()
+export class DatasetService {
+  /** The project's questionnaires that have a published version, newest first. */
+  async questionnaires(tx: Tx, projectId: string) {
+    return tx.execute<{ id: string; name: string; version: number }>(sql`
+      select q.id, q.name, max(v.version)::int as version
+      from questionnaires q join questionnaire_versions v on v.questionnaire_id = q.id
+      where q.project_id = ${projectId}
+      group by q.id, q.name order by max(v.published_at) desc`);
+  }
+
+  async load(
+    tx: Tx,
+    projectId: string,
+    f: DataFilter,
+    opts: { paradata?: boolean; completesOnly?: boolean } = {},
+  ): Promise<Dataset> {
+    const qid = f.questionnaireId ?? (await this.questionnaires(tx, projectId))[0]?.id;
+    if (!qid) throw new NotFoundException({ code: 'NO_DATA', message: 'Nothing published yet' });
+    const [v] = await tx.execute<{ name: string; compiled: CompiledQuestionnaire; tz: string }>(sql`
+      select q.name, v.compiled, p.timezone as tz
+      from questionnaire_versions v join questionnaires q on q.id = v.questionnaire_id
+      join projects p on p.id = q.project_id
+      where q.id = ${qid} and q.project_id = ${projectId}
+      order by v.version desc limit 1`);
+    if (!v) throw new NotFoundException({ code: 'NO_DATA', message: 'Nothing published yet' });
+    const day = sql`(i.submitted_at at time zone ${v.tz})::date`;
+    const rows = await tx.execute<{
+      id: string;
+      caseId: string | null;
+      mode: string;
+      status: string;
+      disposition: string | null;
+      interviewer: string | null;
+      startedAt: Date;
+      submittedAt: Date | null;
+      activeMs: number;
+      version: number;
+      language: string;
+      answers: Record<string, unknown>;
+      flags: Record<string, unknown>;
+      back: number | null;
+      notes: number | null;
+      pauses: number | null;
+      warnings: number | null;
+    }>(sql`
+      select i.id, i.case_id as "caseId", i.mode, i.status, i.disposition, u.name as interviewer,
+             i.started_at as "startedAt", i.submitted_at as "submittedAt", i.active_ms as "activeMs",
+             v.version, i.language, i.answers, i.flags
+             ${
+               opts.paradata
+                 ? sql`, pd.back, pd.notes, pd.pauses, pd.warnings`
+                 : sql`, null as back, null as notes, null as pauses, null as warnings`
+             }
+      from interviews i
+      join questionnaire_versions v on v.id = i.questionnaire_version_id
+      left join users u on u.id = i.interviewer_id
+      ${
+        opts.paradata
+          ? sql`left join lateral (
+              select count(*) filter (where type = 'navigate_back')::int as back,
+                     count(*) filter (where type = 'note_added')::int as notes,
+                     count(*) filter (where type = 'pause')::int as pauses,
+                     count(*) filter (where type = 'warning_confirmed')::int as warnings
+              from interview_paradata pd where pd.interview_id = i.id) pd on true`
+          : sql``
+      }
+      where i.project_id = ${projectId} and v.questionnaire_id = ${qid} and i.entry_pass = 1
+        and i.status in ${f.approvedOnly ? ['approved'] : ['submitted', 'in_review', 'approved']}
+        ${opts.completesOnly ? sql`and i.disposition = 'COMPLETE'` : sql``}
+        ${f.mode ? sql`and i.mode = ${f.mode}` : sql``}
+        ${f.interviewerId ? sql`and i.interviewer_id = ${f.interviewerId}` : sql``}
+        ${f.from ? sql`and ${day} >= ${f.from}::date` : sql``}
+        ${f.to ? sql`and ${day} <= ${f.to}::date` : sql``}
+      order by i.submitted_at, i.id`);
+    return {
+      questionnaireId: qid,
+      name: v.name,
+      compiled: v.compiled,
+      interviews: rows.map((r) => ({
+        ...r,
+        paradata: opts.paradata
+          ? {
+              backMoves: r.back ?? 0,
+              notes: r.notes ?? 0,
+              pauses: r.pauses ?? 0,
+              warnings: r.warnings ?? 0,
+            }
+          : undefined,
+      })),
+    };
+  }
+
+  /** The main table, rosters left out (they are exported, not tabulated). */
+  table(d: Dataset, language?: string) {
+    return buildTables(d.compiled, d.interviews, {
+      rosters: 'long',
+      paradata: false,
+      ...(language ? { language } : {}),
+    }).main;
+  }
+}

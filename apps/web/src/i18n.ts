@@ -6,6 +6,7 @@ import { catiEn, catiEs } from './cati/i18n.js';
 import { cawiEn, cawiEs } from './cawi/i18n.js';
 import { papiEn, papiEs } from './papi/i18n.js';
 import { reviewEn, reviewEs } from './review/i18n.js';
+import { analysisEn, analysisEs } from './analysis/i18n.js';
 import { deviceEn, deviceEs } from './device/i18n.js';
 import { interviewEn, interviewEs } from './interview/i18n.js';
 import { designerEn, designerEs } from './designer/i18n.js';
@@ -143,6 +144,7 @@ const en = {
   cawi: cawiEn,
   papi: papiEn,
   review: reviewEn,
+  analysis: analysisEn,
   device: deviceEn,
   ...messagesEn,
 };
@@ -278,6 +280,7 @@ const es: Catalogue = {
   cawi: cawiEs,
   papi: papiEs,
   review: reviewEs,
+  analysis: analysisEs,
   device: deviceEs,
   ...messagesEs,
 };

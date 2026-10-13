@@ -3,12 +3,13 @@ import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
 import { runMigrations } from '../../api/dist/db/migrate.js';
 import { seed } from '../../api/dist/db/seed.js';
+import { seedDemoData } from '../../api/dist/db/seed-demo.js';
 import { clearMail } from './mail.js';
 
 export const PASSWORD = 'demo-password-123';
 export const WAITING_EMAIL = 'waiting@demo.wansurvey.test';
 
-/** Fresh database for every run: migrations, the demo seed, and a member with no role. */
+/** Fresh database for every run: migrations, the demo seed and fieldwork, and a member with no role. */
 export default async function globalSetup() {
   clearMail();
   const adminUrl =
@@ -27,6 +28,8 @@ export default async function globalSetup() {
 
   await runMigrations(adminUrl, appUrl);
   await seed(adminUrl, PASSWORD);
+  // Completed fieldwork for the dashboards, metrics, results and exports.
+  await seedDemoData(adminUrl, PASSWORD, 60);
 
   const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
   const [demo] = await sql`select id from tenants where slug = 'demo'`;

@@ -40,6 +40,11 @@ const Env = z.object({
   MAIL_WEBHOOK_SECRET: z.string().min(16).optional(),
   /** Base of respondent links; the web app by default. */
   PUBLIC_SURVEY_URL: z.string().url().optional(),
+  /**
+   * Redis for background jobs and live updates (M1, M2). Without it, jobs run inside the API
+   * process (development and tests); production sets it and runs `node dist/worker.js` too.
+   */
+  REDIS_URL: z.string().url().optional(),
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),

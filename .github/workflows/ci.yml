@@ -16,6 +16,11 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -26,7 +31,15 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
       - run: pnpm typecheck
+      # SPSS/Stata files are read back with pyreadstat and pandas (round-trip tests).
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyreadstat==1.2.8 pandas==2.2.3
       - run: pnpm test
+        env:
+          TEST_REDIS_URL: redis://localhost:6379/2
+          REQUIRE_REDIS: '1'
+          REQUIRE_PYREADSTAT: '1'
       - name: Dependency audit
         run: pnpm audit --prod --audit-level high
         continue-on-error: true
@@ -43,6 +56,11 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
