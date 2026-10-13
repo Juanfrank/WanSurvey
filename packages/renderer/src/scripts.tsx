@@ -56,9 +56,9 @@ export function ScriptBox({ scripts }: { scripts: { id: string; text: string }[]
     <aside
       aria-label={t('script.label')}
       data-testid="script"
-      className="rounded-md border-l-4 border-indigo-400 bg-indigo-50 px-3 py-2 text-sm text-indigo-950"
+      className="rounded-md border-l-4 border-indigo-400 bg-indigo-50 px-3 py-2 text-sm text-indigo-ink-950"
     >
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-800">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-ink-800">
         {t('script.label')}
       </p>
       {scripts.map((s) => (

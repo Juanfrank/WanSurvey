@@ -154,7 +154,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
             {boxes(digits, t('paper.writeNumber'))}
             {def.decimals ? (
               <>
-                <span>,</span>
+                <span>{(1.5).toLocaleString(lang).charAt(1)}</span>
                 {boxes(def.decimals, t('paper.writeNumber'))}
               </>
             ) : null}

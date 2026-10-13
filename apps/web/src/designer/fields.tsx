@@ -45,7 +45,7 @@ export function Hint({ id, children }: { id?: string; children: ReactNode }) {
 export function FieldError({ id, children }: { id?: string; children: ReactNode }) {
   if (!children) return null;
   return (
-    <p id={id} className="text-xs text-red-800">
+    <p id={id} className="text-xs text-red-ink-800">
       {children}
     </p>
   );

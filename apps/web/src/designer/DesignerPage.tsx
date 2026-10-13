@@ -29,9 +29,10 @@ import { useDraft, type DraftApi } from './useDraft.js';
 import { useRouting } from './useRouting.js';
 import { caseVariables, variablesOf, type SampleField } from './vars.js';
 import { localiseDiagnostic } from '../i18n-messages.js';
+import { dateTime, timeOnly } from '../format.js';
 
 const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-600';
+  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-600';
 
 /** The questionnaire designer: outline + editor, logic check, preview, scenarios and versions. */
 export function DesignerPage() {
@@ -158,7 +159,7 @@ export function DesignerPage() {
           </nav>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="sr-only">{d.name}</h1>
-            <label className="flex min-w-0 flex-1 items-center gap-2">
+            <label className="flex min-w-[16rem] flex-1 items-center gap-2">
               <span className="sr-only">{t('designer.name')}</span>
               <input
                 className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
@@ -206,7 +207,7 @@ export function DesignerPage() {
             ) : null}
           </div>
           {!canEdit ? (
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900">
               {t('designer.readOnly')}
             </p>
           ) : null}
@@ -228,7 +229,7 @@ export function DesignerPage() {
                     >
                       <span
                         aria-hidden
-                        className="rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-white"
+                        className="rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-on-fill"
                       >
                         {initials(e.name)}
                       </span>
@@ -260,7 +261,7 @@ export function DesignerPage() {
               <Tabs.Trigger value="check" className={tabCls}>
                 {t('designer.tab.check')}
                 {errorCount ? (
-                  <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-900">
+                  <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
                     {errorCount}
                   </span>
                 ) : null}
@@ -313,7 +314,7 @@ export function DesignerPage() {
                 >
                   {others.get(selected)?.length ? (
                     <p
-                      className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950"
+                      className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-ink-950"
                       data-testid="same-item"
                     >
                       {t('designer.collab.sameItem', { who: others.get(selected)!.join(', ') })}
@@ -386,7 +387,7 @@ export function DesignerPage() {
                       <li key={i}>
                         <button
                           type="button"
-                          className="text-left text-indigo-700 underline"
+                          className="text-left text-indigo-ink-700 underline"
                           onClick={() => {
                             setSelected(x.itemId!);
                             setTab('design');
@@ -396,7 +397,9 @@ export function DesignerPage() {
                           {t('designer.goTo', { id: x.itemId })}
                         </button>{' '}
                         <span
-                          className={x.severity === 'error' ? 'text-red-800' : 'text-amber-800'}
+                          className={
+                            x.severity === 'error' ? 'text-red-ink-800' : 'text-amber-ink-800'
+                          }
                         >
                           {localiseDiagnostic(t, x)}
                         </span>
@@ -470,7 +473,7 @@ export function DesignerPage() {
               <p className="mb-4 text-sm">
                 {t('designer.conflict.text', {
                   who: d.conflict.updatedBy ?? t('designer.conflict.someone'),
-                  when: new Date(d.conflict.updatedAt).toLocaleTimeString(),
+                  when: timeOnly(d.conflict.updatedAt),
                 })}
               </p>
               {d.conflict.items?.length ? (
@@ -498,9 +501,9 @@ function SaveStatus({ status }: { status: DraftApi['status'] }) {
   const { t } = useTranslation();
   const style =
     status === 'error' || status === 'conflict'
-      ? 'text-red-800'
+      ? 'text-red-ink-800'
       : status === 'saved'
-        ? 'text-emerald-800'
+        ? 'text-emerald-ink-800'
         : 'text-slate-600';
   return (
     <span className={`text-sm ${style}`} data-testid="save-status" data-status={status}>
@@ -528,7 +531,7 @@ function DraftPreview({ d, projectId, qid }: { d: DraftApi; projectId: string; q
   return (
     <div className="flex flex-col gap-4">
       {changed ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div className="flex flex-wrap items-center gap-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900">
           {t('designer.preview.changed')}
           <button
             type="button"
@@ -623,7 +626,7 @@ function VersionsPanel({
               <td className="py-2 font-mono">v{v.version}</td>
               <td>{t(`designer.versions.${v.status}`)}</td>
               <td>
-                {new Date(v.publishedAt).toLocaleString()}
+                {dateTime(v.publishedAt)}
                 {v.publishedBy ? ` · ${v.publishedBy}` : ''}
               </td>
               <td>{v.hasMapping ? t('designer.versions.yes') : '—'}</td>

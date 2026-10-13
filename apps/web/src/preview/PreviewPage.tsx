@@ -87,12 +87,12 @@ export function PreviewPage() {
         </details>
 
         {p.loaded.jsonError ? (
-          <p role="alert" className="text-sm text-red-800">
+          <p role="alert" className="text-sm text-red-ink-800">
             {t('preview.invalidJson', { error: p.loaded.jsonError })}
           </p>
         ) : null}
         {p.loaded.schemaIssues.length ? (
-          <div role="alert" className="text-sm text-red-800">
+          <div role="alert" className="text-sm text-red-ink-800">
             <p className="font-medium">{t('preview.schemaErrors')}</p>
             <ul className="list-disc pl-5">
               {p.loaded.schemaIssues.slice(0, 20).map((s, i) => (
@@ -229,7 +229,7 @@ export function PreviewWorkbench({
               }
             }}
           />
-          {contextError ? <p className="text-xs text-red-800">{contextError}</p> : null}
+          {contextError ? <p className="text-xs text-red-ink-800">{contextError}</p> : null}
         </details>
       </Card>
 
@@ -243,7 +243,7 @@ export function PreviewWorkbench({
               <Tabs.Trigger
                 key={tab}
                 value={tab}
-                className="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700"
+                className="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-ink-700"
               >
                 {t(`preview.tabs.${tab}`)}
               </Tabs.Trigger>

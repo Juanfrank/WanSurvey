@@ -15,11 +15,11 @@ import type { RunOptions } from './usePreview.js';
 import { localiseCheck, localiseDiagnostic } from '../i18n-messages.js';
 
 const STATUS_STYLE: Record<string, string> = {
-  active: 'bg-emerald-100 text-emerald-900',
+  active: 'bg-emerald-100 text-emerald-ink-900',
   hidden: 'bg-slate-200 text-slate-800',
-  skipped: 'bg-amber-100 text-amber-900',
-  notInMode: 'bg-violet-100 text-violet-900',
-  ended: 'bg-red-100 text-red-900',
+  skipped: 'bg-amber-100 text-amber-ink-900',
+  notInMode: 'bg-violet-100 text-violet-ink-900',
+  ended: 'bg-red-100 text-red-ink-900',
 };
 
 export function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
@@ -32,15 +32,15 @@ export function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] })
         {t('preview.diagnostics')}
       </h2>
       {diagnostics.length === 0 ? (
-        <p className="text-sm text-emerald-800">{t('preview.noIssues')}</p>
+        <p className="text-sm text-emerald-ink-800">{t('preview.noIssues')}</p>
       ) : null}
       {errors.length ? (
-        <p className="text-sm font-medium text-red-800">
+        <p className="text-sm font-medium text-red-ink-800">
           {t('preview.errorsCount', { count: errors.length })}
         </p>
       ) : null}
       {warnings.length ? (
-        <p className="text-sm text-amber-900">
+        <p className="text-sm text-amber-ink-900">
           {t('preview.warningsCount', { count: warnings.length })}
         </p>
       ) : null}
@@ -49,7 +49,9 @@ export function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] })
           {diagnostics.map((d, i) => (
             <li key={i} className="flex gap-2 border-b border-slate-100 px-3 py-1.5 last:border-0">
               <span
-                className={d.severity === 'error' ? 'font-semibold text-red-800' : 'text-amber-900'}
+                className={
+                  d.severity === 'error' ? 'font-semibold text-red-ink-800' : 'text-amber-ink-900'
+                }
               >
                 {d.severity === 'error' ? '✕' : '!'}
               </span>
@@ -108,7 +110,7 @@ export function PathTracer({
                   {t(`preview.status.${e.status}`)}
                 </span>
                 {e.key === current ? (
-                  <span className="rounded bg-indigo-600 px-1.5 text-xs text-white">
+                  <span className="rounded bg-indigo-600 px-1.5 text-xs text-on-fill">
                     {t('preview.current')}
                   </span>
                 ) : null}
@@ -116,7 +118,15 @@ export function PathTracer({
                   <span className="ml-auto truncate font-mono text-slate-700">{value}</span>
                 ) : null}
               </span>
-              <span className="block text-xs text-slate-600">{e.reason}</span>
+              <span className="block text-xs text-slate-600">
+                {e.why
+                  ? t(`preview.why.${e.why.code}`, {
+                      ...e.why.params,
+                      count: Number(e.why.params.n ?? 0),
+                      defaultValue: e.reason,
+                    })
+                  : e.reason}
+              </span>
             </>
           );
           return (
@@ -185,7 +195,7 @@ export function ComparePanel({
               <h3 className="mb-2 flex items-center gap-2 font-semibold">
                 {mode}
                 <span
-                  className={`rounded px-1.5 text-xs ${differs ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700'}`}
+                  className={`rounded px-1.5 text-xs ${differs ? 'bg-amber-100 text-amber-ink-900' : 'bg-slate-100 text-slate-700'}`}
                 >
                   {differs ? t('preview.differs') : t('preview.base')}
                 </span>
@@ -196,7 +206,7 @@ export function ComparePanel({
                 <>
                   <p>{s.text(key) ?? pick(def.text, options.language)}</p>
                   {mode !== 'CAWI' && s.text(key, 'interviewerInstruction') ? (
-                    <p className="mt-2 text-sm font-semibold uppercase text-amber-900">
+                    <p className="mt-2 text-sm font-semibold uppercase text-amber-ink-900">
                       {s.text(key, 'interviewerInstruction')}
                     </p>
                   ) : null}
@@ -329,7 +339,7 @@ export function ScenariosPanel({
           className="flex gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            const s = toScenario(name.trim() || `Run ${list.length + 1}`);
+            const s = toScenario(name.trim() || t('preview.runDefault', { n: list.length + 1 }));
             if (!s) return;
             void store.save(s);
             setName('');
@@ -347,7 +357,7 @@ export function ScenariosPanel({
           />
           <button
             type="submit"
-            className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700"
+            className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-on-fill hover:bg-indigo-700"
           >
             {t('preview.saveScenario')}
           </button>
@@ -391,7 +401,7 @@ export function ScenariosPanel({
                 <span className="text-slate-500">· {s.mode}</span>
                 {r ? (
                   <span
-                    className={`rounded px-1.5 text-xs ${r.passed ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'}`}
+                    className={`rounded px-1.5 text-xs ${r.passed ? 'bg-emerald-100 text-emerald-ink-900' : 'bg-red-100 text-red-ink-900'}`}
                     data-result={r.passed ? 'passed' : 'failed'}
                   >
                     {r.passed ? t('preview.passed') : t('preview.failed')}
@@ -422,7 +432,7 @@ export function ScenariosPanel({
                 </span>
               </div>
               {r && !r.passed ? (
-                <ul className="mt-2 list-disc pl-5 text-red-900">
+                <ul className="mt-2 list-disc pl-5 text-red-ink-900">
                   {r.checks
                     .filter((c) => !c.passed)
                     .map((c, i) => (

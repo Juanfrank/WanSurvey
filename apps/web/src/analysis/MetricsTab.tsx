@@ -158,7 +158,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                         <td
                           key={k}
                           className={`px-2 py-1.5 text-right tabular-nums ${
-                            o ? 'bg-amber-100 font-semibold text-amber-950' : ''
+                            o ? 'bg-amber-100 font-semibold text-amber-ink-950' : ''
                           }`}
                           data-outlier={o ?? undefined}
                         >

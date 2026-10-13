@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { smallBtn } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, modeLabel } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
 
 interface Returned {
@@ -59,7 +59,7 @@ export function ReturnedToMe({ projectId }: { projectId: string }) {
             data-case={r.externalId ?? ''}
           >
             <span className="font-medium">{r.externalId}</span>
-            <span>{r.mode}</span>
+            <span>{modeLabel(t, r.mode)}</span>
             {r.comment ? <span className="italic">“{r.comment}”</span> : null}
             <span className="text-slate-600">{r.reviewer}</span>
             <button type="button" className={smallBtn} onClick={() => void fix(r.id)}>
@@ -68,7 +68,7 @@ export function ReturnedToMe({ projectId }: { projectId: string }) {
           </li>
         ))}
       </ul>
-      <p role="alert" className="empty:hidden text-red-800">
+      <p role="alert" className="empty:hidden text-red-ink-800">
         {error}
       </p>
     </section>

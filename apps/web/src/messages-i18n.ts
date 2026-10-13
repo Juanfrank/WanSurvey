@@ -87,6 +87,9 @@ export const messagesEn = {
   },
   apiError: {
     CALL_OPEN: 'Finish the call in progress first.',
+    NO_OFFLINE_STORAGE: 'This browser cannot store data offline.',
+    CASE_NOT_ON_DEVICE: 'This case is not on this device.',
+    VERSION_NOT_ON_DEVICE: 'The questionnaire is not on this device.',
     CANNOT_CALL: 'This case cannot be called now.',
     MODE_NOT_IN_QUESTIONNAIRE: 'This questionnaire is not fielded in this mode.',
     COMMENT_REQUIRED: 'Say what the interviewer should fix.',
@@ -215,6 +218,9 @@ export const messagesEs: MessagesCatalogue = {
   },
   apiError: {
     CALL_OPEN: 'Termine primero la llamada en curso.',
+    NO_OFFLINE_STORAGE: 'Este navegador no puede guardar datos sin conexión.',
+    CASE_NOT_ON_DEVICE: 'Este caso no está en este dispositivo.',
+    VERSION_NOT_ON_DEVICE: 'El cuestionario no está en este dispositivo.',
     CANNOT_CALL: 'Este caso no se puede llamar ahora.',
     MODE_NOT_IN_QUESTIONNAIRE: 'Este cuestionario no se aplica en este modo.',
     COMMENT_REQUIRED: 'Indique qué debe corregir el entrevistador.',

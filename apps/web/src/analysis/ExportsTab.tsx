@@ -6,6 +6,7 @@ import { controlCls } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, Card, ErrorText } from '../routes/ui.js';
 import { FilterBar, type DataFilters } from './ResultsTab.js';
+import { fileSize } from '../format.js';
 
 const FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook'] as const;
 
@@ -20,12 +21,7 @@ interface ExportRow {
   createdAt: string;
 }
 
-const kb = (n: number | null) =>
-  n === null
-    ? '–'
-    : n < 1024 * 1024
-      ? `${Math.ceil(n / 1024)} KB`
-      : `${(n / 1048576).toFixed(1)} MB`;
+const kb = (n: number | null) => (n === null ? '–' : fileSize(n));
 
 /** Data exports (M6): request a file, watch it being built, download it. */
 export function ExportsTab({ projectId }: { projectId: string }) {
@@ -186,14 +182,14 @@ export function ExportsTab({ projectId }: { projectId: string }) {
                     </td>
                     <td className="px-3 py-2">
                       {t(`analysis.exports.statuses.${e.status}`)}
-                      {e.error ? <span className="block text-red-700">{e.error}</span> : null}
+                      {e.error ? <span className="block text-red-ink-700">{e.error}</span> : null}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{e.rows ?? '–'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{kb(e.size)}</td>
                     <td className="px-3 py-2">
                       {e.status === 'done' ? (
                         <a
-                          className="font-medium text-indigo-700 hover:underline"
+                          className="font-medium text-indigo-ink-700 hover:underline"
                           href={`/api/v1/projects/${projectId}/exports/${e.id}/file`}
                           download={e.fileName ?? undefined}
                         >

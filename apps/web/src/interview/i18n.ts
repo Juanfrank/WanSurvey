@@ -92,6 +92,12 @@ export const interviewEn = {
   when: 'When',
   who: 'Who',
   pathChange: 'cleared by a path change',
+  source: {
+    interviewer: 'interviewer',
+    respondent: 'respondent',
+    reviewer: 'reviewer',
+    system: 'system',
+  },
   reason: {
     path_change: 'path change',
     path_restored: 'restored by the path',
@@ -198,6 +204,12 @@ export const interviewEs: InterviewCatalogue = {
   when: 'Cuándo',
   who: 'Quién',
   pathChange: 'borrada por un cambio de ruta',
+  source: {
+    interviewer: 'entrevistador',
+    respondent: 'entrevistado',
+    reviewer: 'revisor',
+    system: 'sistema',
+  },
   reason: {
     path_change: 'cambio de ruta',
     path_restored: 'restaurada por la ruta',

@@ -97,7 +97,7 @@ export function PublishDialog({
     <Dialog title={t('designer.publish.title')} onClose={onClose} wide>
       <div className="flex flex-col gap-5 text-sm" aria-busy={!check}>
         {error ? (
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-red-800">
+          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-red-ink-800">
             {error}
           </p>
         ) : null}
@@ -152,7 +152,7 @@ export function PublishDialog({
             ]
               .slice(0, 8)
               .map((m, i) => (
-                <p key={i} className="-mt-3 pl-6 text-red-800">
+                <p key={i} className="-mt-3 pl-6 text-red-ink-800">
                   {m}
                 </p>
               ))}
@@ -160,7 +160,7 @@ export function PublishDialog({
             {failing.map((s) => (
               <div key={s.id} className="-mt-3 pl-6">
                 <p className="font-medium">{s.name}</p>
-                <ul className="list-disc pl-5 text-red-800">
+                <ul className="list-disc pl-5 text-red-ink-800">
                   {s.checks
                     .filter((c) => !c.passed)
                     .map((c, i) => (
@@ -218,7 +218,7 @@ export function PublishDialog({
 function CheckLine({ ok, text }: { ok: boolean; text: string }) {
   return (
     <li className="flex items-start gap-2" data-ok={ok}>
-      <span aria-hidden className={ok ? 'text-emerald-700' : 'text-red-700'}>
+      <span aria-hidden className={ok ? 'text-emerald-ink-700' : 'text-red-ink-700'}>
         {ok ? '✓' : '✕'}
       </span>
       <span>
@@ -343,7 +343,7 @@ function MappingRow({
         </table>
       ) : null}
       {problems.length ? (
-        <ul className="text-xs text-red-800">
+        <ul className="text-xs text-red-ink-800">
           {problems.map((p, i) => (
             <li key={i}>{p}</li>
           ))}

@@ -228,7 +228,7 @@ export function InterviewPage() {
           </label>
         ) : null}
         {payload.offline ? (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-ink-900">
             {t('device.offlineCopy')}
           </span>
         ) : null}
@@ -249,12 +249,12 @@ export function InterviewPage() {
         />
       ) : null}
       {iv.problem ? (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
+        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-ink-900">
           {t(`interview.problem.${iv.problem}`, { defaultValue: iv.problem })}
         </p>
       ) : null}
       {iv.lowSpace ? (
-        <p role="alert" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p role="alert" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900">
           {t('interview.lowSpace')}
         </p>
       ) : null}
@@ -485,10 +485,10 @@ export function InterviewPage() {
 function SaveBadge({ state }: { state: SaveState }) {
   const { t } = useTranslation();
   const cls: Record<SaveState, string> = {
-    saved: 'text-emerald-800',
+    saved: 'text-emerald-ink-800',
     saving: 'text-slate-600',
-    local: 'text-amber-800',
-    error: 'text-red-800',
+    local: 'text-amber-ink-800',
+    error: 'text-red-ink-800',
   };
   return (
     <span
@@ -523,7 +523,7 @@ function PaperMeta({
       data-testid="paper-meta"
     >
       {second ? (
-        <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-900">
+        <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-ink-900">
           {t('papi.meta.second')}
         </span>
       ) : null}

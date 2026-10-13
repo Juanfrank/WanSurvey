@@ -6,6 +6,8 @@ export const RENDERER_NS = 'renderer';
 const en = {
   script: { label: 'Read to the respondent' },
   nav: {
+    nextKey: 'Enter',
+    backKey: 'Shift+Enter',
     next: 'Next',
     back: 'Back',
     finish: 'Finish',
@@ -48,7 +50,8 @@ const en = {
     required: 'An answer is required',
     invalid_code: 'Select one of the listed options',
     integer: 'Enter a whole number',
-    decimals: 'Use at most {{n}} decimal place(s)',
+    decimals_one: 'Use at most {{n}} decimal place',
+    decimals_other: 'Use at most {{n}} decimal places',
     min: 'The minimum is {{n}}',
     max: 'The maximum is {{n}}',
     min_date: 'The earliest allowed date is {{n}}',
@@ -56,7 +59,8 @@ const en = {
     min_selections: 'Select at least {{n}}',
     max_selections: 'Select at most {{n}}',
     exclusive: 'This option cannot be combined with others',
-    max_length: 'Use at most {{n}} characters',
+    max_length_one: 'Use at most {{n}} character',
+    max_length_other: 'Use at most {{n}} characters',
     pattern: 'The answer does not have the expected format',
     date: 'Enter a valid date',
     time: 'Enter a valid time (HH:MM)',
@@ -107,6 +111,8 @@ type Catalogue = typeof en;
 const es: Catalogue = {
   script: { label: 'Leer al entrevistado' },
   nav: {
+    nextKey: 'Intro',
+    backKey: 'Mayús+Intro',
     next: 'Siguiente',
     back: 'Atrás',
     finish: 'Terminar',
@@ -150,7 +156,8 @@ const es: Catalogue = {
     required: 'Se requiere una respuesta',
     invalid_code: 'Seleccione una de las opciones',
     integer: 'Ingrese un número entero',
-    decimals: 'Use como máximo {{n}} decimales',
+    decimals_one: 'Use como máximo {{n}} decimal',
+    decimals_other: 'Use como máximo {{n}} decimales',
     min: 'El mínimo es {{n}}',
     max: 'El máximo es {{n}}',
     min_date: 'La fecha más temprana permitida es {{n}}',
@@ -158,7 +165,8 @@ const es: Catalogue = {
     min_selections: 'Seleccione al menos {{n}}',
     max_selections: 'Seleccione como máximo {{n}}',
     exclusive: 'Esta opción no puede combinarse con otras',
-    max_length: 'Use como máximo {{n}} caracteres',
+    max_length_one: 'Use como máximo {{n}} carácter',
+    max_length_other: 'Use como máximo {{n}} caracteres',
     pattern: 'La respuesta no tiene el formato esperado',
     date: 'Ingrese una fecha válida',
     time: 'Ingrese una hora válida (HH:MM)',
@@ -214,5 +222,7 @@ export function messageText(t: TFunction, m: ValidationMessage): string {
     ns: RENDERER_NS,
     defaultValue: m.message,
     ...(m.params ?? {}),
+    // Plural forms (decimal places, characters) follow the number in the rule.
+    ...(typeof m.params?.n === 'number' ? { count: m.params.n } : {}),
   });
 }

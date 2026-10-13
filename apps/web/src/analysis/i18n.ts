@@ -120,6 +120,7 @@ export const analysisEn = {
     openSummary: 'Open the printable summary',
     noData: 'No completed interviews yet.',
     share: {
+      url: 'Link address',
       title: 'Links for clients',
       help: 'A link opens a read-only summary of this project, without signing in. Revoke it to end access.',
       create: 'Create a link',
@@ -134,6 +135,7 @@ export const analysisEn = {
     },
   },
   summary: {
+    kpis: 'Key figures',
     title: 'Summary · {{name}}',
     print: 'Print or save as PDF',
     generated: 'Generated {{date}}',
@@ -298,6 +300,7 @@ export const analysisEs: typeof analysisEn = {
     openSummary: 'Abrir el resumen imprimible',
     noData: 'Aún no hay entrevistas completas.',
     share: {
+      url: 'Dirección del enlace',
       title: 'Enlaces para clientes',
       help: 'Un enlace abre un resumen de solo lectura del proyecto, sin iniciar sesión. Revóquelo para terminar el acceso.',
       create: 'Crear un enlace',
@@ -312,6 +315,7 @@ export const analysisEs: typeof analysisEn = {
     },
   },
   summary: {
+    kpis: 'Cifras clave',
     title: 'Resumen · {{name}}',
     print: 'Imprimir o guardar como PDF',
     generated: 'Generado el {{date}}',

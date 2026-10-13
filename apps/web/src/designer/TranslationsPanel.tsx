@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Group, smallBtn } from './fields.js';
 import type { Draft } from './tree.js';
+import { FileInput } from '../routes/ui.js';
 
 const PREVIEW_ROWS = 50;
 
@@ -86,21 +87,17 @@ export function TranslationsPanel({ draft, change }: { draft: Draft; change(next
           </button>
         ))}
       </div>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">{t('designer.translations.import')}</span>
-        <input
-          type="file"
-          accept=".csv,.xlf,.xliff,text/csv,application/xliff+xml"
-          className="text-sm"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = '';
-            if (f) void read(f);
-          }}
-        />
-      </label>
+      <FileInput
+        label={t('designer.translations.import')}
+        accept=".csv,.xlf,.xliff,text/csv,application/xliff+xml"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (f) void read(f);
+        }}
+      />
       <div role="status" aria-live="polite" className="text-sm">
-        {error ? <p className="text-red-800">{error}</p> : null}
+        {error ? <p className="text-red-ink-800">{error}</p> : null}
         {done ? <p>{done}</p> : null}
       </div>
       {result ? (

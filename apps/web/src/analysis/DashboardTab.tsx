@@ -57,7 +57,7 @@ export function DashboardTab({ projectId }: { projectId: string }) {
         <h2 className="text-lg font-semibold">{t('analysis.live.title')}</h2>
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            live ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'
+            live ? 'bg-emerald-100 text-emerald-ink-900' : 'bg-amber-100 text-amber-ink-900'
           }`}
           data-testid="live-status"
         >

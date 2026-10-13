@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { inputCls, smallBtn } from './fields.js';
+import { dateTime } from '../format.js';
 
 export interface Comment {
   id: string;
@@ -92,7 +93,7 @@ export function CommentsPanel({
           {c.authorName ?? '—'}
           {c.mine ? ` (${t('designer.comments.you')})` : ''}
         </span>{' '}
-        · <time dateTime={c.createdAt}>{new Date(c.createdAt).toLocaleString()}</time>
+        · <time dateTime={c.createdAt}>{dateTime(c.createdAt)}</time>
       </p>
       <p className="whitespace-pre-wrap">{c.body}</p>
     </div>
@@ -239,7 +240,7 @@ export function CommentsPanel({
           </div>
         </form>
       ) : null}
-      <p role="status" aria-live="polite" className="text-red-800">
+      <p role="status" aria-live="polite" className="text-red-ink-800">
         {error}
       </p>
       {open.length ? (

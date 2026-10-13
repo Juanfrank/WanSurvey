@@ -154,7 +154,7 @@ export function DayColumns({ days }: { days: { day: string; completes: number }[
         </text>
       </svg>
       <details className="mt-1 text-sm">
-        <summary className="cursor-pointer text-indigo-700">{t('analysis.live.table')}</summary>
+        <summary className="cursor-pointer text-indigo-ink-700">{t('analysis.live.table')}</summary>
         <table className="mt-1 text-sm">
           <thead>
             <tr>

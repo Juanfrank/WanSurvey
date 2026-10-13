@@ -30,6 +30,7 @@ import {
 } from './tree.js';
 import { assignLanes, type Routing } from './useRouting.js';
 import { nodeLabel, nodeName } from './vars.js';
+import { dispositionLabel } from '../i18n-messages.js';
 
 export const SETTINGS_ID = '__settings';
 
@@ -381,7 +382,7 @@ export function Outline({
                   d={`M ${x} ${y0} C ${x - bulge} ${y0}, ${x - bulge} ${y1}, ${x - 1} ${y1}`}
                   fill="none"
                   stroke="currentColor"
-                  className={on ? 'text-indigo-700' : 'text-slate-400'}
+                  className={on ? 'text-indigo-ink-700' : 'text-slate-400'}
                   strokeWidth={on ? 2 : 1.25}
                   markerEnd="url(#ol-arrow)"
                 >
@@ -495,7 +496,7 @@ export function Outline({
                     role="img"
                     aria-label={others.get(node.id)!.join(', ')}
                     title={others.get(node.id)!.join(', ')}
-                    className="shrink-0 rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-white"
+                    className="shrink-0 rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-on-fill"
                     data-testid="presence-marker"
                   >
                     {others
@@ -509,14 +510,14 @@ export function Outline({
                     role="img"
                     aria-label={t('designer.comments.badge', { count: commentCounts.get(node.id) })}
                     title={t('designer.comments.badge', { count: commentCounts.get(node.id) })}
-                    className="shrink-0 rounded bg-amber-100 px-1 text-xs text-amber-900"
+                    className="shrink-0 rounded bg-amber-100 px-1 text-xs text-amber-ink-900"
                     data-testid="comment-badge"
                   >
                     💬{commentCounts.get(node.id)}
                   </span>
                 ) : null}
                 {errors ? (
-                  <span className="ml-auto shrink-0 rounded bg-red-100 px-1.5 text-xs text-red-900">
+                  <span className="ml-auto shrink-0 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
                     {t('designer.outline.errors', { count: errors })}
                   </span>
                 ) : null}
@@ -554,7 +555,7 @@ function LogicBadges({ id, routing }: { id: string; routing: Routing | null }) {
     marks.push({
       key: 'if',
       sym: '◇',
-      cls: 'text-violet-800',
+      cls: 'text-violet-ink-800',
       label: t('designer.badge.conditional', {
         text: routing.describe(n.showIf.ast, n.showIf.src),
       }),
@@ -572,9 +573,11 @@ function LogicBadges({ id, routing }: { id: string; routing: Routing | null }) {
     marks.push({
       key: 'end',
       sym: '⏹',
-      cls: 'text-red-700',
+      cls: 'text-red-ink-700',
       label: t('designer.badge.ends', {
-        text: n.ends.map((e) => `${e.disposition}: ${routing.describe(e.ast, e.src)}`).join('; '),
+        text: n.ends
+          .map((e) => `${dispositionLabel(t, e.disposition)}: ${routing.describe(e.ast, e.src)}`)
+          .join('; '),
       }),
     });
   const checks = n.checks.errors + n.checks.warnings;
@@ -582,11 +585,16 @@ function LogicBadges({ id, routing }: { id: string; routing: Routing | null }) {
     marks.push({
       key: 'chk',
       sym: '✓',
-      cls: 'text-emerald-800',
+      cls: 'text-emerald-ink-800',
       label: t('designer.badge.checks', { count: checks }),
     });
   if (n.hasPrefill || n.hasFilter)
-    marks.push({ key: 'fx', sym: 'ƒ', cls: 'text-sky-800', label: t('designer.badge.computed') });
+    marks.push({
+      key: 'fx',
+      sym: 'ƒ',
+      cls: 'text-sky-ink-800',
+      label: t('designer.badge.computed'),
+    });
   if (!marks.length) return null;
   return (
     <span className="ml-auto flex shrink-0 gap-1 text-xs" data-testid="logic-badges">

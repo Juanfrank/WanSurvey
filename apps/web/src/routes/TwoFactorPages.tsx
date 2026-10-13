@@ -84,7 +84,7 @@ export function TwoFactorSetupPage() {
           >
             {setup.data.secret}
           </code>
-          <a className="text-sm text-indigo-700 underline" href={setup.data.otpauthUrl}>
+          <a className="text-sm text-indigo-ink-700 underline" href={setup.data.otpauthUrl}>
             {t('twofa.openApp')}
           </a>
         </div>

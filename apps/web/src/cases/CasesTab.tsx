@@ -15,6 +15,7 @@ import { ReturnedToMe } from '../review/ReturnedToMe.js';
 import { CallHistory, InterviewHistory, StartInterview } from './CaseInterviews.js';
 import { useMe } from '../routes/AppLayout.js';
 import { qs, STATUSES, useAssignees, type CaseList, type CaseRow } from './hooks.js';
+import { dateTime } from '../format.js';
 
 const MAX_FIELD_COLUMNS = 4;
 
@@ -368,7 +369,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
                 <td className="px-2 py-1.5">
                   <button
                     type="button"
-                    className="font-mono text-indigo-700 underline-offset-2 hover:underline"
+                    className="font-mono text-indigo-ink-700 underline-offset-2 hover:underline"
                     aria-label={t('cases.list.open', { id: r.externalId })}
                     onClick={() => setOpen(r.id)}
                   >
@@ -378,7 +379,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
                 <td className="px-2 py-1.5">
                   <StatusBadge status={r.status} />
                   {!canReadAll && !r.assignedTo ? (
-                    <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-900">
+                    <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-ink-900">
                       {t('cases.list.availableBadge')}
                     </span>
                   ) : null}
@@ -435,10 +436,10 @@ export function StatusBadge({ status }: { status: string }) {
   const { t } = useTranslation();
   const cls: Record<string, string> = {
     fresh: 'bg-slate-100 text-slate-800',
-    assigned: 'bg-indigo-100 text-indigo-900',
-    in_progress: 'bg-amber-100 text-amber-900',
-    finalised: 'bg-emerald-100 text-emerald-900',
-    withdrawn: 'bg-red-100 text-red-900',
+    assigned: 'bg-indigo-100 text-indigo-ink-900',
+    in_progress: 'bg-amber-100 text-amber-ink-900',
+    finalised: 'bg-emerald-100 text-emerald-ink-900',
+    withdrawn: 'bg-red-100 text-red-ink-900',
   };
   return (
     <span className={`rounded px-1.5 py-0.5 text-xs ${cls[status] ?? ''}`}>
@@ -568,7 +569,7 @@ function CaseDrawer({
               data-testid="checked-out"
             >
               {t('cases.detail.onDevice', {
-                time: new Date(c.checkedOutAt).toLocaleString(),
+                time: dateTime(c.checkedOutAt),
               })}
               {c.canForceRelease ? (
                 <button
@@ -651,7 +652,7 @@ function CaseDrawer({
                           ({x.lat.toFixed(5)}, {x.lng.toFixed(5)})
                         </span>{' '}
                         <a
-                          className="text-xs text-indigo-700 underline"
+                          className="text-xs text-indigo-ink-700 underline"
                           href={`https://www.openstreetmap.org/?mlat=${x.lat}&mlon=${x.lng}#map=17/${x.lat}/${x.lng}`}
                           target="_blank"
                           rel="noreferrer"
@@ -738,7 +739,7 @@ function CaseDrawer({
             <ol className="flex flex-col gap-0.5">
               {c.history.map((h, i) => (
                 <li key={i}>
-                  <time className="text-slate-600">{new Date(h.at).toLocaleString()}</time> ·{' '}
+                  <time className="text-slate-600">{dateTime(h.at)}</time> ·{' '}
                   {t(`cases.detail.event.${h.type}`, { defaultValue: h.type })}
                   {h.actor ? ` · ${h.actor}` : ''}
                 </li>

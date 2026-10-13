@@ -1,4 +1,13 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import {
+  useId,
+  useState,
+  type ButtonHTMLAttributes,
+  type ChangeEvent,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type Ref,
+} from 'react';
+import { useTranslation } from 'react-i18next';
 
 /** Small shared building blocks so screens stay consistent. */
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -16,8 +25,8 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' }) {
   const styles =
     variant === 'primary'
-      ? 'border border-indigo-600 bg-indigo-600 text-white hover:border-indigo-500 hover:bg-indigo-500 disabled:border-indigo-300 disabled:bg-indigo-300'
-      : 'border border-slate-300 bg-white text-navy hover:border-indigo-600 hover:text-indigo-600';
+      ? 'border border-indigo-600 bg-indigo-600 text-on-fill hover:border-indigo-500 hover:bg-indigo-500 disabled:border-indigo-300 disabled:bg-indigo-300'
+      : 'border border-slate-300 bg-white text-navy hover:border-indigo-600 hover:text-indigo-ink-600';
   return (
     <button
       className={`rounded-md px-4 py-2 text-sm font-semibold ${styles} ${className}`}
@@ -48,7 +57,7 @@ export function Field({
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null;
   return (
-    <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+    <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-ink-800">
       {children}
     </p>
   );
@@ -65,5 +74,52 @@ export function AuthShell({ title, children }: { title: string; children: ReactN
         </Card>
       </div>
     </main>
+  );
+}
+
+/**
+ * A file picker whose button and "no file" text are in the interface language (the browser's
+ * own control shows them in the browser's language). The input keeps the field's label.
+ */
+export function FileInput({
+  label,
+  accept,
+  inputRef,
+  onChange,
+  labelClassName = 'font-medium',
+}: {
+  label: string;
+  accept: string;
+  inputRef?: Ref<HTMLInputElement>;
+  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
+  labelClassName?: string;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  const [name, setName] = useState<string | null>(null);
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <span id={`${id}-label`} className={labelClassName}>
+        {label}
+      </span>
+      <div className="flex min-w-0 items-center gap-2">
+        <label className="inline-flex flex-none cursor-pointer items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-navy hover:border-indigo-600 hover:text-indigo-ink-600 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-indigo-600">
+          <input
+            ref={inputRef}
+            id={id}
+            type="file"
+            accept={accept}
+            aria-labelledby={`${id}-label`}
+            className="sr-only"
+            onChange={(e) => {
+              setName(e.target.files?.[0]?.name ?? null);
+              onChange?.(e);
+            }}
+          />
+          {t('app.chooseFile')}
+        </label>
+        <span className="min-w-0 truncate text-slate-600">{name ?? t('app.noFile')}</span>
+      </div>
+    </div>
   );
 }

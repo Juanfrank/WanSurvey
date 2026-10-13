@@ -1,5 +1,5 @@
 import { api, ApiError } from '../api.js';
-import { InterviewStore, type DeviceCase } from './store.js';
+import { InterviewStore, type DeviceCase, DeviceError } from './store.js';
 import { Syncer } from './sync.js';
 
 interface CheckoutResponse {
@@ -102,10 +102,11 @@ export function downloadCases(projectId: string, caseIds: string[]) {
 export function startOnDevice(caseId: string) {
   return withStore(async (store) => {
     const c = await store.getCase(caseId);
-    if (!c) throw new Error('This case is not on this device');
+    if (!c) throw new DeviceError('CASE_NOT_ON_DEVICE', 'This case is not on this device');
     if (c.interviewId) return c.interviewId;
     const v = await store.getVersion(c.questionnaireVersionId);
-    if (!v) throw new Error('The questionnaire is not on this device');
+    if (!v)
+      throw new DeviceError('VERSION_NOT_ON_DEVICE', 'The questionnaire is not on this device');
     const compiled = v.compiled as { questionnaire: { defaultLanguage: string } };
     const id = crypto.randomUUID();
     const startedAt = new Date().toISOString();

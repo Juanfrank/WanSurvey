@@ -21,6 +21,7 @@ import {
 } from './fields.js';
 import { flatten, isSection, locate, type Draft, type TreeNode } from './tree.js';
 import { nodeLabel, nodeName, type VarOption } from './vars.js';
+import { dispositionLabel } from '../i18n-messages.js';
 
 /** A free expression (formula, prefill, option filter) with live syntax checking. */
 export function ExpressionField({
@@ -275,7 +276,10 @@ export function LogicEditor({
             <SelectField
               label={t('designer.logic.disposition', { n: i + 1 })}
               value={e.disposition}
-              options={DISPOSITION_KEYS.map((d) => ({ value: d, label: d }))}
+              options={DISPOSITION_KEYS.map((d) => ({
+                value: d,
+                label: `${dispositionLabel(t, d)} (${d})`,
+              }))}
               onChange={(disposition) =>
                 setEnds(ends.map((x, j) => (j === i ? { ...x, disposition } : x)))
               }

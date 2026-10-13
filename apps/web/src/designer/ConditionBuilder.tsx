@@ -841,7 +841,7 @@ function TryIt({
         </div>
         <p role="status" data-testid="try-result" data-result={result}>
           {t('designer.cond.result')}{' '}
-          <strong className={result ? 'text-emerald-800' : 'text-red-800'}>
+          <strong className={result ? 'text-emerald-ink-800' : 'text-red-ink-800'}>
             {result ? t('designer.cond.true') : t('designer.cond.false')}
           </strong>
           {!result && missing ? (

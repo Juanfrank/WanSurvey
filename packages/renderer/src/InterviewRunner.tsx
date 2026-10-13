@@ -386,13 +386,13 @@ function Runner(p: InterviewRunnerProps) {
       <div
         role="status"
         aria-live="polite"
-        className="empty:hidden rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-900"
+        className="empty:hidden rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-ink-900"
       >
         {notice}
       </div>
       <div
         role="alert"
-        className="empty:hidden rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-800"
+        className="empty:hidden rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-ink-800"
       >
         {alert}
       </div>
@@ -446,7 +446,7 @@ function Runner(p: InterviewRunnerProps) {
               <button
                 key={r.key}
                 type="button"
-                className="rounded-md border border-indigo-600 px-3 py-1.5 text-indigo-700"
+                className="rounded-md border border-indigo-600 px-3 py-1.5 text-indigo-ink-700"
                 onClick={() => addRow(r)}
               >
                 {t('question.addRow')}
@@ -466,15 +466,15 @@ function Runner(p: InterviewRunnerProps) {
             disabled={session.path()[0]?.key === currentKey}
           >
             {t('nav.back')}
-            <span className="ml-2 text-xs text-slate-500">Shift+Enter</span>
+            <span className="ml-2 text-xs text-slate-500">{t('nav.backKey')}</span>
           </button>
           <button
             type="button"
-            className="min-h-11 rounded-md bg-indigo-600 px-5 py-2 font-medium text-white hover:bg-indigo-700"
+            className="min-h-11 rounded-md bg-indigo-600 px-5 py-2 font-medium text-on-fill hover:bg-indigo-700"
             onClick={next}
           >
             {t('nav.next')}
-            <span className="ml-2 text-xs text-indigo-100">Enter</span>
+            <span className="ml-2 text-xs text-on-fill/80">{t('nav.nextKey')}</span>
           </button>
         </div>
       ) : null}

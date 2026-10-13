@@ -32,5 +32,16 @@ export function localiseError(t: TFunction, e: unknown): string {
     const fallback = e.body.message ?? e.message;
     return e.code ? t(`apiError.${e.code}`, { defaultValue: fallback }) : fallback;
   }
+  const code = (e as { code?: unknown } | null)?.code;
+  if (e instanceof Error && typeof code === 'string')
+    return t(`apiError.${code}`, { defaultValue: e.message });
   return e instanceof Error ? e.message : t('apiError.generic');
 }
+
+/** A case or interview disposition (COMPLETE, REFUSAL…) in the interface language. */
+export const dispositionLabel = (t: TFunction, code: string) =>
+  t(`analysis.dispositionLabels.${code}`, { defaultValue: code });
+
+/** A data-collection mode (CATI, CAPI, CAWI, PAPI) by its everyday name. */
+export const modeLabel = (t: TFunction, mode: string) =>
+  t(`analysis.modes.${mode}`, { defaultValue: mode });

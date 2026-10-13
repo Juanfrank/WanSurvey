@@ -178,7 +178,7 @@ export function OptionsEditor({
         </table>
       </div>
       {duplicates.size ? (
-        <p className="text-xs text-red-800">
+        <p className="text-xs text-red-ink-800">
           {t('designer.opt.duplicate', { codes: [...duplicates].join(', ') })}
         </p>
       ) : null}

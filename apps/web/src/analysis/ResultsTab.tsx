@@ -361,7 +361,7 @@ function ShareLinks({ projectId }: { projectId: string }) {
                 <>
                   <input
                     readOnly
-                    aria-label="URL"
+                    aria-label={t('analysis.share.url')}
                     className={`${controlCls} min-w-0 flex-1 font-mono text-xs`}
                     value={l.url}
                   />

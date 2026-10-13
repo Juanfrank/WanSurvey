@@ -27,12 +27,18 @@ const en = {
     preview: 'Questionnaire preview',
     projects: 'Projects',
     skip: 'Skip to content',
+    mainNav: 'Main',
+    chooseFile: 'Choose a file',
+    noFile: 'No file chosen',
     account: 'Account: {{name}}',
     compactPanel: 'Compact the side panel',
     expandPanel: 'Keep the side panel open',
     pin: 'Keep open',
     unpin: 'Unpin',
     close: 'Close',
+    projectStatus: { draft: 'draft', active: 'active', closed: 'closed', archived: 'archived' },
+    theme: 'Theme',
+    themes: { system: 'As the device', light: 'Light', dark: 'Dark' },
   },
   login: {
     title: 'Sign in',
@@ -89,6 +95,22 @@ const en = {
     switch: 'Switch',
   },
   preview: {
+    why: {
+      onPath: 'On path',
+      shown: 'Shown: {{expr}} is true',
+      computed: 'Computed: {{expr}}',
+      rosterFixed_one: '{{n}} fixed row',
+      rosterFixed_other: '{{n}} fixed rows',
+      rosterFrom_one: '{{n}} row from {{expr}}',
+      rosterFrom_other: '{{n}} rows from {{expr}}',
+      rosterAdded_one: '{{n}} row added',
+      rosterAdded_other: '{{n}} rows added',
+      ended: 'Interview ended ({{disposition}}) at {{key}}',
+      skippedToEnd: 'Skipped to end by {{key}}',
+      skippedBy: 'Skipped by rule on {{key}}',
+      hidden: 'Hidden: show if {{expr}} is false',
+      notInMode: 'Not shown in {{mode}}',
+    },
     title: 'Questionnaire preview',
     source: 'Questionnaire',
     sample: 'Sample',
@@ -129,6 +151,7 @@ const en = {
     hiddenInMode: 'Not shown in this mode',
     noAnswers: 'No answers yet.',
     scenarios: 'Test scenarios',
+    runDefault: 'Run {{n}}',
     scenariosHelp:
       'Save this run (answers and resulting path) and re-run it after changes; slice 4 runs them on every publish.',
     scenarioName: 'Scenario name',
@@ -167,12 +190,23 @@ const es: Catalogue = {
     preview: 'Vista previa del cuestionario',
     projects: 'Proyectos',
     skip: 'Ir al contenido',
+    mainNav: 'Principal',
+    chooseFile: 'Elegir un archivo',
+    noFile: 'Ningún archivo elegido',
     account: 'Cuenta: {{name}}',
     compactPanel: 'Compactar el panel lateral',
     expandPanel: 'Mantener abierto el panel lateral',
     pin: 'Mantener fijo',
     unpin: 'Desfijar',
     close: 'Cerrar',
+    projectStatus: {
+      draft: 'borrador',
+      active: 'activo',
+      closed: 'cerrado',
+      archived: 'archivado',
+    },
+    theme: 'Tema',
+    themes: { system: 'Como el dispositivo', light: 'Claro', dark: 'Oscuro' },
   },
   login: {
     title: 'Iniciar sesión',
@@ -231,6 +265,22 @@ const es: Catalogue = {
     switch: 'Cambiar',
   },
   preview: {
+    why: {
+      onPath: 'En el recorrido',
+      shown: 'Se muestra: {{expr}} es verdadero',
+      computed: 'Calculado: {{expr}}',
+      rosterFixed_one: '{{n}} fila fija',
+      rosterFixed_other: '{{n}} filas fijas',
+      rosterFrom_one: '{{n}} fila según {{expr}}',
+      rosterFrom_other: '{{n}} filas según {{expr}}',
+      rosterAdded_one: '{{n}} fila agregada',
+      rosterAdded_other: '{{n}} filas agregadas',
+      ended: 'La entrevista terminó ({{disposition}}) en {{key}}',
+      skippedToEnd: 'Salto al final desde {{key}}',
+      skippedBy: 'Saltado por la regla de {{key}}',
+      hidden: 'Oculto: «mostrar si» {{expr}} es falso',
+      notInMode: 'No se muestra en {{mode}}',
+    },
     title: 'Vista previa del cuestionario',
     source: 'Cuestionario',
     sample: 'Ejemplo',
@@ -271,6 +321,7 @@ const es: Catalogue = {
     hiddenInMode: 'No se muestra en este modo',
     noAnswers: 'Aún no hay respuestas.',
     scenarios: 'Escenarios de prueba',
+    runDefault: 'Prueba {{n}}',
     scenariosHelp:
       'Guarde esta ejecución (respuestas y flujo resultante) y vuelva a ejecutarla tras los cambios; la etapa 4 los ejecuta en cada publicación.',
     scenarioName: 'Nombre del escenario',
@@ -321,6 +372,12 @@ export function initI18n(lng = 'es') {
     showSupportNotice: false,
   });
 }
+
+// <html lang> always names the language the interface is shown in (a stale or unsupported
+// choice falls back to Spanish, and so does the attribute).
+i18next.on('initialized', () => {
+  document.documentElement.lang = i18next.resolvedLanguage ?? 'es';
+});
 
 export function setLanguage(lng: string) {
   try {

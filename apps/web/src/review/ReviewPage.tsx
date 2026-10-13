@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { FlagChips, minutes } from './ReviewTab.js';
 
@@ -175,14 +175,14 @@ export function ReviewPage() {
           {t('review.screen.title', { id: d.interview.externalId ?? d.interview.id.slice(0, 8) })}
         </h1>
         <span>{d.interview.interviewer ?? '—'}</span>
-        <span>{d.interview.mode}</span>
+        <span>{modeLabel(t, d.interview.mode)}</span>
         <span data-testid="review-status" data-status={d.interview.status}>
           {t('review.screen.status', {
             status: t(`interview.status.${d.interview.status}`, {
               defaultValue: d.interview.status,
             }),
           })}
-          {d.interview.disposition ? ` · ${d.interview.disposition}` : ''}
+          {d.interview.disposition ? ` · ${dispositionLabel(t, d.interview.disposition)}` : ''}
         </span>
         <span className="tabular-nums">
           {t('review.screen.length', { time: minutes(d.interview.activeMs) })}
@@ -267,9 +267,11 @@ export function ReviewPage() {
                         {changes.map((h, i) => (
                           <li key={i}>
                             {JSON.stringify(h.oldValue)} → {JSON.stringify(h.newValue)} ·{' '}
-                            {h.by ?? h.source}
-                            {h.reason ? ` (${h.reason})` : ''} ·{' '}
-                            {new Date(h.at).toLocaleString(i18n.language)}
+                            {h.by ?? t(`interview.source.${h.source}`, { defaultValue: h.source })}
+                            {h.reason
+                              ? ` (${t(`interview.reason.${h.reason}`, { defaultValue: h.reason })})`
+                              : ''}{' '}
+                            · {new Date(h.at).toLocaleString(i18n.language)}
                           </li>
                         ))}
                       </ul>
@@ -294,7 +296,7 @@ export function ReviewPage() {
                   </p>
                 ))}
                 {warns.map((w, i) => (
-                  <p key={`w${i}`} className="text-xs text-amber-900">
+                  <p key={`w${i}`} className="text-xs text-amber-ink-900">
                     {t('review.screen.warning', { rule: w.ruleId })}
                   </p>
                 ))}
@@ -421,7 +423,7 @@ export function CommentList({
           {onChange ? (
             <button
               type="button"
-              className="text-xs text-indigo-700 underline"
+              className="text-xs text-indigo-ink-700 underline"
               onClick={() =>
                 void api(`/review/comments/${c.id}/resolve`, { method: 'POST' }).then(onChange)
               }
@@ -474,7 +476,7 @@ export function CommentDialog({
             onChange={(e) => setBody(e.target.value)}
           />
         </label>
-        <p role="alert" className="empty:hidden text-red-800">
+        <p role="alert" className="empty:hidden text-red-ink-800">
           {error}
         </p>
         <div className="flex justify-end gap-2">
@@ -594,7 +596,7 @@ function CorrectDialog({
             onChange={(e) => setReason(e.target.value)}
           />
         </label>
-        <p role="alert" className="empty:hidden text-red-800">
+        <p role="alert" className="empty:hidden text-red-ink-800">
           {error}
         </p>
         <div className="flex justify-end gap-2">

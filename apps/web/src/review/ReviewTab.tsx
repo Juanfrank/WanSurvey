@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
-import { localiseError } from '../i18n-messages.js';
+import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 
 export const FLAG_KINDS = [
@@ -55,7 +55,7 @@ export function FlagChips({ flags }: { flags: Record<string, unknown> }) {
       {set.map((k) => (
         <span
           key={k}
-          className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900"
+          className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-ink-900"
           data-flag={k}
         >
           {t(`review.flags.${k}`)}
@@ -153,7 +153,7 @@ function Queue({ projectId }: { projectId: string }) {
             <option value="">{t('review.queue.anyMode')}</option>
             {['CATI', 'CAPI', 'CAWI', 'PAPI'].map((m) => (
               <option key={m} value={m}>
-                {m}
+                {modeLabel(t, m)}
               </option>
             ))}
           </select>
@@ -204,7 +204,7 @@ function Queue({ projectId }: { projectId: string }) {
                 <td className="py-1.5">
                   <button
                     type="button"
-                    className="font-medium text-indigo-700 underline"
+                    className="font-medium text-indigo-ink-700 underline"
                     onFocus={() => setActive(i)}
                     onClick={() => void open(r.id)}
                     aria-label={t('review.queue.open', { id: r.externalId ?? r.id.slice(0, 8) })}
@@ -212,7 +212,7 @@ function Queue({ projectId }: { projectId: string }) {
                     {r.externalId ?? r.id.slice(0, 8)}
                   </button>
                   {r.sampled ? (
-                    <span className="ml-1 rounded bg-sky-100 px-1 text-xs text-sky-900">
+                    <span className="ml-1 rounded bg-sky-100 px-1 text-xs text-sky-ink-900">
                       {t('review.queue.sampleBadge')}
                     </span>
                   ) : null}
@@ -223,10 +223,10 @@ function Queue({ projectId }: { projectId: string }) {
                   ) : null}
                 </td>
                 <td>{r.interviewer ?? '—'}</td>
-                <td>{r.mode}</td>
+                <td>{modeLabel(t, r.mode)}</td>
                 <td>
                   {t(`interview.status.${r.status}`, { defaultValue: r.status })}
-                  {r.disposition ? ` · ${r.disposition}` : ''}
+                  {r.disposition ? ` · ${dispositionLabel(t, r.disposition)}` : ''}
                 </td>
                 <td>
                   {r.submittedAt

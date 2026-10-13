@@ -124,7 +124,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
     <div className="flex flex-col gap-6">
       {project.data?.settings.assignmentMode === 'pool' ? (
         <p
-          className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"
+          className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-ink-950"
           data-testid="pool-mode"
         >
           {t('cases.rules.poolMode')}

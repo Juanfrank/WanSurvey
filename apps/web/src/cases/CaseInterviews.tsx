@@ -5,10 +5,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { CallList, type CallRow } from '../cati/CallsTab.js';
 import { startInterview } from '../interview/useInterview.js';
 import { Button } from '../routes/ui.js';
+import { timeOnly } from '../format.js';
 
 interface QuestionnaireRow {
   id: string;
@@ -127,7 +128,7 @@ export function StartInterview({
           </button>
         </form>
       )}
-      <p role="status" aria-live="polite" className="text-red-800">
+      <p role="status" aria-live="polite" className="text-red-ink-800">
         {error}
       </p>
     </div>
@@ -179,7 +180,7 @@ export function InterviewHistory({ projectId, caseId }: { projectId: string; cas
                 <span className="font-medium">
                   {t(`interview.status.${r.status}`, { defaultValue: r.status })}
                 </span>
-                {r.disposition ? ` · ${r.disposition}` : ''} ·{' '}
+                {r.disposition ? ` · ${dispositionLabel(t, r.disposition)}` : ''} ·{' '}
                 {t('interview.historyRow', {
                   mode: r.mode,
                   version: r.version,
@@ -214,7 +215,7 @@ export function InterviewHistory({ projectId, caseId }: { projectId: string; cas
                               </span>
                             ) : null}
                           </td>
-                          <td>{new Date(e.at).toLocaleTimeString()}</td>
+                          <td>{timeOnly(e.at)}</td>
                           <td>{e.by ?? e.source}</td>
                         </tr>
                       ))}

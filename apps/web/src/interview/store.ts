@@ -115,11 +115,22 @@ function done(tx: IDBTransaction): Promise<void> {
   });
 }
 
+/** A problem on this device, with a code the interface translates (`apiError.<code>`). */
+export class DeviceError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export class InterviewStore {
   private constructor(private readonly db: IDBDatabase) {}
 
   static async open(name = DB): Promise<InterviewStore> {
-    if (typeof indexedDB === 'undefined') throw new Error('This browser cannot store data offline');
+    if (typeof indexedDB === 'undefined')
+      throw new DeviceError('NO_OFFLINE_STORAGE', 'This browser cannot store data offline');
     const open = indexedDB.open(name, VERSION);
     open.onupgradeneeded = (e) => {
       const db = open.result;

@@ -79,7 +79,7 @@ export function VariantsEditor({
         {shown.map((m) => (
           <label
             key={m}
-            className={`cursor-pointer rounded-md border px-3 py-1 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${mode === m ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-800' : 'border-slate-300'}`}
+            className={`cursor-pointer rounded-md border px-3 py-1 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${mode === m ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-ink-800' : 'border-slate-300'}`}
           >
             <input
               type="radio"
@@ -90,12 +90,12 @@ export function VariantsEditor({
             />
             {m}
             {!used.includes(m) ? (
-              <span className="ml-1 rounded bg-red-100 px-1 text-xs text-red-900">
+              <span className="ml-1 rounded bg-red-100 px-1 text-xs text-red-ink-900">
                 {t('designer.variants.unusedMode')}
               </span>
             ) : null}
             {count(m) ? (
-              <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-900">
+              <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-ink-900">
                 {t('designer.variants.overrides', { count: count(m) })}
               </span>
             ) : null}
@@ -103,7 +103,7 @@ export function VariantsEditor({
         ))}
       </div>
       {!used.includes(mode) ? (
-        <p role="note" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
+        <p role="note" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-ink-900">
           {t('designer.variants.unusedModeHelp', { mode })}{' '}
           <button type="button" className={smallBtn} onClick={() => set({ ...emptyVariant(v) })}>
             {t('designer.variants.removeVariant')}

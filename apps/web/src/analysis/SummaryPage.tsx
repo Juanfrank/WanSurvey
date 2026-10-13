@@ -62,7 +62,10 @@ export function SummaryView({ s, readOnly = false }: { s: Summary; readOnly?: bo
           {t('analysis.summary.print')}
         </Button>
       </header>
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="KPI">
+      <section
+        className="grid grid-cols-2 gap-4 sm:grid-cols-4"
+        aria-label={t('analysis.summary.kpis')}
+      >
         {(
           [
             ['completes', String(s.kpis.completes)],

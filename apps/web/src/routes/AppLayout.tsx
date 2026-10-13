@@ -141,7 +141,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
       to={to}
       activeOptions={exact ? { exact: true } : undefined}
       title={rail ? label : undefined}
-      className={`flex flex-none items-center gap-3 rounded-full border border-white/20 px-3.5 py-1.5 text-sm font-medium text-sidebar hover:bg-white/10 hover:text-white min-[900px]:rounded-lg min-[900px]:border-0 min-[900px]:py-2.5 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-white ${
+      className={`flex flex-none items-center gap-3 rounded-full border border-on-fill/20 px-3.5 py-1.5 text-sm font-medium text-sidebar hover:bg-on-fill/10 hover:text-on-fill min-[900px]:rounded-lg min-[900px]:border-0 min-[900px]:py-2.5 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-on-fill ${
         rail ? 'min-[900px]:h-10 min-[900px]:w-10 min-[900px]:justify-center min-[900px]:px-0' : ''
       }`}
     >
@@ -152,7 +152,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
 
   return (
     <header
-      className={`no-print relative z-30 flex-none bg-navy text-white min-[900px]:transition-[width] min-[900px]:duration-200 ${
+      className={`no-print relative z-30 flex-none bg-navy-fill text-on-fill min-[900px]:transition-[width] min-[900px]:duration-200 ${
         isCompact ? 'min-[900px]:w-18' : 'min-[900px]:w-74'
       }`}
       onMouseEnter={() => setOver(true)}
@@ -163,14 +163,14 @@ function SidePanel({ waiting }: { waiting: boolean }) {
       }}
     >
       <div
-        className={`flex flex-col gap-3 bg-navy px-4 py-3 min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:gap-6 min-[900px]:overflow-y-auto min-[900px]:overflow-x-hidden min-[900px]:py-6 min-[900px]:transition-[width] min-[900px]:duration-200 ${
+        className={`flex flex-col gap-3 bg-navy-fill px-4 py-3 min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:gap-6 min-[900px]:overflow-y-auto min-[900px]:overflow-x-hidden min-[900px]:py-6 min-[900px]:transition-[width] min-[900px]:duration-200 ${
           rail ? 'min-[900px]:w-18 min-[900px]:items-center min-[900px]:px-4' : 'min-[900px]:w-74'
         } ${isCompact && !rail ? 'min-[900px]:shadow-card' : ''}`}
       >
         <div className={`flex items-center gap-2 ${rail ? 'min-[900px]:flex-col' : ''}`}>
           <Link
             to="/"
-            className={`flex-1 truncate px-1 text-lg font-bold uppercase tracking-wide text-white min-[900px]:px-3 min-[900px]:text-xl ${
+            className={`flex-1 truncate px-1 text-lg font-bold uppercase tracking-wide text-on-fill min-[900px]:px-3 min-[900px]:text-xl ${
               rail ? 'min-[900px]:sr-only' : ''
             }`}
           >
@@ -186,9 +186,9 @@ function SidePanel({ waiting }: { waiting: boolean }) {
                 setCompact(!compact);
                 setOver(false);
               }}
-              className={`grid h-10 w-10 flex-none place-items-center rounded-lg text-white ${
+              className={`grid h-10 w-10 flex-none place-items-center rounded-lg text-on-fill ${
                 compact
-                  ? 'bg-white/10 hover:bg-white/20'
+                  ? 'bg-on-fill/10 hover:bg-on-fill/20'
                   : 'bg-indigo-600 shadow-[0_0_0_2px_rgb(255_255_255/0.28)] hover:bg-indigo-500'
               }`}
             >
@@ -198,7 +198,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
         </div>
         {!waiting ? (
           <nav
-            aria-label="Main"
+            aria-label={t('app.mainNav')}
             className="-mx-4 flex min-w-0 gap-2 overflow-x-auto px-4 pb-1 min-[900px]:mx-0 min-[900px]:flex-col min-[900px]:gap-1 min-[900px]:overflow-visible min-[900px]:px-0"
           >
             {link('/', t('app.home'), <HomeIcon />, true)}

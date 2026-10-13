@@ -80,11 +80,40 @@ export interface TraceEntry {
   id: string;
   kind: CompiledNode['kind'];
   status: EntryStatus;
-  /** Human-readable reason for the status, for the designer's path tracer. */
+  /** Human-readable reason for the status (English), for the designer's path tracer. */
   reason: string;
+  /** The same reason as a code and values, for a translated tracer (e.g. `hidden`, `{ expr }`). */
+  why: Why;
   depth: number;
   frames: Frame[];
 }
+
+/** Why a node is on or off the path. `text` is the English wording. */
+export interface Why {
+  code:
+    | 'onPath'
+    | 'shown'
+    | 'computed'
+    | 'rosterFixed'
+    | 'rosterFrom'
+    | 'rosterAdded'
+    | 'ended'
+    | 'skippedToEnd'
+    | 'skippedBy'
+    | 'hidden'
+    | 'notInMode';
+  params: Record<string, string | number>;
+  text: string;
+}
+
+const shownWhy = (node: CompiledNode): Why =>
+  node.showIf
+    ? {
+        code: 'shown',
+        params: { expr: node.showIf.src },
+        text: `Shown: ${node.showIf.src} is true`,
+      }
+    : { code: 'onPath', params: {}, text: 'On path' };
 
 export type AnswerSourceKind = 'interviewer' | 'respondent' | 'reviewer' | 'system';
 
@@ -792,11 +821,20 @@ export class InterviewSession {
     node: CompiledNode,
     frames: Frame[],
     status: EntryStatus,
-    reason: string,
+    why: Why,
     depth: number,
   ): TraceEntry {
     const key = node.name ? formatKey(frames, node.name) : formatKey(frames, node.id);
-    const e: TraceEntry = { key, id: node.id, kind: node.kind, status, reason, depth, frames };
+    const e: TraceEntry = {
+      key,
+      id: node.id,
+      kind: node.kind,
+      status,
+      reason: why.text,
+      why,
+      depth,
+      frames,
+    };
     this.walking!.entries.push(e);
     return e;
   }
@@ -813,37 +851,71 @@ export class InterviewSession {
         node,
         frames,
         'ended',
-        `Interview ended (${w.ended.disposition}) at ${w.ended.byKey}`,
+        {
+          code: 'ended',
+          params: { disposition: w.ended.disposition, key: w.ended.byKey },
+          text: `Interview ended (${w.ended.disposition}) at ${w.ended.byKey}`,
+        },
         depth,
       );
     if (w.skipToEnd)
-      return this.off(node, frames, 'skipped', `Skipped to end by ${w.skipToEnd}`, depth);
+      return this.off(
+        node,
+        frames,
+        'skipped',
+        {
+          code: 'skippedToEnd',
+          params: { key: w.skipToEnd },
+          text: `Skipped to end by ${w.skipToEnd}`,
+        },
+        depth,
+      );
     if (skip.target !== null) {
       if (skip.target === node.index) skip.target = null;
       else if (!(skip.target > node.index && skip.target <= node.end)) {
-        return this.off(node, frames, 'skipped', `Skipped by rule on ${skip.from}`, depth);
+        return this.off(
+          node,
+          frames,
+          'skipped',
+          {
+            code: 'skippedBy',
+            params: { key: skip.from },
+            text: `Skipped by rule on ${skip.from}`,
+          },
+          depth,
+        );
       }
     }
     if (node.showIf && !truthy(this.cached(node, 'showIf', node.showIf, frames))) {
       if (skip.target !== null && skip.target > node.index && skip.target <= node.end)
         skip.target = null;
-      return this.off(node, frames, 'hidden', `Hidden: show if ${node.showIf.src} is false`, depth);
+      return this.off(
+        node,
+        frames,
+        'hidden',
+        {
+          code: 'hidden',
+          params: { expr: node.showIf.src },
+          text: `Hidden: show if ${node.showIf.src} is false`,
+        },
+        depth,
+      );
     }
     const variants = (node.def as Question).variants;
     if (variants?.[this.mode]?.visibleInMode === false) {
-      return this.off(node, frames, 'notInMode', `Not shown in ${this.mode}`, depth);
+      return this.off(
+        node,
+        frames,
+        'notInMode',
+        { code: 'notInMode', params: { mode: this.mode }, text: `Not shown in ${this.mode}` },
+        depth,
+      );
     }
 
     switch (node.kind) {
       case 'section':
       case 'block': {
-        this.entry(
-          node,
-          frames,
-          'active',
-          node.showIf ? `Shown: ${node.showIf.src} is true` : 'On path',
-          depth,
-        );
+        this.entry(node, frames, 'active', shownWhy(node), depth);
         for (const c of node.children) this.visit(this.compiled.nodes[c]!, frames, skip, depth + 1);
         return;
       }
@@ -852,7 +924,17 @@ export class InterviewSession {
       case 'question':
         return this.visitQuestion(node, frames, skip, depth);
       case 'computed': {
-        this.entry(node, frames, 'active', `Computed: ${node.formula!.src}`, depth);
+        this.entry(
+          node,
+          frames,
+          'active',
+          {
+            code: 'computed',
+            params: { expr: node.formula!.src },
+            text: `Computed: ${node.formula!.src}`,
+          },
+          depth,
+        );
         const v = this.cached(node, 'formula', node.formula!, frames);
         const value = (isAnswered(v) ? v : null) as AnswerValue;
         const old =
@@ -870,13 +952,7 @@ export class InterviewSession {
         return;
       }
       default:
-        this.entry(
-          node,
-          frames,
-          'active',
-          node.showIf ? `Shown: ${node.showIf.src} is true` : 'On path',
-          depth,
-        );
+        this.entry(node, frames, 'active', shownWhy(node), depth);
         return;
     }
   }
@@ -890,17 +966,21 @@ export class InterviewSession {
       ? (own(container!, r.name) as AnswerValue[])
       : [];
     let n: number;
-    let reason: string;
+    let reason: Why;
     if (r.count.type === 'fixed') {
       n = r.count.n;
-      reason = `${n} fixed row(s)`;
+      reason = { code: 'rosterFixed', params: { n }, text: `${n} fixed row(s)` };
     } else if (r.count.type === 'expression') {
       const v = toNumber(this.cached(node, 'count', node.rosterCount!, frames));
       n = v === null ? 0 : Math.max(0, Math.min(r.count.max ?? MAX_ROWS, Math.trunc(v)));
-      reason = `${n} row(s) from ${r.count.expr}`;
+      reason = {
+        code: 'rosterFrom',
+        params: { n, expr: r.count.expr },
+        text: `${n} row(s) from ${r.count.expr}`,
+      };
     } else {
       n = Math.min(existing.length, r.count.max ?? MAX_ROWS);
-      reason = `${n} row(s) added`;
+      reason = { code: 'rosterAdded', params: { n }, text: `${n} row(s) added` };
     }
     this.entry(node, frames, 'active', reason, depth);
     this.resizeRows(frames, r.name, key, existing, n);
@@ -993,13 +1073,7 @@ export class InterviewSession {
         value = v;
       }
     }
-    this.entry(
-      node,
-      frames,
-      'active',
-      node.showIf ? `Shown: ${node.showIf.src} is true` : 'On path',
-      depth,
-    );
+    this.entry(node, frames, 'active', shownWhy(node), depth);
     if (!isAnswered(value)) return;
 
     for (const rule of node.endIf) {
@@ -1061,7 +1135,7 @@ export class InterviewSession {
     node: CompiledNode,
     frames: Frame[],
     status: EntryStatus,
-    reason: string,
+    reason: Why,
     depth: number,
   ) {
     const w = this.walking!;

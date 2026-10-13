@@ -188,7 +188,7 @@ export function CaseMap({
                     <td className="py-1">
                       <button
                         type="button"
-                        className="font-mono text-indigo-700 underline-offset-2 hover:underline"
+                        className="font-mono text-indigo-ink-700 underline-offset-2 hover:underline"
                         onClick={() => onOpen(p.caseId)}
                       >
                         {p.externalId}

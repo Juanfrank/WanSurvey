@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { smallBtn } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import {
   deviceState,
   downloadCases,
@@ -208,7 +208,7 @@ export function DevicePage() {
         <span
           data-testid="connection"
           data-online={online}
-          className={`rounded-full px-2.5 py-0.5 text-sm font-medium ${online ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'}`}
+          className={`rounded-full px-2.5 py-0.5 text-sm font-medium ${online ? 'bg-emerald-100 text-emerald-ink-900' : 'bg-amber-100 text-amber-ink-900'}`}
         >
           {online ? t('device.online') : t('device.offline')}
         </span>
@@ -245,7 +245,7 @@ export function DevicePage() {
         {message}
       </p>
       {gps ? (
-        <p className="rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-900">
+        <p className="rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-ink-900">
           <strong>{t('device.gpsTitle')}:</strong> {t('device.gpsOn')}. {gps.gpsNotice}
         </p>
       ) : null}
@@ -271,9 +271,11 @@ export function DevicePage() {
                   <td>{place(c)}</td>
                   <td>
                     {t(`device.status.${c.status}`)}
-                    {c.disposition && c.status !== 'started' ? ` · ${c.disposition}` : ''}
+                    {c.disposition && c.status !== 'started'
+                      ? ` · ${dispositionLabel(t, c.disposition)}`
+                      : ''}
                     {c.problem ? (
-                      <span className="block text-red-800">
+                      <span className="block text-red-ink-800">
                         {t(`device.problems.${c.problem}`, { defaultValue: c.problem })}
                       </span>
                     ) : null}
@@ -339,7 +341,7 @@ export function DevicePage() {
                     <span className="font-medium">{r.externalId}</span>
                     <span className="text-slate-600">{place(r)}</span>
                     {r.checkedOutAt ? (
-                      <span className="text-xs text-amber-800">({t('device.elsewhere')})</span>
+                      <span className="text-xs text-amber-ink-800">({t('device.elsewhere')})</span>
                     ) : null}
                   </label>
                 </li>

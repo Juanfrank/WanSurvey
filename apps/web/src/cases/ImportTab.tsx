@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { api, upload } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
-import { Button, Card, ErrorText } from '../routes/ui.js';
+import { Button, Card, ErrorText, FileInput } from '../routes/ui.js';
+import { dateTime } from '../format.js';
 
 type FieldType = 'text' | 'number' | 'date' | 'code';
 type Column =
@@ -174,10 +175,11 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
               if (f) send.mutate(f);
             }}
           >
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">{t('cases.import.file')}</span>
-              <input ref={fileRef} type="file" accept=".csv,.xlsx,.txt,.tsv" className="text-sm" />
-            </label>
+            <FileInput
+              label={t('cases.import.file')}
+              accept=".csv,.xlsx,.txt,.tsv"
+              inputRef={fileRef}
+            />
             <Button type="submit" disabled={send.isPending}>
               {send.isPending ? t('cases.import.reading') : t('cases.import.upload')}
             </Button>
@@ -191,7 +193,7 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
           </p>
         )}
         {uploaded?.duplicateOf ? (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900">
             {t('cases.import.duplicate')}
           </p>
         ) : null}
@@ -383,7 +385,7 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
               <div key={k} className="rounded-md border border-slate-200 p-2" data-stat={k}>
                 <dt className="text-xs text-slate-600">{t(`cases.import.report.${k}`)}</dt>
                 <dd
-                  className={`text-xl font-semibold ${k === 'invalid' && n ? 'text-red-800' : ''}`}
+                  className={`text-xl font-semibold ${k === 'invalid' && n ? 'text-red-ink-800' : ''}`}
                 >
                   {n}
                 </dd>
@@ -404,7 +406,7 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
               <tbody className="divide-y divide-slate-100">
                 {report.issues.map((i) => (
                   <tr key={i.code} data-issue={i.code}>
-                    <td className={`py-1.5 ${i.blocking ? 'text-red-800' : ''}`}>
+                    <td className={`py-1.5 ${i.blocking ? 'text-red-ink-800' : ''}`}>
                       {t(`cases.import.issue.${i.code}`)}
                     </td>
                     <td>{i.count}</td>
@@ -431,7 +433,7 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
           ) : null}
           {report.invalid ? (
             <a
-              className="text-sm text-indigo-700 underline"
+              className="text-sm text-indigo-ink-700 underline"
               href={`/api/v1/projects/${projectId}/imports/${uploaded.id}/report.csv`}
             >
               {t('cases.import.report.download')}
@@ -497,7 +499,7 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
                 <span className="font-medium">{h.fileName}</span>
                 <span>{h.rows}</span>
                 <span>{t(`cases.import.statusLabel.${h.status}`, { defaultValue: h.status })}</span>
-                <time className="text-slate-600">{new Date(h.createdAt).toLocaleString()}</time>
+                <time className="text-slate-600">{dateTime(h.createdAt)}</time>
               </li>
             ))}
           </ul>

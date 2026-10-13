@@ -280,7 +280,7 @@ export function Scale(p: ControlProps) {
         {points.map((n) => (
           <label
             key={n}
-            className={`flex ${p.touch ? 'size-12' : 'size-10'} cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white font-medium has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500`}
+            className={`flex ${p.touch ? 'size-12' : 'size-10'} cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white font-medium has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-on-fill has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500`}
           >
             <input
               type="radio"
@@ -410,7 +410,7 @@ export function Ranking(p: ControlProps) {
       {!answered ? (
         <button
           type="button"
-          className="mt-3 rounded-md border border-indigo-600 px-3 py-1.5 text-indigo-700"
+          className="mt-3 rounded-md border border-indigo-600 px-3 py-1.5 text-indigo-ink-700"
           onClick={() => p.onChange(order.map((o) => o.code))}
         >
           {t('question.keepOrder')}

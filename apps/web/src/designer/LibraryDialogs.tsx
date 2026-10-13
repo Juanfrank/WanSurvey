@@ -95,7 +95,7 @@ export function SaveToLibraryDialog({
           <span className="font-medium">{t('designer.library.tags')}</span>
           <input className={inputCls} value={tags} onChange={(e) => setTags(e.target.value)} />
         </label>
-        <p role="status" aria-live="polite" className="text-red-800">
+        <p role="status" aria-live="polite" className="text-red-ink-800">
           {error}
         </p>
         <div className="flex justify-end gap-2">

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, apiFull } from '../api.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
 import { PhoneIcon } from '../routes/icons.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
@@ -289,7 +289,10 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
       const label = t(`cati.outcomes.${outcome}`);
       setMessage(
         r.final
-          ? t('cati.savedFinal', { outcome: label, disposition: r.disposition })
+          ? t('cati.savedFinal', {
+              outcome: label,
+              disposition: dispositionLabel(t, r.disposition ?? ''),
+            })
           : r.nextContactAt
             ? t('cati.savedRetry', {
                 outcome: label,
@@ -397,7 +400,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
             <button
               ref={nextRef}
               type="button"
-              className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700 disabled:bg-indigo-300"
+              className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-on-fill hover:bg-indigo-700 disabled:bg-indigo-300"
               disabled={busy}
               onClick={() => void next()}
               aria-keyshortcuts="N"
@@ -418,7 +421,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
         <p
           role="status"
           aria-live="assertive"
-          className="empty:hidden rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          className="empty:hidden rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
           data-testid="callback-due"
         >
           {due ? t('cati.callbackDue', { id: due }) : ''}
@@ -491,7 +494,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
                   ) : null}
                   <a
                     href={`tel:${p.value}`}
-                    className="text-sm text-indigo-700 underline"
+                    className="text-sm text-indigo-ink-700 underline"
                     aria-label={t('cati.dial', { number: p.value })}
                   >
                     ☎
@@ -586,7 +589,7 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
                 <p id="callback-hours" className="text-slate-600">
                   {t('cati.callbackHours', hours)}
                 </p>
-                <p id="callback-problem" className="empty:hidden font-medium text-red-800">
+                <p id="callback-problem" className="empty:hidden font-medium text-red-ink-800">
                   {callbackProblem === 'hours'
                     ? t('cati.outsideHours')
                     : callbackProblem === 'past'
@@ -756,7 +759,7 @@ function Callbacks({
                   >
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <b className="text-navy">{c.externalId}</b>
-                      <span className="rounded-full bg-indigo-50 px-2 text-xs font-semibold text-indigo-700">
+                      <span className="rounded-full bg-indigo-50 px-2 text-xs font-semibold text-indigo-ink-700">
                         {t(`cati.kind.${c.kind}`)}
                       </span>
                       <span className="rounded-full bg-slate-100 px-2 text-xs font-semibold text-slate-700">
@@ -767,7 +770,7 @@ function Callbacks({
                             : t('cati.forAnyoneTag')}
                       </span>
                       {g === 'overdue' ? (
-                        <span className="text-xs font-semibold text-amber-900">
+                        <span className="text-xs font-semibold text-amber-ink-900">
                           ({t('cati.due')})
                         </span>
                       ) : null}
@@ -795,7 +798,7 @@ function Callbacks({
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:bg-slate-200 disabled:text-slate-600"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-on-fill hover:bg-indigo-500 disabled:bg-slate-200 disabled:text-slate-600"
                         disabled={!canCall || !c.callableNow}
                         aria-label={t('cati.callNowCase', { id: c.externalId })}
                         onClick={() => onCall(c)}

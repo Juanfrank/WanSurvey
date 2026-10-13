@@ -108,7 +108,7 @@ export function PersonalData({
           <div className="flex gap-2">
             <button
               type="submit"
-              className="rounded-md bg-red-700 px-3 py-1.5 font-medium text-white hover:bg-red-800"
+              className="rounded-md bg-red-700 px-3 py-1.5 font-medium text-on-fill hover:bg-red-800"
               disabled={erase.isPending}
             >
               {t('cases.privacy.confirm')}

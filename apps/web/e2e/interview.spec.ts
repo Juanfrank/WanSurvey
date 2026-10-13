@@ -106,7 +106,7 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await sup.getByRole('button', { name: `Open case ${caseId}` }).click();
   const d = sup.getByRole('dialog', { name: `Case ${caseId}` });
   const history = d.getByTestId('interviews');
-  await expect(history).toContainText('Submitted · REFUSAL');
+  await expect(history).toContainText('Submitted · Refusal');
   await history.getByText(/Changes/).click();
   await expect(
     history.getByTestId('answer-history').locator('tr[data-reason="path_change"]').first(),

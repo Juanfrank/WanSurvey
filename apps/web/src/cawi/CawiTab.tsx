@@ -567,7 +567,11 @@ function OpenLinkSection({ projectId }: { projectId: string }) {
       {l?.active ? (
         <p>
           <span className="font-medium">{t('cawi.openLink.url')}:</span>{' '}
-          <a className="break-all text-indigo-700 underline" href={l.url} data-testid="open-link">
+          <a
+            className="break-all text-indigo-ink-700 underline"
+            href={l.url}
+            data-testid="open-link"
+          >
             {l.url}
           </a>
         </p>

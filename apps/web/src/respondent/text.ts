@@ -2,7 +2,7 @@
  * Respondent pages speak the questionnaire's language, not the staff interface's (L44): a
  * small catalogue of their own, Spanish first.
  */
-const TEXT = {
+export const TEXT = {
   es: {
     loading: 'Cargando la encuesta…',
     notFound: 'Este enlace no es válido o ya no está disponible.',
@@ -47,5 +47,10 @@ const TEXT = {
 
 export type RespondentText = (typeof TEXT)['es'];
 
-export const respondentText = (lang: string): RespondentText =>
-  TEXT[(lang.split('-')[0] ?? 'es') as keyof typeof TEXT] ?? TEXT.es;
+/** The respondent page language this catalogue has for `lang` (Spanish when it has none). */
+export const respondentLang = (lang: string): keyof typeof TEXT => {
+  const base = lang.split('-')[0] ?? 'es';
+  return base in TEXT ? (base as keyof typeof TEXT) : 'es';
+};
+
+export const respondentText = (lang: string): RespondentText => TEXT[respondentLang(lang)];

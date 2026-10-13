@@ -22,7 +22,7 @@ export function HomePage() {
         <p className="mb-4 text-slate-700">{t('home.intro')}</p>
         <Link
           to="/preview"
-          className="inline-block rounded-md bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700"
+          className="inline-block rounded-md bg-indigo-600 px-4 py-2 font-medium text-on-fill hover:bg-indigo-700"
         >
           {t('home.openPreview')}
         </Link>
@@ -36,12 +36,12 @@ export function HomePage() {
                 <Link
                   to="/projects/$projectId"
                   params={{ projectId: p.id }}
-                  className="text-indigo-700 hover:underline"
+                  className="text-indigo-ink-700 hover:underline"
                 >
                   {p.name}
                 </Link>
                 <span className="font-mono text-sm text-slate-500">
-                  {p.code} · {p.status}
+                  {p.code} · {t(`app.projectStatus.${p.status}`, { defaultValue: p.status })}
                 </span>
               </li>
             ))}

@@ -235,7 +235,7 @@ export function RespondentPage() {
           </p>
           {payload.completion.redirectUrl ? (
             <a
-              className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white"
+              className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-on-fill"
               href={payload.completion.redirectUrl}
             >
               {t.continue}
@@ -262,13 +262,13 @@ export function RespondentPage() {
         <div className="mt-6 flex flex-col items-start gap-2 border-t border-slate-200 pt-4">
           <button
             type="button"
-            className="rounded-md bg-indigo-600 px-5 py-2.5 font-medium text-white disabled:bg-indigo-300"
+            className="rounded-md bg-indigo-600 px-5 py-2.5 font-medium text-on-fill disabled:bg-indigo-300"
             disabled={phase === 'sending'}
             onClick={() => void submit()}
           >
             {phase === 'sending' ? t.sending : t.send}
           </button>
-          <p role="alert" className="empty:hidden text-red-800">
+          <p role="alert" className="empty:hidden text-red-ink-800">
             {problem}
           </p>
         </div>
@@ -291,7 +291,7 @@ export function Shell({
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-          <h1 className="text-base font-semibold text-indigo-800">{title}</h1>
+          <h1 className="text-base font-semibold text-indigo-ink-800">{title}</h1>
           {status ? (
             <p className="text-xs text-slate-600" role="status" data-testid="respondent-save">
               {status}

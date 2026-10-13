@@ -2,7 +2,7 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api.js';
 import { Shell } from './RespondentPage.js';
-import { respondentText } from './text.js';
+import { respondentLang, respondentText } from './text.js';
 
 const key = (slug: string) => `wansurvey.open.${slug}`;
 
@@ -14,7 +14,12 @@ export function OpenLinkPage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
   const navigate = useNavigate();
   const [failed, setFailed] = useState<'notFound' | 'failed' | null>(null);
-  const t = respondentText(navigator.language);
+  // The browser's language when the catalogue has it; the page says which one it uses.
+  const lang = respondentLang(navigator.language);
+  const t = respondentText(lang);
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   useEffect(() => {
     void (async () => {

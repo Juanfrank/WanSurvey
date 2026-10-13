@@ -163,7 +163,7 @@ export function QuestionView(p: QuestionViewProps) {
         <div
           role="note"
           aria-label={t('question.instruction')}
-          className="rounded-md border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-amber-900"
+          className="rounded-md border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-amber-ink-900"
         >
           {instruction}
         </div>
@@ -191,7 +191,7 @@ export function QuestionView(p: QuestionViewProps) {
                 key={kind}
                 type="button"
                 aria-pressed={pressed}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm aria-pressed:border-slate-700 aria-pressed:bg-slate-700 aria-pressed:text-white"
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm aria-pressed:border-slate-700 aria-pressed:bg-slate-700 aria-pressed:text-slate-50"
                 onClick={() => p.onSpecial(entry.key, pressed ? null : kind)}
               >
                 {t(`special.${kind}`)}
@@ -236,16 +236,16 @@ function Messages(p: {
   if (!p.local && !p.errors.length && !p.warnings.length) return null;
   return (
     <div id={p.id} className="flex flex-col gap-2">
-      {p.local ? <p className="text-sm font-medium text-red-700">{p.local}</p> : null}
+      {p.local ? <p className="text-sm font-medium text-red-ink-700">{p.local}</p> : null}
       {p.errors.map((e) => (
-        <p key={e.ruleId} className="text-sm font-medium text-red-700" data-rule={e.ruleId}>
+        <p key={e.ruleId} className="text-sm font-medium text-red-ink-700" data-rule={e.ruleId}>
           {messageText(t, e)}
         </p>
       ))}
       {p.warnings.map((w) => (
         <div
           key={w.ruleId}
-          className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
           data-rule={w.ruleId}
         >
           <p>{messageText(t, w)}</p>

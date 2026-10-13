@@ -11,10 +11,10 @@ import { makeDescriber } from './useRouting.js';
 type Pick = 'draft' | number;
 
 const STATUS_CLS: Record<string, string> = {
-  added: 'bg-emerald-100 text-emerald-900',
-  removed: 'bg-red-100 text-red-900',
-  changed: 'bg-amber-100 text-amber-900',
-  moved: 'bg-sky-100 text-sky-900',
+  added: 'bg-emerald-100 text-emerald-ink-900',
+  removed: 'bg-red-100 text-red-ink-900',
+  changed: 'bg-amber-100 text-amber-ink-900',
+  moved: 'bg-sky-100 text-sky-ink-900',
 };
 
 /** Two versions (or a version and the draft) side by side: what was added, removed, moved or edited. */

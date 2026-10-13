@@ -196,7 +196,7 @@ export function RoutingMap({
           ))}
           <li
             data-card={END_ID}
-            className="rounded-md border border-slate-800 bg-slate-800 px-3 py-1.5 text-sm font-semibold text-white"
+            className="rounded-md border border-slate-800 bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-50"
           >
             ■ {t('designer.routing.end')}
           </li>
@@ -232,7 +232,11 @@ export function RoutingMap({
                 d={`M ${x} ${y0} C ${x + bulge} ${y0}, ${x + bulge} ${y1}, ${x + 2} ${y1}`}
                 fill="none"
                 className={
-                  hot ? 'text-indigo-700' : a.kind === 'row' ? 'text-amber-600' : 'text-slate-400'
+                  hot
+                    ? 'text-indigo-ink-700'
+                    : a.kind === 'row'
+                      ? 'text-amber-ink-600'
+                      : 'text-slate-400'
                 }
                 stroke="currentColor"
                 strokeWidth={hot ? 2.5 : 1.5}
@@ -271,13 +275,13 @@ function Legend() {
         {t('designer.routing.legendSkip')}
       </li>
       <li className="flex items-center gap-1">
-        <span aria-hidden className="text-red-700">
+        <span aria-hidden className="text-red-ink-700">
           ⏹
         </span>
         {t('designer.routing.legendEnd')}
       </li>
       <li className="flex items-center gap-1">
-        <span aria-hidden className="text-amber-700">
+        <span aria-hidden className="text-amber-ink-700">
           ↻
         </span>
         {t('designer.routing.legendRoster')}
@@ -360,10 +364,10 @@ function Card({
           <span className="font-mono">{n.name ?? n.id}</span>
           <span className="min-w-0 truncate text-slate-700">{text}</span>
           {n.kind === 'roster' && n.roster ? (
-            <span className="text-xs text-amber-900">
+            <span className="text-xs text-amber-ink-900">
               ↻{' '}
               {n.roster.count === 'fixed'
-                ? t('designer.routing.loopFixed', { n: n.roster.n })
+                ? t('designer.routing.loopFixed', { n: n.roster.n, count: n.roster.n })
                 : n.roster.count === 'expression'
                   ? t('designer.routing.loopExpr', { expr: n.roster.expr })
                   : t('designer.routing.loopOpen')}
@@ -382,14 +386,14 @@ function Card({
         </span>
         {lines.length ? (
           <span id={`rm-${n.id}-logic`} className="mt-0.5 flex flex-col text-xs">
-            {n.showIf ? <span className="text-violet-800">◇ {lines[0]}</span> : null}
+            {n.showIf ? <span className="text-violet-ink-800">◇ {lines[0]}</span> : null}
             {n.skips.map((_, i) => (
               <span key={`s${i}`} className="text-slate-700">
                 ⤵ {lines[(n.showIf ? 1 : 0) + i]}
               </span>
             ))}
             {n.ends.map((_, i) => (
-              <span key={`e${i}`} className="text-red-800">
+              <span key={`e${i}`} className="text-red-ink-800">
                 ⏹ {lines[(n.showIf ? 1 : 0) + n.skips.length + i]}
               </span>
             ))}

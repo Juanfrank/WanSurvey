@@ -27,6 +27,7 @@ import { OptionsEditor } from './OptionsEditor.js';
 import { TranslationsPanel } from './TranslationsPanel.js';
 import { flatten, isSection, type Draft } from './tree.js';
 import type { VarOption } from './vars.js';
+import { dispositionLabel } from '../i18n-messages.js';
 
 const LANG_RE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 const OUTCOMES = [
@@ -469,7 +470,7 @@ export function SettingsEditor({
                   value={q.disposition}
                   options={(Object.keys(DISPOSITIONS) as Disposition[]).map((d) => ({
                     value: d,
-                    label: d,
+                    label: `${dispositionLabel(t, d)} (${d})`,
                   }))}
                   onChange={(disposition) => update({ disposition })}
                 />
@@ -506,7 +507,7 @@ export function SettingsEditor({
                   ...(draft.quotas ?? []),
                   {
                     id: `quota${n}`,
-                    name: `Quota ${n}`,
+                    name: t('designer.settings.quotaDefault', { n }),
                     when: first
                       ? `${first.name} == ${JSON.stringify(first.codes![0]!.code)}`
                       : 'true',

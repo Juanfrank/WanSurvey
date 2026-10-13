@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import { Button, Card, ErrorText, Field, FileInput } from '../routes/ui.js';
 import { AssignmentsTab } from '../cases/AssignmentsTab.js';
 import { CasesTab } from '../cases/CasesTab.js';
 import { ImportTab } from '../cases/ImportTab.js';
@@ -23,6 +23,7 @@ import { MetricsTab } from '../analysis/MetricsTab.js';
 import { ResultsTab } from '../analysis/ResultsTab.js';
 import { inputCls } from './fields.js';
 import { useCan } from './hooks.js';
+import { dateTime } from '../format.js';
 
 export interface Project {
   id: string;
@@ -64,12 +65,12 @@ export function ProjectsPage() {
                 <Link
                   to="/projects/$projectId"
                   params={{ projectId: p.id }}
-                  className="font-medium text-indigo-700 hover:underline"
+                  className="font-medium text-indigo-ink-700 hover:underline"
                 >
                   {p.name}
                 </Link>
                 <span className="font-mono text-sm text-slate-600">
-                  {p.code} · {p.status}
+                  {p.code} · {t(`app.projectStatus.${p.status}`, { defaultValue: p.status })}
                 </span>
               </li>
             ))}
@@ -157,7 +158,7 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
                     <Link
                       to="/projects/$projectId/questionnaires/$qid"
                       params={{ projectId, qid: q.id }}
-                      className="font-medium text-indigo-700 hover:underline"
+                      className="font-medium text-indigo-ink-700 hover:underline"
                     >
                       {q.name}
                     </Link>
@@ -170,7 +171,7 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
                       ? `v${q.latestVersion.version} · ${t(`designer.versions.${q.latestVersion.status}`)}`
                       : t('designer.unpublished')}
                   </td>
-                  <td>{new Date(q.updatedAt).toLocaleString()}</td>
+                  <td>{dateTime(q.updatedAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -260,24 +261,22 @@ function QuestionnairesSection({ projectId }: { projectId: string }) {
               </label>
             ) : null}
             {kind === 'json' ? (
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">{t('preview.openFile')}</span>
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      setJson({ name: file.name, definition: JSON.parse(await file.text()) });
-                      setError(null);
-                    } catch (err) {
-                      setJson(null);
-                      setError(t('preview.invalidJson', { error: (err as Error).message }));
-                    }
-                  }}
-                />
-              </label>
+              <FileInput
+                label={t('preview.openFile')}
+                labelClassName="font-medium text-slate-700"
+                accept="application/json,.json"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    setJson({ name: file.name, definition: JSON.parse(await file.text()) });
+                    setError(null);
+                  } catch (err) {
+                    setJson(null);
+                    setError(t('preview.invalidJson', { error: (err as Error).message }));
+                  }
+                }}
+              />
             ) : null}
             <ErrorText>{error}</ErrorText>
             <div>
@@ -301,7 +300,7 @@ export function ModeChips({ modes }: { modes: readonly string[] }) {
         <span
           key={m}
           title={t(`designer.modeNames.${m}`)}
-          className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-800"
+          className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-ink-800"
         >
           {m}
           <span className="sr-only"> ({t(`designer.modeNames.${m}`)})</span>
@@ -312,7 +311,7 @@ export function ModeChips({ modes }: { modes: readonly string[] }) {
 }
 
 const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-600';
+  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-600';
 
 type ProjectTab =
   | 'questionnaires'

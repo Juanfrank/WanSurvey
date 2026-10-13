@@ -149,8 +149,8 @@ export function SideDrawer({
       }}
       className={`hidden h-8 w-8 place-items-center rounded-full lg:grid ${
         drawer.pinned
-          ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-          : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
+          ? 'bg-indigo-600 text-on-fill hover:bg-indigo-500'
+          : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-ink-600'
       }`}
     >
       <PinIcon className="h-4 w-4" />
@@ -219,13 +219,15 @@ export function SideDrawer({
           // Pointing opened it: a click keeps it open; otherwise a click opens or closes it.
           onClick={() => drawer.setOpen(!(open && drawer.held))}
           className={`grid h-9 w-9 place-items-center rounded-lg ${
-            open ? 'bg-indigo-600 text-white' : 'text-navy hover:bg-indigo-50 hover:text-indigo-600'
+            open
+              ? 'bg-indigo-600 text-on-fill'
+              : 'text-navy hover:bg-indigo-50 hover:text-indigo-ink-600'
           }`}
         >
           {icon}
         </button>
         {badge ? (
-          <span className="rounded-full bg-amber-100 px-2 text-xs font-bold text-amber-900">
+          <span className="rounded-full bg-amber-100 px-2 text-xs font-bold text-amber-ink-900">
             {badge}
           </span>
         ) : null}
@@ -253,7 +255,7 @@ export function SideDrawer({
               drawer.setOpen(false);
               button.current?.focus();
             }}
-            className="grid h-8 w-8 place-items-center rounded-full text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+            className="grid h-8 w-8 place-items-center rounded-full text-slate-600 hover:bg-indigo-50 hover:text-indigo-ink-600"
           >
             <CloseIcon className="h-4 w-4" />
           </button>
