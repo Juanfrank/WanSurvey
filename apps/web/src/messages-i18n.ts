@@ -125,7 +125,7 @@ export const messagesEn = {
     NO_LAWFUL_BASIS: 'Declare the lawful basis for e-mailing this sample first.',
     TEMPLATE_INVALID:
       'The wording uses unknown placeholders, or lacks the survey link or the unsubscribe link.',
-    WAVE_SENT: 'This wave has already been sent.',
+    WAVE_SENT: 'This campaign has already been sent.',
     OUTSIDE_CALLING_HOURS: 'That time is outside calling hours in the respondent’s time zone.',
     CALLBACK_PAST: 'That time has already passed.',
     CALLBACK_TIME: 'Choose when to call back.',
@@ -275,7 +275,7 @@ export const messagesEs: MessagesCatalogue = {
     NO_LAWFUL_BASIS: 'Primero declare la base legal para escribir por correo a esta muestra.',
     TEMPLATE_INVALID:
       'El texto usa marcadores desconocidos, o le falta el enlace a la encuesta o el de baja.',
-    WAVE_SENT: 'Esta ola ya se envió.',
+    WAVE_SENT: 'Esta campaña ya se envió.',
     OUTSIDE_CALLING_HOURS:
       'Esa hora está fuera del horario de llamadas en la zona horaria del entrevistado.',
     CALLBACK_PAST: 'Esa hora ya pasó.',

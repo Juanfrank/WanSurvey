@@ -250,7 +250,7 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByRole('menuitem', { name: /^Encuesta web/ }).click();
   await page.getByLabel('Nombre', { exact: true }).fill('Enlaces sede Centro');
   await page.getByRole('radio', { name: /Solo enlaces personales/ }).check();
-  await page.getByRole('button', { name: 'Crear ola' }).click();
+  await page.getByRole('button', { name: 'Crear campaña' }).click();
   await page.getByRole('button', { name: 'Generar los enlaces de Enlaces sede Centro' }).click();
   const links = page.getByTestId('wave-links');
   await links.getByLabel('Agregar a todos los enlaces (opcional)').fill('sede=3');

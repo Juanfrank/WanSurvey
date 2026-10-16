@@ -26,7 +26,7 @@ export const designerEn = {
     fileRequired: 'Choose a JSON file.',
     modes: 'Modes',
     modesHelp:
-      'How this questionnaire will be fielded. Wording per mode, the preview, interviews, web waves and paper forms follow this choice; it can be changed in the questionnaire settings.',
+      'How this questionnaire will be fielded. Wording per mode, the preview, interviews, web campaigns and paper forms follow this choice; it can be changed in the questionnaire settings.',
     modesRequired: 'Choose at least one mode.',
   },
   newProject: {
@@ -556,7 +556,7 @@ export const designerEn = {
   },
   settings: {
     modesHelp:
-      'The modes this questionnaire is fielded in. Wording per mode and the preview follow them; interviews, web waves and paper forms use only the published version’s modes.',
+      'The modes this questionnaire is fielded in. Wording per mode and the preview follow them; interviews, web campaigns and paper forms use only the published version’s modes.',
     title: 'Questionnaire settings',
     general: 'General',
     id: 'Questionnaire id',
@@ -753,7 +753,7 @@ export const designerEs: DesignerCatalogue = {
     fileRequired: 'Elija un archivo JSON.',
     modes: 'Modos',
     modesHelp:
-      'Cómo se aplicará este cuestionario. Los textos por modo, la vista previa, las entrevistas, las olas web y los formularios en papel siguen esta elección; puede cambiarse en la configuración del cuestionario.',
+      'Cómo se aplicará este cuestionario. Los textos por modo, la vista previa, las entrevistas, las campañas web y los formularios en papel siguen esta elección; puede cambiarse en la configuración del cuestionario.',
     modesRequired: 'Elija al menos un modo.',
   },
   newProject: {
@@ -1291,7 +1291,7 @@ export const designerEs: DesignerCatalogue = {
   },
   settings: {
     modesHelp:
-      'Los modos en que se aplica este cuestionario. Los textos por modo y la vista previa los siguen; las entrevistas, las olas web y los formularios en papel usan solo los modos de la versión publicada.',
+      'Los modos en que se aplica este cuestionario. Los textos por modo y la vista previa los siguen; las entrevistas, las campañas web y los formularios en papel usan solo los modos de la versión publicada.',
     title: 'Configuración del cuestionario',
     general: 'General',
     id: 'Id del cuestionario',

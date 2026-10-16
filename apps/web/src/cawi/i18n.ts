@@ -57,8 +57,8 @@ export const cawiEn = {
     more: '…and {{count}} more in the download.',
   },
   waves: {
-    title: 'Waves',
-    new: 'New wave',
+    title: 'Campaigns',
+    new: 'New campaign',
     name: 'Name',
     questionnaire: 'Questionnaire',
     filter: 'Only cases where (optional)',
@@ -66,8 +66,8 @@ export const cawiEn = {
     reminders: 'Reminders after (days)',
     remindersHelp: 'Comma-separated, e.g. 3, 7',
     bouncesToCati: 'Move cases whose e-mail bounces to telephone interviewing',
-    create: 'Create wave',
-    created: 'Wave created. Send it when ready.',
+    create: 'Create campaign',
+    created: 'Campaign created. Send it when ready.',
     send: 'Send {{name}}',
     sendConfirm: 'Send now',
     queued_one: '{{count}} invitation queued.',
@@ -75,7 +75,7 @@ export const cawiEn = {
     skipped:
       'Left out: {{noEmail}} without e-mail, {{optedOut}} opted out, {{suppressed}} on the do-not-e-mail list.',
     status: { draft: 'Draft', sending: 'Sending', sent: 'Sent' },
-    none: 'No waves yet.',
+    none: 'No campaigns yet.',
     funnel: 'Funnel of {{name}}',
     steps: {
       sent: 'Sent',
@@ -163,8 +163,8 @@ export const cawiEs: CawiCatalogue = {
     more: '…y {{count}} más en la descarga.',
   },
   waves: {
-    title: 'Olas',
-    new: 'Nueva ola',
+    title: 'Campañas',
+    new: 'Nueva campaña',
     name: 'Nombre',
     questionnaire: 'Cuestionario',
     filter: 'Solo casos donde (opcional)',
@@ -172,8 +172,8 @@ export const cawiEs: CawiCatalogue = {
     reminders: 'Recordatorios a los (días)',
     remindersHelp: 'Separados por comas, p. ej. 3, 7',
     bouncesToCati: 'Pasar a entrevista telefónica los casos cuyo correo rebota',
-    create: 'Crear ola',
-    created: 'Ola creada. Envíela cuando esté lista.',
+    create: 'Crear campaña',
+    created: 'Campaña creada. Envíela cuando esté lista.',
     send: 'Enviar {{name}}',
     sendConfirm: 'Enviar ahora',
     queued_one: '{{count}} invitación en cola.',
@@ -181,7 +181,7 @@ export const cawiEs: CawiCatalogue = {
     skipped:
       'Omitidos: {{noEmail}} sin correo, {{optedOut}} pidieron no recibir correos, {{suppressed}} en la lista de no enviar.',
     status: { draft: 'Borrador', sending: 'Enviando', sent: 'Enviada' },
-    none: 'Aún no hay olas.',
+    none: 'Aún no hay campañas.',
     funnel: 'Embudo de {{name}}',
     steps: {
       sent: 'Enviados',

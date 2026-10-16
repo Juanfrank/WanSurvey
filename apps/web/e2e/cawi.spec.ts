@@ -38,7 +38,7 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
   await page.getByLabel('Name', { exact: true }).fill('Ola 1');
   await page.getByLabel('Only cases where (optional)').fill('case.region == 3 and case.age < 45');
   await page.getByLabel('Reminders after (days)').fill('3');
-  await page.getByRole('button', { name: 'Create wave' }).click();
+  await page.getByRole('button', { name: 'Create campaign' }).click();
   await expect(page.getByTestId('waves-message')).toContainText('Wave created');
   await page.getByRole('button', { name: 'Send Ola 1' }).click();
   await expect(page.getByTestId('waves-message')).toContainText(/\d+ invitations queued/);
@@ -101,7 +101,7 @@ test('a links-only wave makes a personal link per case, ready to download', asyn
   await page.getByLabel('Only cases where (optional)').fill('case.region == 3 and case.age >= 45');
   await page.getByRole('radio', { name: /Personal links only/ }).check();
   await expect(page.getByLabel('Reminders after (days)')).toBeHidden();
-  await page.getByRole('button', { name: 'Create wave' }).click();
+  await page.getByRole('button', { name: 'Create campaign' }).click();
   await page.getByRole('button', { name: 'Make the links of Enlaces región 3' }).click();
   await expect(page.getByTestId('waves-message')).toContainText(/\d+ personal links? made/);
   const links = page.getByTestId('wave-links');
