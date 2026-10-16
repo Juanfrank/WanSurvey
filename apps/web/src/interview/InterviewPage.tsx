@@ -164,7 +164,11 @@ export function InterviewPage() {
         ? navigate({
             to: '/projects/$projectId',
             params: { projectId },
-            search: { tab: 'paper', ...(done ? { notice: 'entry_done' } : {}) },
+            search: {
+              tab: 'paper',
+              q: payload.interview.questionnaireId,
+              ...(done ? { notice: 'entry_done' } : {}),
+            },
           })
         : payload.interview.mode === 'CATI'
           ? navigate({

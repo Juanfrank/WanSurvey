@@ -68,16 +68,32 @@ function removeLanguage(draft: Draft, lang: string): Draft {
 }
 
 /** Questionnaire-wide settings: title, languages, special codes, answer sets, scripts, quotas. */
+/** The settings by topic, each a sub-tab of the questionnaire's Settings. */
+export const SETTINGS_PARTS = [
+  'general',
+  'modes',
+  'languages',
+  'specials',
+  'answerSets',
+  'scripts',
+  'quotas',
+] as const;
+export type SettingsPart = (typeof SETTINGS_PARTS)[number];
+
 export function SettingsEditor({
   draft,
   variables,
   change,
+  part,
 }: {
   draft: Draft;
   variables: VarOption[];
   change(next: Draft, coalesce?: string): void;
+  /** One topic only; all of them when left out. */
+  part?: SettingsPart;
 }) {
   const { t } = useTranslation();
+  const show = (p: SettingsPart) => !part || part === p;
   const langs = draft.languages;
   const set = (patch: Partial<Draft>, coalesce?: string) =>
     change({ ...draft, ...patch }, coalesce ? `settings:${coalesce}` : undefined);
@@ -92,302 +108,339 @@ export function SettingsEditor({
 
   return (
     <div className="flex flex-col gap-8">
-      <Group title={t('designer.settings.general')}>
-        <LocalizedField
-          label={t('designer.title')}
-          value={draft.title}
-          languages={langs}
-          onChange={(title) => set({ title: title ?? {} }, 'title')}
-        />
-        <TextField
-          label={t('designer.settings.id')}
-          mono
-          value={draft.id}
-          hint={t('designer.settings.idHelp')}
-          onCommit={(id) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(id) && set({ id })}
-        />
-      </Group>
+      {show('general') ? (
+        <>
+          <Group title={t('designer.settings.general')}>
+            <LocalizedField
+              label={t('designer.title')}
+              value={draft.title}
+              languages={langs}
+              onChange={(title) => set({ title: title ?? {} }, 'title')}
+            />
+            <TextField
+              label={t('designer.settings.id')}
+              mono
+              value={draft.id}
+              hint={t('designer.settings.idHelp')}
+              onCommit={(id) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(id) && set({ id })}
+            />
+          </Group>
+        </>
+      ) : null}
 
-      <Group title={t('designer.modes')}>
-        <p className="text-sm text-slate-600">{t('designer.settings.modesHelp')}</p>
-        <div className="flex flex-wrap gap-2" data-testid="q-modes">
-          {MODES.map((m) => {
-            const on = (draft.modes ?? MODES).includes(m);
-            const only = on && (draft.modes ?? MODES).length === 1;
-            return (
-              <label
-                key={m}
-                className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={on}
-                  disabled={only}
-                  onChange={(e) =>
+      {show('modes') ? (
+        <>
+          <Group title={t('designer.modes')}>
+            <p className="text-sm text-slate-600">{t('designer.settings.modesHelp')}</p>
+            <div className="flex flex-wrap gap-2" data-testid="q-modes">
+              {MODES.map((m) => {
+                const on = (draft.modes ?? MODES).includes(m);
+                const only = on && (draft.modes ?? MODES).length === 1;
+                return (
+                  <label
+                    key={m}
+                    className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={only}
+                      onChange={(e) =>
+                        set({
+                          modes: MODES.filter((x) =>
+                            x === m ? e.target.checked : (draft.modes ?? MODES).includes(x),
+                          ),
+                        })
+                      }
+                    />
+                    <span className="font-semibold">{m}</span>
+                    <span className="text-slate-600">{t(`designer.modeNames.${m}`)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </Group>
+        </>
+      ) : null}
+
+      {show('languages') ? (
+        <>
+          <Group title={t('designer.settings.languages')}>
+            <ul className="flex flex-wrap gap-2">
+              {langs.map((l) => (
+                <li
+                  key={l}
+                  className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                >
+                  <span className="font-mono">{l}</span>
+                  {l === draft.defaultLanguage ? (
+                    <span className="text-xs text-slate-600">
+                      ({t('designer.settings.default')})
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs underline"
+                      aria-label={t('designer.settings.removeLanguage', { lang: l })}
+                      onClick={() => {
+                        if (
+                          window.confirm(t('designer.settings.confirmRemoveLanguage', { lang: l }))
+                        )
+                          change(removeLanguage(draft, l));
+                      }}
+                    >
+                      {t('designer.remove')}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <form
+              className="flex items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const l = newLang.trim();
+                if (LANG_RE.test(l) && !langs.includes(l)) {
+                  change(addLanguage(draft, l));
+                  setNewLang('');
+                }
+              }}
+            >
+              <div className="w-32">
+                <TextField
+                  label={t('designer.settings.addLanguage')}
+                  mono
+                  value={newLang}
+                  placeholder="pt-BR"
+                  onChange={setNewLang}
+                  error={
+                    newLang && !LANG_RE.test(newLang.trim())
+                      ? t('designer.settings.badLanguage')
+                      : null
+                  }
+                />
+              </div>
+              <button type="submit" className={smallBtn}>
+                {t('designer.add')}
+              </button>
+            </form>
+            <SelectField
+              label={t('designer.settings.defaultLanguage')}
+              value={draft.defaultLanguage}
+              options={langs.map((l) => ({ value: l, label: l }))}
+              onChange={(defaultLanguage) => set({ defaultLanguage })}
+            />
+          </Group>
+
+          <TranslationsPanel draft={draft} change={change} />
+        </>
+      ) : null}
+
+      {show('specials') ? (
+        <>
+          <Group title={t('designer.settings.specials')}>
+            <Hint>{t('designer.settings.specialsHelp')}</Hint>
+            {SPECIAL_KINDS.map((k) => (
+              <div key={k} className="grid gap-2 sm:grid-cols-[6rem_1fr]">
+                <NumberField
+                  label={t(`designer.settings.special.${k}`)}
+                  integer
+                  value={typeof specials[k].code === 'number' ? specials[k].code : undefined}
+                  onChange={(code) =>
                     set({
-                      modes: MODES.filter((x) =>
-                        x === m ? e.target.checked : (draft.modes ?? MODES).includes(x),
-                      ),
+                      settings: {
+                        ...settings,
+                        specialCodes: { ...specials, [k]: { ...specials[k], code: code ?? 0 } },
+                      },
                     })
                   }
                 />
-                <span className="font-semibold">{m}</span>
-                <span className="text-slate-600">{t(`designer.modeNames.${m}`)}</span>
-              </label>
-            );
-          })}
-        </div>
-      </Group>
+                <LocalizedField
+                  label={t('designer.settings.specialLabel', { kind: k })}
+                  value={specials[k].label}
+                  languages={langs}
+                  onChange={(label) =>
+                    set(
+                      {
+                        settings: {
+                          ...settings,
+                          specialCodes: {
+                            ...specials,
+                            [k]: { ...specials[k], label: label ?? {} },
+                          },
+                        },
+                      },
+                      `special-${k}`,
+                    )
+                  }
+                />
+              </div>
+            ))}
+            <CheckField
+              label={t('designer.settings.cawiSpecials')}
+              checked={!!settings.cawiShowSpecialCodes}
+              onChange={(on) => set({ settings: { ...settings, cawiShowSpecialCodes: on } })}
+            />
+          </Group>
+        </>
+      ) : null}
 
-      <Group title={t('designer.settings.languages')}>
-        <ul className="flex flex-wrap gap-2">
-          {langs.map((l) => (
-            <li
-              key={l}
-              className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
-            >
-              <span className="font-mono">{l}</span>
-              {l === draft.defaultLanguage ? (
-                <span className="text-xs text-slate-600">({t('designer.settings.default')})</span>
-              ) : (
+      {show('answerSets') ? (
+        <>
+          <Group title={t('designer.settings.answerSets')}>
+            <Hint>{t('designer.settings.answerSetsHelp')}</Hint>
+            {Object.entries(draft.answerSets ?? {}).map(([name, options]) => (
+              <div key={name} className="rounded-md border border-slate-200 p-3">
+                <OptionsEditor
+                  label={name}
+                  rows={options}
+                  languages={langs}
+                  onChange={(rows) =>
+                    set({ answerSets: { ...draft.answerSets, [name]: rows } }, `set-${name}`)
+                  }
+                />
                 <button
                   type="button"
-                  className="text-xs underline"
-                  aria-label={t('designer.settings.removeLanguage', { lang: l })}
+                  className={`${smallBtn} mt-2`}
                   onClick={() => {
-                    if (window.confirm(t('designer.settings.confirmRemoveLanguage', { lang: l })))
-                      change(removeLanguage(draft, l));
+                    const { [name]: _drop, ...rest } = draft.answerSets ?? {};
+                    set({ answerSets: rest });
                   }}
                 >
-                  {t('designer.remove')}
+                  {t('designer.settings.removeSet', { name })}
                 </button>
-              )}
-            </li>
-          ))}
-        </ul>
-        <form
-          className="flex items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const l = newLang.trim();
-            if (LANG_RE.test(l) && !langs.includes(l)) {
-              change(addLanguage(draft, l));
-              setNewLang('');
-            }
-          }}
-        >
-          <div className="w-32">
-            <TextField
-              label={t('designer.settings.addLanguage')}
-              mono
-              value={newLang}
-              placeholder="pt-BR"
-              onChange={setNewLang}
-              error={
-                newLang && !LANG_RE.test(newLang.trim()) ? t('designer.settings.badLanguage') : null
-              }
-            />
-          </div>
-          <button type="submit" className={smallBtn}>
-            {t('designer.add')}
-          </button>
-        </form>
-        <SelectField
-          label={t('designer.settings.defaultLanguage')}
-          value={draft.defaultLanguage}
-          options={langs.map((l) => ({ value: l, label: l }))}
-          onChange={(defaultLanguage) => set({ defaultLanguage })}
-        />
-      </Group>
-
-      <TranslationsPanel draft={draft} change={change} />
-
-      <Group title={t('designer.settings.specials')}>
-        <Hint>{t('designer.settings.specialsHelp')}</Hint>
-        {SPECIAL_KINDS.map((k) => (
-          <div key={k} className="grid gap-2 sm:grid-cols-[6rem_1fr]">
-            <NumberField
-              label={t(`designer.settings.special.${k}`)}
-              integer
-              value={typeof specials[k].code === 'number' ? specials[k].code : undefined}
-              onChange={(code) =>
-                set({
-                  settings: {
-                    ...settings,
-                    specialCodes: { ...specials, [k]: { ...specials[k], code: code ?? 0 } },
-                  },
-                })
-              }
-            />
-            <LocalizedField
-              label={t('designer.settings.specialLabel', { kind: k })}
-              value={specials[k].label}
-              languages={langs}
-              onChange={(label) =>
-                set(
-                  {
-                    settings: {
-                      ...settings,
-                      specialCodes: { ...specials, [k]: { ...specials[k], label: label ?? {} } },
+              </div>
+            ))}
+            <form
+              className="flex items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const n = newSet.trim();
+                if (/^[A-Za-z][A-Za-z0-9_]*$/.test(n) && !(n in (draft.answerSets ?? {}))) {
+                  set({
+                    answerSets: {
+                      ...draft.answerSets,
+                      [n]: [
+                        { code: 1, label: empty() },
+                        { code: 2, label: empty() },
+                      ],
                     },
-                  },
-                  `special-${k}`,
-                )
-              }
-            />
-          </div>
-        ))}
-        <CheckField
-          label={t('designer.settings.cawiSpecials')}
-          checked={!!settings.cawiShowSpecialCodes}
-          onChange={(on) => set({ settings: { ...settings, cawiShowSpecialCodes: on } })}
-        />
-      </Group>
-
-      <Group title={t('designer.settings.answerSets')}>
-        <Hint>{t('designer.settings.answerSetsHelp')}</Hint>
-        {Object.entries(draft.answerSets ?? {}).map(([name, options]) => (
-          <div key={name} className="rounded-md border border-slate-200 p-3">
-            <OptionsEditor
-              label={name}
-              rows={options}
-              languages={langs}
-              onChange={(rows) =>
-                set({ answerSets: { ...draft.answerSets, [name]: rows } }, `set-${name}`)
-              }
-            />
-            <button
-              type="button"
-              className={`${smallBtn} mt-2`}
-              onClick={() => {
-                const { [name]: _drop, ...rest } = draft.answerSets ?? {};
-                set({ answerSets: rest });
+                  });
+                  setNewSet('');
+                }
               }}
             >
-              {t('designer.settings.removeSet', { name })}
-            </button>
-          </div>
-        ))}
-        <form
-          className="flex items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const n = newSet.trim();
-            if (/^[A-Za-z][A-Za-z0-9_]*$/.test(n) && !(n in (draft.answerSets ?? {}))) {
-              set({
-                answerSets: {
-                  ...draft.answerSets,
-                  [n]: [
-                    { code: 1, label: empty() },
-                    { code: 2, label: empty() },
-                  ],
-                },
-              });
-              setNewSet('');
-            }
-          }}
-        >
-          <div className="w-48">
-            <TextField
-              label={t('designer.settings.newSet')}
-              mono
-              value={newSet}
-              onChange={setNewSet}
-            />
-          </div>
-          <button type="submit" className={smallBtn}>
-            {t('designer.add')}
-          </button>
-        </form>
-      </Group>
-
-      <ScriptsEditor
-        draft={draft}
-        change={change}
-        place="global"
-        title={t('designer.settings.scripts')}
-        hint={t('designer.settings.scriptsGlobalHelp')}
-      />
-
-      <Group title={t('designer.settings.quotas')}>
-        <Hint>{t('designer.settings.quotasHelp')}</Hint>
-        {(draft.quotas ?? []).map((q, i) => {
-          const update = (patch: Partial<Quota>, coalesce?: string) =>
-            set(
-              { quotas: draft.quotas.map((x, j) => (j === i ? { ...x, ...patch } : x)) },
-              coalesce ? `quota-${i}-${coalesce}` : undefined,
-            );
-          return (
-            <div key={i} className="flex flex-col gap-3 rounded-md border border-slate-200 p-3">
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="w-48">
                 <TextField
-                  label={t('designer.settings.quotaName', { n: i + 1 })}
-                  value={q.name}
-                  onChange={(name) => update({ name }, 'name')}
-                />
-                <NumberField
-                  label={t('designer.settings.quotaMax', { n: i + 1 })}
-                  integer
-                  value={q.max}
-                  onChange={(max) => update({ max: max ?? 0 })}
-                />
-                <SelectField
-                  label={t('designer.settings.quotaDisposition', { n: i + 1 })}
-                  value={q.disposition}
-                  options={(Object.keys(DISPOSITIONS) as Disposition[]).map((d) => ({
-                    value: d,
-                    label: `${dispositionLabel(t, d)} (${d})`,
-                  }))}
-                  onChange={(disposition) => update({ disposition })}
+                  label={t('designer.settings.newSet')}
+                  mono
+                  value={newSet}
+                  onChange={setNewSet}
                 />
               </div>
-              <ConditionBuilder
-                label={t('designer.settings.quotaWhen', { n: i + 1 })}
-                value={q.when}
-                variables={variables}
-                onChange={(when) => update({ when: when ?? '' }, 'when')}
-              />
-              <div>
-                <button
-                  type="button"
-                  className={smallBtn}
-                  onClick={() => set({ quotas: draft.quotas.filter((_, j) => j !== i) })}
-                >
-                  {t('designer.settings.removeQuota', { n: i + 1 })}
-                </button>
-              </div>
+              <button type="submit" className={smallBtn}>
+                {t('designer.add')}
+              </button>
+            </form>
+          </Group>
+        </>
+      ) : null}
+
+      {show('scripts') ? (
+        <>
+          <ScriptsEditor
+            draft={draft}
+            change={change}
+            place="global"
+            title={t('designer.settings.scripts')}
+            hint={t('designer.settings.scriptsGlobalHelp')}
+          />
+        </>
+      ) : null}
+
+      {show('quotas') ? (
+        <>
+          <Group title={t('designer.settings.quotas')}>
+            <Hint>{t('designer.settings.quotasHelp')}</Hint>
+            {(draft.quotas ?? []).map((q, i) => {
+              const update = (patch: Partial<Quota>, coalesce?: string) =>
+                set(
+                  { quotas: draft.quotas.map((x, j) => (j === i ? { ...x, ...patch } : x)) },
+                  coalesce ? `quota-${i}-${coalesce}` : undefined,
+                );
+              return (
+                <div key={i} className="flex flex-col gap-3 rounded-md border border-slate-200 p-3">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <TextField
+                      label={t('designer.settings.quotaName', { n: i + 1 })}
+                      value={q.name}
+                      onChange={(name) => update({ name }, 'name')}
+                    />
+                    <NumberField
+                      label={t('designer.settings.quotaMax', { n: i + 1 })}
+                      integer
+                      value={q.max}
+                      onChange={(max) => update({ max: max ?? 0 })}
+                    />
+                    <SelectField
+                      label={t('designer.settings.quotaDisposition', { n: i + 1 })}
+                      value={q.disposition}
+                      options={(Object.keys(DISPOSITIONS) as Disposition[]).map((d) => ({
+                        value: d,
+                        label: `${dispositionLabel(t, d)} (${d})`,
+                      }))}
+                      onChange={(disposition) => update({ disposition })}
+                    />
+                  </div>
+                  <ConditionBuilder
+                    label={t('designer.settings.quotaWhen', { n: i + 1 })}
+                    value={q.when}
+                    variables={variables}
+                    onChange={(when) => update({ when: when ?? '' }, 'when')}
+                  />
+                  <div>
+                    <button
+                      type="button"
+                      className={smallBtn}
+                      onClick={() => set({ quotas: draft.quotas.filter((_, j) => j !== i) })}
+                    >
+                      {t('designer.settings.removeQuota', { n: i + 1 })}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <div>
+              <button
+                type="button"
+                className={smallBtn}
+                onClick={() => {
+                  const used = new Set((draft.quotas ?? []).map((q) => q.id));
+                  let n = (draft.quotas ?? []).length + 1;
+                  while (used.has(`quota${n}`)) n++;
+                  const first = variables.find((v) => v.codes);
+                  set({
+                    quotas: [
+                      ...(draft.quotas ?? []),
+                      {
+                        id: `quota${n}`,
+                        name: t('designer.settings.quotaDefault', { n }),
+                        when: first
+                          ? `${first.name} == ${JSON.stringify(first.codes![0]!.code)}`
+                          : 'true',
+                        max: 100,
+                        disposition: 'QUOTA_FULL',
+                      },
+                    ],
+                  });
+                }}
+              >
+                {t('designer.settings.addQuota')}
+              </button>
             </div>
-          );
-        })}
-        <div>
-          <button
-            type="button"
-            className={smallBtn}
-            onClick={() => {
-              const used = new Set((draft.quotas ?? []).map((q) => q.id));
-              let n = (draft.quotas ?? []).length + 1;
-              while (used.has(`quota${n}`)) n++;
-              const first = variables.find((v) => v.codes);
-              set({
-                quotas: [
-                  ...(draft.quotas ?? []),
-                  {
-                    id: `quota${n}`,
-                    name: t('designer.settings.quotaDefault', { n }),
-                    when: first
-                      ? `${first.name} == ${JSON.stringify(first.codes![0]!.code)}`
-                      : 'true',
-                    max: 100,
-                    disposition: 'QUOTA_FULL',
-                  },
-                ],
-              });
-            }}
-          >
-            {t('designer.settings.addQuota')}
-          </button>
-        </div>
-      </Group>
+          </Group>
+        </>
+      ) : null}
     </div>
   );
 }

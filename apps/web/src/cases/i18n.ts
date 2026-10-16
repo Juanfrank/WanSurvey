@@ -308,6 +308,18 @@ export const casesEn = {
   },
   settings: {
     title: 'Project settings',
+    sections: 'Settings topics',
+    tabs: {
+      assignment: 'Assignment',
+      phone: 'Phone',
+      field: 'Face to face',
+      web: 'Web',
+      paper: 'Paper',
+      review: 'Review',
+      fieldwork: 'Fieldwork',
+      shortcuts: 'Shortcuts',
+      privacy: 'Privacy',
+    },
     reveal: 'Show interviewers the personal data of their cases automatically',
     revealHelp:
       'Interviewers with access to personal data see names and contacts of the cases they hold without asking. The first view of each case is recorded. When off, they reveal it case by case.',
@@ -636,6 +648,18 @@ export const casesEs: CasesCatalogue = {
   },
   settings: {
     title: 'Configuración del proyecto',
+    sections: 'Temas de configuración',
+    tabs: {
+      assignment: 'Asignación',
+      phone: 'Teléfono',
+      field: 'Presencial',
+      web: 'Web',
+      paper: 'Papel',
+      review: 'Revisión',
+      fieldwork: 'Trabajo de campo',
+      shortcuts: 'Atajos',
+      privacy: 'Privacidad',
+    },
     reveal: 'Mostrar automáticamente a los entrevistadores los datos personales de sus casos',
     revealHelp:
       'Los entrevistadores con acceso a datos personales ven los nombres y contactos de sus casos sin pedirlo. La primera consulta de cada caso queda registrada. Si está desactivado, los muestran caso por caso.',

@@ -91,7 +91,7 @@ export function Outline({
   const addStructureRef = useRef<HTMLButtonElement>(null);
 
   const rows = useMemo(() => flatten(draft, collapsed), [draft, collapsed]);
-  const ids = [SETTINGS_ID, ...rows.map((r) => r.node.id)];
+  const ids = rows.map((r) => r.node.id);
 
   // Skip arcs: from the skipping item to its target, or to the nearest visible ancestor
   // when the target is inside a collapsed block; END lands below the last row.
@@ -351,7 +351,7 @@ export function Outline({
     : [];
 
   const onKey = (e: KeyboardEvent<HTMLUListElement>) => {
-    const row = rows[index - 1];
+    const row = rows[ids.indexOf(selected)];
     const node = row?.node;
     const container = !!node && 'items' in node;
     const key = e.key;
@@ -516,18 +516,6 @@ export function Outline({
           className="flex flex-col rounded-md border border-slate-200 bg-white py-1 text-sm"
           onKeyDown={onKey}
         >
-          <li
-            role="treeitem"
-            aria-level={1}
-            aria-selected={selected === SETTINGS_ID}
-            tabIndex={selected === SETTINGS_ID ? 0 : -1}
-            data-id={SETTINGS_ID}
-            className="cursor-pointer px-2 py-1 font-medium aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
-            onClick={() => go(SETTINGS_ID)}
-            onFocus={() => selected !== SETTINGS_ID && onSelect(SETTINGS_ID)}
-          >
-            ⚙ {t('designer.settings.title')}
-          </li>
           {rows.map(({ node, depth }) => {
             const container = 'items' in node;
             const errors = errorsById.get(node.id) ?? 0;
@@ -539,7 +527,12 @@ export function Outline({
                 aria-level={depth + 1}
                 aria-selected={selected === node.id}
                 aria-expanded={container ? !collapsed.has(node.id) : undefined}
-                tabIndex={selected === node.id ? 0 : -1}
+                tabIndex={
+                  selected === node.id ||
+                  (!visibleIds.has(selected) && node.id === rows[0]?.node.id)
+                    ? 0
+                    : -1
+                }
                 data-id={node.id}
                 data-testid="outline-item"
                 className={`flex cursor-pointer items-center gap-1.5 py-1 pr-2 aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 data-[drop=after]:shadow-[inset_0_-2px_0_0_#4338ca] data-[drop=before]:shadow-[inset_0_2px_0_0_#4338ca] data-[drop=inside]:bg-indigo-50 data-[drop=inside]:ring-2 data-[drop=inside]:ring-inset data-[drop=inside]:ring-indigo-400 ${dragId === node.id ? 'opacity-50' : ''}`}

@@ -5,6 +5,7 @@ import { SAMPLES } from '@wansurvey/fixtures';
 import { MODES, type Mode, type ProjectSettings } from '@wansurvey/schema';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { subTabCls, tabCls } from '../routes/tabs.js';
 import { api, ApiError } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
@@ -22,7 +23,6 @@ import {
 import { FeedbackDesigner } from '../feedback/FeedbackDesigner.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
 import { CallsTab } from '../cati/CallsTab.js';
-import { CawiTab } from '../cawi/CawiTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
 import { ReviewTab } from '../review/ReviewTab.js';
 import { DashboardTab } from '../analysis/DashboardTab.js';
@@ -221,14 +221,11 @@ function NewProjectForm({ onCancel }: { onCancel: () => void }) {
 
 type SourceKind = 'blank' | 'sample' | 'json';
 
-type QPanel =
-  | { kind: 'web' | 'paper'; name: string }
-  | {
-      kind: 'feedbackDesign' | 'feedbackLinks' | 'feedbackResults';
-      name: string;
-      point: FeedbackPoint;
-    }
-  | null;
+type QPanel = {
+  kind: 'feedbackDesign' | 'feedbackLinks' | 'feedbackResults';
+  name: string;
+  point: FeedbackPoint;
+} | null;
 
 /** What a new item of the questionnaire list is: a questionnaire, or quick feedback (F1). */
 type NewFormat = 'questionnaire' | 'feedback';
@@ -238,7 +235,6 @@ function QuestionnairesSection({
   project: projectRow,
   canWeb,
   canPaper,
-  notice,
   panel,
   onPanel,
 }: {
@@ -246,7 +242,6 @@ function QuestionnairesSection({
   project: Project | undefined;
   canWeb: boolean;
   canPaper: boolean;
-  notice?: string;
   panel: QPanel;
   onPanel(p: QPanel): void;
 }) {
@@ -259,6 +254,13 @@ function QuestionnairesSection({
     q: QuestionnaireRow;
     at: { x: number; y: number };
   } | null>(null);
+  // A questionnaire's web survey and paper forms live in its Distribution tab.
+  const openDistribution = (qid: string, sub: 'web' | 'paper') =>
+    void navigate({
+      to: '/projects/$projectId/questionnaires/$qid',
+      params: { projectId, qid },
+      search: { tab: 'distribution', sub },
+    });
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
       api<{ name: string }>(`/projects/${projectId}/questionnaires/${id}`, {
@@ -417,7 +419,7 @@ function QuestionnairesSection({
             id: 'web',
             label: t('designer.qActions.web'),
             disabled: !q.modes.includes('CAWI'),
-            onSelect: () => onPanel({ kind: 'web', name: q.name }),
+            onSelect: () => openDistribution(q.id, 'web'),
           },
         ]
       : []),
@@ -428,7 +430,7 @@ function QuestionnairesSection({
             id: 'paper',
             label: t('designer.qActions.paper'),
             disabled: !q.modes.includes('PAPI'),
-            onSelect: () => onPanel({ kind: 'paper', name: q.name }),
+            onSelect: () => openDistribution(q.id, 'paper'),
           },
         ]
       : []),
@@ -539,23 +541,13 @@ function QuestionnairesSection({
                       ? t('feedback.editQuestions')
                       : panel.kind === 'feedbackLinks'
                         ? t('feedback.links')
-                        : panel.kind === 'feedbackResults'
-                          ? t('feedback.results')
-                          : t(`designer.qActions.${panel.kind}`),
+                        : t('feedback.results'),
                   name: panel.name,
                 })
-              : panel.kind === 'web' || panel.kind === 'paper'
-                ? t(`designer.qActions.${panel.kind}`)
-                : null}
+              : null}
           </h2>
         </div>
-        {panel.kind === 'web' ? (
-          projectRow ? (
-            <CawiTab project={projectRow} />
-          ) : null
-        ) : panel.kind === 'paper' ? (
-          <PaperTab projectId={projectId} notice={notice} />
-        ) : panel.kind === 'feedbackDesign' ? (
+        {panel.kind === 'feedbackDesign' ? (
           <Card>
             <FeedbackDesigner
               projectId={projectId}
@@ -864,9 +856,6 @@ export function ModeChips({ modes }: { modes: readonly string[] }) {
   );
 }
 
-const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-600';
-
 type ProjectTab =
   'cases' | 'questionnaires' | 'calls' | 'paper' | 'review' | 'results' | 'exports' | 'settings';
 type ResultsSub = 'topline' | 'dashboard' | 'metrics';
@@ -874,15 +863,17 @@ type ResultsSub = 'topline' | 'dashboard' | 'metrics';
 /** Old `?tab=` values still land in the right place: web and paper forms, dashboard, import… */
 const FROM_SEARCH: Record<
   string,
-  { tab: ProjectTab; cases?: CasesSub; results?: ResultsSub; panel?: 'web' | 'paper' }
+  { tab: ProjectTab; cases?: CasesSub; results?: ResultsSub; distribution?: 'web' | 'paper' }
 > = {
   cases: { tab: 'cases' },
   import: { tab: 'cases', cases: 'sampling' },
   sampling: { tab: 'cases', cases: 'sampling' },
   assignments: { tab: 'cases' },
   questionnaires: { tab: 'questionnaires' },
-  web: { tab: 'questionnaires', panel: 'web' },
-  paper: { tab: 'questionnaires', panel: 'paper' },
+  // Web surveys and paper forms are in each questionnaire's Distribution tab (clerks who do
+  // not see the questionnaires keep a Paper forms tab).
+  web: { tab: 'questionnaires', distribution: 'web' },
+  paper: { tab: 'questionnaires', distribution: 'paper' },
   calls: { tab: 'calls' },
   review: { tab: 'review' },
   results: { tab: 'results', results: 'topline' },
@@ -892,9 +883,6 @@ const FROM_SEARCH: Record<
   settings: { tab: 'settings' },
 };
 
-const subTabCls =
-  'rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[state=active]:bg-indigo-50 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-700';
-
 /**
  * A project, in the order work happens: cases (list, sampling selector, assignments), the
  * questionnaires (with their web survey and paper forms as actions), calls, review, results
@@ -902,7 +890,12 @@ const subTabCls =
  */
 export function ProjectPage() {
   const { projectId } = useParams({ strict: false }) as { projectId: string };
-  const search = useSearch({ strict: false }) as { tab?: string; notice?: string; call?: string };
+  const search = useSearch({ strict: false }) as {
+    tab?: string;
+    notice?: string;
+    call?: string;
+    q?: string;
+  };
   const { t } = useTranslation();
   const project = useQuery({
     queryKey: ['project', projectId],
@@ -961,15 +954,40 @@ export function ProjectPage() {
   ];
   const initial = search.tab ? FROM_SEARCH[search.tab] : undefined;
   const [tab, setTab] = useState<ProjectTab | null>(
-    initial?.tab === 'questionnaires' && initial.panel === 'paper' && !canQuestionnaires
-      ? 'paper'
-      : (initial?.tab ?? null),
+    initial?.distribution === 'paper' && !canQuestionnaires ? 'paper' : (initial?.tab ?? null),
   );
   const [casesSub, setCasesSub] = useState<CasesSub>(initial?.cases ?? 'list');
   const [resultsSub, setResultsSub] = useState<ResultsSub>(initial?.results ?? 'topline');
-  const [panel, setPanel] = useState<QPanel>(
-    initial?.panel ? { kind: initial.panel, name: '' } : null,
+  const navigate = useNavigate();
+  const [panel, setPanel] = useState<QPanel>(null);
+  // Old links to the web survey or paper forms open the questionnaire's Distribution tab.
+  // Taken once: the address is rewritten as the page settles.
+  const [redirect] = useState(() =>
+    initial?.distribution
+      ? { sub: initial.distribution, q: search.q, notice: search.notice }
+      : null,
   );
+  const redirecting = !!redirect && canQuestionnaires;
+  const qList = useQuery({
+    queryKey: ['questionnaires', projectId],
+    queryFn: () => api<{ id: string }[]>(`/projects/${projectId}/questionnaires`),
+    enabled: redirecting,
+  });
+  useEffect(() => {
+    if (!redirect || !redirecting || !qList.data) return;
+    const qid = qList.data.find((q) => q.id === redirect.q)?.id ?? qList.data[0]?.id;
+    if (qid)
+      void navigate({
+        to: '/projects/$projectId/questionnaires/$qid',
+        params: { projectId, qid },
+        search: {
+          tab: 'distribution',
+          sub: redirect.sub,
+          ...(redirect.notice ? { notice: redirect.notice } : {}),
+        },
+        replace: true,
+      });
+  }, [qList.data, redirecting]);
   const start = canDesign
     ? (tabs[0] ?? null)
     : tabs.includes('calls')
@@ -981,7 +999,6 @@ export function ProjectPage() {
   const cases = casesSubs.includes(casesSub) ? casesSub : casesSubs.at(-1)!;
   const results = resultsSubs.includes(resultsSub) ? resultsSub : resultsSubs[0]!;
   // The place in the page is kept in the address (?tab=…), so Back and reload return to it.
-  const navigate = useNavigate();
   const place =
     current === 'cases'
       ? cases === 'list'
@@ -995,7 +1012,7 @@ export function ProjectPage() {
           ? panel.kind
           : current;
   useEffect(() => {
-    if (!place || place === search.tab) return;
+    if (!place || place === search.tab || redirecting) return;
     void navigate({
       to: '/projects/$projectId',
       params: { projectId },
@@ -1060,7 +1077,6 @@ export function ProjectPage() {
               project={project.data}
               canWeb={canWeb}
               canPaper={canPaper}
-              notice={search.notice}
               panel={panel}
               onPanel={setPanel}
             />

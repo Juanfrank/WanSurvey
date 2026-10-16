@@ -74,14 +74,26 @@ function preview(text: string, sample: Record<string, unknown>) {
  * Web surveys for project staff: the lawful basis and completion page, e-mail wording with a
  * preview, waves with their funnel, the open link and the do-not-e-mail list.
  */
-export function CawiTab({ project }: { project: Project }) {
+export function CawiTab({
+  projectId,
+  questionnaireId,
+}: {
+  projectId: string;
+  questionnaireId: string;
+}) {
   return (
     <div className="flex flex-col gap-8 text-sm">
-      <WavesSection projectId={project.id} />
-      <div className="grid gap-8 lg:grid-cols-2">
-        <SendingSettings project={project} />
-        <OpenLinkSection projectId={project.id} />
-      </div>
+      <WavesSection projectId={projectId} questionnaireId={questionnaireId} />
+      <OpenLinkSection projectId={projectId} questionnaireId={questionnaireId} />
+    </div>
+  );
+}
+
+/** The project's web survey settings: sending, e-mail wording and the do-not-e-mail list. */
+export function CawiProjectSettings({ project }: { project: Project }) {
+  return (
+    <div className="flex flex-col gap-8 text-sm">
+      <SendingSettings project={project} />
       <TemplatesSection projectId={project.id} />
       <Suppressions projectId={project.id} />
     </div>
@@ -318,14 +330,22 @@ function TemplatesSection({ projectId }: { projectId: string }) {
   );
 }
 
-function WavesSection({ projectId }: { projectId: string }) {
+function WavesSection({
+  projectId,
+  questionnaireId,
+}: {
+  projectId: string;
+  questionnaireId: string;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const waves = useQuery({
+  const all = useQuery({
     queryKey: ['waves', projectId],
     queryFn: () => api<Wave[]>(`/projects/${projectId}/waves`),
     refetchInterval: 10_000,
   });
+  // The campaigns of this questionnaire.
+  const waves = { data: all.data?.filter((w) => w.questionnaireId === questionnaireId) };
   const qs = useQuery({
     queryKey: ['questionnaires', projectId],
     queryFn: () =>
@@ -333,9 +353,8 @@ function WavesSection({ projectId }: { projectId: string }) {
         `/projects/${projectId}/questionnaires`,
       ),
   });
-  const usable = (qs.data ?? []).filter((q) => q.publishedVersions > 0);
+  const published = !!qs.data?.find((q) => q.id === questionnaireId)?.publishedVersions;
   const [name, setName] = useState('');
-  const [qid, setQid] = useState('');
   const [filter, setFilter] = useState('');
   const [reminders, setReminders] = useState('3, 7');
   const [toCati, setToCati] = useState(false);
@@ -348,7 +367,7 @@ function WavesSection({ projectId }: { projectId: string }) {
         method: 'POST',
         body: {
           name: name.trim(),
-          questionnaireId: qid || usable[0]?.id,
+          questionnaireId,
           ...(filter.trim() ? { filter: filter.trim() } : {}),
           reminderDays: (channel === 'links' ? '' : reminders)
             .split(/[,\s]+/)
@@ -470,22 +489,6 @@ function WavesSection({ projectId }: { projectId: string }) {
               onChange={(e) => setName(e.target.value)}
             />
           </label>
-          {usable.length > 1 ? (
-            <label className="flex flex-col gap-1">
-              <span className="font-medium">{t('cawi.waves.questionnaire')}</span>
-              <select
-                className={`${controlCls} w-auto`}
-                value={qid || usable[0]?.id}
-                onChange={(e) => setQid(e.target.value)}
-              >
-                {usable.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           <label className="flex flex-col gap-1">
             <span className="font-medium">{t('cawi.waves.filter')}</span>
             <input
@@ -535,7 +538,7 @@ function WavesSection({ projectId }: { projectId: string }) {
           </label>
         ) : null}
         <div>
-          <Button type="submit" disabled={create.isPending || !name.trim() || !usable.length}>
+          <Button type="submit" disabled={create.isPending || !name.trim() || !published}>
             {t('cawi.waves.create')}
           </Button>
         </div>
@@ -653,7 +656,13 @@ function FunnelChart({ name, funnel }: { name: string; funnel: Funnel }) {
   );
 }
 
-function OpenLinkSection({ projectId }: { projectId: string }) {
+function OpenLinkSection({
+  projectId,
+  questionnaireId,
+}: {
+  projectId: string;
+  questionnaireId: string;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const link = useQuery({
@@ -668,7 +677,10 @@ function OpenLinkSection({ projectId }: { projectId: string }) {
         `/projects/${projectId}/questionnaires`,
       ),
   });
-  const first = useMemo(() => qs.data?.find((q) => q.publishedVersions > 0)?.id, [qs.data]);
+  const first = useMemo(
+    () => qs.data?.find((q) => q.id === questionnaireId && q.publishedVersions > 0)?.id,
+    [qs.data, questionnaireId],
+  );
   const toggle = useMutation({
     mutationFn: (active: boolean) =>
       api<{ link: { active: boolean; url: string } }>(`/projects/${projectId}/open-link`, {

@@ -75,8 +75,11 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   // 2. The questionnaire, built with the mouse.
   await page.getByLabel('Nombre del cuestionario').fill('Satisfacción con servicios');
   await page.getByRole('button', { name: 'Crear y abrir' }).click();
-  // Its id comes from the name, as the exports will show it.
+  // Its id comes from the name, as the exports will show it (Configuración → General).
+  const sections = page.getByRole('tablist', { name: 'Secciones del cuestionario' });
+  await sections.getByRole('tab', { name: 'Configuración', exact: true }).click();
   await expect(page.getByLabel('Id del cuestionario')).toHaveValue('SATISFACCION_CON_SERVICIOS');
+  await sections.getByRole('tab', { name: 'Diseño', exact: true }).click();
   const outline = page.getByRole('tree', { name: 'Esquema' });
   await outline.getByRole('treeitem', { name: /SEC_A/ }).click();
   const varName = page.getByLabel('Nombre de variable');
@@ -163,6 +166,7 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByRole('button', { name: 'Asignar', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'Demo interviewer' })).toHaveCount(8);
   await page.getByRole('tab', { name: 'Configuración', exact: true }).click();
+  await page.getByRole('tab', { name: 'Teléfono', exact: true }).click();
   // Calls all day, so the test does not depend on the hour it runs at.
   await page.getByLabel('Llamar desde').fill('00:00');
   await page.getByLabel('Llamar hasta').fill('00:00');
@@ -274,6 +278,8 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await desk.page.getByRole('button', { name: 'Enviar mis respuestas' }).click();
   await expect(desk.page.getByText('¡Muchas gracias por responder la encuesta!')).toBeVisible();
   await desk.ctx.close();
+  // Back from the questionnaire's Distribution tab to the project.
+  await page.goBack();
 
   // 8. Results: three completes, the scale as a distribution, the open answers, no raw pipes.
   await page.getByRole('tab', { name: 'Resultados', exact: true }).click();

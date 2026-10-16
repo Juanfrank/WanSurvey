@@ -211,11 +211,11 @@ describe('outline', () => {
     const changes: Draft[] = [];
     const { container } = render(<Harness initial={draft()} onChange={(d) => changes.push(d)} />);
     const tree = screen.getByRole('tree', { name: 'Outline' });
-    expect(within(tree).getAllByRole('treeitem')).toHaveLength(6);
+    expect(within(tree).getAllByRole('treeitem')).toHaveLength(5);
     expect(within(tree).getByText('2 errors')).toBeTruthy();
     await expectAccessible(container);
 
-    const a = within(tree).getAllByRole('treeitem')[2]!;
+    const a = within(tree).getAllByRole('treeitem')[1]!;
     a.focus();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
     expect(ids(changes.at(-1)!)).toEqual(['S1', 'BL', 'A', 'B', 'C']);

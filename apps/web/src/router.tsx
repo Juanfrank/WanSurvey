@@ -137,6 +137,14 @@ const designerRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/projects/$projectId/questionnaires/$qid',
   component: lazyRouteComponent(() => import('./designer/DesignerPage.js'), 'DesignerPage'),
+  // The tab and sub-tab (design, distribution, settings), kept so Back and reload return there.
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): { tab?: string; sub?: string; notice?: string } => ({
+    ...(typeof s.tab === 'string' ? { tab: s.tab } : {}),
+    ...(typeof s.sub === 'string' ? { sub: s.sub } : {}),
+    ...(typeof s.notice === 'string' ? { notice: s.notice } : {}),
+  }),
 });
 
 const interviewRoute = createRoute({
@@ -161,8 +169,9 @@ const printRoute = createRoute({
   component: lazyRouteComponent(() => import('./papi/PrintPage.js'), 'PrintPage'),
   validateSearch: (
     s: Record<string, unknown>,
-  ): { filter?: string; limit?: number; caseIds?: string } => ({
+  ): { filter?: string; limit?: number; caseIds?: string; q?: string } => ({
     ...(typeof s.filter === 'string' ? { filter: s.filter } : {}),
+    ...(typeof s.q === 'string' ? { q: s.q } : {}),
     ...(typeof s.limit === 'number' ? { limit: s.limit } : {}),
     ...(typeof s.caseIds === 'string' ? { caseIds: s.caseIds } : {}),
   }),

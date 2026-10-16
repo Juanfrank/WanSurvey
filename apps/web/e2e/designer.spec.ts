@@ -5,6 +5,14 @@ import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 const outlineItem = (page: Page, name: string) =>
   page.getByRole('treeitem').filter({ has: page.locator(`span.font-mono:text-is("${name}")`) });
 
+/** A topic of the questionnaire's Settings tab. */
+async function openSettings(page: Page, topic: string) {
+  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: topic, exact: true }).click();
+}
+/** Back to the form editor with its outline. */
+const toDesign = (page: Page) => page.getByRole('tab', { name: 'Design', exact: true }).click();
+
 async function saved(page: Page) {
   await expect(page.getByTestId('save-status')).toHaveAttribute('data-status', 'saved', {
     timeout: 10_000,
@@ -106,9 +114,9 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   // Reordering with Alt+arrows and undo.
   await outlineItem(page, 'A_HOURS').focus();
   await page.keyboard.press('Alt+ArrowUp');
-  await expect(page.getByRole('treeitem').nth(2)).toContainText('A_HOURS');
+  await expect(page.getByRole('treeitem').nth(1)).toContainText('A_HOURS');
   await page.keyboard.press('Control+z');
-  await expect(page.getByRole('treeitem').nth(2)).toContainText('A_WORK');
+  await expect(page.getByRole('treeitem').nth(1)).toContainText('A_WORK');
 
   // Preview: A_WORK = No ends the interview without A_HOURS.
   await page.getByRole('tab', { name: 'Preview' }).click();
@@ -132,7 +140,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expect(page.getByTestId('versions').locator('[data-version="1"]')).toContainText('In use');
 
   // Change code 2 to 3: v2 needs a mapping for the old answers.
-  await page.getByRole('tab', { name: 'Design' }).click();
+  await page.getByRole('tab', { name: 'Form' }).click();
   await outlineItem(page, 'A_WORK').click();
   await page.getByLabel('Code of option 2').fill('3');
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
@@ -161,11 +169,11 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expectAccessible(page);
 
   // Drag A_HOURS above A_WORK in the outline; the comparison with v2 shows the move.
-  await page.getByRole('tab', { name: 'Design' }).click();
+  await page.getByRole('tab', { name: 'Form' }).click();
   await outlineItem(page, 'A_HOURS').dragTo(outlineItem(page, 'A_WORK'), {
     targetPosition: { x: 20, y: 2 },
   });
-  await expect(page.getByRole('treeitem').nth(2)).toContainText('A_HOURS');
+  await expect(page.getByRole('treeitem').nth(1)).toContainText('A_HOURS');
   await saved(page);
   await page.getByRole('tab', { name: 'Versions' }).click();
   await compare.getByLabel('Compare').selectOption({ label: 'v2' });
@@ -174,8 +182,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   );
 
   // Translations: export the CSV, change a Spanish text, import it back.
-  await page.getByRole('tab', { name: 'Design' }).click();
-  await page.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  await openSettings(page, 'Languages');
   const [csvFile] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Export all texts (CSV)' }).click(),
@@ -194,16 +201,18 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expectAccessible(page);
   await page.getByRole('button', { name: 'Apply 1 change' }).click();
   await expect(page.getByText(/1 text updated/)).toBeVisible();
+  await toDesign(page);
   await outlineItem(page, 'A_WORK').click();
   await expect(page.getByLabel('Question wording (es)')).toHaveValue('¿Trabaja usted?');
   await saved(page);
 
   // Another language is added as such and edited on its own, one language at a time.
-  await page.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  await openSettings(page, 'Languages');
   const newLang = page.getByLabel('Add language');
   await newLang.fill('en');
   await newLang.locator('xpath=following::button[1]').click();
   await page.getByLabel('Questionnaire language').selectOption('en');
+  await toDesign(page);
   await outlineItem(page, 'A_WORK').click();
   await expect(page.getByLabel('Question wording (es)')).toHaveCount(0);
   await page.getByLabel('Question wording (en)').fill('Do you work?');
@@ -262,7 +271,13 @@ test('the outline collapses to a rail whose pane opens over the editor, and pins
   await page.keyboard.press('Alt+o');
   await expect(tree).toBeVisible();
   await expect(page.getByRole('treeitem', { selected: true })).toBeFocused();
-  expect(await editor.boundingBox()).toEqual(before);
+  // It may grow (the first row gets selected), but it does not move.
+  const after = await editor.boundingBox();
+  expect({ x: after!.x, y: after!.y, width: after!.width }).toEqual({
+    x: before!.x,
+    y: before!.y,
+    width: before!.width,
+  });
   await shot(page, 'designer-outline-over', { fullPage: false });
   await expectAccessible(page);
   // Enter goes to the editor and the pane collapses.
@@ -315,7 +330,7 @@ test('a failing saved scenario blocks publishing', async ({ page }) => {
   await expect(page.getByTestId('scenarios')).toContainText('No skips the name');
 
   // Remove the show-if: the scenario now fails and publishing is blocked.
-  await page.getByRole('tab', { name: 'Design' }).click();
+  await page.getByRole('tab', { name: 'Form' }).click();
   await outlineItem(page, 'A2').click();
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Remove condition 1' }).first().click();
@@ -340,16 +355,18 @@ test('two editors: edits to different parts merge; the same edit asks which to k
   await expect(b.getByRole('tree', { name: 'Outline' })).toBeVisible();
 
   // B retitles the questionnaire while A retitles the section: both survive.
-  await b.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  await openSettings(b, 'General');
+  await shot(b, 'questionnaire-settings');
   await b.getByLabel('Title (es)').fill('Título compartido de B');
   await outlineItem(a, 'SEC_A').click();
   await a.getByLabel('Title (es)').fill('Sección de A');
   await saved(b);
   await saved(a);
-  await a.getByRole('treeitem', { name: /Questionnaire settings/ }).click();
+  await openSettings(a, 'General');
   await expect(a.getByLabel('Title (es)')).toHaveValue('Título compartido de B', {
     timeout: 15_000,
   });
+  await toDesign(b);
   await outlineItem(b, 'SEC_A').click();
   await expect(b.getByLabel('Title (es)')).toHaveValue('Sección de A', { timeout: 15_000 });
   await expect(a.getByRole('dialog')).toHaveCount(0);
@@ -499,7 +516,7 @@ test('the routing map, outline arcs and nested condition builder on the househol
 
   // Its button opens the item in the editor.
   await preview.getByRole('button', { name: 'Edit this item' }).click();
-  await expect(page.getByRole('tab', { name: 'Design' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'Form' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('treeitem', { selected: true })).toHaveAttribute('data-id', id);
 
   // Nested condition builder with a plain-language summary and a live test.

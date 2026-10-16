@@ -26,20 +26,26 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
 }) => {
   test.setTimeout(120_000);
   await openProject(page);
-  await questionnaireAction(page, 'Web survey');
 
-  // Declare the lawful basis, then create and send a wave to some cases of region 3.
+  // Declare the lawful basis in the project's web settings, then create and send a campaign
+  // to some cases of region 3 from the questionnaire's Distribution tab.
+  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Web', exact: true }).click();
   await page.getByLabel('Lawful basis for e-mailing this sample').selectOption('consent');
   await page.getByLabel('Sender name').fill('Encuesta de hogares 2026');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
   await expect(page.getByTestId('template-preview')).toContainText('Le invitamos');
+  await shot(page, 'project-settings-web');
+  await questionnaireAction(page, 'Web survey');
+  await expect(page.getByRole('tab', { name: 'Web survey', selected: true })).toBeVisible();
+  await shot(page, 'questionnaire-distribution-web');
 
   await page.getByLabel('Name', { exact: true }).fill('Ola 1');
   await page.getByLabel('Only cases where (optional)').fill('case.region == 3 and case.age < 45');
   await page.getByLabel('Reminders after (days)').fill('3');
   await page.getByRole('button', { name: 'Create campaign' }).click();
-  await expect(page.getByTestId('waves-message')).toContainText('Wave created');
+  await expect(page.getByTestId('waves-message')).toContainText('Campaign created');
   await page.getByRole('button', { name: 'Send Ola 1' }).click();
   await expect(page.getByTestId('waves-message')).toContainText(/\d+ invitations queued/);
 
@@ -83,7 +89,6 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
 
   // The project manager sees the funnel move.
   await page.reload();
-  await questionnaireAction(page, 'Web survey');
   const funnel = page.locator('[data-wave="Ola 1"]').getByTestId('funnel');
   await expect(funnel.locator('[data-step="completed"]')).toHaveAttribute('data-count', '1', {
     timeout: 15_000,

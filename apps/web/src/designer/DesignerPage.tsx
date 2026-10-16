@@ -1,6 +1,6 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { buildModel, compile, type CompiledQuestionnaire } from '@wansurvey/logic';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,9 @@ import { usePreview } from '../preview/usePreview.js';
 import { ListIcon } from '../routes/icons.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button, Card } from '../routes/ui.js';
+import { SubTabBar, TabBar } from '../routes/tabs.js';
+import { CawiTab } from '../cawi/CawiTab.js';
+import { PaperTab } from '../papi/PaperTab.js';
 import { TypeEnvContext } from './context.js';
 import { Dialog } from './Dialog.js';
 import { EditingLanguageContext, smallBtn } from './fields.js';
@@ -24,7 +27,7 @@ import { CommentsPanel, openCounts, useComments } from './CommentsPanel.js';
 import { ComparePanel } from './ComparePanel.js';
 import { InsertFromLibraryDialog, SaveToLibraryDialog } from './LibraryDialogs.js';
 import { useCollab } from './useCollab.js';
-import { SettingsEditor } from './SettingsEditor.js';
+import { SETTINGS_PARTS, SettingsEditor, type SettingsPart } from './SettingsEditor.js';
 import { flatten, isSection, locate, type Draft } from './tree.js';
 import { iconKeyOf, KindIcon } from './kinds.js';
 import { useDraft, type DraftApi } from './useDraft.js';
@@ -33,17 +36,41 @@ import { caseVariables, nodeName, variablesOf, type SampleField } from './vars.j
 import { localiseDiagnostic } from '../i18n-messages.js';
 import { dateTime, timeOnly } from '../format.js';
 
-const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-600';
+const TOPS = ['design', 'distribution', 'settings'] as const;
+type Top = (typeof TOPS)[number];
+const DESIGN_SUBS = ['design', 'routing', 'preview', 'scenarios', 'versions'] as const;
+type DesignSub = (typeof DESIGN_SUBS)[number];
+const has = <T extends string>(list: readonly T[], v: string | undefined): v is T =>
+  !!v && (list as readonly string[]).includes(v);
 
-/** The questionnaire designer: outline + editor, logic check, preview, scenarios and versions. */
+/**
+ * A questionnaire in tabs on two levels: Design (form, flow, preview, scenarios, versions),
+ * Distribution (web survey, paper forms) and Settings (by topic). The place is in the address.
+ */
 export function DesignerPage() {
   const { projectId, qid } = useParams({ strict: false }) as { projectId: string; qid: string };
   const { t } = useTranslation();
   const d = useDraft(projectId, qid);
   const canEdit = useCan('questionnaires.edit', projectId);
   const canPublish = useCan('questionnaires.publish', projectId);
-  const [tab, setTab] = useState('design');
+  const search = useSearch({ strict: false }) as { tab?: string; sub?: string; notice?: string };
+  const navigate = useNavigate();
+  const top: Top = has(TOPS, search.tab) ? search.tab : 'design';
+  const tab: DesignSub = top === 'design' && has(DESIGN_SUBS, search.sub) ? search.sub : 'design';
+  const settingsPart: SettingsPart =
+    top === 'settings' && has(SETTINGS_PARTS, search.sub) ? search.sub : 'general';
+  const go = (t: Top, sub?: string) =>
+    void navigate({
+      to: '.',
+      search: (s: Record<string, unknown>) => ({ ...s, tab: t, sub }),
+      replace: true,
+    });
+  const setTab = (sub: string) => go('design', sub);
+  const canWeb = useCan('cawi.waves', projectId);
+  const canKey = useCan('dataentry.key', projectId);
+  const canReviewForms = useCan('interviews.review', projectId);
+  const canCasesAll = useCan('cases.read_all', projectId);
+  const canPaper = canKey || canReviewForms || canCasesAll;
   const [selected, setSelected] = useState(SETTINGS_ID);
   const [renameTick, setRenameTick] = useState(0);
   const [publishing, setPublishing] = useState(false);
@@ -60,6 +87,7 @@ export function DesignerPage() {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.code !== 'KeyO' || tab !== 'design') return;
+      if (top !== 'design') return;
       e.preventDefault();
       if (!outline.inline && outline.open) return outline.setOpen(false);
       if (!outline.inline) outline.setOpen(true);
@@ -71,7 +99,7 @@ export function DesignerPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [outline, tab]);
+  }, [outline, tab, top]);
   const canComment = useCan('questionnaires.comment', projectId) || canEdit;
   const comments = useComments(projectId, qid);
   const commentCounts = useMemo(() => openCounts(comments.data), [comments.data]);
@@ -266,162 +294,224 @@ export function DesignerPage() {
               </div>
             ) : null}
 
-            <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
-              <Tabs.List
-                aria-label={t('designer.tabs')}
-                className="flex flex-wrap gap-1 border-b border-slate-200"
-              >
-                <Tabs.Trigger value="design" className={tabCls}>
-                  {t('designer.tab.design')}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="routing" className={tabCls}>
-                  {t('designer.tab.routing')}
-                  {errorCount ? (
-                    <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
-                      {errorCount}
-                    </span>
-                  ) : null}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="preview" className={tabCls}>
-                  {t('designer.tab.preview')}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="scenarios" className={tabCls}>
-                  {t('designer.tab.scenarios')}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="versions" className={tabCls}>
-                  {t('designer.tab.versions')}
-                </Tabs.Trigger>
-              </Tabs.List>
-
-              <Tabs.Content
-                value="design"
-                className="grid grid-cols-[3rem_minmax(0,1fr)] gap-4 min-[900px]:grid-cols-1"
-              >
-                <SideDrawer
-                  id="designer-outline"
-                  drawer={outline}
-                  side="left"
-                  label={t('designer.outline.title')}
-                  icon={<ListIcon />}
-                >
-                  <Outline
-                    draft={draft}
-                    selected={selected}
-                    onSelect={setSelected}
-                    change={d.change}
-                    errorsById={errorsById}
-                    routing={routing}
-                    lang={lang}
-                    readOnly={!canEdit}
-                    onRename={() => setRenameTick((n) => n + 1)}
-                    onEnter={focusEditor}
-                    announce={setMessage}
-                    others={others}
-                    commentCounts={commentCounts}
-                    onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
-                    onSaveToLibrary={(id) => {
-                      setSelected(id);
-                      setSavingToLibrary(true);
-                    }}
+            <Tabs.Root
+              value={top}
+              onValueChange={(v) => go(v as Top)}
+              className="flex flex-col gap-4"
+            >
+              <TabBar
+                label={t('designer.top.label')}
+                items={[
+                  { value: 'design', label: t('designer.top.design') },
+                  ...(canWeb || canPaper
+                    ? [{ value: 'distribution', label: t('designer.top.distribution') }]
+                    : []),
+                  { value: 'settings', label: t('designer.top.settings') },
+                ]}
+              />
+              <Tabs.Content value="design">
+                <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
+                  <SubTabBar
+                    label={t('designer.designSections')}
+                    items={[
+                      { value: 'design', label: t('designer.tab.form') },
+                      {
+                        value: 'routing',
+                        label: (
+                          <>
+                            {t('designer.tab.routing')}
+                            {errorCount ? (
+                              <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
+                                {errorCount}
+                              </span>
+                            ) : null}
+                          </>
+                        ),
+                      },
+                      { value: 'preview', label: t('designer.tab.preview') },
+                      { value: 'scenarios', label: t('designer.tab.scenarios') },
+                      { value: 'versions', label: t('designer.tab.versions') },
+                    ]}
                   />
-                </SideDrawer>
-                <div className="flex min-w-0 flex-col gap-4">
-                  <section
-                    ref={editorRef}
-                    tabIndex={-1}
-                    aria-label={t('designer.editor')}
-                    className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
+
+                  <Tabs.Content
+                    value="design"
+                    className="grid grid-cols-[3rem_minmax(0,1fr)] gap-4 min-[900px]:grid-cols-1"
                   >
-                    {others.get(selected)?.length ? (
-                      <p
-                        className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-ink-950"
-                        data-testid="same-item"
+                    <SideDrawer
+                      id="designer-outline"
+                      drawer={outline}
+                      side="left"
+                      label={t('designer.outline.title')}
+                      icon={<ListIcon />}
+                    >
+                      <Outline
+                        draft={draft}
+                        selected={selected}
+                        onSelect={setSelected}
+                        change={d.change}
+                        errorsById={errorsById}
+                        routing={routing}
+                        lang={lang}
+                        readOnly={!canEdit}
+                        onRename={() => setRenameTick((n) => n + 1)}
+                        onEnter={focusEditor}
+                        announce={setMessage}
+                        others={others}
+                        commentCounts={commentCounts}
+                        onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
+                        onSaveToLibrary={(id) => {
+                          setSelected(id);
+                          setSavingToLibrary(true);
+                        }}
+                      />
+                    </SideDrawer>
+                    <div className="flex min-w-0 flex-col gap-4">
+                      <section
+                        ref={editorRef}
+                        tabIndex={-1}
+                        aria-label={t('designer.editor')}
+                        className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
                       >
-                        {t('designer.collab.sameItem', { who: others.get(selected)!.join(', ') })}
-                      </p>
-                    ) : null}
-                    <EditorHeader
-                      draft={draft}
-                      selected={selected}
-                      onGo={setSelected}
-                      onSave={
-                        canEdit &&
-                        selected !== SETTINGS_ID &&
-                        !draft.sections.some((x) => x.id === selected)
-                          ? () => setSavingToLibrary(true)
-                          : undefined
-                      }
-                    />
-                    <fieldset disabled={!canEdit} className="min-w-0">
-                      {selected === SETTINGS_ID ? (
-                        <SettingsEditor draft={draft} variables={variables} change={d.change} />
-                      ) : (
-                        <ItemEditor
-                          key={selected}
+                        {others.get(selected)?.length ? (
+                          <p
+                            className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-ink-950"
+                            data-testid="same-item"
+                          >
+                            {t('designer.collab.sameItem', {
+                              who: others.get(selected)!.join(', '),
+                            })}
+                          </p>
+                        ) : null}
+                        <EditorHeader
                           draft={draft}
-                          id={selected}
-                          lang={lang}
-                          variables={variables}
-                          change={d.change}
-                          focusNameSignal={renameTick}
-                          select={setSelected}
+                          selected={selected}
+                          onGo={setSelected}
+                          onSave={
+                            canEdit &&
+                            selected !== SETTINGS_ID &&
+                            !draft.sections.some((x) => x.id === selected)
+                              ? () => setSavingToLibrary(true)
+                              : undefined
+                          }
                         />
-                      )}
-                    </fieldset>
-                  </section>
-                  <CommentsPanel
-                    projectId={projectId}
-                    qid={qid}
-                    itemId={selected === SETTINGS_ID ? null : selected}
-                    canWrite={canComment}
-                    onGoTo={(id) => setSelected(id ?? SETTINGS_ID)}
-                  />
-                </div>
-              </Tabs.Content>
+                        <fieldset disabled={!canEdit} className="min-w-0">
+                          {selected === SETTINGS_ID ? (
+                            <p className="text-sm text-slate-600">{t('designer.emptyEditor')}</p>
+                          ) : (
+                            <ItemEditor
+                              key={selected}
+                              draft={draft}
+                              id={selected}
+                              lang={lang}
+                              variables={variables}
+                              change={d.change}
+                              focusNameSignal={renameTick}
+                              select={setSelected}
+                            />
+                          )}
+                        </fieldset>
+                      </section>
+                      <CommentsPanel
+                        projectId={projectId}
+                        qid={qid}
+                        itemId={selected === SETTINGS_ID ? null : selected}
+                        canWrite={canComment}
+                        onGoTo={(id) => (id ? setSelected(id) : go('settings', 'general'))}
+                      />
+                    </div>
+                  </Tabs.Content>
 
-              <Tabs.Content value="routing" className="flex flex-col gap-3">
-                <LogicCheck
-                  diagnostics={d.diagnostics}
-                  highlight={highlight}
-                  onHighlight={setHighlight}
-                  onGoTo={(id) => {
-                    setSelected(id);
-                    setTab('design');
-                    requestAnimationFrame(focusEditor);
-                  }}
-                />
-                {routing ? (
-                  <RoutingMap
-                    draft={draft}
-                    routing={routing}
-                    lang={lang}
-                    problems={highlight ? problemsById : null}
-                    onOpen={(id) => {
-                      setSelected(id);
-                      setTab('design');
-                      requestAnimationFrame(focusEditor);
-                    }}
-                  />
-                ) : (
-                  <Card>{t('designer.routing.unavailable')}</Card>
-                )}
-              </Tabs.Content>
+                  <Tabs.Content value="routing" className="flex flex-col gap-3">
+                    <LogicCheck
+                      diagnostics={d.diagnostics}
+                      highlight={highlight}
+                      onHighlight={setHighlight}
+                      onGoTo={(id) => {
+                        setSelected(id);
+                        setTab('design');
+                        requestAnimationFrame(focusEditor);
+                      }}
+                    />
+                    {routing ? (
+                      <RoutingMap
+                        draft={draft}
+                        routing={routing}
+                        lang={lang}
+                        problems={highlight ? problemsById : null}
+                        onOpen={(id) => {
+                          setSelected(id);
+                          setTab('design');
+                          requestAnimationFrame(focusEditor);
+                        }}
+                      />
+                    ) : (
+                      <Card>{t('designer.routing.unavailable')}</Card>
+                    )}
+                  </Tabs.Content>
 
-              <Tabs.Content value="preview">
-                <DraftPreview d={d} projectId={projectId} qid={qid} />
-              </Tabs.Content>
+                  <Tabs.Content value="preview">
+                    <DraftPreview d={d} projectId={projectId} qid={qid} />
+                  </Tabs.Content>
 
-              <Tabs.Content value="scenarios">
-                <ScenariosTab d={d} projectId={projectId} qid={qid} />
-              </Tabs.Content>
+                  <Tabs.Content value="scenarios">
+                    <ScenariosTab d={d} projectId={projectId} qid={qid} />
+                  </Tabs.Content>
 
-              <Tabs.Content value="versions">
-                <VersionsPanel
+                  <Tabs.Content value="versions">
+                    <VersionsPanel
+                      projectId={projectId}
+                      qid={qid}
+                      canPublish={canPublish}
+                      draft={d.questionnaire}
+                    />
+                  </Tabs.Content>
+                </Tabs.Root>
+              </Tabs.Content>
+              <Tabs.Content value="distribution">
+                <Distribution
                   projectId={projectId}
                   qid={qid}
-                  canPublish={canPublish}
-                  draft={d.questionnaire}
+                  sub={search.sub}
+                  notice={search.notice}
+                  web={canWeb && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('CAWI')}
+                  paper={
+                    canPaper && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('PAPI')
+                  }
+                  onSub={(sub) => go('distribution', sub)}
                 />
+              </Tabs.Content>
+              <Tabs.Content value="settings">
+                <Tabs.Root
+                  value={settingsPart}
+                  onValueChange={(v) => go('settings', v)}
+                  className="flex flex-col gap-4"
+                >
+                  <SubTabBar
+                    label={t('designer.settingsSections')}
+                    items={SETTINGS_PARTS.map((x) => ({
+                      value: x,
+                      label: x === 'modes' ? t('designer.modes') : t(`designer.settings.${x}`),
+                    }))}
+                  />
+                  <Tabs.Content value={settingsPart}>
+                    <Card>
+                      <h2 className="sr-only">
+                        {settingsPart === 'modes'
+                          ? t('designer.modes')
+                          : t(`designer.settings.${settingsPart}`)}
+                      </h2>
+                      <fieldset disabled={!canEdit} className="min-w-0">
+                        <SettingsEditor
+                          draft={draft}
+                          variables={variables}
+                          change={d.change}
+                          part={settingsPart}
+                        />
+                      </fieldset>
+                    </Card>
+                  </Tabs.Content>
+                </Tabs.Root>
               </Tabs.Content>
             </Tabs.Root>
 
@@ -512,7 +602,7 @@ function EditorHeader({
   onSave?: () => void;
 }) {
   const { t } = useTranslation();
-  const order = [SETTINGS_ID, ...flatten(draft).map((r) => r.node.id)];
+  const order = flatten(draft).map((r) => r.node.id);
   const i = order.indexOf(selected);
   const prev = i > 0 ? order[i - 1] : undefined;
   const next = i >= 0 && i < order.length - 1 ? order[i + 1] : undefined;
@@ -844,5 +934,43 @@ function VersionsPanel({
         <ComparePanel projectId={projectId} qid={qid} versions={versions.data} draft={draft} />
       </div>
     </Card>
+  );
+}
+
+/** Where the questionnaire goes out: its web survey and its paper forms. */
+function Distribution({
+  projectId,
+  qid,
+  sub,
+  notice,
+  web,
+  paper,
+  onSub,
+}: {
+  projectId: string;
+  qid: string;
+  sub?: string;
+  notice?: string;
+  web: boolean;
+  paper: boolean;
+  onSub(sub: string): void;
+}) {
+  const { t } = useTranslation();
+  const subs = [...(web ? ['web'] : []), ...(paper ? ['paper'] : [])];
+  const current = sub && subs.includes(sub) ? sub : subs[0];
+  if (!current) return <Card>{t('designer.distribution.none')}</Card>;
+  return (
+    <Tabs.Root value={current} onValueChange={onSub} className="flex flex-col gap-4">
+      <SubTabBar
+        label={t('designer.distribution.label')}
+        items={subs.map((x) => ({ value: x, label: t(`designer.distribution.${x}`) }))}
+      />
+      <Tabs.Content value="web">
+        <CawiTab projectId={projectId} questionnaireId={qid} />
+      </Tabs.Content>
+      <Tabs.Content value="paper">
+        <PaperTab projectId={projectId} questionnaireId={qid} notice={notice} />
+      </Tabs.Content>
+    </Tabs.Root>
   );
 }

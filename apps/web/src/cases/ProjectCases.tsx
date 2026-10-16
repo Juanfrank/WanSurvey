@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import { subTabCls } from '../routes/tabs.js';
 import { api } from '../api.js';
 import { useCan } from '../designer/hooks.js';
 import { CasesTab } from './CasesTab.js';
@@ -10,8 +11,6 @@ import { QuestionnaireScope } from './scope.js';
 
 export type CasesSub = 'list' | 'sampling';
 
-const subTabCls =
-  'rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[state=active]:bg-indigo-50 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-700';
 const pillCls =
   'rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 aria-pressed:border-indigo-500 aria-pressed:bg-indigo-50 aria-pressed:text-indigo-ink-700';
 
@@ -38,10 +37,16 @@ export function ProjectCases({
   const navigate = useNavigate();
   const list = useQuery({
     queryKey: ['questionnaires', projectId],
-    queryFn: () => api<{ id: string; name: string }[]>(`/projects/${projectId}/questionnaires`),
+    queryFn: () =>
+      api<{ id: string; name: string; createdAt: string }[]>(
+        `/projects/${projectId}/questionnaires`,
+      ),
     enabled: canQuestionnaires,
   });
-  const qs = list.data ?? [];
+  // Oldest first, as the API takes the project's first questionnaire by default.
+  const qs = [...(list.data ?? [])].sort(
+    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+  );
   // Without the questionnaire list (interviewers), every case of theirs is shown.
   const current = qs.find((q) => q.id === search.q)?.id ?? qs[0]?.id;
   const pick = (q: string) =>
@@ -57,6 +62,8 @@ export function ProjectCases({
     ...(canList ? (['list'] as const) : []),
   ];
   const active = subs.includes(sub) ? sub : (subs.at(-1) ?? 'list');
+  // Wait for the questionnaires, so the views do not start over when they arrive.
+  if (canQuestionnaires && list.isPending) return <p aria-busy="true">…</p>;
   if (canQuestionnaires && list.isSuccess && !qs.length)
     return <p className="text-sm text-slate-600">{t('cases.tabs.noQuestionnaire')}</p>;
 

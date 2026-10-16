@@ -21,21 +21,40 @@ const show = (v: unknown) =>
   v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
 
 /** Paper forms: keying by clerks, printing, and the double-entry differences (P1–P4). */
-export function PaperTab({ projectId, notice }: { projectId: string; notice?: string }) {
+export function PaperTab({
+  projectId,
+  notice,
+  questionnaireId,
+}: {
+  projectId: string;
+  notice?: string;
+  /** The questionnaire whose forms are keyed and printed; without it, the first published. */
+  questionnaireId?: string;
+}) {
   const canClerk = useCan('dataentry.key', projectId);
   const canConduct = useCan('interviews.conduct', projectId);
   const canKey = canClerk || canConduct;
   const canReview = useCan('interviews.review', projectId);
   return (
     <div className="flex flex-col gap-8 text-sm">
-      {canKey ? <KeyForm projectId={projectId} notice={notice} /> : null}
+      {canKey ? (
+        <KeyForm projectId={projectId} notice={notice} questionnaireId={questionnaireId} />
+      ) : null}
       {canReview ? <Mismatches projectId={projectId} /> : null}
-      <PrintForms projectId={projectId} />
+      <PrintForms projectId={projectId} questionnaireId={questionnaireId} />
     </div>
   );
 }
 
-function KeyForm({ projectId, notice }: { projectId: string; notice?: string }) {
+function KeyForm({
+  projectId,
+  notice,
+  questionnaireId,
+}: {
+  projectId: string;
+  notice?: string;
+  questionnaireId?: string;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [id, setId] = useState('');
@@ -49,7 +68,9 @@ function KeyForm({ projectId, notice }: { projectId: string; notice?: string }) 
         `/projects/${projectId}/questionnaires`,
       ),
   });
-  const qid = qs.data?.find((q) => q.publishedVersions > 0)?.id;
+  const qid = qs.data?.find(
+    (q) => q.publishedVersions > 0 && (!questionnaireId || q.id === questionnaireId),
+  )?.id;
 
   const go = async () => {
     if (!id.trim() || !qid) return;
@@ -114,7 +135,13 @@ function KeyForm({ projectId, notice }: { projectId: string; notice?: string }) 
   );
 }
 
-function PrintForms({ projectId }: { projectId: string }) {
+function PrintForms({
+  projectId,
+  questionnaireId,
+}: {
+  projectId: string;
+  questionnaireId?: string;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [filter, setFilter] = useState('');
@@ -128,7 +155,11 @@ function PrintForms({ projectId }: { projectId: string }) {
         void navigate({
           to: '/projects/$projectId/papi/print',
           params: { projectId },
-          search: { ...(filter.trim() ? { filter: filter.trim() } : {}), limit },
+          search: {
+            ...(filter.trim() ? { filter: filter.trim() } : {}),
+            limit,
+            ...(questionnaireId ? { q: questionnaireId } : {}),
+          },
         });
       }}
     >

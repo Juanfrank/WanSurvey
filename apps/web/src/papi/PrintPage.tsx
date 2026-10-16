@@ -25,6 +25,7 @@ export function PrintPage() {
     filter?: string;
     limit?: number;
     caseIds?: string;
+    q?: string;
   };
   const { t } = useTranslation();
   const forms = useQuery({
@@ -34,6 +35,7 @@ export function PrintPage() {
       if (search.filter) q.set('filter', search.filter);
       if (search.limit) q.set('limit', String(search.limit));
       if (search.caseIds) q.set('caseIds', search.caseIds);
+      if (search.q) q.set('questionnaireId', search.q);
       return api<Forms>(`/projects/${projectId}/papi/forms?${q.toString()}`);
     },
   });
@@ -45,7 +47,7 @@ export function PrintPage() {
         <Link
           to="/projects/$projectId"
           params={{ projectId }}
-          search={{ tab: 'paper' }}
+          search={{ tab: 'paper', ...(search.q ? { q: search.q } : {}) }}
           className="text-sm text-slate-600 hover:underline"
         >
           {t('papi.print.back')}

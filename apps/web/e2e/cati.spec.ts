@@ -31,6 +31,7 @@ async function onQuestion(page: Page, id: string) {
 test('the project manager opens calling hours all day', async ({ page }) => {
   await openProject(page, PM);
   await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByRole('tab', { name: 'Phone', exact: true }).click();
   const cati = page.getByTestId('cati-settings');
   await cati.getByLabel('Calling from').fill('00:00');
   await cati.getByLabel('Calling until').fill('00:00');

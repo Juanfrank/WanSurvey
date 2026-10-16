@@ -103,6 +103,7 @@ export class QuestionnairesController {
           name: questionnaires.name,
           draftRevision: questionnaires.draftRevision,
           updatedAt: questionnaires.updatedAt,
+          createdAt: questionnaires.createdAt,
           modes: sql<string[] | null>`${questionnaires.draft} -> 'modes'`,
         })
         .from(questionnaires)
