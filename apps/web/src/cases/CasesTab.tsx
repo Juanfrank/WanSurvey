@@ -520,7 +520,7 @@ function SamplingFacts({
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
         <dt className="text-slate-600">{t('cases.sampling.role')}</dt>
         <dd data-role={c.selectionRole}>
-          {t(`cases.sampling.roles.${c.selectionRole}`, { defaultValue: c.selectionRole ?? '' })}
+          {t(`cases.sampling.roleOne.${c.selectionRole}`, { defaultValue: c.selectionRole ?? '' })}
         </dd>
         <dt className="text-slate-600">{t('cases.sampling.inclusion')}</dt>
         <dd>{n(c.inclusionProb, 6)}</dd>

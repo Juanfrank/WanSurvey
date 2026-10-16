@@ -93,7 +93,10 @@ export function AsSeenFrame({
     .filter((a) => a.value !== null && a.value !== undefined);
   const caseData = context.case ?? {};
   const screen = (
-    <div className="flex flex-col gap-4 bg-slate-50 p-4" data-testid="as-seen-interviewer">
+    <div
+      className="@container flex flex-col gap-4 bg-slate-50 p-4"
+      data-testid="as-seen-interviewer"
+    >
       <header className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-2">
         <h2 className="text-lg font-semibold">{t('preview.asSeen.case')}</h2>
         <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-ink-800">
@@ -113,7 +116,7 @@ export function AsSeenFrame({
           {t('interview.save.saved')}
         </span>
       </header>
-      <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className="grid gap-4 @3xl:grid-cols-[16rem_minmax(0,1fr)]">
         <aside
           aria-label={t('interview.side')}
           className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 text-sm"
@@ -150,7 +153,9 @@ export function AsSeenFrame({
                 {answered.map((a) => (
                   <div key={a.key} className="contents">
                     <dt className="font-mono text-slate-600">{a.key}</dt>
-                    <dd>{shown(a.value, session, a.key.replace(/\[.*$/, '').split('.').pop()!)}</dd>
+                    <dd className="min-w-0 break-words">
+                      {shown(a.value, session, a.key.replace(/\[.*$/, '').split('.').pop()!)}
+                    </dd>
                   </div>
                 ))}
               </dl>

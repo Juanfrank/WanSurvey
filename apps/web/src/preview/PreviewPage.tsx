@@ -236,7 +236,9 @@ export function PreviewWorkbench({
         </details>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      {/* The interview gets the full width (as the field sees it); the tracer sits beside it
+          only when there is room for both. */}
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_24rem]">
         <Tabs.Root defaultValue="interview" className="flex min-w-0 flex-col gap-4">
           <Tabs.List
             aria-label={t('preview.title')}

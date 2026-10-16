@@ -209,6 +209,12 @@ export const samplingEn = {
   confirmSelect:
     'Select the sample now? The selection is kept as it is: units are not deleted or replaced afterwards, and the frame and design can no longer change.',
   selectedOn: 'Selected on {{date}} (seed {{seed}}).',
+  roleOne: {
+    main: 'Main',
+    reserve: 'Released reserve',
+    substitute: 'Substitute',
+    field: 'Field',
+  },
   rolesTitle: 'Cases by role',
   roles: {
     main: 'Main',
@@ -458,6 +464,12 @@ export const samplingEs: typeof samplingEn = {
   confirmSelect:
     '¿Seleccionar la muestra ahora? La selección se conserva tal cual: después no se borran ni se reemplazan unidades, y el marco y el diseño ya no pueden cambiar.',
   selectedOn: 'Seleccionada el {{date}} (semilla {{seed}}).',
+  roleOne: {
+    main: 'Principal',
+    reserve: 'Reserva liberada',
+    substitute: 'Sustituto',
+    field: 'De campo',
+  },
   rolesTitle: 'Casos por rol',
   roles: {
     main: 'Principales',

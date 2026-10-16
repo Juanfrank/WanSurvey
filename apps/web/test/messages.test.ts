@@ -35,8 +35,10 @@ describe('message catalogues', () => {
       expect(ids.length).toBeGreaterThan(3);
       const en = messagesEn[group] as Record<string, string>;
       const es = messagesEs[group] as Record<string, string>;
-      expect(ids.filter((id) => !en[id])).toEqual([]);
-      expect(ids.filter((id) => !es[id])).toEqual([]);
+      // A message with a count has plural forms (id_one, id_other) instead of the id.
+      const has = (c: Record<string, string>, id: string) => !!(c[id] ?? c[`${id}_other`]);
+      expect(ids.filter((id) => !has(en, id))).toEqual([]);
+      expect(ids.filter((id) => !has(es, id))).toEqual([]);
     });
   }
 

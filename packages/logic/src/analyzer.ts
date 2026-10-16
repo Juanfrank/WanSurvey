@@ -301,8 +301,14 @@ function checkQuestion(
     add({
       severity: 'warning',
       code: 'empty_option_label',
-      message: `Options ${noLabel.join(', ')} of ${q.name} have no label`,
-      msg: { id: 'empty_option_label', params: { name: q.name, codes: noLabel.join(', ') } },
+      message:
+        noLabel.length === 1
+          ? `Option ${noLabel[0]} of ${q.name} has no label`
+          : `Options ${noLabel.join(', ')} of ${q.name} have no label`,
+      msg: {
+        id: 'empty_option_label',
+        params: { name: q.name, codes: noLabel.join(', '), count: noLabel.length },
+      },
       itemId: node.id,
       field: 'options',
     });
@@ -311,8 +317,14 @@ function checkQuestion(
     add({
       severity: 'warning',
       code: 'empty_option_label',
-      message: `Rows ${noRowLabel.join(', ')} of ${q.name} have no label`,
-      msg: { id: 'empty_row_label', params: { name: q.name, codes: noRowLabel.join(', ') } },
+      message:
+        noRowLabel.length === 1
+          ? `Row ${noRowLabel[0]} of ${q.name} has no label`
+          : `Rows ${noRowLabel.join(', ')} of ${q.name} have no label`,
+      msg: {
+        id: 'empty_row_label',
+        params: { name: q.name, codes: noRowLabel.join(', '), count: noRowLabel.length },
+      },
       itemId: node.id,
       field: 'rows',
     });
