@@ -1,4 +1,3 @@
-import { QUESTION_TYPES } from '@wansurvey/schema';
 import {
   useEffect,
   useLayoutEffect,
@@ -10,6 +9,8 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { smallBtn } from './fields.js';
+import { iconKeyOf, KindIcon, questionMenu, structureMenu } from './kinds.js';
+import { below, Menu, type MenuEntry } from './Menu.js';
 import {
   duplicate,
   flatten,
@@ -34,51 +35,6 @@ import { dispositionLabel } from '../i18n-messages.js';
 
 export const SETTINGS_ID = '__settings';
 
-const NEW_KINDS: NewKind[] = [
-  ...QUESTION_TYPES.map((type) => ({ kind: 'question' as const, type })),
-  { kind: 'static' },
-  { kind: 'computed' },
-  { kind: 'pagebreak' },
-  { kind: 'block' },
-  { kind: 'roster' },
-  { kind: 'section' },
-];
-
-const kindKey = (k: NewKind) =>
-  k.kind === 'question' ? `designer.type.${k.type}` : `designer.kind.${k.kind}`;
-
-function badge(node: TreeNode): string {
-  if (isSection(node)) return '§';
-  switch (node.kind) {
-    case 'question':
-      return (
-        {
-          single: '◉',
-          multi: '☑',
-          numeric: '#',
-          text: 'Aa',
-          date: '📅',
-          time: '⏱',
-          datetime: '📅',
-          grid: '▦',
-          ranking: '⇅',
-          scale: '⋯',
-          yesno: 'Y/N',
-        } as const
-      )[node.type];
-    case 'static':
-      return 'ℹ';
-    case 'computed':
-      return 'ƒ';
-    case 'pagebreak':
-      return '—';
-    case 'block':
-      return '▢';
-    case 'roster':
-      return '↻';
-  }
-}
-
 /**
  * The questionnaire as an accessible tree (WAI-ARIA tree pattern). Arrow keys move, Alt+arrows
  * reorder and indent, Insert adds, Delete removes (undo with Ctrl+Z), Ctrl+D duplicates,
@@ -99,6 +55,7 @@ export function Outline({
   others,
   commentCounts,
   onInsertFromLibrary,
+  onSaveToLibrary,
 }: {
   draft: Draft;
   selected: string;
@@ -118,13 +75,20 @@ export function Outline({
   commentCounts?: ReadonlyMap<string, number>;
   /** Opens the question library to insert after (or inside) a row. */
   onInsertFromLibrary?(afterId: string | null, inside: boolean): void;
+  /** Saves a row (not a section) to the question library. */
+  onSaveToLibrary?(id: string): void;
 }) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [picker, setPicker] = useState(false);
+  // One menu at a time: the question types, the structural elements, or a row's actions.
+  const [menu, setMenu] = useState<{
+    mode: 'question' | 'structure' | 'row';
+    at: { x: number; y: number };
+  } | null>(null);
   const [focusTick, setFocusTick] = useState(0);
   const treeRef = useRef<HTMLUListElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
+  const addQuestionRef = useRef<HTMLButtonElement>(null);
+  const addStructureRef = useRef<HTMLButtonElement>(null);
 
   const rows = useMemo(() => flatten(draft, collapsed), [draft, collapsed]);
   const ids = [SETTINGS_ID, ...rows.map((r) => r.node.id)];
@@ -216,10 +180,6 @@ export function Outline({
     [...rowsEls].find((el) => el.dataset.id === selected)?.focus();
   }, [focusTick, selected]);
 
-  useEffect(() => {
-    if (picker) pickerRef.current?.querySelector('button')?.focus();
-  }, [picker]);
-
   const go = (id: string | undefined) => {
     if (!id) return;
     onSelect(id);
@@ -243,13 +203,152 @@ export function Outline({
     return { after, inside };
   };
 
+  const rowEl = (id: string) =>
+    [...(treeRef.current?.querySelectorAll<HTMLElement>('[data-id]') ?? [])].find(
+      (el) => el.dataset.id === id,
+    ) ?? null;
+  const closeMenu = () => {
+    setMenu(null);
+    setFocusTick((n) => n + 1);
+  };
+
   const add = (what: NewKind) => {
-    setPicker(false);
+    setMenu(null);
     const { after, inside } = target();
     const r = insert(draft, after, what, { inside });
     structural(r.draft, r.newId);
     announce(t('designer.outline.added', { name: r.newId }));
   };
+
+  const selectedRow = rows.find((r) => r.node.id === selected);
+  const selectedNode = selectedRow?.node;
+  const del = (node: TreeNode) => {
+    const next = remove(draft, node.id);
+    if (next !== draft && JSON.stringify(next) !== JSON.stringify(draft)) {
+      structural(next, ids[ids.indexOf(node.id) - 1]!);
+      announce(t('designer.outline.deleted', { name: nodeName(node) }));
+    }
+  };
+  const dup = (node: TreeNode) => {
+    const r = duplicate(draft, node.id);
+    if (r.newId) structural(r.draft, r.newId);
+  };
+
+  const libraryEntry: MenuEntry[] = onInsertFromLibrary
+    ? [
+        { type: 'separator' },
+        {
+          type: 'item',
+          id: 'library',
+          label: t('designer.library.insert'),
+          icon: <KindIcon k="block" />,
+          onSelect: () => {
+            const { after, inside } = target();
+            onInsertFromLibrary(after, inside);
+          },
+        },
+      ]
+    : [];
+
+  // The row's actions, each also reachable from the keyboard (shortcut shown).
+  const rowEntries: MenuEntry[] = selectedNode
+    ? [
+        {
+          type: 'item',
+          id: 'edit',
+          label: t('designer.outline.menuEdit'),
+          shortcut: 'Enter',
+          onSelect: onEnter,
+        },
+        ...(readOnly
+          ? []
+          : ([
+              {
+                type: 'item',
+                id: 'addq',
+                label: t('designer.outline.menuAddQuestion'),
+                shortcut: 'Insert',
+                keepOpen: true,
+                onSelect: () => setMenu((m) => (m ? { ...m, mode: 'question' } : m)),
+              },
+              {
+                type: 'item',
+                id: 'adds',
+                label: t('designer.outline.menuAddStructure'),
+                shortcut: 'Shift+Insert',
+                keepOpen: true,
+                onSelect: () => setMenu((m) => (m ? { ...m, mode: 'structure' } : m)),
+              },
+              ...libraryEntry.slice(1),
+              { type: 'separator' },
+              {
+                type: 'item',
+                id: 'rename',
+                label: t('designer.outline.menuRename'),
+                shortcut: 'F2',
+                onSelect: onRename,
+              },
+              {
+                type: 'item',
+                id: 'dup',
+                label: t('designer.outline.menuDuplicate'),
+                shortcut: 'Ctrl+D',
+                onSelect: () => dup(selectedNode),
+              },
+              ...(onSaveToLibrary && !isSection(selectedNode)
+                ? [
+                    {
+                      type: 'item' as const,
+                      id: 'save',
+                      label: t('designer.outline.menuSaveLibrary'),
+                      onSelect: () => onSaveToLibrary(selectedNode.id),
+                    },
+                  ]
+                : []),
+              { type: 'separator' },
+              {
+                type: 'item',
+                id: 'up',
+                label: t('designer.outline.menuUp'),
+                shortcut: 'Alt+↑',
+                onSelect: () => structural(move(draft, selectedNode.id, -1)),
+              },
+              {
+                type: 'item',
+                id: 'down',
+                label: t('designer.outline.menuDown'),
+                shortcut: 'Alt+↓',
+                onSelect: () => structural(move(draft, selectedNode.id, 1)),
+              },
+              ...(!isSection(selectedNode)
+                ? [
+                    {
+                      type: 'item' as const,
+                      id: 'indent',
+                      label: t('designer.outline.menuIndent'),
+                      shortcut: 'Alt+→',
+                      onSelect: () => structural(indent(draft, selectedNode.id)),
+                    },
+                    {
+                      type: 'item' as const,
+                      id: 'outdent',
+                      label: t('designer.outline.menuOutdent'),
+                      shortcut: 'Alt+←',
+                      onSelect: () => structural(outdent(draft, selectedNode.id)),
+                    },
+                  ]
+                : []),
+              { type: 'separator' },
+              {
+                type: 'item',
+                id: 'delete',
+                label: t('designer.outline.menuDelete'),
+                shortcut: t('designer.outline.keyDelete'),
+                onSelect: () => del(selectedNode),
+              },
+            ] as MenuEntry[])),
+      ]
+    : [];
 
   const onKey = (e: KeyboardEvent<HTMLUListElement>) => {
     const row = rows[index - 1];
@@ -275,18 +374,17 @@ export function Outline({
       else if (row.parentId) go(row.parentId);
     } else if (key === 'Enter') onEnter();
     else if (key === 'F2' && node) onRename();
+    else if (((key === 'F10' && e.shiftKey) || key === 'ContextMenu') && node)
+      setMenu({ mode: 'row', at: below(rowEl(node.id)) });
     else if (readOnly) handled = false;
-    else if (key === 'Insert' || (key === '+' && !e.ctrlKey)) setPicker(true);
-    else if ((key === 'Delete' || key === 'Backspace') && node) {
-      const next = remove(draft, node.id);
-      if (next !== draft && JSON.stringify(next) !== JSON.stringify(draft)) {
-        structural(next, ids[index - 1]!);
-        announce(t('designer.outline.deleted', { name: nodeName(node) }));
-      }
-    } else if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'd' && node) {
-      const r = duplicate(draft, node.id);
-      if (r.newId) structural(r.draft, r.newId);
-    } else handled = false;
+    else if (key === 'Insert' || (key === '+' && !e.ctrlKey))
+      setMenu({
+        mode: e.shiftKey ? 'structure' : 'question',
+        at: below(rowEl(selected)),
+      });
+    else if ((key === 'Delete' || key === 'Backspace') && node) del(node);
+    else if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'd' && node) dup(node);
+    else handled = false;
     if (handled) {
       e.preventDefault();
       e.stopPropagation();
@@ -300,63 +398,63 @@ export function Outline({
           {t('designer.outline.title')}
         </h2>
         {!readOnly ? (
-          <button
-            type="button"
-            className={smallBtn}
-            aria-haspopup="true"
-            aria-expanded={picker}
-            onClick={() => setPicker((p) => !p)}
-          >
-            {t('designer.outline.add')}
-          </button>
+          <div className="flex gap-1">
+            <button
+              ref={addQuestionRef}
+              type="button"
+              className={`${smallBtn} inline-flex items-center gap-1`}
+              aria-label={t('designer.outline.addQuestionLabel')}
+              aria-haspopup="menu"
+              aria-expanded={menu?.mode === 'question'}
+              onClick={() =>
+                setMenu((m) =>
+                  m?.mode === 'question'
+                    ? null
+                    : { mode: 'question', at: below(addQuestionRef.current) },
+                )
+              }
+            >
+              <span aria-hidden>+</span> {t('designer.outline.addQuestion')}
+            </button>
+            <button
+              ref={addStructureRef}
+              type="button"
+              className={`${smallBtn} inline-flex items-center gap-1`}
+              aria-label={t('designer.outline.addStructureLabel')}
+              aria-haspopup="menu"
+              aria-expanded={menu?.mode === 'structure'}
+              onClick={() =>
+                setMenu((m) =>
+                  m?.mode === 'structure'
+                    ? null
+                    : { mode: 'structure', at: below(addStructureRef.current) },
+                )
+              }
+            >
+              <span aria-hidden>+</span> {t('designer.outline.addStructure')}
+            </button>
+          </div>
         ) : null}
       </div>
-      {picker ? (
-        <div
-          ref={pickerRef}
-          role="group"
-          aria-label={t('designer.outline.pickType')}
-          className="absolute right-0 top-9 z-10 grid w-64 grid-cols-2 gap-1 rounded-md border border-slate-300 bg-white p-2 shadow-lg"
-          onKeyDown={(e) => {
-            const buttons = [...(pickerRef.current?.querySelectorAll('button') ?? [])];
-            const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              setPicker(false);
-              setFocusTick((n) => n + 1);
-            } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-              e.preventDefault();
-              buttons[(i + 1) % buttons.length]?.focus();
-            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-              e.preventDefault();
-              buttons[(i - 1 + buttons.length) % buttons.length]?.focus();
-            }
-          }}
-        >
-          {NEW_KINDS.map((k) => (
-            <button
-              key={kindKey(k)}
-              type="button"
-              className="rounded px-2 py-1 text-left text-sm hover:bg-indigo-50 focus:bg-indigo-50"
-              onClick={() => add(k)}
-            >
-              {t(kindKey(k))}
-            </button>
-          ))}
-          {onInsertFromLibrary ? (
-            <button
-              type="button"
-              className="col-span-2 rounded border-t border-slate-200 px-2 py-1 text-left text-sm font-medium hover:bg-indigo-50 focus:bg-indigo-50"
-              onClick={() => {
-                setPicker(false);
-                const { after, inside } = target();
-                onInsertFromLibrary(after, inside);
-              }}
-            >
-              {t('designer.library.insert')}
-            </button>
-          ) : null}
-        </div>
+      {menu ? (
+        <Menu
+          label={
+            menu.mode === 'row'
+              ? t('designer.outline.menu', { name: selectedNode ? nodeName(selectedNode) : '' })
+              : menu.mode === 'question'
+                ? t('designer.outline.addQuestionLabel')
+                : t('designer.outline.addStructureLabel')
+          }
+          entries={
+            menu.mode === 'question'
+              ? [...questionMenu(t, (type) => add({ kind: 'question', type })), ...libraryEntry]
+              : menu.mode === 'structure'
+                ? structureMenu(t, add)
+                : rowEntries
+          }
+          at={menu.at}
+          onClose={closeMenu}
+        />
       ) : null}
       <div
         className="relative lg:pl-[var(--gutter)]"
@@ -448,6 +546,11 @@ export function Outline({
                 style={{ paddingLeft: `${0.5 + depth * 1.1}rem` }}
                 onClick={() => go(node.id)}
                 onFocus={() => selected !== node.id && onSelect(node.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  go(node.id);
+                  setMenu({ mode: 'row', at: { x: e.clientX, y: e.clientY } });
+                }}
                 draggable={!readOnly}
                 title={readOnly ? undefined : t('designer.outline.drag', { name: nodeName(node) })}
                 data-drop={dropAt?.id === node.id ? dropAt.zone : undefined}
@@ -483,8 +586,8 @@ export function Outline({
                 ) : (
                   <span aria-hidden className="w-3" />
                 )}
-                <span aria-hidden className="w-6 shrink-0 text-center text-xs text-slate-600">
-                  {badge(node)}
+                <span aria-hidden className="flex w-6 shrink-0 justify-center text-slate-600">
+                  <KindIcon k={iconKeyOf(node)} className="size-3.5" />
                 </span>
                 <span className={`shrink-0 font-mono ${isSection(node) ? 'font-semibold' : ''}`}>
                   {nodeName(node)}

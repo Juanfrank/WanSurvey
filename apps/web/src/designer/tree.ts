@@ -219,6 +219,20 @@ export function duplicate(draft: Draft, id: string): { draft: Draft; newId: stri
   return { draft: next, newId };
 }
 
+/** The variable-name root of a section: its `prefix`, or its id without `SEC_`/`SECTION_`. */
+export function sectionRoot(section: Section): string {
+  if (section.prefix) return section.prefix;
+  const bare = section.id.replace(/^(SEC|SECTION|SECCION)_?/i, '');
+  return /^[A-Za-z]/.test(bare) ? bare : `S${bare}`;
+}
+
+/** The section that holds `id` (itself when it is a section). */
+export function sectionOf(draft: Draft, id: string): Section | null {
+  let at = locate(draft, id);
+  while (at && at.parentId !== null) at = locate(draft, at.parentId);
+  return at && isSection(at.node) ? at.node : null;
+}
+
 export type NewKind =
   | { kind: 'question'; type: QuestionType }
   | { kind: 'static' }
@@ -232,7 +246,7 @@ function text(draft: Draft, s: string): LocalizedText {
   return Object.fromEntries((draft.languages ?? ['en']).map((l) => [l, s]));
 }
 
-export function newNode(draft: Draft, what: NewKind, used: Set<string>): TreeNode {
+export function newNode(draft: Draft, what: NewKind, used: Set<string>, root = 'Q'): TreeNode {
   const name = (base: string) => {
     const n = freshName(used, base);
     used.add(n);
@@ -242,7 +256,8 @@ export function newNode(draft: Draft, what: NewKind, used: Set<string>): TreeNod
     case 'section':
       return { id: name('SEC_1'), title: text(draft, ''), items: [] };
     case 'question': {
-      const id = name('Q1');
+      // A1, A2… after a root that ends in a letter; S1_1, S1_2… after one that ends in a digit.
+      const id = name(/\d$/.test(root) ? `${root}_1` : `${root}1`);
       const q: ContainerItem = {
         kind: 'question',
         id,
@@ -296,7 +311,9 @@ export function insert(
   let newId = '';
   const next = edit(draft, (d) => {
     const used = usedNames(d);
-    const node = newNode(d, what, used);
+    // New questions are named after the root of the section they land in (A1, A2… in SEC_A).
+    const host = afterId ? sectionOf(d, afterId) : d.sections[d.sections.length - 1];
+    const node = newNode(d, what, used, host ? sectionRoot(host) : 'Q');
     newId = node.id;
     if (what.kind === 'section') {
       let sectionIndex = d.sections.length - 1;

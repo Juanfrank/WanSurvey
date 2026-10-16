@@ -65,30 +65,30 @@ describe('mergeDrafts', () => {
 
   it('combines additions, deletions and moves on both sides', () => {
     const b = base();
-    let mine = insert(b, 'A', { kind: 'question', type: 'numeric' }).draft; // Q1 after A
+    let mine = insert(b, 'A', { kind: 'question', type: 'numeric' }).draft; // S1_1 after A
     mine = moveTo(mine, 'E', 'S1', 0); // E to the top of S1
     let theirs = remove(b, 'B');
     theirs = move(theirs, 'D', -1); // D before BL
     theirs = { ...theirs, title: { en: 'Renamed' } };
     const r = mergeDrafts(b, mine, theirs);
     expect(r.conflicts).toEqual([]);
-    expect(ids(r.draft)).toEqual(['S1', 'E', 'A', 'Q1', 'D', 'BL', 'C', 'S2']);
+    expect(ids(r.draft)).toEqual(['S1', 'E', 'A', 'S1_1', 'D', 'BL', 'C', 'S2']);
     expect(r.draft!.title.en).toBe('Renamed');
   });
 
   it('gives a fresh id to an item both added under the same id', () => {
     const b = base();
-    const mine = setText(insert(b, 'A', { kind: 'question', type: 'text' }).draft, 'Q1', 'mine');
+    const mine = setText(insert(b, 'A', { kind: 'question', type: 'text' }).draft, 'S1_1', 'mine');
     const theirs = setText(
       insert(b, 'D', { kind: 'question', type: 'text' }).draft,
-      'Q1',
+      'S1_1',
       'theirs',
     );
     const r = mergeDrafts(b, mine, theirs);
     expect(r.conflicts).toEqual([]);
-    expect(ids(r.draft)).toEqual(['S1', 'A', 'Q2', 'B', 'BL', 'C', 'D', 'Q1', 'S2', 'E']);
-    expect(text(r.draft!, 'Q1')).toBe('theirs');
-    expect(text(r.draft!, 'Q2')).toBe('mine');
+    expect(ids(r.draft)).toEqual(['S1', 'A', 'S1_2', 'B', 'BL', 'C', 'D', 'S1_1', 'S2', 'E']);
+    expect(text(r.draft!, 'S1_1')).toBe('theirs');
+    expect(text(r.draft!, 'S1_2')).toBe('mine');
   });
 
   it('reports the same item changed differently, or edited where the other side deleted it', () => {

@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toLiteral } from './ConditionBuilder.js';
 import { inputCls, smallBtn, useShownLanguages } from './fields.js';
+import { PipeField } from './PipeAssist.js';
 
 type Row = { code: Code; label: LocalizedText } & Partial<
   Pick<AnswerOption, 'exclusive' | 'otherSpecify' | 'fixedPosition'>
@@ -116,8 +117,7 @@ export function OptionsEditor({
                 </td>
                 {shown.map((l, li) => (
                   <td key={l} className="py-1 pr-2">
-                    <input
-                      type="text"
+                    <PipeField
                       className={inputCls}
                       aria-label={t('designer.opt.labelN', { n: i + 1, lang: l })}
                       value={r.label[l] ?? ''}

@@ -117,8 +117,9 @@ describe('tree edits', () => {
   it('inserts with fresh names, duplicates and removes', () => {
     const d = draft();
     const r = insert(d, 'A', { kind: 'question', type: 'single' });
-    expect(r.newId).toBe('Q1');
-    expect(ids(r.draft).indexOf('Q1')).toBe(ids(r.draft).indexOf('A') + 1);
+    // Named after the section's root (S1 → S1_1).
+    expect(r.newId).toBe('S1_1');
+    expect(ids(r.draft).indexOf('S1_1')).toBe(ids(r.draft).indexOf('A') + 1);
     const inside = insert(d, 'BL', { kind: 'static' }, { inside: true });
     expect(locate(inside.draft, inside.newId)!.parentId).toBe('BL');
     const dup = duplicate(d, 'B');
@@ -229,8 +230,8 @@ describe('outline', () => {
     expect(ids(changes.at(-1)!)).not.toContain('B');
 
     await user.keyboard('{Insert}');
-    const picker = screen.getByRole('group', { name: 'Choose what to add' });
-    expect(document.activeElement?.textContent).toBe('Single choice');
+    const picker = screen.getByRole('menu', { name: 'Add a question' });
+    expect(document.activeElement?.textContent).toContain('Single choice');
     await user.keyboard('{ArrowDown}{Enter}');
     expect(picker.isConnected).toBe(false);
     const added = flatten(changes.at(-1)!).find((x) => 'type' in x.node && x.node.type === 'multi');

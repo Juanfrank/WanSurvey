@@ -126,7 +126,18 @@ export function InsertFromLibraryDialog({
   onInsert(next: Draft, newId: string, message: string): void;
 }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const removeItem = useMutation({
+    mutationFn: (item: LibraryItem) => api(`/library/${item.id}`, { method: 'DELETE' }),
+    onSuccess: async (_r, item) => {
+      setChosen(null);
+      setStatus(t('designer.library.removed', { name: item.name }));
+      await qc.invalidateQueries({ queryKey: ['library'] });
+    },
+    onError: (e) => setStatus(localiseError(t, e)),
+  });
   const [term, setTerm] = useState('');
   const [tag, setTag] = useState('');
   const [chosen, setChosen] = useState<string | null>(null);
@@ -237,10 +248,21 @@ export function InsertFromLibraryDialog({
                     </li>
                   ))}
                 </ul>
-                <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <Button type="button" onClick={() => insert(pick)}>
                     {t('designer.library.insertThis', { name: pick.name })}
                   </Button>
+                  <button
+                    type="button"
+                    className={`${smallBtn} text-red-ink-800`}
+                    disabled={removeItem.isPending}
+                    onClick={() => {
+                      if (window.confirm(t('designer.library.confirmRemove', { name: pick.name })))
+                        removeItem.mutate(pick);
+                    }}
+                  >
+                    {t('designer.library.remove')}
+                  </button>
                 </div>
               </section>
             ) : null}
@@ -248,6 +270,9 @@ export function InsertFromLibraryDialog({
         ) : (
           <p className="text-slate-600">{t('designer.library.empty')}</p>
         )}
+        <p role="status" aria-live="polite" className="text-slate-700 empty:hidden">
+          {status}
+        </p>
         <div className="flex justify-end">
           <button type="button" className={smallBtn} onClick={onClose}>
             {t('designer.library.cancel')}

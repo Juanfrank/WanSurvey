@@ -32,19 +32,23 @@ async function newQuestionnaire(page: Page, name: string, untick: string[] = [])
   return page.url();
 }
 
-/** Adds an item after the focused outline row with the keyboard: Insert, arrows, Enter. */
+/**
+ * Adds a question after the focused outline row with the keyboard: Insert opens the grouped
+ * menu (single, multi, yes/no, ranking, scale, grid, text, number, date, time, date and time).
+ */
 async function addWithKeyboard(page: Page, steps: number) {
   await page.keyboard.press('Insert');
-  await expect(page.getByRole('group', { name: 'Choose what to add' })).toBeVisible();
+  await expect(page.getByRole('menu', { name: 'Add a question' })).toBeVisible();
   for (let i = 0; i < steps; i++) await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
 }
 
+/** Renames with F2; names in SEC_A keep the section root "A" in front of what is typed. */
 async function rename(page: Page, name: string) {
   await page.keyboard.press('F2');
   const field = page.getByLabel('Variable name');
   await expect(field).toBeFocused();
-  await field.fill(name);
+  await field.fill(name.replace(/^A/, ''));
   await page.keyboard.press('Enter');
   await expect(outlineItem(page, name)).toBeVisible();
 }
@@ -58,19 +62,37 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   const section = outlineItem(page, 'SEC_A');
   await section.focus();
   await addWithKeyboard(page, 0); // Single choice, inside the section
-  await expect(outlineItem(page, 'Q1')).toBeFocused();
-  await rename(page, 'WORK');
+  await expect(outlineItem(page, 'A1')).toBeFocused();
+  await rename(page, 'A_WORK');
   await page.getByLabel('Question wording (es)').fill('¿Trabaja?');
   await page.getByLabel('Label of option 1 (es)').fill('Sí');
   await page.getByLabel('Label of option 2 (es)').fill('No');
 
-  await outlineItem(page, 'WORK').focus();
-  await addWithKeyboard(page, 2); // Number
-  await rename(page, 'HOURS');
+  await outlineItem(page, 'A_WORK').focus();
+  await addWithKeyboard(page, 7); // Number
+  await rename(page, 'A_HOURS');
   await page.getByLabel('Question wording (es)').fill('¿Cuántas horas por semana?');
+  // Typing {{ lists the variables to pipe in; Enter inserts the chosen one.
+  const wording = page.getByLabel('Question wording (es)');
+  await wording.press('End');
+  await wording.pressSequentially(' ({{WO');
+  await expect(page.getByTestId('pipe-assist')).toContainText('A_WORK');
+  await page.keyboard.press('Enter');
+  await expect(wording).toHaveValue('¿Cuántas horas por semana? ({{A_WORK}}');
+  await wording.fill('¿Cuántas horas por semana?');
+  // The type picker groups the types, with the current one checked.
+  await page.getByTestId('type-picker').click();
+  const types = page.getByRole('menu', { name: 'Question type' });
+  await expect(types.getByRole('group', { name: 'Open answers' })).toBeVisible();
+  await expect(types.getByRole('menuitemradio', { name: /Number/ })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await page.keyboard.press('Escape');
+  await expect(types).toBeHidden();
 
-  // Skip HOURS when WORK is No, built with the condition rows.
-  await outlineItem(page, 'WORK').click();
+  // Skip A_HOURS when A_WORK is No, built with the condition rows.
+  await outlineItem(page, 'A_WORK').click();
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Add skip' }).click();
   await page.getByLabel('Condition 1: value', { exact: true }).first().selectOption('2');
@@ -81,19 +103,19 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expectAccessible(page);
 
   // Reordering with Alt+arrows and undo.
-  await outlineItem(page, 'HOURS').focus();
+  await outlineItem(page, 'A_HOURS').focus();
   await page.keyboard.press('Alt+ArrowUp');
-  await expect(page.getByRole('treeitem').nth(2)).toContainText('HOURS');
+  await expect(page.getByRole('treeitem').nth(2)).toContainText('A_HOURS');
   await page.keyboard.press('Control+z');
-  await expect(page.getByRole('treeitem').nth(2)).toContainText('WORK');
+  await expect(page.getByRole('treeitem').nth(2)).toContainText('A_WORK');
 
-  // Preview: WORK = No ends the interview without HOURS.
+  // Preview: A_WORK = No ends the interview without A_HOURS.
   await page.getByRole('tab', { name: 'Preview' }).click();
-  await page.locator('[data-qkey="WORK"]').focus();
+  await page.locator('[data-qkey="A_WORK"]').focus();
   await page.keyboard.type('2');
   await page.keyboard.press('Enter');
   await expect(page.getByText('The interview is complete. Thank you.')).toBeVisible();
-  await expect(page.getByTestId('tracer').locator('[data-key="HOURS"]')).toHaveAttribute(
+  await expect(page.getByTestId('tracer').locator('[data-key="A_HOURS"]')).toHaveAttribute(
     'data-status',
     'skipped',
   );
@@ -110,7 +132,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
 
   // Change code 2 to 3: v2 needs a mapping for the old answers.
   await page.getByRole('tab', { name: 'Design' }).click();
-  await outlineItem(page, 'WORK').click();
+  await outlineItem(page, 'A_WORK').click();
   await page.getByLabel('Code of option 2').fill('3');
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByLabel('Condition 1: value', { exact: true }).first().selectOption('3');
@@ -128,21 +150,21 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await dialog.getByRole('button', { name: 'Publish version 2' }).click();
   await expect(page.getByTestId('versions').locator('[data-version="2"]')).toContainText('Yes');
 
-  // Compare: the draft equals v2; v1 differs in WORK's codes.
+  // Compare: the draft equals v2; v1 differs in A_WORK's codes.
   const compare = page.getByTestId('compare');
   await expect(compare.getByTestId('compare-summary')).toHaveText('No differences.');
   await compare.getByLabel('Compare').selectOption({ label: 'v1' });
-  await expect(compare.locator('[data-compare-item="WORK"]')).toContainText('Edited');
-  await expect(compare.locator('[data-compare-item="WORK"]')).toContainText('options[3].code');
+  await expect(compare.locator('[data-compare-item="A_WORK"]')).toContainText('Edited');
+  await expect(compare.locator('[data-compare-item="A_WORK"]')).toContainText('options[3].code');
   await shot(page, 'designer-compare');
   await expectAccessible(page);
 
-  // Drag HOURS above WORK in the outline; the comparison with v2 shows the move.
+  // Drag A_HOURS above A_WORK in the outline; the comparison with v2 shows the move.
   await page.getByRole('tab', { name: 'Design' }).click();
-  await outlineItem(page, 'HOURS').dragTo(outlineItem(page, 'WORK'), {
+  await outlineItem(page, 'A_HOURS').dragTo(outlineItem(page, 'A_WORK'), {
     targetPosition: { x: 20, y: 2 },
   });
-  await expect(page.getByRole('treeitem').nth(2)).toContainText('HOURS');
+  await expect(page.getByRole('treeitem').nth(2)).toContainText('A_HOURS');
   await saved(page);
   await page.getByRole('tab', { name: 'Versions' }).click();
   await compare.getByLabel('Compare').selectOption({ label: 'v2' });
@@ -158,7 +180,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
     page.getByRole('button', { name: 'Export all texts (CSV)' }).click(),
   ]);
   const csv = readFileSync((await csvFile.path())!, 'utf8');
-  expect(csv).toContain('WORK.text');
+  expect(csv).toContain('A_WORK.text');
   await page.getByLabel('Import translations (.csv or .xlf)').setInputFiles({
     name: 'texts.csv',
     mimeType: 'text/csv',
@@ -171,7 +193,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expectAccessible(page);
   await page.getByRole('button', { name: 'Apply 1 change' }).click();
   await expect(page.getByText(/1 text updated/)).toBeVisible();
-  await outlineItem(page, 'WORK').click();
+  await outlineItem(page, 'A_WORK').click();
   await expect(page.getByLabel('Question wording (es)')).toHaveValue('¿Trabaja usted?');
   await saved(page);
 
@@ -181,7 +203,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await newLang.fill('en');
   await newLang.locator('xpath=following::button[1]').click();
   await page.getByLabel('Questionnaire language').selectOption('en');
-  await outlineItem(page, 'WORK').click();
+  await outlineItem(page, 'A_WORK').click();
   await expect(page.getByLabel('Question wording (es)')).toHaveCount(0);
   await page.getByLabel('Question wording (en)').fill('Do you work?');
   await page.getByLabel('Label of option 1 (en)').fill('Yes');
@@ -254,20 +276,20 @@ test('the outline collapses to a rail whose pane opens over the editor, and pins
 test('a failing saved scenario blocks publishing', async ({ page }) => {
   await newQuestionnaire(page, 'Scenario guard');
   await outlineItem(page, 'SEC_A').focus();
-  await addWithKeyboard(page, 10); // Yes / No
+  await addWithKeyboard(page, 2); // Yes / No
   await page.getByLabel('Question wording (es)').fill('¿Adulto?');
-  await outlineItem(page, 'Q1').focus();
-  await addWithKeyboard(page, 3); // Text
+  await outlineItem(page, 'A1').focus();
+  await addWithKeyboard(page, 6); // Text
   await page.getByLabel('Question wording (es)').fill('¿Nombre?');
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Add condition' }).first().click();
-  await page.getByLabel('Condition 1: variable', { exact: true }).first().fill('Q1');
+  await page.getByLabel('Condition 1: variable', { exact: true }).first().fill('A1');
   await page.getByLabel('Condition 1: value', { exact: true }).first().selectOption('1');
   await saved(page);
 
   // Save a run where "No" skips the name.
   await page.getByRole('tab', { name: 'Preview' }).click();
-  await page.locator('[data-qkey="Q1"]').focus();
+  await page.locator('[data-qkey="A1"]').focus();
   await page.keyboard.type('2');
   await page.keyboard.press('Enter');
   await expect(page.getByText('The interview is complete. Thank you.')).toBeVisible();
@@ -277,7 +299,7 @@ test('a failing saved scenario blocks publishing', async ({ page }) => {
 
   // Remove the show-if: the scenario now fails and publishing is blocked.
   await page.getByRole('tab', { name: 'Design' }).click();
-  await outlineItem(page, 'Q2').click();
+  await outlineItem(page, 'A2').click();
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Remove condition 1' }).first().click();
   await saved(page);
@@ -346,7 +368,7 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   const url = await newQuestionnaire(pm, 'Review round');
   await outlineItem(pm, 'SEC_A').focus();
   await addWithKeyboard(pm, 0); // Single choice
-  await rename(pm, 'CONSENT');
+  await rename(pm, 'A_CONSENT');
   await pm.getByLabel('Question wording (es)').fill('¿Acepta participar?');
   await saved(pm);
 
@@ -355,9 +377,9 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await login(sup, 'supervisor@demo.wansurvey.test');
   await sup.waitForURL((u) => !u.pathname.startsWith('/login'));
   await sup.goto(url);
-  await outlineItem(sup, 'CONSENT').click();
+  await outlineItem(sup, 'A_CONSENT').click();
   await expect(pm.getByTestId('presence')).toContainText('Demo supervisor', { timeout: 15_000 });
-  await expect(outlineItem(pm, 'CONSENT').getByTestId('presence-marker')).toBeVisible();
+  await expect(outlineItem(pm, 'A_CONSENT').getByTestId('presence-marker')).toBeVisible();
 
   // The supervisor cannot edit but can comment.
   await expect(sup.getByLabel('Question wording (es)')).toBeDisabled();
@@ -368,8 +390,8 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await expectAccessible(sup);
 
   await pm.reload();
-  await expect(outlineItem(pm, 'CONSENT').getByTestId('comment-badge')).toContainText('1');
-  await outlineItem(pm, 'CONSENT').click();
+  await expect(outlineItem(pm, 'A_CONSENT').getByTestId('comment-badge')).toContainText('1');
+  await outlineItem(pm, 'A_CONSENT').click();
   const thread = pm.getByTestId('comments').locator('[data-thread]');
   await thread.getByRole('button', { name: 'Reply' }).click();
   await thread.getByLabel(/Reply to/).fill('Done.');
@@ -377,18 +399,20 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await expect(thread).toContainText('Done.');
   await shot(pm, 'designer-comments');
   await thread.getByRole('button', { name: 'Resolve' }).click();
-  await expect(outlineItem(pm, 'CONSENT').getByTestId('comment-badge')).toHaveCount(0);
+  await expect(outlineItem(pm, 'A_CONSENT').getByTestId('comment-badge')).toHaveCount(0);
 
   // Save the question to the library, then insert it again: it gets a fresh name.
   await pm.getByRole('button', { name: 'Save to library' }).click();
-  const save = pm.getByRole('dialog', { name: /Save CONSENT to the question library/ });
+  const save = pm.getByRole('dialog', { name: /Save A_CONSENT to the question library/ });
   await save.getByLabel('Name').fill('Consent question');
   await save.getByLabel('Tags (comma separated)').fill('consent, core');
   await save.getByRole('button', { name: 'Save to library' }).click();
   await expect(pm.getByTestId('presence')).toContainText('Saved to the library.');
-  await outlineItem(pm, 'CONSENT').focus();
-  await pm.keyboard.press('Insert');
-  await pm.getByRole('button', { name: 'From the library…' }).click();
+  // The row's context menu (right click) offers the library too.
+  await outlineItem(pm, 'A_CONSENT').click({ button: 'right' });
+  const rowMenu = pm.getByRole('menu', { name: 'Actions for A_CONSENT' });
+  await expect(rowMenu.getByRole('menuitem', { name: /Duplicate/ })).toBeVisible();
+  await rowMenu.getByRole('menuitem', { name: /From the library/ }).click();
   const lib = pm.getByRole('dialog', { name: 'Insert from the question library' });
   await lib.getByLabel('Search the library').fill('Consent');
   await lib
@@ -399,9 +423,19 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await shot(pm, 'designer-library');
   await expectAccessible(pm, 'dialog');
   await lib.getByRole('button', { name: 'Insert Consent question' }).click();
-  await expect(outlineItem(pm, 'CONSENT_2')).toBeVisible();
-  await expect(pm.getByTestId('presence')).toContainText('CONSENT → CONSENT_2');
+  await expect(outlineItem(pm, 'A_CONSENT_2')).toBeVisible();
+  await expect(pm.getByTestId('presence')).toContainText('A_CONSENT → A_CONSENT_2');
   await saved(pm);
+
+  // Entries can be removed from the library; questionnaires keep their copy.
+  await outlineItem(pm, 'A_CONSENT_2').click({ button: 'right' });
+  await pm.getByRole('menuitem', { name: /From the library/ }).click();
+  await lib.getByLabel('Search the library').fill('Consent question');
+  await expect(lib.getByTestId('library-preview')).toContainText('Consent question');
+  pm.once('dialog', (d) => void d.accept());
+  await lib.getByRole('button', { name: 'Remove from library' }).click();
+  await expect(lib.getByRole('status')).toContainText('Removed Consent question from the library.');
+  await expect(outlineItem(pm, 'A_CONSENT_2')).toBeVisible();
 });
 
 test('the routing map, outline arcs and nested condition builder on the household survey', async ({

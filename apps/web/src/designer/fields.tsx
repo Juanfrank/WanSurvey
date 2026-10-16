@@ -1,4 +1,5 @@
 import type { LocalizedText } from '@wansurvey/schema';
+import { PipeField } from './PipeAssist.js';
 import { createContext, useContext, useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -301,7 +302,7 @@ export function LocalizedField({
               >
                 {lang}
               </span>
-              {multiline ? <textarea rows={2} {...props} /> : <input type="text" {...props} />}
+              <PipeField multiline={multiline} {...props} />
             </div>
           );
         })}

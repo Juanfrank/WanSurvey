@@ -1,6 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import {
-  QUESTION_TYPES,
   type Block,
   type Computed,
   type ContainerItem,
@@ -10,7 +9,7 @@ import {
   type Section,
   type StaticText,
 } from '@wansurvey/schema';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConditionBuilder } from './ConditionBuilder.js';
 import {
@@ -24,12 +23,16 @@ import {
   TextField,
 } from './fields.js';
 import { ExpressionField, LogicEditor } from './LogicEditor.js';
+import { KindIcon, questionMenu } from './kinds.js';
+import { below, Menu } from './Menu.js';
 import { PIPE_EXAMPLES } from './i18n.js';
 import { OptionsEditor } from './OptionsEditor.js';
 import {
   isSection,
   locate,
   renameVariable,
+  sectionOf,
+  sectionRoot,
   updateNode,
   usedNames,
   type Draft,
@@ -83,7 +86,6 @@ export function ItemEditor(props: EditorProps) {
     case 'pagebreak':
       return (
         <div className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">{t('designer.kind.pagebreak')}</h2>
           <Hint>{t('designer.pagebreakHelp')}</Hint>
           <NameField {...props} node={node} />
         </div>
@@ -93,7 +95,11 @@ export function ItemEditor(props: EditorProps) {
 
 type Patch = <T extends TreeNode>(p: Partial<T>, coalesce?: string) => void;
 
-/** Variable name (or id): checked for format and clashes; renaming updates every reference. */
+/**
+ * Variable name (or id): checked for format and clashes; renaming updates every reference.
+ * Variables start with the root of their section (A in SEC_A), shown fixed before the part
+ * that can be edited; together they are the name.
+ */
 function NameField({
   draft,
   id,
@@ -104,6 +110,7 @@ function NameField({
 }: EditorProps & { node: TreeNode }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
+  const inputId = useId();
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setError(null), [id]);
   // Focus only when F2 is pressed after this editor opened, not when it mounts.
@@ -114,48 +121,167 @@ function NameField({
   const hasName = 'name' in node && typeof node.name === 'string';
   const current = hasName ? (node as { name: string }).name : node.id;
   const label = hasName ? t('designer.variableName') : t('designer.itemId');
+  const section = hasName && !isSection(node) ? sectionOf(draft, id) : null;
+  const root = section ? sectionRoot(section) : '';
+  const rooted = !root || current.startsWith(root);
+  const suffix = root && rooted ? current.slice(root.length) : current;
+
+  const commit = (typed: string) => {
+    const name = `${root}${typed.trim()}`;
+    if (name === current) return setError(null);
+    if (!NAME_RE.test(name)) {
+      setError(t('designer.badName'));
+      return;
+    }
+    const used = usedNames(draft);
+    used.delete(current);
+    used.delete(node.id);
+    if (used.has(name)) {
+      setError(t('designer.nameTaken', { name }));
+      return;
+    }
+    setError(null);
+    if (hasName) {
+      const next = renameVariable(draft, id, name);
+      change(next);
+      if (!locate(next, id)) select(name);
+    } else {
+      change(updateNode(draft, id, (n) => ({ ...n, id: name })));
+      select(name);
+    }
+  };
+
+  if (!root)
+    return (
+      <div ref={ref}>
+        <TextField
+          label={label}
+          mono
+          value={current}
+          hint={hasName ? t('designer.renameHelp') : undefined}
+          error={error}
+          onCommit={commit}
+        />
+      </div>
+    );
   return (
-    <div ref={ref}>
-      <TextField
-        label={label}
-        mono
-        value={current}
-        hint={hasName ? t('designer.renameHelp') : undefined}
-        error={error}
-        onCommit={(next) => {
-          const name = next.trim();
-          if (!NAME_RE.test(name)) {
-            setError(t('designer.badName'));
-            return;
-          }
-          const used = usedNames(draft);
-          used.delete(current);
-          used.delete(node.id);
-          if (used.has(name)) {
-            setError(t('designer.nameTaken', { name }));
-            return;
-          }
-          setError(null);
-          if (hasName) {
-            const next = renameVariable(draft, id, name);
-            change(next);
-            if (!locate(next, id)) select(name);
-          } else {
-            change(updateNode(draft, id, (n) => ({ ...n, id: name })));
-            select(name);
-          }
-        }}
-      />
+    <div ref={ref} className="flex flex-col gap-1">
+      <label htmlFor={inputId} className="text-sm font-medium text-slate-700">
+        {label}
+      </label>
+      <div className="flex items-stretch">
+        <span
+          className="flex items-center rounded-l-md border border-r-0 border-slate-300 bg-slate-100 px-2.5 font-mono text-sm text-slate-700"
+          title={t('designer.rootFixed', { root, section: section!.id })}
+          data-testid="name-root"
+        >
+          {root}
+        </span>
+        <SuffixInput
+          id={inputId}
+          value={suffix}
+          invalid={!!error}
+          describedBy={`${inputId}-hint${error ? ` ${inputId}-err` : ''}`}
+          onCommit={commit}
+        />
+      </div>
+      <p id={`${inputId}-hint`} className="text-xs text-slate-600">
+        {t('designer.rootHelp', { root, section: section!.id })}{' '}
+        {!rooted ? t('designer.rootMissing', { root }) : ''} {t('designer.renameHelp')}
+      </p>
+      {error ? (
+        <p id={`${inputId}-err`} className="text-sm text-red-ink-800">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-function Heading({ kind, name }: { kind: string; name: string }) {
+function SuffixInput({
+  id,
+  value,
+  invalid,
+  describedBy,
+  onCommit,
+}: {
+  id: string;
+  value: string;
+  invalid: boolean;
+  describedBy: string;
+  onCommit(v: string): void;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => setLocal(value), [value]);
   return (
-    <h2 className="flex items-baseline gap-2 text-lg font-semibold">
-      <span>{kind}</span>
-      <span className="font-mono text-base text-slate-500">{name}</span>
-    </h2>
+    <input
+      id={id}
+      className="min-w-0 flex-1 rounded-r-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 aria-[invalid=true]:border-red-600"
+      value={local}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
+      autoComplete="off"
+      spellCheck={false}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => onCommit(local)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          onCommit(local);
+        }
+      }}
+    />
+  );
+}
+
+/** The question type as a menu button: the same grouped list, with icons, as the add button. */
+function TypePicker({ value, onChange }: { value: QuestionType; onChange(t: QuestionType): void }) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1">
+      <span id={id} className="text-sm font-medium text-slate-700">
+        {t('designer.questionType')}
+      </span>
+      <button
+        ref={ref}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-labelledby={`${id} ${id}-v`}
+        className="flex w-full items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-left text-sm hover:border-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60"
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        data-testid="type-picker"
+      >
+        <KindIcon k={value} />
+        <span id={`${id}-v`} className="flex-1">
+          {t(`designer.type.${value}`)}
+        </span>
+        <span aria-hidden className="text-slate-500">
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <Menu
+          label={t('designer.questionType')}
+          entries={questionMenu(t, onChange, value)}
+          at={below(ref.current)}
+          minWidth={Math.max(240, ref.current?.offsetWidth ?? 0)}
+          onClose={() => {
+            setOpen(false);
+            ref.current?.focus();
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -177,13 +303,23 @@ function SectionEditor(props: EditorProps & { node: Section; patch: Patch }) {
   const langs = props.draft.languages;
   return (
     <div className="flex flex-col gap-4">
-      <Heading kind={t('designer.kind.section')} name={props.node.id} />
       <NameField {...props} node={props.node} />
       <LocalizedField
         label={t('designer.title')}
         value={props.node.title}
         languages={langs}
         onChange={(title) => props.patch<Section>({ title: title ?? {} }, 'title')}
+      />
+      <TextField
+        label={t('designer.sectionRoot')}
+        mono
+        value={sectionRoot(props.node)}
+        hint={t('designer.sectionRootHelp')}
+        onCommit={(v) => {
+          const prefix = v.trim();
+          if (prefix && !/^[A-Za-z][A-Za-z0-9_]{0,15}$/.test(prefix)) return;
+          props.patch<Section>({ prefix: prefix || undefined });
+        }}
       />
       <ShowIf {...props} value={props.node.showIf} />
     </div>
@@ -194,7 +330,6 @@ function BlockEditor(props: EditorProps & { node: Block; patch: Patch }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
-      <Heading kind={t('designer.kind.block')} name={props.node.id} />
       <Hint>{t('designer.blockHelp')}</Hint>
       <NameField {...props} node={props.node} />
       <LocalizedField
@@ -215,7 +350,6 @@ function RosterEditor(props: EditorProps & { node: Roster; patch: Patch }) {
   const max = c.type === 'fixed' ? undefined : c.max;
   return (
     <div className="flex flex-col gap-4">
-      <Heading kind={t('designer.kind.roster')} name={props.node.name} />
       <Hint>{t('designer.rosterHelp')}</Hint>
       <NameField {...props} node={props.node} />
       <LocalizedField
@@ -286,7 +420,6 @@ function ComputedEditor(props: EditorProps & { node: Computed; patch: Patch }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
-      <Heading kind={t('designer.kind.computed')} name={props.node.name} />
       <Hint>{t('designer.computedHelp')}</Hint>
       <NameField {...props} node={props.node} />
       <SelectField
@@ -315,7 +448,6 @@ function StaticEditor(props: EditorProps & { node: StaticText; patch: Patch }) {
     <EditorTabs
       basics={
         <>
-          <Heading kind={t('designer.kind.static')} name={props.node.id} />
           <NameField {...props} node={props.node} />
           <SelectField
             label={t('designer.static.role')}
@@ -413,14 +545,8 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
 
   const basics = (
     <>
-      <Heading kind={t(`designer.type.${q.type}`)} name={q.name} />
       <NameField {...props} node={q} />
-      <SelectField
-        label={t('designer.questionType')}
-        value={q.type}
-        options={QUESTION_TYPES.map((x) => ({ value: x, label: t(`designer.type.${x}`) }))}
-        onChange={changeType}
-      />
+      <TypePicker value={q.type} onChange={changeType} />
       <LocalizedField
         label={t('designer.wording')}
         value={q.text}

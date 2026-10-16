@@ -311,6 +311,14 @@ export const RosterSchema: z.ZodType<Roster> = z.lazy(() =>
 export const Section = z.strictObject({
   id: ItemId,
   title: LocalizedText,
+  /**
+   * Root of the variable names in the section (e.g. `A` for A1, A2…). The designer keeps it at
+   * the start of every name it gives or edits there; without it, it comes from the id (`SEC_A` → `A`).
+   */
+  prefix: z
+    .string()
+    .regex(/^[A-Za-z][A-Za-z0-9_]{0,15}$/)
+    .optional(),
   showIf: Expression.optional(),
   items: z.array(ContainerItemSchema),
 });

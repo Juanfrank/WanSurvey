@@ -106,7 +106,6 @@ export function SettingsEditor({
 
   return (
     <div className="flex flex-col gap-8">
-      <h2 className="text-lg font-semibold">{t('designer.settings.title')}</h2>
       <Group title={t('designer.settings.general')}>
         <LocalizedField
           label={t('designer.title')}
