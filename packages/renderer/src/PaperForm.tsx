@@ -21,6 +21,8 @@ import { pick } from './text.js';
 export interface PaperFormProps {
   compiled: CompiledQuestionnaire;
   lang: string;
+  /** The form's id when printed for a case: it marks where each form starts and ends. */
+  formId?: string;
   /** The case the form is printed for, to fill its data into the texts. */
   context?: PaperContext;
 }
@@ -55,7 +57,7 @@ export function paperText(src: string, ctx: PaperContext = {}): string {
  * The questionnaire as a printable paper form (PAPI): numbered questions, codes beside
  * options, routing printed as instructions, rosters repeated.
  */
-export function PaperForm({ compiled, lang, context = {} }: PaperFormProps) {
+export function PaperForm({ compiled, lang, context = {}, formId }: PaperFormProps) {
   // Every text on the form, in its language and with its pipes made printable.
   const tx = (text: Parameters<typeof pick>[0], l: string) => {
     const v = pick(text, l);
@@ -395,7 +397,17 @@ export function PaperForm({ compiled, lang, context = {} }: PaperFormProps) {
             className="paper-question flex gap-3 break-inside-avoid"
             data-paper-q={numbers.get(node.id)}
           >
-            <span className="w-12 shrink-0 font-bold">{numbers.get(node.id)}</span>
+            {/* An anchor for scanners: a solid mark at each question, with its number and the
+                variable it fills, so every answer is read into the right place. */}
+            <span className="flex w-16 shrink-0 flex-col items-start gap-0.5">
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden className="paper-anchor inline-block h-3.5 w-2 bg-slate-950" />
+                <span className="font-bold">{numbers.get(node.id)}</span>
+              </span>
+              <span className="paper-var font-mono text-[9px] tracking-tight text-slate-700">
+                {def.name}
+              </span>
+            </span>
             <div className="flex flex-1 flex-col gap-2">
               {askIf(node)}
               <p className="font-medium">{paperText(text, context)}</p>
@@ -409,15 +421,17 @@ export function PaperForm({ compiled, lang, context = {} }: PaperFormProps) {
                     !(kind === 'DK' && def.allowDK === false) &&
                     !(kind === 'RF' && def.allowRefused === false),
                 );
+                // Special answers are filled like any answer: a circle, in the same column.
                 return offered.length ? (
-                  <p className="flex gap-4 text-sm">
+                  <ul className="paper-special ml-4 flex flex-wrap gap-x-6 gap-y-1 text-sm">
                     {offered.map(([kind, cfg]) => (
-                      <span key={kind}>
-                        <span className="font-mono font-semibold">{cfg.code}</span>{' '}
-                        {tx(cfg.label, lang)}
-                      </span>
+                      <li key={kind} className="flex items-center gap-3" data-special={kind}>
+                        {bubble(`${cfg.code} ${tx(cfg.label, lang) ?? ''}`)}
+                        <span className="w-8 text-right font-mono font-semibold">{cfg.code}</span>
+                        <span>{tx(cfg.label, lang)}</span>
+                      </li>
                     ))}
-                  </p>
+                  </ul>
                 ) : null;
               })()}
               {routing(node)}
@@ -498,6 +512,16 @@ export function PaperForm({ compiled, lang, context = {} }: PaperFormProps) {
   return (
     <article className="paper relative mx-auto flex max-w-3xl flex-col gap-6 bg-white p-8 font-serif text-slate-900 print:p-0">
       {marks}
+      {/* Start and end bands: a scanner fed a stack of forms splits it here. */}
+      <p
+        className="paper-band flex items-center justify-between bg-slate-950 px-3 py-1 font-mono text-xs font-bold tracking-widest text-white print:[-webkit-print-color-adjust:exact]"
+        data-band="start"
+      >
+        <span>{t('paper.formStart')}</span>
+        <span>
+          {formId ?? ''} · {q.id}
+        </span>
+      </p>
       <header>
         <h1 className="text-2xl font-bold">{tx(q.title, lang)}</h1>
         <p className="text-sm italic">{t('paper.interviewerCopy')}</p>
@@ -516,6 +540,15 @@ export function PaperForm({ compiled, lang, context = {} }: PaperFormProps) {
           {annex.map(gridTable)}
         </section>
       ) : null}
+      <p
+        className="paper-band flex items-center justify-between bg-slate-950 px-3 py-1 font-mono text-xs font-bold tracking-widest text-white print:[-webkit-print-color-adjust:exact]"
+        data-band="end"
+      >
+        <span>{t('paper.formEnd')}</span>
+        <span>
+          {formId ?? ''} · {q.id}
+        </span>
+      </p>
     </article>
   );
 }

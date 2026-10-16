@@ -100,8 +100,18 @@ export function PrintPage() {
           <PaperForm
             compiled={f.compiled}
             lang={lang}
+            formId={c.externalId}
             context={{ case: c.sample, respondent: respondentFromCase(c.sample) }}
           />
+          {/* The end of each form has the case's code too: a stack is split and matched. */}
+          <footer className="mt-4 flex items-center justify-end gap-3 text-sm">
+            <span className="font-mono">{c.externalId}</span>
+            <QrCode
+              value={`${c.externalId}#end`}
+              label={t('papi.print.qrEnd', { id: c.externalId })}
+              size={64}
+            />
+          </footer>
         </article>
       ))}
     </div>

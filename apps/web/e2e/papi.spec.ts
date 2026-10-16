@@ -97,7 +97,10 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     await pm.getByRole('button', { name: 'Prepare forms' }).click();
     const forms = pm.getByTestId('print').locator('article[data-case]');
     await expect(forms).toHaveCount(2);
-    await expect(forms.first().locator('[data-qr] svg')).toBeVisible();
+    // A QR code where the form starts and where it ends, so a scanned stack splits by case.
+    await expect(forms.first().locator('[data-qr] svg')).toHaveCount(2);
+    await expect(forms.first().locator('[data-band="start"]')).toContainText(/\w/);
+    await expect(forms.first().locator('[data-special]').first()).toBeVisible();
     await expect(forms.first()).toContainText('Q1');
     await shot(pm, 'paper-form-qr');
     await expectAccessible(pm);

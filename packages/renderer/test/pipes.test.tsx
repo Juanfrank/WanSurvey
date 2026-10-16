@@ -35,3 +35,18 @@ describe('dynamic fields', () => {
     );
   });
 });
+
+describe('paper for scanners', () => {
+  it('special answers are circles like the options; each question and form is marked', () => {
+    const compiled = compile(allTypes as never);
+    const html = renderToStaticMarkup(<PaperForm compiled={compiled} lang="es" formId="HH0001" />);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const q = doc.querySelector('[data-paper-q]')!;
+    expect(q.querySelector('.paper-anchor')).not.toBeNull();
+    expect(q.querySelector('.paper-var')?.textContent).toBe('Q_SINGLE');
+    expect(q.querySelector('[data-special="DK"] .paper-bubble')).not.toBeNull();
+    const bands = doc.querySelectorAll('[data-band]');
+    expect([...bands].map((b) => b.getAttribute('data-band'))).toEqual(['start', 'end']);
+    expect(bands[0]!.textContent).toContain('HH0001');
+  });
+});

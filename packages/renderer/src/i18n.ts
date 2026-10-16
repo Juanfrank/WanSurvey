@@ -101,6 +101,8 @@ const en = {
     phone: 'Enter a telephone number (digits, spaces, +, - or brackets)',
   },
   paper: {
+    formStart: 'START OF FORM',
+    formEnd: 'END OF FORM',
     askIf: 'Ask only if {{condition}}',
     ifGoTo: 'If {{condition}} → go to {{target}}',
     ifEnd: 'If {{condition}} → end the interview ({{disposition}})',
@@ -249,6 +251,8 @@ const es: Catalogue = {
     phone: 'Escriba un número de teléfono (dígitos, espacios, +, - o paréntesis)',
   },
   paper: {
+    formStart: 'INICIO DEL FORMULARIO',
+    formEnd: 'FIN DEL FORMULARIO',
     askIf: 'Pregunte solo si {{condition}}',
     ifGoTo: 'Si {{condition}} → pase a {{target}}',
     ifEnd: 'Si {{condition}} → termine la entrevista ({{disposition}})',
