@@ -85,3 +85,21 @@ export async function shot(page: Page, name: string, opts: { fullPage?: boolean 
     await page.waitForTimeout(150);
   }
 }
+
+/** Opens a questionnaire's action (web survey, paper forms) from the Questionnaires tab. */
+export async function questionnaireAction(
+  page: Page,
+  action: 'Web survey' | 'Paper forms',
+  name = 'Household questionnaire',
+) {
+  await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
+  await page.getByRole('button', { name: `Actions for ${name}` }).click();
+  await page.getByRole('menuitem', { name: action }).click();
+}
+
+/** Opens a part of the Results tab (summary, dashboard, metrics). */
+export async function resultsSection(page: Page, section: 'Summary' | 'Dashboard' | 'Metrics') {
+  await page.getByRole('tab', { name: 'Results', exact: true }).click();
+  const sub = page.getByRole('tablist', { name: 'Result sections' });
+  if (await sub.isVisible()) await sub.getByRole('tab', { name: section, exact: true }).click();
+}

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { expectAccessible, login, PM, shot, pickOrganisation } from './helpers.js';
+import { expectAccessible, login, PM, pickOrganisation, resultsSection, shot } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const SUPERVISOR = 'supervisor@demo.wansurvey.test';
@@ -44,7 +44,7 @@ test('the supervisor dashboard updates live when an interview is submitted elsew
   test.setTimeout(120_000);
   const sup = await (await browser.newContext({ storageState: './e2e/english-ui.json' })).newPage();
   await openProject(sup, SUPERVISOR);
-  await sup.getByRole('tab', { name: 'Dashboard' }).click();
+  await resultsSection(sup, 'Dashboard');
   await expect(sup.getByTestId('live-status')).toHaveText('Live');
   await expect(sup.getByTestId('completes')).toHaveText('60');
   const finalised = await barValue(sup, 'Finalised');
@@ -93,7 +93,7 @@ test('the supervisor dashboard updates live when an interview is submitted elsew
 test('team metrics, topline, crosstab, summary and a client link', async ({ page, browser }) => {
   test.setTimeout(120_000);
   await openProject(page, PM);
-  await page.getByRole('tab', { name: 'Metrics' }).click();
+  await resultsSection(page, 'Metrics');
   const rows = page.getByTestId('metrics-row');
   await expect(rows).toHaveCount(5);
   // The quick interviewer stands out on interview length.
@@ -103,7 +103,7 @@ test('team metrics, topline, crosstab, summary and a client link', async ({ page
   await shot(page, 'team-metrics');
   await expectAccessible(page);
 
-  await page.getByRole('tab', { name: 'Results' }).click();
+  await resultsSection(page, 'Summary');
   await expect(page.getByTestId('n')).toHaveText('60 complete interviews');
   const sex = page.getByTestId('topline').locator('[data-variable="A3_SEX"]');
   await expect(sex).toContainText('Base: 60');

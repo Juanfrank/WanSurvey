@@ -2,7 +2,15 @@ import { hash } from '@node-rs/argon2';
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
 import { uuidv7 } from 'uuidv7';
-import { PASSWORD, PM, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import {
+  PASSWORD,
+  PM,
+  expectAccessible,
+  login,
+  pickOrganisation,
+  questionnaireAction,
+  shot,
+} from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
 const CLERK2 = 'second.clerk@demo.wansurvey.test';
@@ -18,7 +26,7 @@ async function openPaper(page: Page, email: string) {
     .getByRole('link', { name: 'Projects' })
     .click();
   await page.getByRole('link', { name: 'Household Survey 2026' }).click();
-  await page.getByRole('tab', { name: 'Paper forms' }).click();
+  await questionnaireAction(page, 'Paper forms');
 }
 
 const question = (page: Page, id: string) => page.locator(`[data-qkey^="${id}"]`).first();
@@ -83,7 +91,7 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     await pm.getByLabel(/Key every form twice/).check();
     await pm.getByRole('button', { name: 'Save settings' }).click();
     await expect(pm.getByText('Settings saved.')).toBeVisible();
-    await pm.getByRole('tab', { name: 'Paper forms' }).click();
+    await questionnaireAction(pm, 'Paper forms');
     await pm.getByLabel('Only cases where (optional)').fill('case.region == 2');
     await pm.getByLabel('How many').fill('2');
     await pm.getByRole('button', { name: 'Prepare forms' }).click();

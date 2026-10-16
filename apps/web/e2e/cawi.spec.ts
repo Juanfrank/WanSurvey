@@ -1,5 +1,12 @@
 import { devices, expect, test, type Page } from '@playwright/test';
-import { PM, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import {
+  PM,
+  expectAccessible,
+  login,
+  pickOrganisation,
+  questionnaireAction,
+  shot,
+} from './helpers.js';
 import { sentMail } from './mail.js';
 
 async function openProject(page: Page) {
@@ -19,7 +26,7 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
 }) => {
   test.setTimeout(120_000);
   await openProject(page);
-  await page.getByRole('tab', { name: 'Web survey' }).click();
+  await questionnaireAction(page, 'Web survey');
 
   // Declare the lawful basis, then create and send a wave to some cases of region 3.
   await page.getByLabel('Lawful basis for e-mailing this sample').selectOption('consent');
@@ -76,7 +83,7 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
 
   // The project manager sees the funnel move.
   await page.reload();
-  await page.getByRole('tab', { name: 'Web survey' }).click();
+  await questionnaireAction(page, 'Web survey');
   const funnel = page.locator('[data-wave="Ola 1"]').getByTestId('funnel');
   await expect(funnel.locator('[data-step="completed"]')).toHaveAttribute('data-count', '1', {
     timeout: 15_000,

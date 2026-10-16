@@ -10,6 +10,7 @@ import {
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   UnprocessableEntityException,
@@ -26,11 +27,16 @@ import { ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
 import {
   auditLog,
+  invitations,
+  openLinks,
   projects,
+  questionnaireComments,
+  questionnairePresence,
   questionnaireScenarios,
   questionnaireVersions,
   questionnaires,
   users,
+  waves,
 } from '../db/schema.js';
 import { checkDraft, type PreviousVersion } from './publish-checks.js';
 
@@ -70,6 +76,7 @@ const PublishBody = z.object({
 const CheckBody = PublishBody.partial();
 
 const ScenarioBody = z.object({ scenario: Scenario });
+const RenameBody = z.object({ name: z.string().trim().min(1).max(200) });
 
 /** Draft saves are audited at most once per editor and questionnaire in this window. */
 const DRAFT_AUDIT_WINDOW_MS = 5 * 60_000;
@@ -211,6 +218,91 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
   ) {
     return this.database.withTenant(ctx.tenantId, (tx) => this.load(tx, projectId, qid));
+  }
+
+  /** Renames a questionnaire (its draft and versions are unchanged). */
+  @Patch(':qid')
+  @RequirePermission('questionnaires.edit', PERM)
+  @ApiBody({ schema: z.toJSONSchema(RenameBody) as object })
+  rename(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('qid', ParseUUIDPipe) qid: string,
+    @Body(new ZodPipe(RenameBody)) body: z.infer<typeof RenameBody>,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const [row] = await tx
+        .update(questionnaires)
+        .set({ name: body.name, updatedAt: new Date(), updatedBy: ctx.userId })
+        .where(and(eq(questionnaires.id, qid), eq(questionnaires.projectId, projectId)))
+        .returning({ id: questionnaires.id, name: questionnaires.name });
+      if (!row) throw new NotFoundException('Questionnaire not found');
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'questionnaire.renamed',
+          targetType: 'questionnaire',
+          targetId: qid,
+          details: { name: body.name },
+        }),
+      );
+      return row;
+    });
+  }
+
+  /**
+   * Deletes a questionnaire that was never fielded: no published version, web wave, invitation
+   * or open link (409 IN_USE otherwise; retire its versions instead).
+   */
+  @Delete(':qid')
+  @HttpCode(204)
+  @RequirePermission('questionnaires.edit', PERM)
+  async remove(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('qid', ParseUUIDPipe) qid: string,
+  ): Promise<void> {
+    await this.database.withTenant(ctx.tenantId, async (tx) => {
+      const current = await this.lockDraft(tx, projectId, qid);
+      const used = async (table: typeof waves | typeof invitations | typeof openLinks) =>
+        (
+          await tx
+            .select({ n: sql<number>`count(*)::int` })
+            .from(table)
+            .where(eq(table.questionnaireId, qid))
+        )[0]!.n > 0;
+      const [versions] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(questionnaireVersions)
+        .where(eq(questionnaireVersions.questionnaireId, qid));
+      if (
+        versions!.n > 0 ||
+        (await used(waves)) ||
+        (await used(invitations)) ||
+        (await used(openLinks))
+      )
+        throw new ConflictException({
+          code: 'IN_USE',
+          message: 'The questionnaire has been published or used for web surveys',
+        });
+      await tx
+        .delete(questionnaireScenarios)
+        .where(eq(questionnaireScenarios.questionnaireId, qid));
+      await tx.delete(questionnaireComments).where(eq(questionnaireComments.questionnaireId, qid));
+      await tx.delete(questionnairePresence).where(eq(questionnairePresence.questionnaireId, qid));
+      await tx.delete(questionnaires).where(eq(questionnaires.id, qid));
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'questionnaire.deleted',
+          targetType: 'questionnaire',
+          targetId: qid,
+          details: { projectId, name: current.name },
+        }),
+      );
+    });
   }
 
   /**

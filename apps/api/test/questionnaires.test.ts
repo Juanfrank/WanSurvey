@@ -174,6 +174,36 @@ describe('questionnaires', () => {
     expect(rows[0]!.n).toBe(1);
   });
 
+  it('renames, and deletes only what was never published', async () => {
+    const q = await create();
+    const url = `${base}/${q.id}`;
+    const patch = (path: string, body: object) =>
+      pm.agent.patch(path).set('x-csrf-token', pm.csrf).send(body);
+    const del = (path: string) => pm.agent.delete(path).set('x-csrf-token', pm.csrf);
+    expect((await patch(url, { name: '  ' })).status).toBe(400);
+    const renamed = await patch(url, { name: 'Renamed' });
+    expect(renamed.body).toMatchObject({ id: q.id, name: 'Renamed' });
+    expect((await pm.agent.get(url)).body.name).toBe('Renamed');
+
+    // Published: refused.
+    const used = await create();
+    await post(pm, `${base}/${used.id}/publish`, { baseRevision: used.draftRevision }).expect(201);
+    const refused = await del(`${base}/${used.id}`);
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('IN_USE');
+
+    // Never published: gone, with its scenarios.
+    const scen = await put(pm, `${url}/scenarios`, {
+      scenario: { name: 'One', mode: 'CATI', steps: [], expect: {} },
+    });
+    expect(scen.status, JSON.stringify(scen.body)).toBe(200);
+    expect((await del(url)).status).toBe(204);
+    expect((await pm.agent.get(url)).status).toBe(404);
+    const [{ n }] = await t.admin<{ n: number }[]>`
+      select count(*)::int as n from questionnaire_scenarios where questionnaire_id = ${q.id}`;
+    expect(n).toBe(0);
+  });
+
   it('publishes, blocks on errors, failing scenarios, missing mappings and no changes', async () => {
     const q = await create();
     const url = `${base}/${q.id}`;

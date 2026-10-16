@@ -27,6 +27,8 @@ export type AuditAction =
   | 'project.created'
   | 'project.updated'
   | 'questionnaire.created'
+  | 'questionnaire.renamed'
+  | 'questionnaire.deleted'
   | 'questionnaire.draft_saved'
   | 'questionnaire.published'
   | 'questionnaire.version_retired'

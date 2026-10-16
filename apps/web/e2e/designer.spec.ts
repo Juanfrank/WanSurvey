@@ -21,6 +21,7 @@ async function newQuestionnaire(page: Page, name: string, untick: string[] = [])
     .getByRole('link', { name: 'Projects' })
     .click();
   await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Household questionnaire' })).toBeVisible();
   await page.getByLabel('Questionnaire name').fill(name);
   // Every mode the project uses is ticked to begin with.
@@ -226,6 +227,22 @@ test('a questionnaire takes its modes at creation (Q1)', async ({ page }) => {
   await expect(chips).toContainText('CAWI');
   await expect(chips).not.toContainText('CAPI');
   await expect(chips).not.toContainText('PAPI');
+
+  // Its actions: paper forms are off (not a paper questionnaire), rename, then delete.
+  await page.getByRole('button', { name: 'Actions for Phone and web' }).click();
+  const menu = page.getByRole('menu', { name: 'Actions for Phone and web' });
+  await expect(menu.getByRole('menuitem', { name: 'Paper forms' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  page.once('dialog', (d) => void d.accept('Phone and web (copy)'));
+  await menu.getByRole('menuitem', { name: 'Rename…' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Phone and web (copy)' })).toBeVisible();
+  await page.getByRole('button', { name: 'Actions for Phone and web (copy)' }).click();
+  page.once('dialog', (d) => void d.accept());
+  await page.getByRole('menuitem', { name: 'Delete…' }).click();
+  await expect(page.getByText('Deleted Phone and web (copy).')).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Phone and web' })).toHaveCount(0);
 });
 
 test('the outline collapses to a rail whose pane opens over the editor, and pins back', async ({
@@ -448,6 +465,7 @@ test('the routing map, outline arcs and nested condition builder on the househol
     .getByRole('link', { name: 'Projects' })
     .click();
   await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await page.getByRole('link', { name: 'Household questionnaire' }).click();
   await expect(page.getByRole('tree', { name: 'Outline' })).toBeVisible();
 

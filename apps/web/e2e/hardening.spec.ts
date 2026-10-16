@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectAccessible, login, openAccount, PM, shot, pickOrganisation } from './helpers.js';
+import {
+  expectAccessible,
+  login,
+  openAccount,
+  PM,
+  pickOrganisation,
+  resultsSection,
+  shot,
+} from './helpers.js';
 
 async function openProject(page: Page) {
   await login(page, PM);
@@ -40,8 +48,12 @@ test('the app is served with a strict Content-Security-Policy and breaks none of
 
   await openProject(page);
   await shot(page, 'project-home');
-  for (const tab of ['Cases', 'Dashboard', 'Metrics', 'Results', 'Exports', 'Settings']) {
-    await page.getByRole('tab', { name: tab }).click();
+  for (const tab of ['Cases', 'Results', 'Exports', 'Settings']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await page.waitForLoadState('networkidle');
+  }
+  for (const section of ['Dashboard', 'Metrics'] as const) {
+    await resultsSection(page, section);
     await page.waitForLoadState('networkidle');
   }
   await page.getByRole('tab', { name: 'Questionnaires' }).click();
@@ -108,7 +120,8 @@ test('at 200% zoom the project pages reflow without scrolling sideways', async (
   await page.setViewportSize({ width: 640, height: 450 });
   await openProject(page);
   for (const tab of ['Cases', 'Dashboard', 'Results', 'Exports']) {
-    await page.getByRole('tab', { name: tab }).click();
+    if (tab === 'Dashboard') await resultsSection(page, 'Dashboard');
+    else await page.getByRole('tab', { name: tab, exact: true }).click();
     await page.waitForLoadState('networkidle');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
@@ -152,14 +165,14 @@ test('the dark theme: chosen in the account menu, remembered, and readable on ev
   await expect(html).toHaveAttribute('data-theme', 'dark');
   await page.keyboard.press('Escape');
   // Every main page passes the accessibility checks (colour contrast included) in the dark.
-  const tabs = ['Questionnaires', 'Cases', 'Dashboard', 'Results', 'Settings'];
+  const tabs = ['Questionnaires', 'Cases', 'Results', 'Settings'];
   for (const tab of tabs) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
-    await expect(page.getByRole('tabpanel')).toBeVisible();
+    await expect(page.getByRole('tabpanel').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
     await expectAccessible(page);
   }
-  await page.getByRole('tab', { name: 'Dashboard', exact: true }).click();
+  await resultsSection(page, 'Dashboard');
   await shot(page, 'dark-dashboard', { fullPage: false });
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await page.getByRole('link', { name: 'Household questionnaire' }).click();

@@ -15,6 +15,10 @@ export const casesEn = {
     results: 'Results',
     exports: 'Exports',
     settings: 'Settings',
+    list: 'Case list',
+    topline: 'Summary',
+    casesSections: 'Case sections',
+    resultsSections: 'Result sections',
   },
   privacy: {
     title: 'Personal data',
@@ -298,6 +302,10 @@ export const casesEs: CasesCatalogue = {
     results: 'Resultados',
     exports: 'Exportar',
     settings: 'Configuración',
+    list: 'Lista de casos',
+    topline: 'Resumen',
+    casesSections: 'Secciones de casos',
+    resultsSections: 'Secciones de resultados',
   },
   privacy: {
     title: 'Datos personales',
