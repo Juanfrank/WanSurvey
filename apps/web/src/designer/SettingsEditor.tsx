@@ -6,7 +6,6 @@ import {
   type Disposition,
   type LocalizedText,
   type Quota,
-  type Script,
   type SpecialCodes,
 } from '@wansurvey/schema';
 import { useState } from 'react';
@@ -22,23 +21,14 @@ import {
   smallBtn,
   TextField,
 } from './fields.js';
-import { PIPE_EXAMPLES } from './i18n.js';
 import { OptionsEditor } from './OptionsEditor.js';
+import { ScriptsEditor } from './Scripts.js';
 import { TranslationsPanel } from './TranslationsPanel.js';
-import { flatten, isSection, type Draft } from './tree.js';
+import type { Draft } from './tree.js';
 import type { VarOption } from './vars.js';
 import { dispositionLabel } from '../i18n-messages.js';
 
 const LANG_RE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
-const OUTCOMES = [
-  'busy',
-  'refusal',
-  'callback',
-  'voicemail',
-  'answered',
-  'no_answer',
-  'wrong_number',
-] as const;
 
 /** Adds empty translations for a new language everywhere a text has the default language. */
 function addLanguage(draft: Draft, lang: string): Draft {
@@ -98,10 +88,6 @@ export function SettingsEditor({
     specialCodes: DEFAULT_SPECIAL_CODES,
     cawiShowSpecialCodes: false,
   };
-  const sections = draft.sections.map((s) => s.id);
-  const items = flatten(draft)
-    .filter((x) => !isSection(x.node))
-    .map((x) => x.node.id);
   const empty = (): LocalizedText => Object.fromEntries(langs.map((l) => [l, '']));
 
   return (
@@ -315,132 +301,13 @@ export function SettingsEditor({
         </form>
       </Group>
 
-      <Group title={t('designer.settings.scripts')}>
-        <Hint>{t('designer.settings.scriptsHelp')}</Hint>
-        {(draft.scripts ?? []).map((s, i) => {
-          const update = (patch: Partial<Script>, coalesce?: string) =>
-            set(
-              { scripts: draft.scripts.map((x, j) => (j === i ? { ...x, ...patch } : x)) },
-              coalesce ? `script-${i}-${coalesce}` : undefined,
-            );
-          const a = s.anchor;
-          return (
-            <div
-              key={i}
-              className="flex flex-col gap-3 rounded-md border border-slate-200 p-3"
-              data-testid="script"
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SelectField
-                  label={t('designer.settings.anchor', { n: i + 1 })}
-                  value={a.at}
-                  options={(['start', 'end', 'section', 'item', 'callOutcome'] as const).map(
-                    (x) => ({
-                      value: x,
-                      label: t(`designer.settings.anchors.${x}`),
-                    }),
-                  )}
-                  onChange={(at) =>
-                    update({
-                      anchor:
-                        at === 'section'
-                          ? { at, sectionId: sections[0] ?? '' }
-                          : at === 'item'
-                            ? { at, itemId: items[0] ?? '' }
-                            : at === 'callOutcome'
-                              ? { at, outcome: 'busy' }
-                              : { at },
-                    })
-                  }
-                />
-                {a.at === 'section' ? (
-                  <SelectField
-                    label={t('designer.settings.anchorSection')}
-                    value={a.sectionId}
-                    options={sections.map((x) => ({ value: x, label: x }))}
-                    onChange={(sectionId) => update({ anchor: { at: 'section', sectionId } })}
-                  />
-                ) : null}
-                {a.at === 'item' ? (
-                  <SelectField
-                    label={t('designer.settings.anchorItem')}
-                    value={a.itemId}
-                    options={items.map((x) => ({ value: x, label: x }))}
-                    onChange={(itemId) => update({ anchor: { at: 'item', itemId } })}
-                  />
-                ) : null}
-                {a.at === 'callOutcome' ? (
-                  <SelectField
-                    label={t('designer.settings.anchorOutcome')}
-                    value={a.outcome}
-                    options={OUTCOMES.map((x) => ({
-                      value: x,
-                      label: t(`designer.settings.outcomes.${x}`),
-                    }))}
-                    onChange={(outcome) => update({ anchor: { at: 'callOutcome', outcome } })}
-                  />
-                ) : null}
-              </div>
-              <fieldset className="flex flex-wrap gap-3 text-sm">
-                <legend className="mb-1 font-medium text-slate-700">
-                  {t('designer.settings.scriptModes')}
-                </legend>
-                {(['CATI', 'CAPI', 'PAPI'] as const).map((m) => (
-                  <label key={m} className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={s.modes.includes(m)}
-                      onChange={(e) => {
-                        const modes = e.target.checked
-                          ? [...s.modes, m]
-                          : s.modes.filter((x) => x !== m);
-                        if (modes.length) update({ modes });
-                      }}
-                    />
-                    {m}
-                  </label>
-                ))}
-              </fieldset>
-              <LocalizedField
-                label={t('designer.settings.scriptBody', { n: i + 1 })}
-                value={s.body}
-                languages={langs}
-                multiline
-                hint={t('designer.pipingHelp', PIPE_EXAMPLES)}
-                onChange={(body) => update({ body: body ?? {} }, 'body')}
-              />
-              <div>
-                <button
-                  type="button"
-                  className={smallBtn}
-                  onClick={() => set({ scripts: draft.scripts.filter((_, j) => j !== i) })}
-                >
-                  {t('designer.settings.removeScript', { n: i + 1 })}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        <div>
-          <button
-            type="button"
-            className={smallBtn}
-            onClick={() => {
-              const used = new Set((draft.scripts ?? []).map((s) => s.id));
-              let n = (draft.scripts ?? []).length + 1;
-              while (used.has(`script${n}`)) n++;
-              set({
-                scripts: [
-                  ...(draft.scripts ?? []),
-                  { id: `script${n}`, anchor: { at: 'start' }, modes: ['CATI'], body: empty() },
-                ],
-              });
-            }}
-          >
-            {t('designer.settings.addScript')}
-          </button>
-        </div>
-      </Group>
+      <ScriptsEditor
+        draft={draft}
+        change={change}
+        place="global"
+        title={t('designer.settings.scripts')}
+        hint={t('designer.settings.scriptsGlobalHelp')}
+      />
 
       <Group title={t('designer.settings.quotas')}>
         <Hint>{t('designer.settings.quotasHelp')}</Hint>

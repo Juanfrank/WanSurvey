@@ -27,6 +27,7 @@ import { KindIcon, questionMenu } from './kinds.js';
 import { below, Menu } from './Menu.js';
 import { PIPE_EXAMPLES } from './i18n.js';
 import { OptionsEditor } from './OptionsEditor.js';
+import { ScriptsEditor } from './Scripts.js';
 import {
   isSection,
   locate,
@@ -322,6 +323,13 @@ function SectionEditor(props: EditorProps & { node: Section; patch: Patch }) {
         }}
       />
       <ShowIf {...props} value={props.node.showIf} />
+      <ScriptsEditor
+        draft={props.draft}
+        change={props.change}
+        place={{ sectionId: props.node.id }}
+        title={t('designer.scriptsHere')}
+        hint={t('designer.scriptsSectionHelp')}
+      />
     </div>
   );
 }
@@ -467,6 +475,13 @@ function StaticEditor(props: EditorProps & { node: StaticText; patch: Patch }) {
             multiline
             hint={t('designer.pipingHelp', PIPE_EXAMPLES)}
             onChange={(text) => props.patch<StaticText>({ text: text ?? {} }, 'text')}
+          />
+          <ScriptsEditor
+            draft={props.draft}
+            change={props.change}
+            place={{ itemId: props.node.id }}
+            title={t('designer.scriptsHere')}
+            hint={t('designer.scriptsItemHelp')}
           />
         </>
       }
@@ -771,6 +786,13 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
           />
         </Group>
       ) : null}
+      <ScriptsEditor
+        draft={props.draft}
+        change={props.change}
+        place={{ itemId: q.id }}
+        title={t('designer.scriptsHere')}
+        hint={t('designer.scriptsItemHelp')}
+      />
     </>
   );
 

@@ -134,6 +134,16 @@ const en = {
     quotasFull: 'Quota cells treated as full',
     reset: 'Restart interview',
     tabs: { interview: 'Interview', compare: 'Compare modes', answers: 'Answers' },
+    asSeen: {
+      toggleInterviewer: 'As the interviewer sees it',
+      toggleRespondent: 'As the respondent sees it',
+      device: 'Device',
+      phone: 'Phone',
+      computer: 'Computer',
+      saved: 'Answers saved',
+      case: 'Interview · preview case',
+      inactive: 'Works in a real interview',
+    },
     tracer: 'Path tracer',
     tracerHelp: 'Why each item is shown or skipped. Select an answered item to jump back to it.',
     status: {
@@ -304,6 +314,16 @@ const es: Catalogue = {
     quotasFull: 'Celdas de cuota tratadas como llenas',
     reset: 'Reiniciar entrevista',
     tabs: { interview: 'Entrevista', compare: 'Comparar modos', answers: 'Respuestas' },
+    asSeen: {
+      toggleInterviewer: 'Como lo ve el entrevistador',
+      toggleRespondent: 'Como lo ve el encuestado',
+      device: 'Dispositivo',
+      phone: 'Teléfono',
+      computer: 'Computadora',
+      saved: 'Respuestas guardadas',
+      case: 'Entrevista · caso de prueba',
+      inactive: 'Funciona en una entrevista real',
+    },
     tracer: 'Rastreador de flujo',
     tracerHelp:
       'Por qué cada ítem se muestra o se salta. Seleccione un ítem respondido para volver a él.',

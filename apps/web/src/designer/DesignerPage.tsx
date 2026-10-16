@@ -112,6 +112,18 @@ export function DesignerPage() {
     return m;
   }, [d.diagnostics]);
   const errorCount = d.diagnostics.filter((x) => x.severity === 'error').length;
+  const problemsById = useMemo(() => {
+    const m = new Map<string, { errors: number; warnings: number }>();
+    for (const x of d.diagnostics) {
+      if (!x.itemId) continue;
+      const p = m.get(x.itemId) ?? { errors: 0, warnings: 0 };
+      if (x.severity === 'error') p.errors++;
+      else p.warnings++;
+      m.set(x.itemId, p);
+    }
+    return m;
+  }, [d.diagnostics]);
+  const [highlight, setHighlight] = useState(false);
 
   // Start on the first section once loaded.
   useEffect(() => {
@@ -261,14 +273,6 @@ export function DesignerPage() {
                 <Tabs.Trigger value="routing" className={tabCls}>
                   {t('designer.tab.routing')}
                 </Tabs.Trigger>
-                <Tabs.Trigger value="check" className={tabCls}>
-                  {t('designer.tab.check')}
-                  {errorCount ? (
-                    <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
-                      {errorCount}
-                    </span>
-                  ) : null}
-                </Tabs.Trigger>
                 <Tabs.Trigger value="preview" className={tabCls}>
                   {t('designer.tab.preview')}
                 </Tabs.Trigger>
@@ -366,12 +370,23 @@ export function DesignerPage() {
                 </div>
               </Tabs.Content>
 
-              <Tabs.Content value="routing">
+              <Tabs.Content value="routing" className="flex flex-col gap-3">
+                <LogicCheck
+                  diagnostics={d.diagnostics}
+                  highlight={highlight}
+                  onHighlight={setHighlight}
+                  onGoTo={(id) => {
+                    setSelected(id);
+                    setTab('design');
+                    requestAnimationFrame(focusEditor);
+                  }}
+                />
                 {routing ? (
                   <RoutingMap
                     draft={draft}
                     routing={routing}
                     lang={lang}
+                    problems={highlight ? problemsById : null}
                     onOpen={(id) => {
                       setSelected(id);
                       setTab('design');
@@ -381,38 +396,6 @@ export function DesignerPage() {
                 ) : (
                   <Card>{t('designer.routing.unavailable')}</Card>
                 )}
-              </Tabs.Content>
-
-              <Tabs.Content value="check">
-                <Card>
-                  <DiagnosticsPanel diagnostics={d.diagnostics} />
-                  <ul className="mt-4 flex flex-col gap-1 text-sm">
-                    {d.diagnostics
-                      .filter((x) => x.itemId)
-                      .map((x, i) => (
-                        <li key={i}>
-                          <button
-                            type="button"
-                            className="text-left text-indigo-ink-700 underline"
-                            onClick={() => {
-                              setSelected(x.itemId!);
-                              setTab('design');
-                              requestAnimationFrame(focusEditor);
-                            }}
-                          >
-                            {t('designer.goTo', { id: x.itemId })}
-                          </button>{' '}
-                          <span
-                            className={
-                              x.severity === 'error' ? 'text-red-ink-800' : 'text-amber-ink-800'
-                            }
-                          >
-                            {localiseDiagnostic(t, x)}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                </Card>
               </Tabs.Content>
 
               <Tabs.Content value="preview">
@@ -578,6 +561,116 @@ function EditorHeader({
       >
         <span aria-hidden>›</span>
       </button>
+    </div>
+  );
+}
+
+/**
+ * "Check the logic": runs the questionnaire's checks and answers in a floating bubble, either
+ * that all is well or with the problems, a link to each item and a switch that marks the items
+ * with problems on the routing map.
+ */
+function LogicCheck({
+  diagnostics,
+  highlight,
+  onHighlight,
+  onGoTo,
+}: {
+  diagnostics: DraftApi['diagnostics'];
+  highlight: boolean;
+  onHighlight(on: boolean): void;
+  onGoTo(id: string): void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const errors = diagnostics.filter((x) => x.severity === 'error').length;
+  useEffect(() => {
+    if (!open) return;
+    ref.current?.focus();
+    const onKey = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+  return (
+    <div className="relative flex flex-wrap items-center gap-3">
+      <Button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {t('designer.routing.check')}
+      </Button>
+      {highlight ? (
+        <button type="button" className={smallBtn} onClick={() => onHighlight(false)}>
+          {t('designer.routing.unhighlight')}
+        </button>
+      ) : null}
+      {open ? (
+        <div
+          ref={ref}
+          tabIndex={-1}
+          role="dialog"
+          aria-label={t('designer.routing.checkTitle')}
+          className={`absolute left-0 top-full z-30 mt-2 w-[min(32rem,calc(100vw-2rem))] rounded-xl border bg-white p-4 shadow-xl focus:outline-none ${
+            diagnostics.length
+              ? errors
+                ? 'border-red-200'
+                : 'border-amber-200'
+              : 'border-emerald-200'
+          }`}
+          data-testid="logic-check"
+        >
+          <span
+            aria-hidden
+            className="absolute -top-1.5 left-6 size-3 rotate-45 border-l border-t border-inherit bg-white"
+          />
+          {diagnostics.length === 0 ? (
+            <p className="flex items-center gap-2 font-medium text-emerald-ink-800">
+              <span aria-hidden>✓</span> {t('designer.routing.allGood')}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <DiagnosticsPanel diagnostics={diagnostics} />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="text-sm font-medium text-indigo-ink-700 underline"
+                  onClick={() => {
+                    onHighlight(true);
+                    setOpen(false);
+                  }}
+                >
+                  {t('designer.routing.highlight')}
+                </button>
+              </div>
+              <ul className="flex max-h-48 flex-col gap-1 overflow-auto text-sm">
+                {diagnostics
+                  .filter((x) => x.itemId)
+                  .map((x, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        className="text-left text-indigo-ink-700 underline"
+                        onClick={() => onGoTo(x.itemId!)}
+                      >
+                        {t('designer.goTo', { id: x.itemId })}
+                      </button>{' '}
+                      <span
+                        className={
+                          x.severity === 'error' ? 'text-red-ink-800' : 'text-amber-ink-800'
+                        }
+                      >
+                        {localiseDiagnostic(t, x)}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+          <div className="mt-3 flex justify-end">
+            <button type="button" className={smallBtn} onClick={() => setOpen(false)}>
+              {t('designer.routing.close')}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

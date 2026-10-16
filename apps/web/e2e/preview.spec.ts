@@ -22,6 +22,8 @@ test('a CATI interviewer completes the household survey with the keyboard only',
   page,
 }) => {
   await openPreview(page);
+  // The preview shows the interviewer's own screen around the questions.
+  await expect(page.getByTestId('as-seen-interviewer')).toBeVisible();
   await shot(page, 'preview-cati-start');
   await press(page, 'Enter'); // consent text
   await typeAndEnter(page, '1'); // A1 consent: Yes

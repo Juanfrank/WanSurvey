@@ -22,7 +22,7 @@ function clock(ms: number) {
   return `${h ? `${h}:` : ''}${pad(m)}:${pad(s % 60)}`;
 }
 
-function shown(v: unknown, session: InterviewSession, name: string): string {
+export function shown(v: unknown, session: InterviewSession, name: string): string {
   if (v === null || v === undefined) return '—';
   if (typeof v === 'object' && v && '$special' in v)
     return session.specialLabel((v as { $special: 'DK' }).$special);
@@ -40,7 +40,7 @@ interface SectionInfo {
 }
 
 /** Sections on the path with how far the interview got in each. */
-function sectionsOf(session: InterviewSession, lang: string): SectionInfo[] {
+export function sectionsOf(session: InterviewSession, lang: string): SectionInfo[] {
   const trace = session.trace();
   const visited = new Set(session.state().visited);
   const current = session.currentKey();

@@ -15,6 +15,7 @@ import {
   type ScenarioStore,
 } from './panels.js';
 import { usePreview } from './usePreview.js';
+import { AsSeenFrame } from './AsSeen.js';
 
 const selectCls = 'max-w-full rounded-md border border-slate-300 bg-white px-2 py-1.5';
 
@@ -128,6 +129,8 @@ export function PreviewWorkbench({
   const { t } = useTranslation();
   const [contextText, setContextText] = useState(() => JSON.stringify(p.options.context, null, 2));
   const [contextError, setContextError] = useState<string | null>(null);
+  // As the field sees it (the interviewer's or respondent's screen), or the bare test runner.
+  const [asSeen, setAsSeen] = useState(true);
   const q = p.loaded.questionnaire;
   // Only the questionnaire's modes (Q1); switch to one of them if the current mode is not.
   const modes = q?.modes?.length ? q.modes : MODES;
@@ -264,16 +267,40 @@ export function PreviewWorkbench({
                 </div>
               </div>
             ) : (
-              <Card>
-                <p className="mb-4 text-sm text-slate-500">{pick(q.title, p.options.language)}</p>
-                <InterviewRunner
-                  key={`${p.options.mode}`}
-                  session={p.session}
-                  mode={p.options.mode}
-                  lang={p.options.language}
-                  onChange={p.onChange}
-                />
-              </Card>
+              <div className="flex flex-col gap-3">
+                <label className="no-print flex items-center gap-2 self-end text-sm">
+                  <input
+                    type="checkbox"
+                    checked={asSeen}
+                    onChange={(e) => setAsSeen(e.target.checked)}
+                  />
+                  {p.options.mode === 'CAWI'
+                    ? t('preview.asSeen.toggleRespondent')
+                    : t('preview.asSeen.toggleInterviewer')}
+                </label>
+                {asSeen ? (
+                  <AsSeenFrame
+                    session={p.session}
+                    mode={p.options.mode}
+                    lang={p.options.language}
+                    onChange={p.onChange}
+                    context={p.options.context as { case?: Record<string, unknown> }}
+                  />
+                ) : (
+                  <Card>
+                    <p className="mb-4 text-sm text-slate-500">
+                      {pick(q.title, p.options.language)}
+                    </p>
+                    <InterviewRunner
+                      key={`${p.options.mode}`}
+                      session={p.session}
+                      mode={p.options.mode}
+                      lang={p.options.language}
+                      onChange={p.onChange}
+                    />
+                  </Card>
+                )}
+              </div>
             )}
           </Tabs.Content>
           <Tabs.Content value="compare">

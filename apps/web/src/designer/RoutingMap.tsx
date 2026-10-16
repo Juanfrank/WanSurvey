@@ -1,8 +1,10 @@
-import type { RoutingNode } from '@wansurvey/logic';
+import { YES_NO_OPTIONS, type RoutingNode } from '@wansurvey/logic';
+import { pick } from '@wansurvey/renderer';
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { inputCls } from './fields.js';
-import { locate, type Draft } from './tree.js';
+import { iconKeyOf, KindIcon } from './kinds.js';
+import { isSection, locate, type Draft } from './tree.js';
 import { assignLanes, logicSummary, type Routing } from './useRouting.js';
 import { nodeLabel } from './vars.js';
 
@@ -29,13 +31,18 @@ export function RoutingMap({
   routing,
   lang,
   onOpen,
+  problems,
 }: {
   draft: Draft;
   routing: Routing;
   lang: string;
   onOpen(id: string): void;
+  /** Items with logic-check findings, marked on their cards (from the check button). */
+  problems?: ReadonlyMap<string, { errors: number; warnings: number }> | null;
 }) {
   const { t } = useTranslation();
+  // A click shows the card's preview (options, script) instead of leaving the map.
+  const [preview, setPreview] = useState<string | null>(null);
   const [onlyLogic, setOnlyLogic] = useState(false);
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -192,6 +199,9 @@ export function RoutingMap({
               }
               onActive={setActive}
               onOpen={onOpen}
+              expanded={preview === n.id}
+              onPreview={() => setPreview((p) => (p === n.id ? null : n.id))}
+              problem={problems?.get(n.id) ?? null}
             />
           ))}
           <li
@@ -301,6 +311,9 @@ function Card({
   onToggle,
   onActive,
   onOpen,
+  expanded,
+  onPreview,
+  problem,
 }: {
   n: RoutingNode;
   routing: Routing;
@@ -312,6 +325,9 @@ function Card({
   onToggle(): void;
   onActive(id: string | null): void;
   onOpen(id: string): void;
+  expanded: boolean;
+  onPreview(): void;
+  problem: { errors: number; warnings: number } | null;
 }) {
   const { t } = useTranslation();
   const at = locate(draft, n.id);
@@ -319,7 +335,15 @@ function Card({
   const container = n.kind === 'section' || n.kind === 'block' || n.kind === 'roster';
   const lines = logicSummary(n, routing, t);
   const checks = n.checks.errors + n.checks.warnings;
-  const ring = active ? 'ring-2 ring-indigo-600' : related ? 'ring-2 ring-amber-400' : '';
+  const ring = problem
+    ? problem.errors
+      ? 'ring-2 ring-red-600'
+      : 'ring-2 ring-amber-500'
+    : active
+      ? 'ring-2 ring-indigo-600'
+      : related
+        ? 'ring-2 ring-amber-400'
+        : '';
   const style =
     n.kind === 'section'
       ? 'border-slate-300 bg-slate-100 font-semibold'
@@ -350,56 +374,182 @@ function Card({
           {collapsed ? '▸' : '▾'}
         </button>
       ) : null}
-      <button
-        type="button"
-        className={`min-w-0 flex-1 rounded-md border px-3 py-1.5 text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${style} ${ring}`}
-        onClick={() => onOpen(n.id)}
-        onMouseEnter={() => onActive(n.id)}
-        onMouseLeave={() => onActive(null)}
-        onFocus={() => onActive(n.id)}
-        onBlur={() => onActive(null)}
-        aria-describedby={lines.length ? `rm-${n.id}-logic` : undefined}
-      >
-        <span className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-mono">{n.name ?? n.id}</span>
-          <span className="min-w-0 truncate text-slate-700">{text}</span>
-          {n.kind === 'roster' && n.roster ? (
-            <span className="text-xs text-amber-ink-900">
-              ↻{' '}
-              {n.roster.count === 'fixed'
-                ? t('designer.routing.loopFixed', { n: n.roster.n, count: n.roster.n })
-                : n.roster.count === 'expression'
-                  ? t('designer.routing.loopExpr', { expr: n.roster.expr })
-                  : t('designer.routing.loopOpen')}
-            </span>
-          ) : null}
-          {checks ? (
-            <span className="text-xs text-slate-600">
-              ✓ {t('designer.routing.checks', { count: checks })}
-            </span>
-          ) : null}
-          {n.readBy.length ? (
-            <span className="text-xs text-slate-600">
-              {t('designer.routing.usedBy', { count: n.readBy.length })}
-            </span>
-          ) : null}
-        </span>
-        {lines.length ? (
-          <span id={`rm-${n.id}-logic`} className="mt-0.5 flex flex-col text-xs">
-            {n.showIf ? <span className="text-violet-ink-800">◇ {lines[0]}</span> : null}
-            {n.skips.map((_, i) => (
-              <span key={`s${i}`} className="text-slate-700">
-                ⤵ {lines[(n.showIf ? 1 : 0) + i]}
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          className={`w-full rounded-md border px-3 py-1.5 text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${style} ${ring}`}
+          onClick={onPreview}
+          onDoubleClick={() => onOpen(n.id)}
+          aria-expanded={expanded}
+          aria-controls={expanded ? `rm-${n.id}-preview` : undefined}
+          data-problem={problem ? (problem.errors ? 'error' : 'warning') : undefined}
+          onMouseEnter={() => onActive(n.id)}
+          onMouseLeave={() => onActive(null)}
+          onFocus={() => onActive(n.id)}
+          onBlur={() => onActive(null)}
+          aria-describedby={lines.length ? `rm-${n.id}-logic` : undefined}
+        >
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            {at ? (
+              <span className="self-center text-slate-500">
+                <KindIcon k={iconKeyOf(at.node)} className="size-3.5" />
               </span>
-            ))}
-            {n.ends.map((_, i) => (
-              <span key={`e${i}`} className="text-red-ink-800">
-                ⏹ {lines[(n.showIf ? 1 : 0) + n.skips.length + i]}
+            ) : null}
+            <span className="font-mono">{n.name ?? n.id}</span>
+            {problem ? (
+              <span
+                className={`rounded px-1.5 text-xs ${problem.errors ? 'bg-red-100 text-red-ink-900' : 'bg-amber-100 text-amber-ink-900'}`}
+              >
+                {problem.errors
+                  ? t('designer.outline.errors', { count: problem.errors })
+                  : t('designer.routing.warnings', { count: problem.warnings })}
               </span>
-            ))}
+            ) : null}
+            <span className="min-w-0 truncate text-slate-700">{text}</span>
+            {n.kind === 'roster' && n.roster ? (
+              <span className="text-xs text-amber-ink-900">
+                ↻{' '}
+                {n.roster.count === 'fixed'
+                  ? t('designer.routing.loopFixed', { n: n.roster.n, count: n.roster.n })
+                  : n.roster.count === 'expression'
+                    ? t('designer.routing.loopExpr', { expr: n.roster.expr })
+                    : t('designer.routing.loopOpen')}
+              </span>
+            ) : null}
+            {checks ? (
+              <span className="text-xs text-slate-600">
+                ✓ {t('designer.routing.checks', { count: checks })}
+              </span>
+            ) : null}
+            {n.readBy.length ? (
+              <span className="text-xs text-slate-600">
+                {t('designer.routing.usedBy', { count: n.readBy.length })}
+              </span>
+            ) : null}
           </span>
+          {lines.length ? (
+            <span id={`rm-${n.id}-logic`} className="mt-0.5 flex flex-col text-xs">
+              {n.showIf ? <span className="text-violet-ink-800">◇ {lines[0]}</span> : null}
+              {n.skips.map((_, i) => (
+                <span key={`s${i}`} className="text-slate-700">
+                  ⤵ {lines[(n.showIf ? 1 : 0) + i]}
+                </span>
+              ))}
+              {n.ends.map((_, i) => (
+                <span key={`e${i}`} className="text-red-ink-800">
+                  ⏹ {lines[(n.showIf ? 1 : 0) + n.skips.length + i]}
+                </span>
+              ))}
+            </span>
+          ) : null}
+        </button>
+        {expanded && at ? (
+          <CardPreview
+            id={`rm-${n.id}-preview`}
+            draft={draft}
+            nodeId={n.id}
+            lang={lang}
+            onOpen={onOpen}
+          />
         ) : null}
-      </button>
+      </div>
     </li>
+  );
+}
+
+/** What a card's click shows: the full wording, the answer options and the scripts read there. */
+function CardPreview({
+  id,
+  draft,
+  nodeId,
+  lang,
+  onOpen,
+}: {
+  id: string;
+  draft: Draft;
+  nodeId: string;
+  lang: string;
+  onOpen(id: string): void;
+}) {
+  const { t } = useTranslation();
+  const node = locate(draft, nodeId)!.node;
+  const scripts = (draft.scripts ?? []).filter(
+    (s) =>
+      (s.anchor.at === 'item' && s.anchor.itemId === nodeId) ||
+      (s.anchor.at === 'section' && s.anchor.sectionId === nodeId),
+  );
+  const q = !isSection(node) && node.kind === 'question' ? node : null;
+  const options = q
+    ? q.options?.length
+      ? q.options
+      : q.answerSetId
+        ? (draft.answerSets?.[q.answerSetId] ?? [])
+        : q.type === 'yesno'
+          ? YES_NO_OPTIONS
+          : []
+    : [];
+  const wording = isSection(node)
+    ? pick(node.title, lang)
+    : node.kind === 'question' || node.kind === 'static'
+      ? pick(node.text, lang)
+      : node.kind === 'block' || node.kind === 'roster'
+        ? pick(node.title, lang)
+        : node.kind === 'computed'
+          ? node.formula
+          : '';
+  return (
+    <div
+      id={id}
+      role="region"
+      aria-label={t('designer.routing.previewOf', { name: nodeId })}
+      className="mt-1 flex flex-col gap-2 rounded-md border border-indigo-200 bg-indigo-50/40 p-3 text-sm"
+      data-testid="routing-preview"
+    >
+      {wording ? <p className="whitespace-pre-wrap">{wording}</p> : null}
+      {q?.type === 'grid' && q.rows?.length ? (
+        <p className="text-xs text-slate-600">
+          {t('designer.routing.rows')}: {q.rows.map((r) => pick(r.label, lang)).join(' · ')}
+        </p>
+      ) : null}
+      {options.length ? (
+        <ul className="flex flex-col gap-0.5" aria-label={t('designer.options')}>
+          {options.map((o) => (
+            <li key={String(o.code)} className="flex gap-2">
+              <span className="w-8 shrink-0 text-right font-mono text-xs text-slate-500">
+                {o.code}
+              </span>
+              <span>{pick(o.label, lang) || '—'}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {q?.scale ? (
+        <p className="text-xs text-slate-600">
+          {q.scale.min} … {q.scale.max}
+          {q.scale.minLabel ? ` · ${pick(q.scale.minLabel, lang)}` : ''}
+          {q.scale.maxLabel ? ` → ${pick(q.scale.maxLabel, lang)}` : ''}
+        </p>
+      ) : null}
+      {scripts.map((s) => (
+        <div
+          key={s.id}
+          className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-ink-950"
+        >
+          <span className="mb-0.5 block text-xs font-semibold uppercase">
+            {t('designer.scriptsHere')} · {s.modes.join(', ')}
+          </span>
+          {pick(s.body, lang)}
+        </div>
+      ))}
+      <div>
+        <button
+          type="button"
+          className="rounded-md border border-indigo-600 bg-white px-3 py-1 text-sm font-medium text-indigo-ink-700 hover:bg-indigo-50"
+          onClick={() => onOpen(nodeId)}
+        >
+          {t('designer.routing.edit')}
+        </button>
+      </div>
+    </div>
   );
 }

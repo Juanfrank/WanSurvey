@@ -282,16 +282,21 @@ export function Shell({
   title,
   status,
   children,
+  embedded,
 }: {
   title: string;
   status?: string;
   children: React.ReactNode;
+  /** Inside the staff preview: no page landmarks, no full-screen height. */
+  embedded?: boolean;
 }) {
+  const Heading = embedded ? 'p' : 'h1';
+  const Body = embedded ? 'div' : 'main';
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`${embedded ? '' : 'min-h-screen'} bg-slate-50`}>
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-          <h1 className="text-base font-semibold text-indigo-ink-800">{title}</h1>
+          <Heading className="text-base font-semibold text-indigo-ink-800">{title}</Heading>
           {status ? (
             <p className="text-xs text-slate-600" role="status" data-testid="respondent-save">
               {status}
@@ -299,9 +304,9 @@ export function Shell({
           ) : null}
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-3xl px-4 py-6">
+      <Body {...(embedded ? {} : { id: 'main' })} className="mx-auto max-w-3xl px-4 py-6">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">{children}</div>
-      </main>
+      </Body>
     </div>
   );
 }

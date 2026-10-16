@@ -466,7 +466,21 @@ test('the routing map, outline arcs and nested condition builder on the househol
   await expectAccessible(page);
   const card = map.getByTestId('routing-card').filter({ hasText: 'Asked only if' }).first();
   const id = (await card.getAttribute('data-card'))!;
+  // A click previews the item (options, script) without leaving the map.
   await card.getByRole('button').last().click();
+  const preview = card.getByTestId('routing-preview');
+  await expect(preview).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Routing' })).toHaveAttribute('aria-selected', 'true');
+  await expectAccessible(page);
+
+  // The logic check is a button here; its bubble can mark the items with problems.
+  await page.getByRole('button', { name: 'Check the logic' }).click();
+  await expect(page.getByTestId('logic-check')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('logic-check')).toBeHidden();
+
+  // Its button opens the item in the editor.
+  await preview.getByRole('button', { name: 'Edit this item' }).click();
   await expect(page.getByRole('tab', { name: 'Design' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('treeitem', { selected: true })).toHaveAttribute('data-id', id);
 
