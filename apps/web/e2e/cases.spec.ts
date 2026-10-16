@@ -77,7 +77,6 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
   const bubble = page.getByRole('tooltip').filter({ hasText: 'Design effect' });
   await expect(bubble).toBeVisible();
   await expect(bubble).toContainText('Suggested standard:');
-  await shot(page, 'cases-sampling-tooltip', { fullPage: false });
   await page.mouse.move(0, 0);
   await expect(bubble).toBeHidden();
   await selector.locator('[data-tip="stratified"]').focus();
