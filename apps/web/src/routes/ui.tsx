@@ -25,11 +25,11 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' }) {
   const styles =
     variant === 'primary'
-      ? 'border border-indigo-600 bg-indigo-600 text-on-fill hover:border-indigo-500 hover:bg-indigo-500 disabled:border-indigo-300 disabled:bg-indigo-300'
-      : 'border border-slate-300 bg-white text-navy hover:border-indigo-600 hover:text-indigo-ink-600';
+      ? 'border border-indigo-600 bg-indigo-600 text-on-fill hover:border-indigo-500 hover:bg-indigo-500 disabled:hover:border-indigo-600 disabled:hover:bg-indigo-600'
+      : 'border border-slate-300 bg-white text-navy hover:border-indigo-600 hover:text-indigo-ink-600 disabled:hover:border-slate-300 disabled:hover:text-navy';
   return (
     <button
-      className={`rounded-md px-4 py-2 text-sm font-semibold ${styles} ${className}`}
+      className={`rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`}
       {...rest}
     />
   );

@@ -164,7 +164,8 @@ export function TeamPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* The action stays beside the title: the account pill sits at the right. */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <h1 className="text-2xl font-bold">{t('team.title')}</h1>
         {canManage && !inviting ? (
           <Button onClick={() => setInviting(true)}>{t('team.invite.open')}</Button>

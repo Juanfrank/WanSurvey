@@ -195,7 +195,11 @@ export function DesignerPage() {
       <PipeVariablesContext.Provider value={variables}>
         <EditingLanguageContext.Provider value={lang}>
           <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
-            <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
+            {/* As tall as the account pill beside it, so the name row starts below it. */}
+            <nav
+              aria-label={t('designer.breadcrumb')}
+              className="text-sm text-slate-600 min-[900px]:min-h-10"
+            >
               <Link to="/projects" className="hover:underline">
                 {t('designer.projects')}
               </Link>{' '}

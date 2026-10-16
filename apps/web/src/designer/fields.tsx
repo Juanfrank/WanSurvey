@@ -7,8 +7,9 @@ import { useTranslation } from 'react-i18next';
 export const controlCls =
   'min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 aria-[invalid=true]:border-red-600';
 export const inputCls = `w-full ${controlCls}`;
+/** A compact secondary button: the same family as `Button` (border, weight, disabled look). */
 export const smallBtn =
-  'rounded-md border border-slate-300 bg-white px-2 py-1 text-sm hover:bg-slate-50 disabled:opacity-50';
+  'rounded-md border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-navy hover:border-indigo-600 hover:text-indigo-ink-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-navy';
 
 export function Group({
   title,

@@ -95,8 +95,9 @@ export function AppLayout() {
         id="main"
         className="min-w-0 flex-1 px-4 py-4 min-[900px]:py-5 min-[900px]:pl-[calc(var(--pane-left,0px)+2rem)] min-[900px]:pr-[calc(var(--pane-right,0px)+2rem)]"
       >
-        <div className="mx-auto flex max-w-7xl flex-col">
-          <div className="no-print mb-3 flex justify-end">
+        <div className="relative mx-auto flex max-w-7xl flex-col">
+          {/* Beside the first line of the page on wide screens, so it takes no row of its own. */}
+          <div className="no-print mb-3 flex justify-end min-[900px]:absolute min-[900px]:right-0 min-[900px]:top-0 min-[900px]:z-10 min-[900px]:mb-0">
             <AccountMenu
               me={me.data}
               onSwitchTenant={(id) => void switchTenant(id)}

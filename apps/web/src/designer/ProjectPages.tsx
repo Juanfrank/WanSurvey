@@ -67,7 +67,8 @@ export function ProjectsPage() {
   });
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* The action stays beside the title: the account pill sits at the right. */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <h1 className="text-2xl font-bold">{t('designer.projects')}</h1>
         {canCreate && !creating && (
           <Button onClick={() => setCreating(true)}>{t('designer.newProject.open')}</Button>
