@@ -170,7 +170,7 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await page.getByLabel('At most (cases held by the person)').fill('10');
   await page.getByRole('button', { name: 'Add rule' }).last().click();
   await expect(page.getByTestId('rules')).toContainText('Region 3 to the clerk');
-  await shot(page, 'cases-assignments');
+  await shot(page, 'cases-assignments', { fullPage: false });
   await expectAccessible(page);
   await rules.getByRole('button', { name: 'Close' }).last().click();
 

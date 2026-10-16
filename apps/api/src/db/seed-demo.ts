@@ -77,11 +77,11 @@ export async function seedDemoData(adminUrl: string, password: string, count = 6
           city: 'Lima',
           age: 30 + (n % 40),
         });
-        await tx`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, sample_pii, sample_pii_index, status, disposition, assigned_to, attempts, last_attempt_at)
+        await tx`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, sample_pii, sample_pii_index, status, disposition, assigned_to, assigned_at, attempts, last_attempt_at)
                  values (${caseId}, ${p.tenant_id}, ${p.id}, ${v!.questionnaire_id}, ${external}, ${tx.json(sealed.sample as never)},
                          ${sealed.samplePii}, ${sealed.samplePiiIndex},
                          ${lost ? (finalLost ? 'finalised' : 'assigned') : 'finalised'}, ${lost ?? 'COMPLETE'},
-                         ${interviewer}, ${mode === 'CATI' || lost ? 1 + (n % 3) : 0}, ${at})`;
+                         ${interviewer}, ${interviewer ? at : null}, ${mode === 'CATI' || lost ? 1 + (n % 3) : 0}, ${at})`;
         if (mode === 'CATI' || lost) {
           const caller = interviewer ?? team[1]!;
           for (let a = 0; a < 1 + (n % 3); a++) {
