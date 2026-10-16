@@ -75,6 +75,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm --filter @wansurvey/web exec playwright install --with-deps chromium
+      # pdftotext and pdftoppm, to read the summary PDF in the E2E tests.
+      - run: sudo apt-get install -y --no-install-recommends poppler-utils
       - run: pnpm e2e
       - uses: actions/upload-artifact@v4
         if: failure()
