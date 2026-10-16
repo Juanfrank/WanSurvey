@@ -1,16 +1,15 @@
-import {
-  SKIP_END,
-  SKIP_END_ROW,
-  type AnswerOption,
-  type Answers,
-  type AnswerValue,
-  type LocalizedText,
-  type Mode,
-  type Question,
-  type Roster,
-  type SpecialKind,
-  type StaticText,
+import type {
+  AnswerOption,
+  Answers,
+  AnswerValue,
+  LocalizedText,
+  Mode,
+  Question,
+  Roster,
+  SpecialKind,
+  StaticText,
 } from '@wansurvey/schema';
+import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema/constants';
 import type { Namespace } from './ast.js';
 import type { CompiledQuestionnaire } from './compile.js';
 import { evaluate, type Scope } from './evaluator.js';

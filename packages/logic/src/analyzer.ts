@@ -1,13 +1,12 @@
 import {
   MODES,
-  SKIP_END,
-  SKIP_END_ROW,
   type LocalizedText,
   type Question,
   type Questionnaire,
   type Roster,
   type Script,
 } from '@wansurvey/schema';
+import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema/constants';
 import type { Node, Span } from './ast.js';
 import { evaluate, type Scope } from './evaluator.js';
 import {

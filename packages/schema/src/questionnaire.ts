@@ -99,9 +99,6 @@ export type Variants = z.infer<typeof Variants>;
 // Logic rules attached to items
 // ---------------------------------------------------------------------------
 
-export const SKIP_END = 'END';
-export const SKIP_END_ROW = 'END_ROW';
-
 export const SkipRule = z.strictObject({
   when: Expression,
   /** Item, block, roster or section id; `END` ends the questionnaire, `END_ROW` the current roster row. */

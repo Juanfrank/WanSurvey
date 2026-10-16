@@ -1,5 +1,5 @@
 import type { Questionnaire, Roster } from '@wansurvey/schema';
-import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema';
+import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema/constants';
 import type { Node } from './ast.js';
 import { buildModel, nodeExpressions, type CompiledExpr, type NodeKind } from './model.js';
 

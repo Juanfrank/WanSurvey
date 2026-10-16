@@ -4,14 +4,8 @@ import {
   type CompiledNode,
   type CompiledQuestionnaire,
 } from '@wansurvey/logic';
-import {
-  SKIP_END,
-  SKIP_END_ROW,
-  type Question,
-  type Roster,
-  type Section,
-  type StaticText,
-} from '@wansurvey/schema';
+import type { Question, Roster, Section, StaticText } from '@wansurvey/schema';
+import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema/constants';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { describeCondition, type DescribeContext } from './describe.js';

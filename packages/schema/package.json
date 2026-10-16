@@ -17,6 +17,10 @@
     "./feedback": {
       "types": "./dist/feedback.d.ts",
       "default": "./dist/feedback.js"
+    },
+    "./constants": {
+      "types": "./dist/constants.d.ts",
+      "default": "./dist/constants.js"
     }
   },
   "files": [
@@ -29,5 +33,11 @@
   },
   "dependencies": {
     "zod": "^4.1.0"
-  }
+  },
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/runtime.js",
+    "./src/index.ts",
+    "./src/runtime.ts"
+  ]
 }

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 const DIST = new URL('../dist/', import.meta.url).pathname;
-const BUDGET_KB = Number(process.env.RESPONDENT_BUDGET_KB ?? 240);
+const BUDGET_KB = Number(process.env.RESPONDENT_BUDGET_KB ?? 160);
 // Chunks by name: the respondent page is shared by invitation and open links.
 const ROUTES = ['RespondentPage', 'OpenLinkPage'];
 

@@ -19,6 +19,6 @@ Performance targets (spec §12) and how they are covered:
 | Target                                                    | Coverage                                                                                                                      |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Question-to-question under 100 ms                         | Engine re-evaluation under 20 ms on a 500-item questionnaire: `packages/logic/test/perf.test.ts`; navigation needs no network |
-| CAWI first load under 2.5 s LCP on 4G                     | The respondent page loads about 216 KB gzipped; CI fails above 240 KB (`apps/web/scripts/bundle-budget.mjs`)                  |
+| CAWI first load under 2.5 s LCP on 4G                     | The respondent page loads about 151 KB gzipped; CI fails above 160 KB (`apps/web/scripts/bundle-budget.mjs`)                  |
 | 300 concurrent interviewers; 50 CAWI completes per second | `load/sync-300.js`, `load/cawi-burst.js` (k6, on staging)                                                                     |
 | Dashboard within 5 s of a submit                          | As above                                                                                                                      |

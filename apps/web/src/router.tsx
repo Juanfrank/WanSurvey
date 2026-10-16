@@ -5,13 +5,27 @@ import {
   lazyRouteComponent,
   Outlet,
 } from '@tanstack/react-router';
-import { AppLayout } from './routes/AppLayout.js';
-import { HomePage } from './routes/HomePage.js';
-import { LoginPage } from './routes/LoginPage.js';
-import { TwoFactorPage, TwoFactorSetupPage } from './routes/TwoFactorPages.js';
-import { WaitingPage } from './routes/WaitingPage.js';
+import { isRespondentPath, loadCatalogue } from './i18n.js';
 
-const rootRoute = createRootRoute({ component: () => <Outlet /> });
+// Every page loads when opened: a web respondent downloads none of the staff application (H6).
+const AppLayout = lazyRouteComponent(() => import('./routes/AppLayout.js'), 'AppLayout');
+const HomePage = lazyRouteComponent(() => import('./routes/HomePage.js'), 'HomePage');
+const LoginPage = lazyRouteComponent(() => import('./routes/LoginPage.js'), 'LoginPage');
+const TwoFactorPage = lazyRouteComponent(
+  () => import('./routes/TwoFactorPages.js'),
+  'TwoFactorPage',
+);
+const TwoFactorSetupPage = lazyRouteComponent(
+  () => import('./routes/TwoFactorPages.js'),
+  'TwoFactorSetupPage',
+);
+const WaitingPage = lazyRouteComponent(() => import('./routes/WaitingPage.js'), 'WaitingPage');
+
+const rootRoute = createRootRoute({
+  component: () => <Outlet />,
+  // Staff pages need the interface's words, also when coming from a respondent's page.
+  beforeLoad: ({ location }) => (isRespondentPath(location.pathname) ? undefined : loadCatalogue()),
+});
 
 export const loginRoute = createRoute({
   getParentRoute: () => rootRoute,

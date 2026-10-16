@@ -1,16 +1,15 @@
-import {
-  SKIP_END,
-  SKIP_END_ROW,
-  type AnswerOption,
-  type Block,
-  type Computed,
-  type PageBreak,
-  type Question,
-  type Questionnaire,
-  type Roster,
-  type Section,
-  type StaticText,
+import type {
+  AnswerOption,
+  Block,
+  Computed,
+  PageBreak,
+  Question,
+  Questionnaire,
+  Roster,
+  Section,
+  StaticText,
 } from '@wansurvey/schema';
+import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema/constants';
 import { NAMESPACES, RESERVED_IDENTIFIERS, type Node, type Span } from './ast.js';
 import type { TypeTag } from './functions.js';
 import { tryParse } from './parser.js';
