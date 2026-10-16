@@ -272,6 +272,11 @@ export function DesignerPage() {
                 </Tabs.Trigger>
                 <Tabs.Trigger value="routing" className={tabCls}>
                   {t('designer.tab.routing')}
+                  {errorCount ? (
+                    <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
+                      {errorCount}
+                    </span>
+                  ) : null}
                 </Tabs.Trigger>
                 <Tabs.Trigger value="preview" className={tabCls}>
                   {t('designer.tab.preview')}

@@ -430,7 +430,11 @@ describe('routing', () => {
 
     const first = within(cards[0]!).getAllByRole('button').at(-1)!;
     first.focus();
+    // Enter previews the card; the preview's button opens it for editing.
     await user.keyboard('{ArrowDown}{Enter}');
+    const preview = within(map).getByTestId('routing-preview');
+    expect(onOpen).not.toHaveBeenCalled();
+    await user.click(within(preview).getByRole('button', { name: 'Edit this item' }));
     expect(onOpen).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByLabelText('Only items with logic'));
