@@ -17,7 +17,7 @@ import {
 } from '@wansurvey/schema';
 import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { CasesService } from '../cases/cases.service.js';
+import { CasesService, ofQuestionnaire } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { Tx } from '../db/database.js';
 import {
@@ -190,6 +190,8 @@ export class CatiService implements OnModuleInit {
       .where(
         and(
           eq(cases.projectId, projectId),
+          // The cases of the questionnaire being called (each has its own list).
+          ofQuestionnaire(questionnaireId),
           inArray(cases.status, ['fresh', 'assigned', 'in_progress']),
           or(isNull(cases.modePreference), eq(cases.modePreference, 'CATI')),
           pool
@@ -392,7 +394,12 @@ export class CatiService implements OnModuleInit {
     );
     const history = await this.history(tx, c.id);
     const qs = await this.usable(tx, projectId);
-    const qid = qs.find((q) => q.id === questionnaireId)?.id ?? qs[0]?.id ?? null;
+    // A case belongs to one questionnaire; the one asked for only counts for cases without.
+    const qid =
+      qs.find((q) => q.id === c.questionnaireId)?.id ??
+      qs.find((q) => q.id === questionnaireId)?.id ??
+      qs[0]?.id ??
+      null;
     let openInterview: InterviewRow | undefined;
     if (attempt.interviewId)
       [openInterview] = await tx

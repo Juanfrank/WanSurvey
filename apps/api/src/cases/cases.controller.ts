@@ -24,7 +24,7 @@ import { ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
 import { assignments, caseEvents, cases, contacts, sampleFields, users } from '../db/schema.js';
 import { compileRule, maskContact, maskSample, ruleError } from './case-logic.js';
-import { CasesService } from './cases.service.js';
+import { CasesService, ofQuestionnaire } from './cases.service.js';
 import { words } from './pii.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -32,6 +32,8 @@ const READ = ['cases.read_all', 'cases.read_assigned'] as const;
 const STATUSES = ['fresh', 'assigned', 'in_progress', 'finalised', 'withdrawn'] as const;
 
 const ListQuery = z.object({
+  /** The questionnaire whose cases to list (each questionnaire has its own). */
+  questionnaireId: z.uuid().optional(),
   status: z.enum(STATUSES).optional(),
   /** A user id, `me` or `none`. */
   assignedTo: z.union([z.uuid(), z.enum(['me', 'none'])]).optional(),
@@ -57,18 +59,29 @@ const AssignBody = z
     /** Assign every case matching this rule-style filter instead of a list. */
     filter: z.string().max(2000).optional(),
     onlyUnassigned: z.boolean().default(false),
+    /** With a filter: only this questionnaire's cases. */
+    questionnaireId: z.uuid().optional(),
     userId: z.uuid().nullable(),
   })
   .refine((b) => !!b.caseIds !== (b.filter !== undefined), 'Give either caseIds or filter');
 
 const RuleBody = z.object({
   userId: z.uuid(),
+  /** The questionnaire whose cases the rule hands out; left out: every case of the project. */
+  questionnaireId: z.uuid().nullable().optional(),
   name: z.string().max(200).optional(),
   filter: z.string().min(1).max(2000),
   quota: z.number().int().min(1).max(1_000_000).nullable().optional(),
   active: z.boolean().optional(),
 });
 const RulePatch = RuleBody.partial();
+const QuestionnaireQuery = z.object({ questionnaireId: z.uuid().optional() });
+/** Runs the rules: one rule, or all; over some cases (the selected ones), or every free one. */
+const ApplyBody = z.object({
+  ruleId: z.uuid().optional(),
+  caseIds: z.array(z.uuid()).max(50_000).optional(),
+  questionnaireId: z.uuid().optional(),
+});
 
 const FieldPatch = z.object({
   label: z.string().max(200).nullable().optional(),
@@ -102,6 +115,7 @@ export class CasesController {
       const settings = await this.svc.settings(tx, projectId);
       const own = this.svc.restrictedToOwn(ctx, projectId);
       const base: SQL[] = [eq(cases.projectId, projectId)];
+      if (q.questionnaireId) base.push(ofQuestionnaire(q.questionnaireId)!);
       if (own) base.push(this.visibleToOwn(ctx, settings.assignmentMode === 'pool'));
       const conds = [...base];
       if (q.status) conds.push(eq(cases.status, q.status));
@@ -171,6 +185,11 @@ export class CasesController {
         .from(cases)
         .where(and(...base))
         .groupBy(cases.status);
+      // Completed: finished with a complete interview (finalised also covers refusals…).
+      const [done] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(cases)
+        .where(and(...base, eq(cases.status, 'finalised'), eq(cases.disposition, 'COMPLETE')));
       const fields = await this.fields(tx, projectId);
       // Lists mask personal fields; clear values come from an audited reveal per case, or,
       // for an interviewer's own cases, automatically with the first view recorded.
@@ -182,6 +201,7 @@ export class CasesController {
         page: q.page,
         limit: q.limit,
         counts: Object.fromEntries(counts.map((c) => [c.status, c.n])),
+        completed: done?.n ?? 0,
         fields,
         assignmentMode: settings.assignmentMode,
         piiMasked: pii.size > 0,
@@ -442,7 +462,11 @@ export class CasesController {
         const err = ruleError(body.filter || 'true');
         if (body.filter && err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
         const match = compileRule(body.filter);
-        const all = this.open(await this.selectCases(tx).where(eq(cases.projectId, projectId)));
+        const all = this.open(
+          await this.selectCases(tx).where(
+            and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId)),
+          ),
+        );
         ids = all.filter(match).map((c) => c.id);
       }
       if (body.onlyUnassigned && ids?.length) {
@@ -515,12 +539,17 @@ export class CasesController {
 
   @Get('assignments')
   @RequirePermission('cases.assign', PERM)
-  rules(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
+  rules(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(new ZodPipe(QuestionnaireQuery)) q: z.infer<typeof QuestionnaireQuery>,
+  ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const rows = await tx
         .select({
           id: assignments.id,
           userId: assignments.userId,
+          questionnaireId: assignments.questionnaireId,
           userName: users.name,
           name: assignments.name,
           filter: assignments.filter,
@@ -530,12 +559,30 @@ export class CasesController {
         })
         .from(assignments)
         .innerJoin(users, eq(users.id, assignments.userId))
-        .where(eq(assignments.projectId, projectId))
+        .where(
+          and(
+            eq(assignments.projectId, projectId),
+            // A questionnaire's rules and the project-wide ones.
+            q.questionnaireId
+              ? or(
+                  eq(assignments.questionnaireId, q.questionnaireId),
+                  isNull(assignments.questionnaireId),
+                )
+              : undefined,
+          ),
+        )
         .orderBy(asc(assignments.createdAt));
       const all = this.open(await this.selectCases(tx).where(eq(cases.projectId, projectId)));
       return rows.map((r) => {
         const match = compileRule(r.filter);
-        const matching = all.filter(match);
+        const matching = all
+          .filter(
+            (c) =>
+              !r.questionnaireId ||
+              c.questionnaireId === r.questionnaireId ||
+              c.questionnaireId === null,
+          )
+          .filter(match);
         return {
           ...r,
           matching: matching.length,
@@ -553,14 +600,19 @@ export class CasesController {
   preview(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Body(new ZodPipe(z.object({ filter: z.string().max(2000) }))) body: { filter: string },
+    @Body(
+      new ZodPipe(z.object({ filter: z.string().max(2000), questionnaireId: z.uuid().optional() })),
+    )
+    body: { filter: string; questionnaireId?: string },
   ) {
     const err = body.filter.trim() ? ruleError(body.filter) : null;
     if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const match = compileRule(body.filter);
       const all = this.open(
-        await this.selectCases(tx).where(eq(cases.projectId, projectId)),
+        await this.selectCases(tx).where(
+          and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId)),
+        ),
       ).filter(match);
       return {
         matching: all.length,
@@ -582,12 +634,16 @@ export class CasesController {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       await this.svc.project(tx, projectId);
       await this.svc.assertAssignee(tx, projectId, body.userId);
+      const questionnaireId = body.questionnaireId
+        ? await this.svc.questionnaireFor(tx, projectId, body.questionnaireId)
+        : null;
       const [row] = await tx
         .insert(assignments)
         .values({
           tenantId: ctx.tenantId,
           projectId,
           userId: body.userId,
+          questionnaireId,
           kind: 'rule',
           name: body.name ?? null,
           filter: body.filter,
@@ -684,16 +740,15 @@ export class CasesController {
   apply(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Body(new ZodPipe(z.object({ ruleId: z.uuid().optional() }))) body: { ruleId?: string },
+    @Body(new ZodPipe(ApplyBody)) body: z.infer<typeof ApplyBody>,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       await this.svc.project(tx, projectId);
-      const n = await this.svc.applyRules(
-        tx,
-        ctx,
-        projectId,
-        body.ruleId ? { ruleId: body.ruleId } : {},
-      );
+      const n = await this.svc.applyRules(tx, ctx, projectId, {
+        ...(body.ruleId ? { ruleId: body.ruleId } : {}),
+        ...(body.caseIds ? { onlyCaseIds: body.caseIds } : {}),
+        ...(body.questionnaireId ? { questionnaireId: body.questionnaireId } : {}),
+      });
       await this.audit.record(
         tx,
         ctx.tenantId,
@@ -764,9 +819,11 @@ export class CasesController {
         externalId: cases.externalId,
         sample: cases.sample,
         samplePii: cases.samplePii,
+        questionnaireId: cases.questionnaireId,
         status: cases.status,
         disposition: cases.disposition,
         attempts: cases.attempts,
+        assignedAt: cases.assignedAt,
         priority: cases.priority,
         modePreference: cases.modePreference,
         assignedTo: cases.assignedTo,

@@ -13,7 +13,7 @@ import { uuidv7 } from 'uuidv7';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
-import { CasesService } from '../cases/cases.service.js';
+import { CasesService, ofQuestionnaire } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
@@ -346,7 +346,14 @@ export class CawiService implements OnModuleInit {
           modePreference: cases.modePreference,
         })
         .from(cases)
-        .where(and(eq(cases.projectId, projectId), inArray(cases.status, ['fresh', 'assigned'])))
+        .where(
+          and(
+            eq(cases.projectId, projectId),
+            // A campaign invites the cases of its own questionnaire.
+            ofQuestionnaire(w.questionnaireId),
+            inArray(cases.status, ['fresh', 'assigned']),
+          ),
+        )
         .orderBy(asc(cases.externalId))
     )
       .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
@@ -447,7 +454,14 @@ export class CawiService implements OnModuleInit {
           modePreference: cases.modePreference,
         })
         .from(cases)
-        .where(and(eq(cases.projectId, projectId), inArray(cases.status, ['fresh', 'assigned'])))
+        .where(
+          and(
+            eq(cases.projectId, projectId),
+            // A campaign invites the cases of its own questionnaire.
+            ofQuestionnaire(w.questionnaireId),
+            inArray(cases.status, ['fresh', 'assigned']),
+          ),
+        )
         .orderBy(asc(cases.externalId))
     )
       .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))

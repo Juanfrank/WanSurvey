@@ -96,9 +96,10 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
         const sealed = cipher
           ? cipher.seal(sample, pii)
           : { sample, samplePii: null, samplePiiIndex: null };
-        await tx`insert into cases (id, tenant_id, project_id, external_id, sample, sample_pii, sample_pii_index, status, priority, assigned_to)
-                 values (${caseId}, ${tenantId}, ${projectId}, ${r.id}, ${tx.json(sealed.sample as never)},
-                         ${sealed.samplePii}, ${sealed.samplePiiIndex}, ${mine ? 'assigned' : 'fresh'}, ${r.priority}, ${mine ? interviewer : null})`;
+        await tx`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, sample_pii, sample_pii_index, status, priority, assigned_to, assigned_at)
+                 values (${caseId}, ${tenantId}, ${projectId}, ${questionnaireId}, ${r.id}, ${tx.json(sealed.sample as never)},
+                         ${sealed.samplePii}, ${sealed.samplePiiIndex}, ${mine ? 'assigned' : 'fresh'}, ${r.priority}, ${mine ? interviewer : null},
+                         ${mine ? new Date() : null})`;
         await tx`insert into contacts (id, tenant_id, case_id, type, value, label)
                  values (${uuidv7()}, ${tenantId}, ${caseId}, 'phone', ${'+51' + r.phone}, 'phone'),
                         (${uuidv7()}, ${tenantId}, ${caseId}, 'email', ${r.email}, 'email')`;

@@ -25,6 +25,7 @@ import {
   contacts,
   memberships,
   projects,
+  questionnaires,
   sampleFields,
   tenantMembers,
   users,
@@ -46,6 +47,16 @@ export function chunks<T>(xs: T[], n = BATCH): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
   return out;
+}
+
+/**
+ * The cases of one questionnaire: its own, and those that belong to none (written before
+ * cases were per questionnaire). No questionnaire: every case of the project.
+ */
+export function ofQuestionnaire(questionnaireId?: string | null) {
+  return questionnaireId
+    ? or(eq(cases.questionnaireId, questionnaireId), isNull(cases.questionnaireId))!
+    : undefined;
 }
 
 @Injectable()
@@ -176,6 +187,7 @@ export class CasesService {
         .update(cases)
         .set({
           assignedTo: userId,
+          assignedAt: userId ? new Date() : null,
           status: userId
             ? sql`case when ${cases.status} = 'fresh' then 'assigned' else ${cases.status} end`
             : sql`case when ${cases.status} = 'assigned' then 'fresh' else ${cases.status} end`,
@@ -195,6 +207,24 @@ export class CasesService {
       })),
     );
     return changed.length;
+  }
+
+  /**
+   * The questionnaire new cases, frames and plans belong to: the one asked for (it must be
+   * the project's), else the project's first; null while the project has none.
+   */
+  async questionnaireFor(tx: Tx, projectId: string, wanted?: string | null) {
+    const rows = await tx
+      .select({ id: questionnaires.id })
+      .from(questionnaires)
+      .where(eq(questionnaires.projectId, projectId))
+      .orderBy(asc(questionnaires.createdAt), asc(questionnaires.id));
+    if (wanted) {
+      if (!rows.some((r) => r.id === wanted))
+        throw new NotFoundException({ code: 'NOT_FOUND', message: 'Questionnaire not found' });
+      return wanted;
+    }
+    return rows[0]?.id ?? null;
   }
 
   /** The project's settings, with defaults. */
@@ -342,7 +372,7 @@ export class CasesService {
     tx: Tx,
     ctx: AuthContext,
     projectId: string,
-    opts: { onlyCaseIds?: string[]; ruleId?: string } = {},
+    opts: { onlyCaseIds?: string[]; ruleId?: string; questionnaireId?: string | null } = {},
   ): Promise<number> {
     const eligible = new Set((await this.assignees(tx, projectId)).map((a) => a.userId));
     const rules = (
@@ -354,6 +384,15 @@ export class CasesService {
             eq(assignments.projectId, projectId),
             eq(assignments.active, true),
             ...(opts.ruleId ? [eq(assignments.id, opts.ruleId)] : []),
+            // A questionnaire's rules, and the ones for the whole project.
+            ...(opts.questionnaireId
+              ? [
+                  or(
+                    eq(assignments.questionnaireId, opts.questionnaireId),
+                    isNull(assignments.questionnaireId),
+                  )!,
+                ]
+              : []),
           ),
         )
         .orderBy(asc(assignments.createdAt))
@@ -368,6 +407,7 @@ export class CasesService {
           status: cases.status,
           priority: cases.priority,
           modePreference: cases.modePreference,
+          questionnaireId: cases.questionnaireId,
         })
         .from(cases)
         .where(
@@ -376,6 +416,7 @@ export class CasesService {
             isNull(cases.assignedTo),
             eq(cases.status, 'fresh'),
             ...(opts.onlyCaseIds ? [inArray(cases.id, opts.onlyCaseIds)] : []),
+            ...(opts.questionnaireId ? [ofQuestionnaire(opts.questionnaireId)!] : []),
           ),
         )
         .orderBy(sql`${cases.priority} desc`, asc(cases.id))
@@ -391,19 +432,29 @@ export class CasesService {
     const held = new Map(load.filter((l) => l.userId).map((l) => [l.userId!, l.n]));
     const taken = new Set<string>();
     let total = 0;
-    for (const strategy of STRATEGIES) {
-      const mine = rules.filter((r) => r.kind === strategy.kind);
-      if (!mine.length) continue;
-      for (const hand of strategy.plan({ rules: mine, pool, held, taken }))
-        total += await this.assign(
-          tx,
-          ctx,
-          projectId,
-          hand.caseIds,
-          hand.userId,
-          `rule:${hand.ruleId}`,
-        );
-    }
+    // A questionnaire's rules hand out its cases (and those of no questionnaire); rules for the
+    // whole project hand out any case. Questionnaire rules go first.
+    const groups = [...new Set(rules.map((r) => r.questionnaireId))].sort((a, b) =>
+      a === null ? 1 : b === null ? -1 : 0,
+    );
+    for (const group of groups)
+      for (const strategy of STRATEGIES) {
+        const mine = rules.filter((r) => r.kind === strategy.kind && r.questionnaireId === group);
+        if (!mine.length) continue;
+        const reachable =
+          group === null
+            ? pool
+            : pool.filter((c) => c.questionnaireId === group || c.questionnaireId === null);
+        for (const hand of strategy.plan({ rules: mine, pool: reachable, held, taken }))
+          total += await this.assign(
+            tx,
+            ctx,
+            projectId,
+            hand.caseIds,
+            hand.userId,
+            `rule:${hand.ruleId}`,
+          );
+      }
     return total;
   }
 
@@ -421,7 +472,12 @@ export class CasesService {
     await this.assertAssignee(tx, projectId, ctx.userId);
     const [row] = await tx
       .update(cases)
-      .set({ assignedTo: ctx.userId, status: 'assigned', updatedAt: new Date() })
+      .set({
+        assignedTo: ctx.userId,
+        assignedAt: new Date(),
+        status: 'assigned',
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(cases.id, caseId),
@@ -465,7 +521,7 @@ export class CasesService {
       });
     await tx
       .update(cases)
-      .set({ assignedTo: null, status: 'fresh', updatedAt: new Date() })
+      .set({ assignedTo: null, assignedAt: null, status: 'fresh', updatedAt: new Date() })
       .where(eq(cases.id, caseId));
     await this.events(tx, ctx.tenantId, ctx.userId, [
       { caseId, type: 'released', details: { from: c.assignedTo } },

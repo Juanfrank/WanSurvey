@@ -26,8 +26,10 @@ export async function seedDemoData(adminUrl: string, password: string, count = 6
     const [done] =
       await sql`select 1 from cases where project_id = ${p.id} and external_id = 'D001'`;
     if (done) return;
-    const [v] = await sql<{ id: string; compiled: CompiledQuestionnaire }[]>`
-      select v.id, v.compiled from questionnaire_versions v
+    const [v] = await sql<
+      { id: string; questionnaire_id: string; compiled: CompiledQuestionnaire }[]
+    >`
+      select v.id, v.questionnaire_id, v.compiled from questionnaire_versions v
       join questionnaires q on q.id = v.questionnaire_id
       where q.project_id = ${p.id} order by v.version desc limit 1`;
     const hash = await hashPassword(password);
@@ -75,8 +77,8 @@ export async function seedDemoData(adminUrl: string, password: string, count = 6
           city: 'Lima',
           age: 30 + (n % 40),
         });
-        await tx`insert into cases (id, tenant_id, project_id, external_id, sample, sample_pii, sample_pii_index, status, disposition, assigned_to, attempts, last_attempt_at)
-                 values (${caseId}, ${p.tenant_id}, ${p.id}, ${external}, ${tx.json(sealed.sample as never)},
+        await tx`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, sample_pii, sample_pii_index, status, disposition, assigned_to, attempts, last_attempt_at)
+                 values (${caseId}, ${p.tenant_id}, ${p.id}, ${v!.questionnaire_id}, ${external}, ${tx.json(sealed.sample as never)},
                          ${sealed.samplePii}, ${sealed.samplePiiIndex},
                          ${lost ? (finalLost ? 'finalised' : 'assigned') : 'finalised'}, ${lost ?? 'COMPLETE'},
                          ${interviewer}, ${mode === 'CATI' || lost ? 1 + (n % 3) : 0}, ${at})`;

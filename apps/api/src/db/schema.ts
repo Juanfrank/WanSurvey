@@ -391,6 +391,8 @@ export const cases = pgTable(
     projectId: uuid('project_id')
       .notNull()
       .references(() => projects.id),
+    /** The questionnaire whose case this is; null: any questionnaire of the project. */
+    questionnaireId: uuid('questionnaire_id').references(() => questionnaires.id),
     externalId: text('external_id').notNull(),
     sample: jsonb('sample').notNull().default({}),
     /** Personal sample fields, sealed with AES-256-GCM (H1); see `PiiCipher`. */
@@ -405,6 +407,8 @@ export const cases = pgTable(
     priority: integer('priority').notNull().default(0),
     modePreference: text('mode_preference'),
     assignedTo: uuid('assigned_to').references(() => users.id),
+    /** When the current holder got the case. */
+    assignedAt: timestamp('assigned_at', { withTimezone: true }),
     importId: uuid('import_id'),
     // CATI (slice 7)
     attempts: integer('attempts').notNull().default(0),
@@ -432,7 +436,9 @@ export const cases = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('cases_external_uq').on(t.projectId, t.externalId),
+    // Nulls not distinct (migration 0026): one id per questionnaire of the project.
+    uniqueIndex('cases_external_uq').on(t.projectId, t.questionnaireId, t.externalId),
+    index('cases_questionnaire_idx').on(t.projectId, t.questionnaireId, t.status),
     index('cases_next_contact_idx').on(t.projectId, t.nextContactAt),
     index('cases_status_idx').on(t.projectId, t.status),
     index('cases_assigned_idx').on(t.projectId, t.assignedTo),
@@ -476,6 +482,7 @@ export const sampleImports = pgTable('sample_imports', {
   projectId: uuid('project_id')
     .notNull()
     .references(() => projects.id),
+  questionnaireId: uuid('questionnaire_id').references(() => questionnaires.id),
   fileName: text('file_name').notNull(),
   size: integer('size').notNull(),
   sha256: text('sha256').notNull(),
@@ -523,6 +530,8 @@ export const assignments = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id),
+    /** The questionnaire whose cases the rule hands out; null: all of the project. */
+    questionnaireId: uuid('questionnaire_id').references(() => questionnaires.id),
     /** list | rule */
     kind: text('kind').notNull(),
     name: text('name'),
@@ -1116,8 +1125,9 @@ export const samplingPlans = pgTable('sampling_plans', {
   tenantId: tenantId().references(() => tenants.id),
   projectId: uuid('project_id')
     .notNull()
-    .unique()
     .references(() => projects.id),
+  /** One plan per questionnaire (unique with the project, nulls not distinct). */
+  questionnaireId: uuid('questionnaire_id').references(() => questionnaires.id),
   source: jsonb('source').notNull().default({}),
   design: jsonb('design').notNull().default({}),
   size: jsonb('size').notNull().default({}),
@@ -1146,6 +1156,7 @@ export const frameUnits = pgTable(
     projectId: uuid('project_id')
       .notNull()
       .references(() => projects.id),
+    questionnaireId: uuid('questionnaire_id').references(() => questionnaires.id),
     externalId: text('external_id').notNull(),
     sourceLabel: text('source_label'),
     sample: jsonb('sample').notNull().default({}),
@@ -1167,7 +1178,7 @@ export const frameUnits = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex('frame_units_external_uq').on(t.projectId, t.externalId),
+    uniqueIndex('frame_units_external_uq').on(t.projectId, t.questionnaireId, t.externalId),
     index('frame_units_role_idx').on(t.tenantId, t.projectId, t.role),
   ],
 );

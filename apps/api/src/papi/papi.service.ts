@@ -10,7 +10,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { compileRule, maskSample, ruleError } from '../cases/case-logic.js';
-import { CasesService } from '../cases/cases.service.js';
+import { CasesService, ofQuestionnaire } from '../cases/cases.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
 import type { Tx } from '../db/database.js';
 import { cases, entryMismatches, interviewAnswerEvents, interviews, users } from '../db/schema.js';
@@ -67,6 +67,9 @@ export class PapiService implements OnModuleInit {
     const conds = [eq(cases.projectId, projectId)];
     if (!all) conds.push(eq(cases.assignedTo, ctx.userId));
     if (q.caseIds?.length) conds.push(inArray(cases.id, q.caseIds));
+    // Each questionnaire prints its own cases.
+    const ofQ = ofQuestionnaire(chosen?.id);
+    if (ofQ) conds.push(ofQ);
     const rows = (
       await tx
         .select({

@@ -71,7 +71,15 @@ export class CapiService implements OnModuleInit {
     // Only questionnaires fielded face to face (Q1).
     const usable = await this.runtime.questionnairesFor(tx, projectId, 'CAPI');
     const qid = usable.find((q) => q.id === body.questionnaireId)?.id ?? usable[0]?.id;
-    const latest = qid ? await this.runtime.latestVersion(tx, projectId, qid, 'CAPI') : null;
+    // Each case is interviewed with its own questionnaire; the one asked for is for the rest.
+    const latestOf = new Map<string, Awaited<ReturnType<InterviewsService['latestVersion']>>>();
+    const latestFor = async (q: string | null | undefined) => {
+      const id = q ? usable.find((u) => u.id === q)?.id : qid;
+      if (!id) return null;
+      if (!latestOf.has(id))
+        latestOf.set(id, await this.runtime.latestVersion(tx, projectId, id, 'CAPI'));
+      return latestOf.get(id) ?? null;
+    };
 
     const rows = await tx
       .select()
@@ -81,7 +89,6 @@ export class CapiService implements OnModuleInit {
     const refused: { caseId: string; code: string }[] = [];
     const out: unknown[] = [];
     const versions = new Map<string, { id: string; version: number; compiled: unknown }>();
-    if (latest) versions.set(latest.id, latest);
     const now = new Date();
     for (const id of body.caseIds) {
       const c = rows.find((r) => r.id === id);
@@ -117,10 +124,12 @@ export class CapiService implements OnModuleInit {
         refused.push({ caseId: id, code: 'IN_PROGRESS_OTHER_MODE' });
         continue;
       }
+      const latest = await latestFor(c.questionnaireId);
       if (!open && !latest) {
         refused.push({ caseId: id, code: 'NO_PUBLISHED_VERSION' });
         continue;
       }
+      if (latest && !open) versions.set(latest.id, latest);
       await tx
         .update(cases)
         .set({ checkedOutDevice: body.deviceId, checkedOutBy: ctx.userId, checkedOutAt: now })

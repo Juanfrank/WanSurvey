@@ -143,6 +143,12 @@ export class InterviewsService {
     } else {
       const [taken] = await tx.select().from(interviews).where(eq(interviews.id, body.id));
       if (taken) throw new ConflictException({ code: 'ID_IN_USE', message: 'Interview id in use' });
+      // A case is interviewed with the questionnaire it belongs to.
+      if (c.questionnaireId && c.questionnaireId !== body.questionnaireId)
+        throw new ConflictException({
+          code: 'OTHER_QUESTIONNAIRE',
+          message: 'This case belongs to another questionnaire',
+        });
       const version = await this.latestVersion(tx, projectId, body.questionnaireId, body.mode);
       const context = await this.caseContext(tx, ctx, projectId, c, settings.revealToInterviewers);
       [row] = (await tx

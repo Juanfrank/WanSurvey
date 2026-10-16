@@ -13,6 +13,7 @@ import {
   PayloadTooLargeException,
   Post,
   Put,
+  Query,
   UnprocessableEntityException,
   UploadedFile,
   UseInterceptors,
@@ -20,7 +21,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
@@ -43,6 +44,13 @@ import { ImportMapping, suggestMapping, validateRows, type PreparedRow } from '.
 
 const PERM = { projectParam: 'projectId' } as const;
 const STAGING_HOURS = 24;
+const ListQuery = z.object({ questionnaireId: z.uuid().optional() });
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Cases and frame units of a questionnaire (or of the project when it has none yet). */
+const sameQ = (
+  col: typeof cases.questionnaireId | typeof frameUnits.questionnaireId,
+  q: string | null,
+) => (q ? eq(col, q) : isNull(col));
 
 interface UploadedSample {
   originalname: string;
@@ -84,7 +92,8 @@ export class ImportsController {
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @UploadedFile() file: UploadedSample | undefined,
-    @Body() body: { sheet?: string; target?: string; sourceLabel?: string },
+    @Body()
+    body: { sheet?: string; target?: string; sourceLabel?: string; questionnaireId?: string },
   ) {
     if (!file) throw new BadRequestException('Attach the sample file as "file"');
     if (file.size > this.config.IMPORT_MAX_MB * 1024 * 1024) throw new PayloadTooLargeException();
@@ -102,6 +111,14 @@ export class ImportsController {
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       await this.casesService.project(tx, projectId);
+      // The cases (or frame) of one questionnaire; without one, the project's first.
+      const wanted = typeof body?.questionnaireId === 'string' ? body.questionnaireId : '';
+      if (wanted && !UUID.test(wanted)) throw new BadRequestException('Invalid questionnaireId');
+      const questionnaireId = await this.casesService.questionnaireFor(
+        tx,
+        projectId,
+        wanted || null,
+      );
       await this.cleanupStaging(tx);
       const [dup] = await tx
         .select({ id: sampleImports.id, committedAt: sampleImports.committedAt })
@@ -109,6 +126,9 @@ export class ImportsController {
         .where(
           and(
             eq(sampleImports.projectId, projectId),
+            questionnaireId
+              ? eq(sampleImports.questionnaireId, questionnaireId)
+              : isNull(sampleImports.questionnaireId),
             eq(sampleImports.sha256, sha256),
             eq(sampleImports.status, 'committed'),
           ),
@@ -119,6 +139,7 @@ export class ImportsController {
         .values({
           tenantId: ctx.tenantId,
           projectId,
+          questionnaireId,
           fileName: file.originalname,
           size: file.size,
           sha256,
@@ -170,7 +191,11 @@ export class ImportsController {
 
   @Get()
   @RequirePermission('cases.import', PERM)
-  list(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
+  list(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(new ZodPipe(ListQuery)) q: z.infer<typeof ListQuery>,
+  ) {
     return this.database.withTenant(ctx.tenantId, (tx) =>
       tx
         .select({
@@ -183,7 +208,12 @@ export class ImportsController {
           committedAt: sampleImports.committedAt,
         })
         .from(sampleImports)
-        .where(eq(sampleImports.projectId, projectId))
+        .where(
+          and(
+            eq(sampleImports.projectId, projectId),
+            q.questionnaireId ? eq(sampleImports.questionnaireId, q.questionnaireId) : undefined,
+          ),
+        )
         .orderBy(desc(sampleImports.createdAt))
         .limit(50),
     );
@@ -224,7 +254,14 @@ export class ImportsController {
         throw new ConflictException('This import is already committed');
       const headers = imp.headers as string[];
       this.checkMapping(mapping, headers.length);
-      const { report } = await this.validate(tx, projectId, importId, headers, mapping);
+      const { report } = await this.validate(
+        tx,
+        projectId,
+        imp.questionnaireId,
+        importId,
+        headers,
+        mapping,
+      );
       await tx
         .update(sampleImports)
         .set({ mapping, report, status: 'validated' })
@@ -257,7 +294,15 @@ export class ImportsController {
         });
       const mapping = ImportMapping.parse(imp.mapping);
       const headers = imp.headers as string[];
-      const { report, prepared } = await this.validate(tx, projectId, importId, headers, mapping);
+      const q = imp.questionnaireId;
+      const { report, prepared } = await this.validate(
+        tx,
+        projectId,
+        q,
+        importId,
+        headers,
+        mapping,
+      );
       if (report.invalid && !mapping.skipInvalid) {
         throw new UnprocessableEntityException({
           code: 'INVALID_ROWS',
@@ -282,6 +327,7 @@ export class ImportsController {
             part.map((r) => ({
               tenantId: ctx.tenantId,
               projectId,
+              questionnaireId: q,
               externalId: r.externalId,
               ...this.casesService.pii.seal(r.sample, pii),
               priority: r.priority ?? 0,
@@ -307,6 +353,7 @@ export class ImportsController {
           .where(
             and(
               eq(cases.projectId, projectId),
+              sameQ(cases.questionnaireId, q),
               inArray(
                 cases.externalId,
                 part.map((r) => r.externalId),
@@ -347,7 +394,10 @@ export class ImportsController {
       const pool = (await this.casesService.settings(tx, projectId)).assignmentMode === 'pool';
       const assigned =
         created.length && !pool
-          ? await this.casesService.applyRules(tx, ctx, projectId, { onlyCaseIds: created })
+          ? await this.casesService.applyRules(tx, ctx, projectId, {
+              onlyCaseIds: created,
+              questionnaireId: q,
+            })
           : 0;
       await tx.delete(sampleImportRows).where(eq(sampleImportRows.importId, importId));
       const summary = {
@@ -390,6 +440,7 @@ export class ImportsController {
       const { report } = await this.validate(
         tx,
         projectId,
+        imp.questionnaireId,
         importId,
         imp.headers as string[],
         mapping,
@@ -439,6 +490,7 @@ export class ImportsController {
   private async validate(
     tx: Tx,
     projectId: string,
+    q: string | null,
     importId: string,
     headers: string[],
     mapping: ImportMapping,
@@ -452,7 +504,13 @@ export class ImportsController {
       const found = await tx
         .select({ externalId: cases.externalId })
         .from(cases)
-        .where(and(eq(cases.projectId, projectId), inArray(cases.externalId, part)));
+        .where(
+          and(
+            eq(cases.projectId, projectId),
+            sameQ(cases.questionnaireId, q),
+            inArray(cases.externalId, part),
+          ),
+        );
       found.forEach((f) => existing.add(f.externalId));
     }
     const result = validateRows(headers, rows, mapping, existing, maxExamples);
@@ -517,10 +575,16 @@ export class ImportsController {
     report: { invalid: number },
     prepared: PreparedRow[],
   ) {
+    const q = imp.questionnaireId;
     const [plan] = await tx
       .select({ status: samplingPlans.status, design: samplingPlans.design })
       .from(samplingPlans)
-      .where(eq(samplingPlans.projectId, projectId));
+      .where(
+        and(
+          eq(samplingPlans.projectId, projectId),
+          q ? eq(samplingPlans.questionnaireId, q) : isNull(samplingPlans.questionnaireId),
+        ),
+      );
     // A probability sample keeps its frame once selected (decision 6); a census or a
     // non-probability design takes later units straight in as cases ("added").
     const adding = plan?.status === 'selected';
@@ -536,7 +600,7 @@ export class ImportsController {
         await tx
           .select({ externalId: frameUnits.externalId })
           .from(frameUnits)
-          .where(eq(frameUnits.projectId, projectId))
+          .where(and(eq(frameUnits.projectId, projectId), sameQ(frameUnits.questionnaireId, q)))
       ).map((x) => x.externalId),
     );
     let created = 0;
@@ -551,6 +615,7 @@ export class ImportsController {
             fresh.map((r) => ({
               tenantId: ctx.tenantId,
               projectId,
+              questionnaireId: q,
               externalId: r.externalId,
               sourceLabel: imp.sourceLabel,
               ...frameSample(this.casesService.pii.seal(r.sample, pii)),
@@ -572,13 +637,17 @@ export class ImportsController {
               sourceLabel: imp.sourceLabel,
             })
             .where(
-              and(eq(frameUnits.projectId, projectId), eq(frameUnits.externalId, r.externalId)),
+              and(
+                eq(frameUnits.projectId, projectId),
+                sameQ(frameUnits.questionnaireId, q),
+                eq(frameUnits.externalId, r.externalId),
+              ),
             );
           updated++;
         }
     }
     await tx.delete(sampleImportRows).where(eq(sampleImportRows.importId, imp.id));
-    const addedCases = adding ? await this.sampling.addUnits(tx, ctx, projectId, added) : 0;
+    const addedCases = adding ? await this.sampling.addUnits(tx, ctx, projectId, q, added) : 0;
     const summary = {
       created,
       updated,

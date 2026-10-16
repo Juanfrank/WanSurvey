@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { SamplingPlanInput } from '@wansurvey/schema/sampling';
@@ -23,6 +24,11 @@ import {
 
 const PERM = { projectParam: 'projectId' } as const;
 
+/** Each questionnaire has its own plan and frame; without one, the project's first. */
+const QuestionnaireQuery = z.object({ questionnaireId: z.uuid().optional() });
+type QQ = z.infer<typeof QuestionnaireQuery>;
+const QPipe = new ZodPipe(QuestionnaireQuery);
+
 /** The sampling selector of a project (S1): plan, preview, selection, reserves, substitutes. */
 @ApiTags('sampling')
 @Controller('projects/:projectId/sampling')
@@ -31,8 +37,12 @@ export class SamplingController {
 
   @Get()
   @RequirePermission('cases.read_all', PERM)
-  get(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.sampling.get(ctx.tenantId, projectId);
+  get(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(QPipe) q: QQ,
+  ) {
+    return this.sampling.get(ctx.tenantId, projectId, q.questionnaireId);
   }
 
   @Put()
@@ -42,22 +52,31 @@ export class SamplingController {
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(SamplingPlanInput)) body: SamplingPlanInput,
+    @Query(QPipe) q: QQ,
   ) {
-    return this.sampling.save(ctx, projectId, body);
+    return this.sampling.save(ctx, projectId, body, q.questionnaireId);
   }
 
   @Post('preview')
   @HttpCode(200)
   @RequirePermission('cases.import', PERM)
-  preview(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.sampling.preview(ctx.tenantId, projectId);
+  preview(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(QPipe) q: QQ,
+  ) {
+    return this.sampling.preview(ctx.tenantId, projectId, q.questionnaireId);
   }
 
   @Post('select')
   @HttpCode(200)
   @RequirePermission('cases.import', PERM)
-  select(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.sampling.select(ctx, projectId);
+  select(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(QPipe) q: QQ,
+  ) {
+    return this.sampling.select(ctx, projectId, q.questionnaireId);
   }
 
   @Post('release')
@@ -68,8 +87,9 @@ export class SamplingController {
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(ReleaseBody)) body: z.infer<typeof ReleaseBody>,
+    @Query(QPipe) q: QQ,
   ) {
-    return this.sampling.release(ctx, projectId, body);
+    return this.sampling.release(ctx, projectId, body, q.questionnaireId);
   }
 
   @Post('cases/:caseId/substitute')
@@ -93,13 +113,18 @@ export class SamplingController {
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(FieldCasesBody)) body: z.infer<typeof FieldCasesBody>,
+    @Query(QPipe) q: QQ,
   ) {
-    return this.sampling.fieldCases(ctx, projectId, body);
+    return this.sampling.fieldCases(ctx, projectId, body, q.questionnaireId);
   }
 
   @Delete('frame')
   @RequirePermission('cases.import', PERM)
-  clearFrame(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.sampling.clearFrame(ctx, projectId);
+  clearFrame(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(QPipe) q: QQ,
+  ) {
+    return this.sampling.clearFrame(ctx, projectId, q.questionnaireId);
   }
 }
