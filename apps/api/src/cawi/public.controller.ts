@@ -29,7 +29,8 @@ const respondentLimit = { default: { limit: 120, ttl: 60_000 } };
 /** 1×1 transparent GIF. */
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
-const DeviceQuery = z.object({ device: DeviceId });
+/** `params` is the link's own query string (`sede=2&…`), kept with the interview. */
+const DeviceQuery = z.object({ device: DeviceId, params: z.string().max(2000).optional() });
 
 /**
  * Everything that works without signing in: the respondent's survey (the link token is the
@@ -50,7 +51,7 @@ export class PublicSurveyController {
     @Param('token') token: string,
     @Query(new ZodPipe(DeviceQuery)) q: z.infer<typeof DeviceQuery>,
   ) {
-    return this.cawi.respondent(token, q.device);
+    return this.cawi.respondent(token, q.device, q.params);
   }
 
   @Public()

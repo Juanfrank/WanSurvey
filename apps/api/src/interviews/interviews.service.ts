@@ -522,13 +522,21 @@ export class InterviewsService {
   }
 
   engineOptions(row: InterviewRow): Omit<InterviewOptions, 'state'> {
-    const context = row.context as { case?: Record<string, unknown> };
+    const context = row.context as {
+      case?: Record<string, unknown>;
+      params?: Record<string, string>;
+    };
     return {
       mode: row.mode as Mode,
       language: row.language,
       seed: row.id,
       now: () => row.startedAt,
-      context: { case: context.case ?? {}, respondent: respondentFromCase(context.case ?? {}) },
+      // The link's parameters answer their questions here too, as on the respondent's device.
+      context: {
+        case: context.case ?? {},
+        respondent: respondentFromCase(context.case ?? {}),
+        ...(context.params ? { params: context.params } : {}),
+      },
     };
   }
 

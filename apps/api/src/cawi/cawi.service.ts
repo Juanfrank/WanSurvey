@@ -810,7 +810,7 @@ export class CawiService implements OnModuleInit {
    * Opens the respondent's interview, creating it on first use. The browser's device id takes
    * the interview over, so a respondent can continue on another device with the same link.
    */
-  async respondent(token: string, deviceId: string) {
+  async respondent(token: string, deviceId: string, linkQuery = '') {
     return this.byToken(token, async (tx, inv) => {
       const settings = await this.cases.settings(tx, inv.projectId);
       let row: InterviewRow | undefined;
@@ -843,6 +843,7 @@ export class CawiService implements OnModuleInit {
           .set({ startedAt: new Date() })
           .where(eq(invitations.id, inv.id));
       const p = await this.runtime.payload(tx, row, deviceId);
+      const params = await this.keepParams(tx, row, p.compiled, linkQuery);
       return {
         interview: {
           id: p.interview.id,
@@ -854,7 +855,7 @@ export class CawiService implements OnModuleInit {
           activeMs: p.interview.activeMs,
           totalMs: p.interview.totalMs,
         },
-        context: { case: (p.context as { case?: unknown }).case ?? {} },
+        context: { case: (p.context as { case?: unknown }).case ?? {}, params },
         compiled: p.compiled,
         lastSeq: p.lastSeq,
         serverTime: p.serverTime,
@@ -864,6 +865,37 @@ export class CawiService implements OnModuleInit {
         },
       };
     });
+  }
+
+  /**
+   * The link's parameters (`?sede=2`), kept with the interview: the first link that brings
+   * any of the questionnaire's parameters sets them, and later visits (with other values, or
+   * none, or from another device) get the same ones, so the answers they give cannot change.
+   */
+  private async keepParams(
+    tx: Tx,
+    row: InterviewRow,
+    compiled: CompiledQuestionnaire,
+    linkQuery: string,
+  ): Promise<Record<string, string>> {
+    const context = row.context as { params?: Record<string, string> };
+    if (context.params || row.status !== 'in_progress') return context.params ?? {};
+    const names = new Set<string>();
+    for (const n of compiled.nodes)
+      if (n.kind === 'question') {
+        const name = (n.def as { urlParam?: string }).urlParam;
+        if (name) names.add(name);
+      }
+    const params: Record<string, string> = {};
+    new URLSearchParams(linkQuery).forEach((v, k) => {
+      if (names.has(k) && !(k in params)) params[k] = v.slice(0, 200);
+    });
+    if (!Object.keys(params).length) return {};
+    await tx
+      .update(interviews)
+      .set({ context: { ...context, params } })
+      .where(eq(interviews.id, row.id));
+    return params;
   }
 
   private async createInterview(tx: Tx, inv: InvitationRow, deviceId: string) {

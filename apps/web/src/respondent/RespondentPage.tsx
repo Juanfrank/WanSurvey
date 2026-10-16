@@ -23,7 +23,8 @@ interface RespondentPayload {
     activeMs: number;
     totalMs: number;
   };
-  context: { case: Record<string, unknown> };
+  /** `params`: the link's parameters (`?sede=2`), as the server kept them for this interview. */
+  context: { case: Record<string, unknown>; params?: Record<string, string> };
   compiled: CompiledQuestionnaire;
   lastSeq: number;
   completion: { message: string; redirectUrl: string };
@@ -37,26 +38,6 @@ const hasState = (s: unknown): s is Partial<InterviewState> =>
  * one question per page on phones; every change is kept on the device and sent at once, so a
  * respondent can stop and come back with the same link, on any device.
  */
-/**
- * The link's parameters (`?sede=2`): questions with that link parameter take them. They are
- * remembered for this invitation, so coming back without them keeps the same answers.
- */
-export function linkParams(token: string): Record<string, string> {
-  const fresh: Record<string, string> = {};
-  new URLSearchParams(window.location.search).forEach((v, k) => {
-    if (/^[a-z][a-z0-9_]{0,31}$/.test(k) && !['lang', 'ref'].includes(k))
-      fresh[k] = v.slice(0, 200);
-  });
-  const key = `ws.params.${token}`;
-  try {
-    if (Object.keys(fresh).length) localStorage.setItem(key, JSON.stringify(fresh));
-    else return JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, string>;
-  } catch {
-    // Without storage the parameters still work for this visit.
-  }
-  return fresh;
-}
-
 export function RespondentPage() {
   const { token } = useParams({ strict: false }) as { token: string };
   const [payload, setPayload] = useState<RespondentPayload | null>(null);
@@ -82,7 +63,10 @@ export function RespondentPage() {
         store = await InterviewStore.open();
         const deviceId = await store.deviceId();
         const p = await api<RespondentPayload>(
-          `/public/s/${token}?device=${encodeURIComponent(deviceId)}`,
+          `/public/s/${token}?device=${encodeURIComponent(deviceId)}` +
+            (window.location.search
+              ? `&params=${encodeURIComponent(window.location.search.slice(1))}`
+              : ''),
         );
         if (cancelled) return;
         document.documentElement.lang = p.interview.language;
@@ -112,7 +96,7 @@ export function RespondentPage() {
           context: {
             case: p.context.case,
             respondent: respondentFromCase(p.context.case),
-            params: linkParams(token),
+            params: p.context.params ?? {},
           },
           ...(hasState(state) ? { state: state as Partial<InterviewState> } : {}),
         });

@@ -39,17 +39,8 @@ export function OpenLinkPage() {
             // As above.
           }
         }
-        // The open link's parameters (?sede=2) go on to the survey.
-        if (window.location.search) {
-          try {
-            const params: Record<string, string> = {};
-            new URLSearchParams(window.location.search).forEach((v, k) => (params[k] = v));
-            localStorage.setItem(`ws.params.${token}`, JSON.stringify(params));
-          } catch {
-            // Without storage the survey starts without them.
-          }
-        }
-        await navigate({ to: '/s/$token', params: { token }, replace: true });
+        // The open link's parameters (?sede=2) go on to the survey, which keeps them.
+        await navigate({ href: `/s/${token}${window.location.search}`, replace: true });
       } catch (e) {
         setFailed(e instanceof ApiError && e.status === 404 ? 'notFound' : 'failed');
       }

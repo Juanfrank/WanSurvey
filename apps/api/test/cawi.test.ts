@@ -347,6 +347,96 @@ describe('web surveys by e-mail', () => {
     await api().get('/api/v1/public/s/not-a-real-token-at-all?device=anon-browser-1').expect(404);
   });
 
+  it('keeps the link parameters with the interview; the first link that brings them wins', async () => {
+    const withSede = await createQuestionnaire(t.admin, tenant.id, project, {
+      definition: {
+        ...definition,
+        id: 'SEDES',
+        sections: [
+          {
+            id: 'S',
+            title: { es: 'S' },
+            items: [
+              {
+                kind: 'question',
+                id: 'SEDE',
+                name: 'SEDE',
+                type: 'single',
+                text: { es: '¿A cuál sede acudió?' },
+                options: [
+                  { code: 1, label: { es: 'Norte' } },
+                  { code: 2, label: { es: 'Sur' } },
+                ],
+                urlParam: 'sede',
+              },
+              definition.sections[0]!.items[0]!,
+            ],
+          },
+        ],
+      },
+      publish: true,
+    });
+    const link = await put(`/projects/${project}/open-link`, {
+      active: true,
+      questionnaireId: withSede,
+    });
+    const slug = link.body.link.slug as string;
+    const { token } = (await api().post(`/api/v1/public/o/${slug}/start`).expect(200)).body as {
+      token: string;
+    };
+    const open = (device: string, query?: string) =>
+      api()
+        .get(
+          `/api/v1/public/s/${token}?device=${device}` +
+            (query === undefined ? '' : `&params=${encodeURIComponent(query)}`),
+        )
+        .expect(200);
+    // Only the questionnaire's own parameters are kept.
+    expect(
+      (await open('sede-browser-1', 'sede=2&utm_source=x&lang=es')).body.context.params,
+    ).toEqual({
+      sede: '2',
+    });
+    // Coming back with another value, or none, or on another device: the same.
+    expect((await open('sede-browser-1', 'sede=1')).body.context.params).toEqual({ sede: '2' });
+    expect((await open('sede-browser-2')).body.context.params).toEqual({ sede: '2' });
+    const [row] = await t.admin`
+      select i.context from interviews i join invitations v on v.interview_id = i.id
+      where i.project_id = ${project} and i.context ? 'params'`;
+    expect(row!.context.params).toEqual({ sede: '2' });
+    // Answered and sent with the kept parameter: the server's own run follows it too.
+    const p = (await open('sede-browser-2')).body;
+    const s = createInterview(p.compiled, {
+      mode: 'CAWI',
+      language: p.interview.language,
+      seed: p.interview.id,
+      now: () => new Date(p.interview.startedAt),
+      context: { case: p.context.case, params: p.context.params },
+    });
+    expect(s.currentKey()).toBe('AGE');
+    s.setAnswer('AGE', 33, 'respondent');
+    s.next();
+    const ops = s.drainEvents().map((e, i) => ({
+      seq: i + 1,
+      kind: 'answer' as const,
+      variable: e.key,
+      oldValue: e.oldValue,
+      newValue: e.newValue,
+      at: new Date().toISOString(),
+      source: e.source,
+      reason: e.reason ?? null,
+    }));
+    await api()
+      .post(`/api/v1/public/s/${token}/sync`)
+      .send({ deviceId: 'sede-browser-2', ops, state: s.state() })
+      .expect(200);
+    const done = await api()
+      .post(`/api/v1/public/s/${token}/submit`)
+      .send({ deviceId: 'sede-browser-2', seq: ops.length, path: s.pathKeys() });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    await put(`/projects/${project}/open-link`, { active: false });
+  });
+
   it('a links-only wave makes a personal link per case, e-mail or not, and sends nothing', async () => {
     const ids = await addCases(3, 'LNK');
     // One case without any e-mail still gets its link.
