@@ -72,6 +72,17 @@ describe('InterviewRunner (interviewer modes)', () => {
     expect(question()).toBe('A3_SEX');
   });
 
+  it('Shift+Enter goes back also when focus is outside the questions', async () => {
+    const { user } = setup('CATI');
+    await user.keyboard('{Enter}1{Enter}');
+    expect(question()).toBe('A2_AGE');
+    // E.g. after a click on the case panel: focus is on the page, outside the runner.
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    await user.keyboard('{Shift>}{Enter}{/Shift}');
+    expect(question()).toBe('A1_CONSENT');
+  });
+
   it('blocks Next on errors and announces them; shows codes and the interviewer instruction', async () => {
     const { user } = setup('CAPI');
     await user.keyboard('{Enter}1{Enter}{Enter}');

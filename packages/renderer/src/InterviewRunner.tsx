@@ -249,6 +249,25 @@ function Runner(p: InterviewRunnerProps) {
     refresh();
   }, [layout, currentKey, pages, session, refresh]);
 
+  // Shift+Enter goes back from anywhere on the page, not only from inside the questions: after
+  // a click on the case panel, a footer button or the page itself focus is outside the runner.
+  // Text areas and other forms keep the key for themselves.
+  useEffect(() => {
+    const onWindowKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !e.shiftKey || e.key !== 'Enter') return;
+      const target = e.target as HTMLElement | null;
+      if (target && containerRef.current?.contains(target)) return;
+      if (
+        target?.closest('textarea, input, select, [contenteditable], dialog, [role=dialog], form')
+      )
+        return;
+      e.preventDefault();
+      back();
+    };
+    window.addEventListener('keydown', onWindowKey);
+    return () => window.removeEventListener('keydown', onWindowKey);
+  }, [back]);
+
   const addRow = useCallback(
     (roster: TraceEntry) => {
       const row = session.addRosterRow(roster.key);

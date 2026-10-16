@@ -905,7 +905,7 @@ const subTabCls =
  */
 export function ProjectPage() {
   const { projectId } = useParams({ strict: false }) as { projectId: string };
-  const search = useSearch({ strict: false }) as { tab?: string; notice?: string };
+  const search = useSearch({ strict: false }) as { tab?: string; notice?: string; call?: string };
   const { t } = useTranslation();
   const project = useQuery({
     queryKey: ['project', projectId],
@@ -948,11 +948,15 @@ export function ProjectPage() {
     ...(canDashboard ? (['topline', 'dashboard'] as const) : []),
     ...(canMetrics ? (['metrics'] as const) : []),
   ];
+  // Who designs starts at the questionnaires; callers at their calls (the call screen and
+  // their callbacks), other interviewers and clerks at their cases.
+  const canDesign = useCan('questionnaires.edit', projectId);
   const tabs: ProjectTab[] = [
+    ...(canCall && !canDesign ? (['calls'] as const) : []),
     // The questionnaires are defined first; then the sample says who answers them.
     ...(canQuestionnaires ? (['questionnaires'] as const) : []),
     ...(casesSubs.length ? (['cases'] as const) : []),
-    ...(canCall ? (['calls'] as const) : []),
+    ...(canCall && canDesign ? (['calls'] as const) : []),
     // Data-entry clerks who do not see the questionnaires keep paper forms as a tab.
     ...(canPaper && !canQuestionnaires ? (['paper'] as const) : []),
     ...(canReview || canApprove ? (['review'] as const) : []),
@@ -971,9 +975,13 @@ export function ProjectPage() {
   const [panel, setPanel] = useState<QPanel>(
     initial?.panel ? { kind: initial.panel, name: '' } : null,
   );
-  // Who designs starts at the questionnaires; interviewers and clerks at their cases.
-  const canDesign = useCan('questionnaires.edit', projectId);
-  const start = !canDesign && tabs.includes('cases') ? 'cases' : (tabs[0] ?? null);
+  const start = canDesign
+    ? (tabs[0] ?? null)
+    : tabs.includes('calls')
+      ? 'calls'
+      : tabs.includes('cases')
+        ? 'cases'
+        : (tabs[0] ?? null);
   const current = tab && tabs.includes(tab) ? tab : start;
   const cases = casesSubs.includes(casesSub) ? casesSub : casesSubs[0]!;
   const results = resultsSubs.includes(resultsSub) ? resultsSub : resultsSubs[0]!;
@@ -1095,7 +1103,7 @@ export function ProjectPage() {
             />
           </Tabs.Content>
           <Tabs.Content value="calls">
-            <CallsTab projectId={projectId} notice={search.notice} />
+            <CallsTab projectId={projectId} notice={search.notice} call={search.call} />
           </Tabs.Content>
           <Tabs.Content value="paper">
             <PaperTab projectId={projectId} notice={search.notice} />

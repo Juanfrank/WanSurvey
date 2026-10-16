@@ -207,7 +207,7 @@ function SearchableSelect(p: ControlProps & { selected: string | number | null }
                   ? (a + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length
                   : 0,
               );
-            } else if (e.key === 'Enter' && open && list[active]) {
+            } else if (e.key === 'Enter' && !e.shiftKey && open && list[active]) {
               e.preventDefault();
               e.stopPropagation();
               pickOption(list[active]!);

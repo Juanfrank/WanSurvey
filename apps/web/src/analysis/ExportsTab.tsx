@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls } from '../designer/fields.js';
@@ -84,7 +85,23 @@ export function ExportsTab({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col gap-6 text-sm" data-testid="exports">
       <Card className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">{t('analysis.exports.title')}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">{t('analysis.exports.title')}</h2>
+          {/* The results as a report: the printable summary, saved as PDF from the browser. */}
+          <Link
+            to="/projects/$projectId/summary"
+            params={{ projectId }}
+            search={{
+              ...(filters.questionnaireId ? { questionnaireId: filters.questionnaireId } : {}),
+              ...(filters.mode ? { mode: filters.mode } : {}),
+              ...(filters.from ? { from: filters.from } : {}),
+              ...(filters.to ? { to: filters.to } : {}),
+            }}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium hover:bg-slate-50"
+          >
+            {t('analysis.exports.summaryPdf')}
+          </Link>
+        </div>
         <form
           className="flex flex-col gap-4"
           onSubmit={(e) => {

@@ -100,7 +100,16 @@ function localAt(tz: string, opts: { minutes?: number; days?: number; hhmm?: str
  * callbacks are booked in the respondent's time zone. Keyboard-first: N, Alt+1–3, 1–9 and
  * Ctrl+Enter.
  */
-export function CallsTab({ projectId, notice }: { projectId: string; notice?: string }) {
+export function CallsTab({
+  projectId,
+  notice,
+  call,
+}: {
+  projectId: string;
+  notice?: string;
+  /** A case to call at once, chosen in its drawer. */
+  call?: string;
+}) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -161,7 +170,8 @@ export function CallsTab({ projectId, notice }: { projectId: string; notice?: st
 
   // A request for a case made while another request runs (N pressed as the tab opens and
   // checks for an open call, say) is served when that one ends, not dropped.
-  const pending = useRef<{ caseId?: string } | null>(null);
+  // A case chosen in its drawer is called once the open call (if any) has been checked.
+  const pending = useRef<{ caseId?: string } | null>(call ? { caseId: call } : null);
 
   /** `current`: only the caller's open call, if any (opening the tab never takes a case). */
   const next = useCallback(

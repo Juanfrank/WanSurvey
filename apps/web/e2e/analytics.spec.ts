@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, login, PM, pickOrganisation, resultsSection, shot } from './helpers.js';
 
@@ -115,6 +116,23 @@ test('team metrics, topline, crosstab, summary and a client link', async ({ page
   await page.getByLabel('Mode').first().selectOption('');
   await shot(page, 'topline-crosstab');
   await expectAccessible(page);
+
+  // The printable summary, saved as PDF, carries the results.
+  await page.getByRole('link', { name: 'Open the printable summary' }).click();
+  const printable = page.getByTestId('summary');
+  await expect(printable.getByTestId('topline').locator('[data-variable="A3_SEX"]')).toBeVisible();
+  await page.emulateMedia({ media: 'print' });
+  const pdf = await page.pdf({ format: 'A4', printBackground: false });
+  const pdfPath = test.info().outputPath('summary.pdf');
+  writeFileSync(pdfPath, pdf);
+  const text = execFileSync('pdftotext', [pdfPath, '-']).toString();
+  expect(text).toContain('Household Survey 2026');
+  expect(text).toMatch(/A3_SEX/);
+  expect(text).toMatch(/Base: 60/);
+  // The bars print too (they are backgrounds, kept with print-color-adjust).
+  execFileSync('pdftoppm', ['-png', '-r', '40', '-f', '1', '-l', '1', pdfPath, pdfPath]);
+  await page.emulateMedia({ media: 'screen' });
+  await page.goBack();
 
   // A link for the client: a read-only summary without signing in.
   await page.getByRole('button', { name: 'Create a link' }).click();

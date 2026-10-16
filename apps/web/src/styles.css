@@ -312,6 +312,12 @@
   body {
     background: white;
   }
+  /* Bars, chips and colour scales are backgrounds: printed as on screen, even when the
+     browser's "background graphics" is off (the results summary saved as PDF). */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* People who ask for less motion get none: no transitions, animations or smooth scrolling. */

@@ -3,7 +3,8 @@ import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { Button } from '../routes/ui.js';
+import { localiseError } from '../i18n-messages.js';
+import { Button, ErrorText } from '../routes/ui.js';
 import { BarTable, fmtNum, fmtPct, Progress } from './charts.js';
 import { filterQuery, type DataFilters } from './ResultsTab.js';
 import { ToplineItems, type ToplineItem } from './Topline.js';
@@ -131,7 +132,13 @@ export function SummaryPage() {
           ← {t('analysis.results.title')}
         </Link>
       </nav>
-      {s.data ? <SummaryView s={s.data} /> : <p>…</p>}
+      {s.data ? (
+        <SummaryView s={s.data} />
+      ) : s.error ? (
+        <ErrorText>{localiseError(t, s.error)}</ErrorText>
+      ) : (
+        <p aria-busy="true">…</p>
+      )}
     </div>
   );
 }

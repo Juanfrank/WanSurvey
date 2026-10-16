@@ -163,6 +163,9 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByRole('button', { name: 'Asignar', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'Demo interviewer' })).toHaveCount(8);
   await page.getByRole('tab', { name: 'Configuración', exact: true }).click();
+  // Calls all day, so the test does not depend on the hour it runs at.
+  await page.getByLabel('Llamar desde').fill('00:00');
+  await page.getByLabel('Llamar hasta').fill('00:00');
   await page.getByLabel('Intentos por caso').fill('1');
   await page.getByRole('button', { name: 'Guardar configuración' }).click();
   await expect(page.getByText('Configuración guardada.')).toBeVisible();
@@ -171,8 +174,9 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   const { ctx: ivCtx, page: iv } = await newBrowser(browser);
   await signIn(iv, INTERVIEWER);
   await iv.getByRole('link', { name: `Encuesta de satisfacción vecinal ${CODE}` }).click();
-  await expect(iv.getByRole('tab', { name: 'Mis casos' })).toHaveAttribute('aria-selected', 'true');
-  await iv.getByRole('tab', { name: 'Llamadas' }).click();
+  // A caller lands on the call screen, with their callbacks beside it.
+  await expect(iv.getByRole('tab', { name: 'Llamadas' })).toHaveAttribute('aria-selected', 'true');
+  await expect(iv.getByRole('complementary', { name: 'Mis rellamadas' })).toBeVisible();
   const nextCase = iv.getByRole('button', { name: 'Siguiente caso N' });
   const call = async (outcome: string) => {
     await nextCase.click();
@@ -220,7 +224,7 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await iv.getByRole('button', { name: /^Guardar resultado/ }).click();
   await expect(nextCase).toBeVisible();
   await call('9 Cita');
-  await iv.getByRole('button', { name: 'Mañana 09:00' }).click();
+  await iv.getByRole('button', { name: 'Mañana 10:00' }).click();
   await iv.getByLabel('Nota (opcional)').fill('Prefiere que la llamen temprano.');
   await iv.getByRole('button', { name: /^Guardar resultado/ }).click();
   await expect(nextCase).toBeVisible();

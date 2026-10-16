@@ -154,6 +154,7 @@ export const analysisEn = {
   },
   exports: {
     title: 'Export data',
+    summaryPdf: 'Results summary (PDF)',
     format: 'Format',
     formats: {
       csv: 'CSV (UTF-8)',
@@ -338,6 +339,7 @@ export const analysisEs: typeof analysisEn = {
   },
   exports: {
     title: 'Exportar datos',
+    summaryPdf: 'Resumen de resultados (PDF)',
     format: 'Formato',
     formats: {
       csv: 'CSV (UTF-8)',

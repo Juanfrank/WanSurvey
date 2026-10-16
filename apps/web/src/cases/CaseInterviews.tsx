@@ -74,10 +74,26 @@ export function StartInterview({
   return (
     <div className="flex flex-col gap-2" data-testid="start-interview">
       {!open ? (
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={!list.isSuccess} onClick={() => setOpen(true)}>
             {resume ? t('interview.resumeCase') : t('interview.start')}
           </Button>
+          {/* A phone case goes through the call screen: number, outcome, then the interview. */}
+          {!resume && usable.some((q) => modesOf(q).includes('CATI')) ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                void navigate({
+                  to: '/projects/$projectId',
+                  params: { projectId },
+                  search: { tab: 'calls', call: caseId },
+                })
+              }
+            >
+              {t('interview.callCase')}
+            </Button>
+          ) : null}
         </div>
       ) : (
         <form
