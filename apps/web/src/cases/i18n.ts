@@ -19,6 +19,7 @@ export const casesEn = {
     topline: 'Summary',
     casesSections: 'Case sections',
     resultsSections: 'Result sections',
+    sampling: 'Sampling selector',
   },
   privacy: {
     title: 'Personal data',
@@ -306,6 +307,7 @@ export const casesEs: CasesCatalogue = {
     topline: 'Resumen',
     casesSections: 'Secciones de casos',
     resultsSections: 'Secciones de resultados',
+    sampling: 'Selector muestral',
   },
   privacy: {
     title: 'Datos personales',

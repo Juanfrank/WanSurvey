@@ -270,8 +270,26 @@ export class CasesController {
           )
         : [];
       const free = !c.assignedTo && c.status === 'fresh';
+      // The sample keeps its history: the case this one substitutes, and its own substitute.
+      const [original] = c.substituteFor
+        ? await tx
+            .select({ id: cases.id, externalId: cases.externalId })
+            .from(cases)
+            .where(eq(cases.id, c.substituteFor))
+        : [];
+      const [substitute] = await tx
+        .select({ id: cases.id, externalId: cases.externalId })
+        .from(cases)
+        .where(and(eq(cases.projectId, projectId), eq(cases.substituteFor, caseId)));
       return {
         ...c,
+        substitutes: original ?? null,
+        substitutedBy: substitute ?? null,
+        canSubstitute:
+          can(ctx.memberships, 'cases.import', projectId) &&
+          c.status === 'finalised' &&
+          !!c.selectionRole &&
+          !substitute,
         sample: maskSample(c.sample as Record<string, unknown>, pii, show),
         contacts: cs.map((x) => maskContact(x, show)),
         history,
@@ -755,6 +773,10 @@ export class CasesController {
         checkedOutAt: cases.checkedOutAt,
         anonymisedAt: cases.anonymisedAt,
         updatedAt: cases.updatedAt,
+        selectionRole: cases.selectionRole,
+        substituteFor: cases.substituteFor,
+        inclusionProb: cases.inclusionProb,
+        baseWeight: cases.baseWeight,
       })
       .from(cases)
       .leftJoin(users, eq(users.id, cases.assignedTo))

@@ -1,3 +1,4 @@
+import './sampling-i18n.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -73,7 +74,18 @@ const fieldName = (h: string) => {
 };
 
 /** Upload → map columns → validation report → commit. */
-export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): void }) {
+export function ImportTab({
+  projectId,
+  onDone,
+  target = 'cases',
+  sourceLabel,
+}: {
+  projectId: string;
+  onDone(): void;
+  /** frame: the rows become units of the sampling frame (S1), not cases. */
+  target?: 'cases' | 'frame';
+  sourceLabel?: string;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -95,6 +107,10 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
     mutationFn: (file: File) => {
       const form = new FormData();
       form.append('file', file);
+      if (target === 'frame') {
+        form.append('target', 'frame');
+        if (sourceLabel?.trim()) form.append('sourceLabel', sourceLabel.trim());
+      }
       return upload<Uploaded>(`/projects/${projectId}/imports`, form);
     },
     onSuccess: (u) => {
@@ -137,6 +153,7 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
       await qc.invalidateQueries({ queryKey: ['imports', projectId] });
       await qc.invalidateQueries({ queryKey: ['sample-fields', projectId] });
       await qc.invalidateQueries({ queryKey: ['assignees', projectId] });
+      await qc.invalidateQueries({ queryKey: ['sampling', projectId] });
     },
     onError: fail,
   });
@@ -462,12 +479,14 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
               }
               onClick={() => commit.mutate()}
             >
-              {report.toUpdate
-                ? t('cases.import.commitUpdate', {
-                    create: report.toCreate,
-                    update: report.toUpdate,
-                  })
-                : t('cases.import.commit', { count: report.toCreate })}
+              {target === 'frame'
+                ? t('cases.sampling.loadFrame', { count: report.toCreate + report.toUpdate })
+                : report.toUpdate
+                  ? t('cases.import.commitUpdate', {
+                      create: report.toCreate,
+                      update: report.toUpdate,
+                    })
+                  : t('cases.import.commit', { count: report.toCreate })}
             </Button>
           </div>
         </Card>
@@ -477,11 +496,16 @@ export function ImportTab({ projectId, onDone }: { projectId: string; onDone(): 
         <Card className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">{t('cases.import.stepDone')}</h2>
           <p role="status" className="text-sm" data-testid="import-done">
-            {t('cases.import.done', summary)}
+            {target === 'frame'
+              ? t('cases.sampling.frameLoaded', summary) +
+                (summary.added !== undefined
+                  ? ` ${t('cases.sampling.addedCases', { count: summary.added })}`
+                  : '')
+              : t('cases.import.done', summary)}
           </p>
           <div className="flex gap-2">
             <Button type="button" onClick={onDone}>
-              {t('cases.import.viewCases')}
+              {target === 'frame' ? t('cases.sampling.toDesign') : t('cases.import.viewCases')}
             </Button>
             <Button type="button" variant="secondary" onClick={reset}>
               {t('cases.import.another')}

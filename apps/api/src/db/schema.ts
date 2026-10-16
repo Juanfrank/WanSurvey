@@ -420,6 +420,14 @@ export const cases = pgTable(
     checkedOutDevice: text('checked_out_device'),
     checkedOutBy: uuid('checked_out_by'),
     checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+    // Sampling selector (S1): where the case comes from in the selected sample.
+    frameUnitId: uuid('frame_unit_id'),
+    /** main | reserve | substitute | field; null for cases loaded without a plan. */
+    selectionRole: text('selection_role'),
+    /** The case this one replaces (a substitute keeps the original's result untouched). */
+    substituteFor: uuid('substitute_for'),
+    inclusionProb: doublePrecision('inclusion_prob'),
+    baseWeight: doublePrecision('base_weight'),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -477,6 +485,10 @@ export const sampleImports = pgTable('sample_imports', {
   status: text('status').notNull().default('uploaded'),
   report: jsonb('report'),
   rows: integer('rows').notNull().default(0),
+  /** cases (load cases directly) | frame (units of the sampling frame, S1) */
+  target: text('target').notNull().default('cases'),
+  /** Which source the units come from, when a frame combines several lists. */
+  sourceLabel: text('source_label'),
   uploadedBy: uuid('uploaded_by'),
   createdAt: createdAt(),
   committedAt: timestamp('committed_at', { withTimezone: true }),
@@ -1087,4 +1099,66 @@ export const feedbackResponses = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('feedback_responses_point_idx').on(t.tenantId, t.pointId, t.createdAt)],
+);
+
+/** The project's sampling plan (S1): source, design, sizes, eligibility, quotas, substitution. */
+export const samplingPlans = pgTable('sampling_plans', {
+  id: id(),
+  tenantId: tenantId().references(() => tenants.id),
+  projectId: uuid('project_id')
+    .notNull()
+    .unique()
+    .references(() => projects.id),
+  source: jsonb('source').notNull().default({}),
+  design: jsonb('design').notNull().default({}),
+  size: jsonb('size').notNull().default({}),
+  /** Expression over case.* that a frame unit must meet to be eligible. */
+  eligibility: text('eligibility'),
+  /** Expression over case.* that excludes a unit (with the reason recorded). */
+  exclusions: text('exclusions'),
+  quotas: jsonb('quotas').notNull().default([]),
+  substitution: jsonb('substitution').notNull().default({}),
+  seed: text('seed').notNull(),
+  /** draft | selected */
+  status: text('status').notNull().default('draft'),
+  result: jsonb('result'),
+  selectedAt: timestamp('selected_at', { withTimezone: true }),
+  selectedBy: uuid('selected_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by'),
+});
+
+/** Units of the sampling frame, before and after selection (S1). */
+export const frameUnits = pgTable(
+  'frame_units',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    externalId: text('external_id').notNull(),
+    sourceLabel: text('source_label'),
+    sample: jsonb('sample').notNull().default({}),
+    samplePii: text('sample_pii'),
+    contacts: jsonb('contacts').notNull().default([]),
+    importId: uuid('import_id'),
+    eligible: boolean('eligible').notNull().default(true),
+    /** Why the unit is out (ineligible or excluded), when it is. */
+    exclusion: text('exclusion'),
+    /** main | reserve once selected; null otherwise. */
+    role: text('role'),
+    /** Order in which reserves are released (1 first). */
+    releaseOrder: integer('release_order'),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    inclusionProb: doublePrecision('inclusion_prob'),
+    baseWeight: doublePrecision('base_weight'),
+    stratum: text('stratum'),
+    caseId: uuid('case_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('frame_units_external_uq').on(t.projectId, t.externalId),
+    index('frame_units_role_idx').on(t.tenantId, t.projectId, t.role),
+  ],
 );

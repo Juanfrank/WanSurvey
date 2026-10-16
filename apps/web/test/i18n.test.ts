@@ -1,6 +1,7 @@
 import { rendererResources } from '@wansurvey/renderer';
 import i18next from 'i18next';
 import { describe, expect, it } from 'vitest';
+import { registerSamplingText } from '../src/cases/sampling-i18n.js';
 import { initI18n } from '../src/i18n.js';
 import { TEXT } from '../src/respondent/text.js';
 
@@ -25,6 +26,7 @@ const NONE = { onlyEnglish: [], onlySpanish: [] };
 describe('interface catalogues', () => {
   it('English and Spanish have the same keys, plural forms included', async () => {
     await initI18n('es');
+    registerSamplingText();
     const app = (lng: string) => i18next.getResourceBundle(lng, 'app');
     expect(difference(app('en'), app('es'))).toEqual(NONE);
     expect(difference(rendererResources.en.renderer, rendererResources.es.renderer)).toEqual(NONE);
@@ -33,6 +35,7 @@ describe('interface catalogues', () => {
 
   it('no translation is left empty', async () => {
     await initI18n('es');
+    registerSamplingText();
     for (const lng of ['en', 'es']) {
       const bundle = i18next.getResourceBundle(lng, 'app') as Record<string, unknown>;
       const empty = keys(bundle).filter((k) => {
@@ -47,6 +50,7 @@ describe('interface catalogues', () => {
 
   it('a placeholder used in English is used in Spanish too', async () => {
     await initI18n('es');
+    registerSamplingText();
     const en = i18next.getResourceBundle('en', 'app') as Record<string, unknown>;
     const es = i18next.getResourceBundle('es', 'app') as Record<string, unknown>;
     const at = (o: Record<string, unknown>, k: string) =>

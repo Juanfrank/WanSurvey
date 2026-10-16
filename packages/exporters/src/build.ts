@@ -19,6 +19,13 @@ export interface ExportInterview {
   /** Counts from paradata, when the export includes it. */
   paradata?: { backMoves: number; notes: number; pauses: number; warnings: number };
   flags?: Record<string, unknown>;
+  /** From the sampling selector (S1): the case's role, stratum, π and base weight 1/π. */
+  sampling?: {
+    role: string | null;
+    stratum: string | null;
+    prob: number | null;
+    weight: number | null;
+  };
 }
 
 export interface BuildOptions {
@@ -252,6 +259,10 @@ const META: Column[] = [
   { name: 'active_seconds', label: 'Active time (seconds)', type: 'numeric', measure: 'scale' },
   { name: 'version', label: 'Questionnaire version', type: 'numeric', measure: 'ordinal' },
   { name: 'language', label: 'Language', type: 'string' },
+  { name: 'selection_role', label: 'Selection role', type: 'string' },
+  { name: 'stratum', label: 'Stratum', type: 'string' },
+  { name: 'inclusion_prob', label: 'Probability of inclusion', type: 'numeric', measure: 'scale' },
+  { name: 'base_weight', label: 'Base weight (1/π)', type: 'numeric', measure: 'scale' },
 ];
 const PARADATA: Column[] = [
   { name: 'back_moves', label: 'Back moves', type: 'numeric', measure: 'scale' },
@@ -279,6 +290,10 @@ function meta(i: ExportInterview): Cell[] {
     Math.round(i.activeMs / 1000),
     i.version,
     i.language,
+    i.sampling?.role ?? null,
+    i.sampling?.stratum ?? null,
+    i.sampling?.prob ?? null,
+    i.sampling?.weight ?? null,
   ];
 }
 

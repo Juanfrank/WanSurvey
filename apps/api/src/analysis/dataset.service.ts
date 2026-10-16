@@ -75,8 +75,13 @@ export class DatasetService {
       notes: number | null;
       pauses: number | null;
       warnings: number | null;
+      role: string | null;
+      stratum: string | null;
+      prob: number | null;
+      weight: number | null;
     }>(sql`
       select i.id, i.case_id as "caseId", i.mode, i.status, i.disposition, u.name as interviewer,
+             c.selection_role as role, fu.stratum, c.inclusion_prob as prob, c.base_weight as weight,
              i.started_at as "startedAt", i.submitted_at as "submittedAt", i.active_ms as "activeMs",
              v.version, i.language, i.answers, i.flags
              ${
@@ -87,6 +92,8 @@ export class DatasetService {
       from interviews i
       join questionnaire_versions v on v.id = i.questionnaire_version_id
       left join users u on u.id = i.interviewer_id
+      left join cases c on c.id = i.case_id
+      left join frame_units fu on fu.id = c.frame_unit_id
       ${
         opts.paradata
           ? sql`left join lateral (
@@ -109,8 +116,9 @@ export class DatasetService {
       questionnaireId: qid,
       name: v.name,
       compiled: v.compiled,
-      interviews: rows.map((r) => ({
+      interviews: rows.map(({ role, stratum, prob, weight, ...r }) => ({
         ...r,
+        sampling: { role, stratum, prob, weight },
         paradata: opts.paradata
           ? {
               backMoves: r.back ?? 0,

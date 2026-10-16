@@ -27,8 +27,17 @@ import { Auth, RequirePermission, type AuthContext } from '../common/auth-contex
 import { ZodPipe } from '../common/zod.js';
 import { CONFIG, loadConfig, type AppConfig } from '../config.js';
 import { Database, type Tx } from '../db/database.js';
-import { cases, contacts, sampleFields, sampleImportRows, sampleImports } from '../db/schema.js';
+import {
+  cases,
+  contacts,
+  frameUnits,
+  sampleFields,
+  sampleImportRows,
+  sampleImports,
+  samplingPlans,
+} from '../db/schema.js';
 import { chunks, CasesService } from './cases.service.js';
+import { SamplingService } from '../sampling/sampling.service.js';
 import { parseSampleFile, SampleFileError } from './sample-file.js';
 import { ImportMapping, suggestMapping, validateRows, type PreparedRow } from './sample-mapping.js';
 
@@ -41,6 +50,12 @@ interface UploadedSample {
   buffer: Buffer;
 }
 
+/** Frame units keep the sealed sample, without the search index of cases. */
+const frameSample = (s: { sample: Record<string, unknown>; samplePii: string | null }) => ({
+  sample: s.sample,
+  samplePii: s.samplePii,
+});
+
 /**
  * Sample import (spec §8.1, §13 slice 5): upload a CSV/XLSX file, map its columns, validate,
  * then commit in one transaction. Parsed rows wait in a staging table between the steps.
@@ -52,6 +67,7 @@ export class ImportsController {
     private readonly database: Database,
     private readonly audit: AuditService,
     private readonly casesService: CasesService,
+    private readonly sampling: SamplingService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -68,7 +84,7 @@ export class ImportsController {
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @UploadedFile() file: UploadedSample | undefined,
-    @Body() body: { sheet?: string },
+    @Body() body: { sheet?: string; target?: string; sourceLabel?: string },
   ) {
     if (!file) throw new BadRequestException('Attach the sample file as "file"');
     if (file.size > this.config.IMPORT_MAX_MB * 1024 * 1024) throw new PayloadTooLargeException();
@@ -108,6 +124,12 @@ export class ImportsController {
           sha256,
           headers: parsed.headers,
           rows: parsed.rows.length,
+          // Units for the sampling frame (S1) rather than cases straight away.
+          target: body?.target === 'frame' ? 'frame' : 'cases',
+          sourceLabel:
+            typeof body?.sourceLabel === 'string' && body.sourceLabel.trim()
+              ? body.sourceLabel.trim().slice(0, 100)
+              : null,
           uploadedBy: ctx.userId,
         })
         .returning({ id: sampleImports.id });
@@ -245,6 +267,8 @@ export class ImportsController {
       }
 
       await this.upsertFields(tx, ctx.tenantId, projectId, mapping);
+      if (imp.target === 'frame')
+        return this.commitFrame(tx, ctx, projectId, imp, mapping, report, prepared);
       const rows = prepared.filter((r) => r.valid);
       const fresh = rows.filter((r) => !r.exists);
       const updates = mapping.existing === 'update' ? rows.filter((r) => r.exists) : [];
@@ -478,6 +502,106 @@ export class ImportsController {
         value: '',
       })),
     });
+  }
+
+  /**
+   * Units for the sampling frame (S1): kept apart from cases until the plan selects them.
+   * Existing units are updated when the mapping says so; nothing is selected here.
+   */
+  private async commitFrame(
+    tx: Tx,
+    ctx: AuthContext,
+    projectId: string,
+    imp: typeof sampleImports.$inferSelect,
+    mapping: ImportMapping,
+    report: { invalid: number },
+    prepared: PreparedRow[],
+  ) {
+    const [plan] = await tx
+      .select({ status: samplingPlans.status, design: samplingPlans.design })
+      .from(samplingPlans)
+      .where(eq(samplingPlans.projectId, projectId));
+    // A probability sample keeps its frame once selected (decision 6); a census or a
+    // non-probability design takes later units straight in as cases ("added").
+    const adding = plan?.status === 'selected';
+    if (adding && (plan.design as { family?: string }).family === 'probability')
+      throw new ConflictException({
+        code: 'SAMPLE_SELECTED',
+        message: 'The sample has been selected; the frame cannot change any more',
+      });
+    const rows = prepared.filter((r) => r.valid);
+    const pii = await this.casesService.piiFields(tx, projectId);
+    const existing = new Set(
+      (
+        await tx
+          .select({ externalId: frameUnits.externalId })
+          .from(frameUnits)
+          .where(eq(frameUnits.projectId, projectId))
+      ).map((x) => x.externalId),
+    );
+    let created = 0;
+    let updated = 0;
+    const added: string[] = [];
+    for (const part of chunks(rows)) {
+      const fresh = part.filter((r) => !existing.has(r.externalId));
+      if (fresh.length) {
+        const ins = await tx
+          .insert(frameUnits)
+          .values(
+            fresh.map((r) => ({
+              tenantId: ctx.tenantId,
+              projectId,
+              externalId: r.externalId,
+              sourceLabel: imp.sourceLabel,
+              ...frameSample(this.casesService.pii.seal(r.sample, pii)),
+              contacts: r.contacts,
+              importId: imp.id,
+            })),
+          )
+          .returning({ id: frameUnits.id });
+        added.push(...ins.map((x) => x.id));
+        created += fresh.length;
+      }
+      if (mapping.existing === 'update')
+        for (const r of part.filter((x) => existing.has(x.externalId))) {
+          await tx
+            .update(frameUnits)
+            .set({
+              ...frameSample(this.casesService.pii.seal(r.sample, pii)),
+              contacts: r.contacts,
+              sourceLabel: imp.sourceLabel,
+            })
+            .where(
+              and(eq(frameUnits.projectId, projectId), eq(frameUnits.externalId, r.externalId)),
+            );
+          updated++;
+        }
+    }
+    await tx.delete(sampleImportRows).where(eq(sampleImportRows.importId, imp.id));
+    const addedCases = adding ? await this.sampling.addUnits(tx, ctx, projectId, added) : 0;
+    const summary = {
+      created,
+      updated,
+      skipped: report.invalid,
+      assigned: 0,
+      frame: true,
+      ...(adding ? { added: addedCases } : {}),
+    };
+    await tx
+      .update(sampleImports)
+      .set({ status: 'committed', committedAt: new Date(), report: { ...report, summary } })
+      .where(eq(sampleImports.id, imp.id));
+    await this.audit.record(
+      tx,
+      ctx.tenantId,
+      this.audit.fromContext(ctx, {
+        action: 'cases.imported',
+        targetType: 'project',
+        targetId: projectId,
+        details: { importId: imp.id, file: imp.fileName, target: 'frame', ...summary },
+      }),
+    );
+    return summary;
   }
 
   private async insertContacts(

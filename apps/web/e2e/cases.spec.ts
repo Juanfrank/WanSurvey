@@ -25,11 +25,15 @@ async function sampleXlsx(): Promise<Buffer> {
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-test('import a sample from Excel: map, see the problems, leave them out, create the cases', async ({
+test('sampling selector: load a frame from Excel, see the problems, select a census, get the cases', async ({
   page,
 }) => {
   await openProject(page);
-  await page.getByRole('tab', { name: 'Import sample' }).click();
+  await page.getByRole('tab', { name: 'Sampling selector' }).click();
+  const selector = page.getByTestId('sampling');
+  await expect(selector.getByTestId('layer-1')).toContainText('1 · Source of the units');
+  await expect(selector.getByTestId('frame-units')).toHaveText('0 units');
+  await selector.getByRole('button', { name: 'Import sample' }).click();
   await page.getByLabel('Sample file (.csv or .xlsx)').setInputFiles({
     name: 'households.xlsx',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -55,15 +59,33 @@ test('import a sample from Excel: map, see the problems, leave them out, create 
   const issues = page.getByTestId('import-issues');
   await expect(issues.locator('[data-issue="invalid_email"]')).toContainText('2');
   await expect(issues.locator('[data-issue="duplicate_id"]')).toContainText('1');
-  await expect(page.getByRole('button', { name: 'Create 10 cases' })).toBeDisabled();
+  const load = page.getByRole('button', { name: 'Load 10 units into the frame' });
+  await expect(load).toBeDisabled();
   await page.getByLabel('Leave out the 3 rows with problems').check();
   await shot(page, 'cases-import-report');
   await expectAccessible(page);
-  await page.getByRole('button', { name: 'Create 10 cases' }).click();
-  await expect(page.getByTestId('import-done')).toContainText('10 cases created');
-  await expect(page.getByTestId('import-done')).toContainText('rows left out');
+  await load.click();
+  await expect(page.getByTestId('import-done')).toContainText(
+    'Frame: 10 units added, 0 updated, 3 skipped.',
+  );
+  await page.getByRole('button', { name: 'Continue with the design' }).click();
+  await expect(selector.getByTestId('frame-units')).toHaveText('10 units');
 
-  await page.getByRole('button', { name: 'View the cases' }).click();
+  // Layer 2: every unit of the list. Layer 3: the size follows the frame; no sampling error.
+  await selector
+    .getByTestId('layer-2')
+    .getByRole('radio', { name: /Every unit of the list/ })
+    .check();
+  await expect(selector.locator('[data-check="census_no_sampling_error"]')).toBeVisible();
+  await expect(selector.locator('[data-check="no_margin_of_error"]')).toHaveCount(0);
+  await shot(page, 'cases-sampling');
+  await expectAccessible(page);
+  page.once('dialog', (d) => void d.accept());
+  await selector.getByRole('button', { name: 'Select the sample and create the cases…' }).click();
+  await expect(selector.getByTestId('selected-on')).toBeVisible();
+  await expect(selector.locator('[data-role="main"]')).toContainText('10');
+
+  await page.getByRole('tab', { name: 'Case list' }).click();
   await page.getByLabel('Search id or sample data').fill('XHH');
   await expect(page.getByText('Page 1 of 1 · 10 cases')).toBeVisible();
 });
@@ -242,8 +264,9 @@ test('duplicates across projects are flagged; addresses are found and shown on t
     ).ok(),
   ).toBe(true);
 
-  // The household project imports the same phone under another id.
-  await page.getByRole('tab', { name: 'Import sample' }).click();
+  // The household project adds the same phone under another id (to its census).
+  await page.getByRole('tab', { name: 'Sampling selector' }).click();
+  await page.getByRole('button', { name: 'Add units to the sample' }).click();
   const mine = [
     ['id', 'first_name', 'phone', 'address'],
     [`G${code}-1`, 'Rosa', '987650001', 'Av. Brasil 100, Lima'],
@@ -262,15 +285,17 @@ test('duplicates across projects are flagged; addresses are found and shown on t
   await expect(page.getByTestId('import-elsewhere')).toContainText(`Panel ${code} (1 row)`);
   await shot(page, 'cases-import-duplicates');
   await expectAccessible(page);
-  await page.getByRole('button', { name: 'Create 2 cases' }).click();
-  await expect(page.getByTestId('import-done')).toContainText('2 cases created');
+  await page.getByRole('button', { name: 'Load 2 units into the frame' }).click();
+  await expect(page.getByTestId('import-done')).toContainText('2 eligible units became cases');
 
-  // The case drawer says where else the person is.
-  await page.getByRole('button', { name: 'View the cases' }).click();
+  // The case drawer says where else the person is, and where the case comes from.
+  await page.getByRole('tab', { name: 'Case list' }).click();
   await page.getByLabel('Search id or sample data').fill(`G${code}-1`);
   await page.getByRole('button', { name: `Open case G${code}-1` }).click();
   const drawer = page.getByRole('dialog', { name: `Case G${code}-1` });
   await expect(drawer.getByTestId('elsewhere')).toContainText(`Panel ${code} (1 case)`);
+  await expect(drawer.getByTestId('case-sampling')).toContainText('Main');
+  await expect(drawer.getByTestId('case-sampling')).toContainText('Probability of inclusion1');
   await drawer.getByRole('button', { name: 'Close' }).click();
 
   // Geocode the addresses and see the points.

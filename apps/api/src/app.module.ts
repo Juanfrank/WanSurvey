@@ -1,3 +1,5 @@
+import { SamplingController } from './sampling/sampling.controller.js';
+import { SamplingService } from './sampling/sampling.service.js';
 import { FeedbackController, PublicFeedbackController } from './feedback/feedback.controller.js';
 import { FeedbackService } from './feedback/feedback.service.js';
 import {
@@ -147,6 +149,7 @@ export class AppModule {
         AuditController,
         FeedbackController,
         PublicFeedbackController,
+        SamplingController,
       ],
       providers: [
         { provide: CONFIG, useValue: config },
@@ -195,6 +198,7 @@ export class AppModule {
         ShareService,
         PrivacyService,
         FeedbackService,
+        SamplingService,
         {
           provide: GEOCODER,
           useValue:

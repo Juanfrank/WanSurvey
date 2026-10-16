@@ -1,3 +1,4 @@
+import './sampling-i18n.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -472,6 +473,111 @@ interface CaseDetail extends CaseRow {
   canRelease: boolean;
   canForceRelease?: boolean;
   checkedOutAt?: string | null;
+  selectionRole?: string | null;
+  inclusionProb?: number | null;
+  baseWeight?: number | null;
+  substitutes?: { id: string; externalId: string } | null;
+  substitutedBy?: { id: string; externalId: string } | null;
+  canSubstitute?: boolean;
+}
+
+/** Where the case comes from in the sample (S1), and its substitute by the plan's rule. */
+function SamplingFacts({
+  projectId,
+  caseId,
+  c,
+  onDone,
+}: {
+  projectId: string;
+  caseId: string;
+  c: CaseDetail;
+  onDone(): Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [reason, setReason] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState('');
+  const substitute = useMutation({
+    mutationFn: () =>
+      api(`/projects/${projectId}/sampling/cases/${caseId}/substitute`, {
+        method: 'POST',
+        body: { reason: reason.trim() },
+      }),
+    onSuccess: async () => {
+      setAsking(false);
+      setNote(t('cases.sampling.substituted'));
+      await onDone();
+    },
+    onError: (e) => setNote(localiseError(t, e)),
+  });
+  const n = (x: number | null | undefined, digits: number) =>
+    x == null ? '—' : x.toLocaleString(undefined, { maximumFractionDigits: digits });
+  return (
+    <section aria-labelledby="cd-sampling" data-testid="case-sampling">
+      <h3 id="cd-sampling" className="mb-1 font-semibold">
+        {t('cases.sampling.role')}
+      </h3>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+        <dt className="text-slate-600">{t('cases.sampling.role')}</dt>
+        <dd data-role={c.selectionRole}>
+          {t(`cases.sampling.roles.${c.selectionRole}`, { defaultValue: c.selectionRole ?? '' })}
+        </dd>
+        <dt className="text-slate-600">{t('cases.sampling.inclusion')}</dt>
+        <dd>{n(c.inclusionProb, 6)}</dd>
+        <dt className="text-slate-600">{t('cases.sampling.weight')}</dt>
+        <dd>{n(c.baseWeight, 3)}</dd>
+        {c.substitutes ? (
+          <>
+            <dt className="text-slate-600">{t('cases.sampling.substituteFor')}</dt>
+            <dd className="font-mono">{c.substitutes.externalId}</dd>
+          </>
+        ) : null}
+        {c.substitutedBy ? (
+          <>
+            <dt className="text-slate-600">{t('cases.sampling.substitutedBy')}</dt>
+            <dd className="font-mono" data-testid="substituted-by">
+              {c.substitutedBy.externalId}
+            </dd>
+          </>
+        ) : null}
+      </dl>
+      {c.canSubstitute ? (
+        asking ? (
+          <form
+            className="mt-2 flex flex-wrap items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (reason.trim()) substitute.mutate();
+            }}
+          >
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('cases.sampling.substituteReason')}</span>
+              <input
+                className={`${controlCls} w-72`}
+                value={reason}
+                maxLength={500}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+            <Button
+              type="submit"
+              className="px-3 py-1 text-sm"
+              disabled={!reason.trim() || substitute.isPending}
+            >
+              {t('cases.sampling.substituteGo')}
+            </Button>
+          </form>
+        ) : (
+          <button type="button" className={`${smallBtn} mt-2`} onClick={() => setAsking(true)}>
+            {t('cases.sampling.substitute')}
+          </button>
+        )
+      ) : null}
+      <p role="status" aria-live="polite" className="empty:hidden">
+        {note}
+      </p>
+    </section>
+  );
 }
 
 function CaseDrawer({
@@ -633,6 +739,9 @@ function CaseDrawer({
               ))}
             </dl>
           </section>
+          {c.selectionRole ? (
+            <SamplingFacts projectId={projectId} caseId={caseId} c={c} onDone={refresh} />
+          ) : null}
           <section aria-labelledby="cd-contacts">
             <h3 id="cd-contacts" className="mb-1 font-semibold">
               {t('cases.detail.contacts')}

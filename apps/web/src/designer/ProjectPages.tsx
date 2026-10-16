@@ -11,7 +11,7 @@ import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field, FileInput } from '../routes/ui.js';
 import { AssignmentsTab } from '../cases/AssignmentsTab.js';
 import { CasesTab } from '../cases/CasesTab.js';
-import { ImportTab } from '../cases/ImportTab.js';
+import { SamplingTab } from '../cases/SamplingTab.js';
 import { FeedbackSection } from '../feedback/FeedbackSection.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
 import { CallsTab } from '../cati/CallsTab.js';
@@ -492,7 +492,7 @@ const tabCls =
 
 type ProjectTab =
   'cases' | 'questionnaires' | 'calls' | 'paper' | 'review' | 'results' | 'exports' | 'settings';
-type CasesSub = 'list' | 'import' | 'assignments';
+type CasesSub = 'list' | 'sampling' | 'assignments';
 type ResultsSub = 'topline' | 'dashboard' | 'metrics';
 
 /** Old `?tab=` values still land in the right place: web and paper forms, dashboard, import… */
@@ -501,7 +501,8 @@ const FROM_SEARCH: Record<
   { tab: ProjectTab; cases?: CasesSub; results?: ResultsSub; panel?: 'web' | 'paper' }
 > = {
   cases: { tab: 'cases' },
-  import: { tab: 'cases', cases: 'import' },
+  import: { tab: 'cases', cases: 'sampling' },
+  sampling: { tab: 'cases', cases: 'sampling' },
   assignments: { tab: 'cases', cases: 'assignments' },
   questionnaires: { tab: 'questionnaires' },
   web: { tab: 'questionnaires', panel: 'web' },
@@ -519,7 +520,7 @@ const subTabCls =
   'rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[state=active]:bg-indigo-50 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-700';
 
 /**
- * A project, in the order work happens: cases (list, sample import, assignments), the
+ * A project, in the order work happens: cases (list, sampling selector, assignments), the
  * questionnaires (with their web survey and paper forms as actions), calls, review, results
  * (summary, dashboard, metrics), exports and settings; each as allowed by role.
  */
@@ -561,7 +562,7 @@ export function ProjectPage() {
 
   const casesSubs: CasesSub[] = [
     ...(canCasesAll || canCasesOwn ? (['list'] as const) : []),
-    ...(canImport ? (['import'] as const) : []),
+    ...(canImport ? (['sampling'] as const) : []),
     ...(canAssign ? (['assignments'] as const) : []),
   ];
   const resultsSubs: ResultsSub[] = [
@@ -684,8 +685,8 @@ export function ProjectPage() {
                 <Tabs.Content value="list">
                   <CasesTab projectId={projectId} />
                 </Tabs.Content>
-                <Tabs.Content value="import">
-                  <ImportTab projectId={projectId} onDone={() => setCasesSub('list')} />
+                <Tabs.Content value="sampling">
+                  <SamplingTab projectId={projectId} />
                 </Tabs.Content>
                 <Tabs.Content value="assignments">
                   <AssignmentsTab projectId={projectId} />
@@ -693,8 +694,8 @@ export function ProjectPage() {
               </Tabs.Root>
             ) : cases === 'list' ? (
               <CasesTab projectId={projectId} />
-            ) : cases === 'import' ? (
-              <ImportTab projectId={projectId} onDone={() => setCasesSub('list')} />
+            ) : cases === 'sampling' ? (
+              <SamplingTab projectId={projectId} />
             ) : (
               <AssignmentsTab projectId={projectId} />
             )}
