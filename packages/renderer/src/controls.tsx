@@ -1,6 +1,6 @@
 import type { RenderedOption } from '@wansurvey/logic';
 import type { AnswerValue, Question } from '@wansurvey/schema';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RENDERER_NS } from './i18n.js';
 import { scaleColor } from './scaleColors.js';
@@ -22,6 +22,37 @@ export interface ControlProps {
   touch: boolean;
   displayAs?: string;
   lang: string;
+  /**
+   * Interviewer modes, on questions with skips or end rules: where each answer leads
+   * ("skips to A5", "ends the interview"), by option code.
+   */
+  routes?: Record<string, RouteHint>;
+}
+
+export interface RouteHint {
+  text: string;
+  /** next: carries on; jump: skips ahead; end: ends the interview. */
+  tone: 'next' | 'jump' | 'end';
+}
+
+const toneCls: Record<RouteHint['tone'], string> = {
+  next: 'border-slate-200 bg-slate-50 text-slate-600',
+  jump: 'border-sky-200 bg-sky-50 text-sky-ink-900',
+  end: 'border-red-200 bg-red-50 text-red-ink-800',
+};
+
+/** The route of an answer, shown at the right of its option. */
+function RouteTag({ hint }: { hint: RouteHint | undefined }) {
+  if (!hint) return null;
+  return (
+    <span
+      className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-xs ${toneCls[hint.tone]}`}
+      data-route={hint.tone}
+    >
+      <span aria-hidden>→ </span>
+      {hint.text}
+    </span>
+  );
 }
 
 const isSpecialValue = (v: AnswerValue) =>
@@ -66,43 +97,194 @@ function Fieldset({
 
 // ---------------------------------------------------------------------------
 
-export function SingleChoice(p: ControlProps) {
+/** Lists this long get a search box above them. */
+const SEARCH_FROM = 8;
+
+const norm = (x: string) =>
+  x
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+/** Options whose label (accents ignored) or code contains the typed text. */
+function filterOptions(options: RenderedOption[], query: string): RenderedOption[] {
+  const q = norm(query.trim());
+  if (!q) return options;
+  return options.filter((o) => norm(o.label).includes(q) || String(o.code) === query.trim());
+}
+
+/** The search box over a long list of options. */
+function OptionSearch({
+  value,
+  onChange,
+  count,
+  total,
+}: {
+  value: string;
+  onChange(v: string): void;
+  count: number;
+  total: number;
+}) {
   const { t } = useTranslation(RENDERER_NS);
-  const name = useId();
-  const selectId = useId();
-  const selected = isSpecialValue(p.value) ? null : p.value;
-  if (p.displayAs === 'dropdown') {
-    return (
-      <div>
-        <label htmlFor={selectId} className="mb-3 block">
-          {p.heading}
-        </label>
-        <select
-          id={selectId}
-          className={inputCls}
+  const id = useId();
+  return (
+    <div className="mb-2 flex flex-col gap-1">
+      <label htmlFor={id} className="sr-only">
+        {t('question.searchOptions')}
+      </label>
+      <input
+        id={id}
+        type="search"
+        className={`${inputCls} max-w-md`}
+        placeholder={t('question.searchOptions')}
+        value={value}
+        autoComplete="off"
+        onChange={(e) => onChange(e.target.value)}
+        data-option-search
+      />
+      <span className="text-xs text-slate-600" aria-live="polite">
+        {value.trim() ? t('question.optionsShown', { count, total }) : ''}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * A dropdown with free-text search (combobox): typing filters the options by label or code,
+ * ↑↓ move, Enter picks, Escape closes; the chosen option shows in the field.
+ */
+function SearchableSelect(p: ControlProps & { selected: string | number | null }) {
+  const { t } = useTranslation(RENDERER_NS);
+  const id = useId();
+  const listId = `${id}-list`;
+  const current = p.options.find(
+    (o) => p.selected !== null && String(o.code) === String(p.selected),
+  );
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const list = filterOptions(p.options, text);
+  const pickOption = (o: RenderedOption) => {
+    p.onChange(o.code);
+    setText('');
+    setOpen(false);
+  };
+  return (
+    <div>
+      <label htmlFor={id} className="mb-3 block">
+        {p.heading}
+      </label>
+      <div className="relative max-w-md">
+        <input
+          id={id}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={open && list[active] ? `${listId}-${active}` : undefined}
           aria-describedby={p.describedBy}
-          value={selected === null || selected === undefined ? '' : String(selected)}
+          className={inputCls}
+          autoComplete="off"
+          placeholder={
+            current
+              ? `${p.showCodes ? `${current.code} · ` : ''}${current.label}`
+              : t('question.selectPlaceholder')
+          }
+          value={text}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
           onChange={(e) => {
-            const o = p.options.find((x) => String(x.code) === e.target.value);
-            p.onChange(o ? o.code : null);
+            setText(e.target.value);
+            setActive(0);
+            setOpen(true);
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              setOpen(true);
+              setActive((a) =>
+                list.length
+                  ? (a + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length
+                  : 0,
+              );
+            } else if (e.key === 'Enter' && open && list[active]) {
+              e.preventDefault();
+              e.stopPropagation();
+              pickOption(list[active]!);
+            } else if (e.key === 'Escape' && open) {
+              e.stopPropagation();
+              setOpen(false);
+            }
+          }}
+          data-text-answer={open ? '' : undefined}
+        />
+        {current ? (
+          <p className="mt-1 text-sm text-slate-700" data-testid="chosen-option">
+            {t('question.chosen', {
+              label: `${p.showCodes ? `${current.code} · ` : ''}${current.label}`,
+            })}
+          </p>
+        ) : null}
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={t('question.searchOptions')}
+          hidden={!open}
+          className="absolute left-0 right-0 top-[2.75rem] z-20 max-h-64 overflow-y-auto rounded-md border border-slate-300 bg-white p-1 shadow-lg"
         >
-          <option value="">{t('question.selectPlaceholder')}</option>
-          {p.options.map((o) => (
-            <option key={String(o.code)} value={String(o.code)}>
-              {p.showCodes ? `${o.code} · ` : ''}
-              {o.label}
-            </option>
-          ))}
-        </select>
+          {list.length ? (
+            list.map((o, i) => (
+              <li
+                key={String(o.code)}
+                id={`${listId}-${i}`}
+                role="option"
+                aria-selected={current?.code === o.code}
+                className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 ${i === active ? 'bg-indigo-50' : ''}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickOption(o);
+                }}
+                onMouseEnter={() => setActive(i)}
+              >
+                <Code code={o.code} show={p.showCodes} />
+                <span>{o.label}</span>
+              </li>
+            ))
+          ) : (
+            <li
+              role="option"
+              aria-disabled="true"
+              aria-selected={false}
+              className="px-2 py-1.5 text-slate-500"
+            >
+              {t('question.noOptionMatch')}
+            </li>
+          )}
+        </ul>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+export function SingleChoice(p: ControlProps) {
+  const name = useId();
+  const [query, setQuery] = useState('');
+  const selected = isSpecialValue(p.value) ? null : (p.value as string | number | null);
+  if (p.displayAs === 'dropdown') return <SearchableSelect {...p} selected={selected} />;
   const buttons = p.displayAs === 'buttons';
+  const shown = filterOptions(p.options, query);
   return (
     <Fieldset heading={p.heading} describedBy={p.describedBy}>
+      {p.options.length >= SEARCH_FROM ? (
+        <OptionSearch
+          value={query}
+          onChange={setQuery}
+          count={shown.length}
+          total={p.options.length}
+        />
+      ) : null}
       <div className={buttons ? 'grid grid-cols-1 gap-2 sm:grid-cols-2' : 'flex flex-col gap-2'}>
-        {p.options.map((o) => (
+        {shown.map((o) => (
           <label key={String(o.code)} className={optionBox(p.touch || buttons)}>
             <input
               type="radio"
@@ -119,6 +301,7 @@ export function SingleChoice(p: ControlProps) {
             />
             <Code code={o.code} show={p.showCodes} />
             <span>{o.label}</span>
+            <RouteTag hint={p.routes?.[String(o.code)]} />
           </label>
         ))}
       </div>
@@ -127,6 +310,7 @@ export function SingleChoice(p: ControlProps) {
 }
 
 export function MultiChoice(p: ControlProps) {
+  const [query, setQuery] = useState('');
   const selected = Array.isArray(p.value) ? (p.value as (string | number)[]) : [];
   const has = (c: string | number) => selected.some((s) => String(s) === String(c));
   const toggle = (o: RenderedOption) => {
@@ -136,10 +320,19 @@ export function MultiChoice(p: ControlProps) {
     const exclusive = new Set(p.options.filter((x) => x.exclusive).map((x) => String(x.code)));
     return p.onChange([...selected.filter((s) => !exclusive.has(String(s))), o.code]);
   };
+  const shown = filterOptions(p.options, query);
   return (
     <Fieldset heading={p.heading} describedBy={p.describedBy}>
+      {p.options.length >= SEARCH_FROM ? (
+        <OptionSearch
+          value={query}
+          onChange={setQuery}
+          count={shown.length}
+          total={p.options.length}
+        />
+      ) : null}
       <div className="flex flex-col gap-2">
-        {p.options.map((o) => (
+        {shown.map((o) => (
           <label key={String(o.code)} className={optionBox(p.touch)}>
             <input
               type="checkbox"
@@ -373,11 +566,36 @@ export function Scale(p: ControlProps) {
           <span className="text-right">{maxLabel}</span>
         </div>
       ) : null}
+      {p.routes ? <ScaleRoutes points={points} routes={p.routes} /> : null}
     </Fieldset>
   );
 }
 
+/** Runs of scale points that lead to the same place: "0–6 → skips to D7 · 7–10 → next". */
+function ScaleRoutes({ points, routes }: { points: number[]; routes: Record<string, RouteHint> }) {
+  const runs: { from: number; to: number; hint: RouteHint }[] = [];
+  for (const n of points) {
+    const hint = routes[String(n)];
+    if (!hint) continue;
+    const last = runs.at(-1);
+    if (last && last.hint.text === hint.text) last.to = n;
+    else runs.push({ from: n, to: n, hint });
+  }
+  if (!runs.length) return null;
+  return (
+    <ul className="mt-2 flex flex-wrap gap-2" data-testid="scale-routes">
+      {runs.map((r) => (
+        <li key={r.from} className="flex items-center gap-1 text-xs">
+          <span className="font-mono">{r.from === r.to ? r.from : `${r.from}–${r.to}`}</span>
+          <RouteTag hint={r.hint} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Grid(p: ControlProps) {
+  const { t } = useTranslation(RENDERER_NS);
   const rows = p.question.rows ?? [];
   const value =
     typeof p.value === 'object' &&
@@ -399,6 +617,7 @@ export function Grid(p: ControlProps) {
           <fieldset
             key={String(r.code)}
             className="grid gap-2 p-3 sm:grid-cols-[minmax(8rem,1fr)_3fr] sm:items-center"
+            data-row={String(r.code)}
           >
             <legend className="sr-only">{pick(r.label, p.lang)}</legend>
             <span aria-hidden="true" className="font-medium">
@@ -429,12 +648,15 @@ export function Grid(p: ControlProps) {
           </fieldset>
         ))}
       </div>
+      {p.showCodes ? <p className="mt-2 text-xs text-slate-600">{t('question.gridKeys')}</p> : null}
     </Fieldset>
   );
 }
 
 export function Ranking(p: ControlProps) {
   const { t } = useTranslation(RENDERER_NS);
+  const listRef = useRef<HTMLOListElement>(null);
+  const positions = useRef(new Map<string, number>());
   const answered = Array.isArray(p.value) ? (p.value as (string | number)[]) : null;
   const order = answered
     ? answered
@@ -448,12 +670,35 @@ export function Ranking(p: ControlProps) {
     [next[i], next[j]] = [next[j]!, next[i]!];
     p.onChange(next);
   };
+  // FLIP: each row slides from where it was to its new place, so a change of rank is seen.
+  const orderKey = order.map((o) => String(o.code)).join('|');
+  useLayoutEffect(() => {
+    const items = listRef.current?.querySelectorAll<HTMLElement>('[data-rank-code]') ?? [];
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    items.forEach((el) => {
+      const code = el.dataset.rankCode!;
+      const top = el.offsetTop;
+      const before = positions.current.get(code);
+      positions.current.set(code, top);
+      if (reduce || before === undefined || before === top || !el.animate) return;
+      el.animate(
+        [
+          { transform: `translateY(${before - top}px)`, backgroundColor: 'rgb(238 242 255)' },
+          { transform: 'translateY(0)' },
+        ],
+        { duration: 260, easing: 'cubic-bezier(.2,.7,.3,1)' },
+      );
+    });
+  }, [orderKey]);
   return (
     <Fieldset heading={p.heading} describedBy={p.describedBy}>
-      <ol className="flex flex-col gap-2">
+      <ol ref={listRef} className="relative flex flex-col gap-2">
         {order.map((o, i) => (
           <li
             key={String(o.code)}
+            data-rank-code={String(o.code)}
             className="flex items-center gap-3 rounded-lg border border-slate-300 bg-white px-3 py-2"
           >
             <span className="w-16 text-sm text-slate-600">{t('question.rank', { n: i + 1 })}</span>
@@ -480,6 +725,7 @@ export function Ranking(p: ControlProps) {
           </li>
         ))}
       </ol>
+      {p.showCodes ? <p className="mt-2 text-xs text-slate-600">{t('question.rankKeys')}</p> : null}
       {!answered ? (
         <button
           type="button"

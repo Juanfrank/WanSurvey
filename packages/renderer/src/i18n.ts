@@ -5,6 +5,22 @@ export const RENDERER_NS = 'renderer';
 
 const en = {
   script: { label: 'Read to the respondent' },
+  route: {
+    next: 'next question',
+    skip: 'skips to {{to}}',
+    finish: 'goes to the end',
+    endRow: 'next row',
+    end: 'ends: {{disposition}}',
+  },
+  disposition: {
+    REFUSAL: 'refusal',
+    SCREENED_OUT: 'not eligible',
+    QUOTA_FULL: 'quota full',
+    BREAK_OFF: 'break-off',
+    LANGUAGE_BARRIER: 'language barrier',
+    COMPLETE: 'complete',
+    PARTIAL: 'partial',
+  },
   nav: {
     nextKey: 'Enter',
     nextKeyText: 'Ctrl+Enter',
@@ -17,6 +33,14 @@ const en = {
   },
   special: { DK: "Don't know", RF: 'Refused' },
   question: {
+    rankKeys:
+      'Type the codes in the order wanted: the first goes to place 1. Typing a code again takes it out.',
+    gridKeys: 'Type one code per row, in order; the next row follows on its own.',
+    searchOptions: 'Search the options',
+    optionsShown_one: '{{count}} of {{total}} options',
+    optionsShown_other: '{{count}} of {{total}} options',
+    noOptionMatch: 'No option matches',
+    chosen: 'Chosen: {{label}}',
     instruction: 'Interviewer instruction',
     readOptions: 'Read the options aloud',
     otherSpecify: 'Please specify',
@@ -112,6 +136,22 @@ type Catalogue = typeof en;
 
 const es: Catalogue = {
   script: { label: 'Leer al entrevistado' },
+  route: {
+    next: 'sigue a la siguiente',
+    skip: 'salta a {{to}}',
+    finish: 'va al final',
+    endRow: 'siguiente fila',
+    end: 'termina: {{disposition}}',
+  },
+  disposition: {
+    REFUSAL: 'rechazo',
+    SCREENED_OUT: 'no elegible',
+    QUOTA_FULL: 'cuota llena',
+    BREAK_OFF: 'abandono',
+    LANGUAGE_BARRIER: 'barrera de idioma',
+    COMPLETE: 'completa',
+    PARTIAL: 'parcial',
+  },
   nav: {
     nextKey: 'Intro',
     nextKeyText: 'Ctrl+Intro',
@@ -124,6 +164,14 @@ const es: Catalogue = {
   },
   special: { DK: 'No sabe', RF: 'Rehúsa' },
   question: {
+    rankKeys:
+      'Teclee los códigos en el orden deseado: el primero queda en el lugar 1. Volver a teclear un código lo quita.',
+    gridKeys: 'Teclee un código por fila, en orden; la fila siguiente se activa sola.',
+    searchOptions: 'Buscar una opción',
+    optionsShown_one: '{{count}} de {{total}} opciones',
+    optionsShown_other: '{{count}} de {{total}} opciones',
+    noOptionMatch: 'Ninguna opción coincide',
+    chosen: 'Elegida: {{label}}',
     instruction: 'Instrucción para el entrevistador',
     readOptions: 'Lea las opciones en voz alta',
     otherSpecify: 'Especifique',

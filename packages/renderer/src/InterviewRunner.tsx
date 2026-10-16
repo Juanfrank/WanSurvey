@@ -127,6 +127,8 @@ function Runner(p: InterviewRunnerProps) {
     timer: null,
   });
   const containerRef = useRef<HTMLDivElement>(null);
+  // Codes typed for a ranking, in order (the first typed is rank 1), per question.
+  const rankTyped = useRef<{ key: string; codes: (string | number)[] }>({ key: '', codes: [] });
   const narrow = useNarrow(p.narrow);
   const respondent = p.mode === 'CAWI';
   const layout = p.layout ?? (respondent && !narrow ? 'page' : 'item');
@@ -190,8 +192,9 @@ function Runner(p: InterviewRunnerProps) {
   );
 
   const confirm = useCallback(
-    (key: string, ruleId: string) => {
-      session.confirmWarning(key, ruleId);
+    (key: string, ruleId: string, on = true) => {
+      if (on) session.confirmWarning(key, ruleId);
+      else session.unconfirmWarning(key, ruleId);
       refresh();
     },
     [session, refresh],
@@ -315,13 +318,51 @@ function Runner(p: InterviewRunnerProps) {
               return out;
             })()
           : session.optionsFor(key).options.map((o) => o.code);
-      if (!['single', 'yesno', 'multi', 'scale'].includes(q.type) || codes.length === 0) return;
+      if (
+        !['single', 'yesno', 'multi', 'scale', 'grid', 'ranking'].includes(q.type) ||
+        codes.length === 0
+      )
+        return;
       e.preventDefault();
       const state = typed.current;
       if (state.timer) clearTimeout(state.timer);
       state.buffer += e.key;
       const m = matchTypedCode(state.buffer, codes);
-      if (m.code !== null) {
+      if (m.code !== null && q.type === 'grid') {
+        // One code per row, in order: the focused row, or the first without an answer.
+        const rows = (q.rows ?? []).map((r) => String(r.code));
+        const cur = session.getAnswer(key);
+        const value =
+          cur && typeof cur === 'object' && !Array.isArray(cur) && !('$special' in cur)
+            ? (cur as Record<string, string | number>)
+            : {};
+        const focusedRow = target.closest<HTMLElement>('[data-row]')?.dataset.row;
+        const row =
+          focusedRow && rows.includes(focusedRow)
+            ? focusedRow
+            : (rows.find((r) => value[r] === undefined) ?? rows.at(-1)!);
+        answer(key, { ...value, [row]: m.code });
+        const next = rows[rows.indexOf(row) + 1];
+        requestAnimationFrame(() => {
+          const scope = containerRef.current?.querySelector(`[data-qkey="${CSS.escape(key)}"]`);
+          const el = next
+            ? scope?.querySelector<HTMLInputElement>(`[data-row="${CSS.escape(next)}"] input`)
+            : scope?.querySelector<HTMLInputElement>(
+                `[data-row="${CSS.escape(row)}"] input[data-code="${CSS.escape(String(m.code))}"]`,
+              );
+          el?.focus();
+        });
+      } else if (m.code !== null && q.type === 'ranking') {
+        // The typed order becomes the ranking; typing a code again takes it out.
+        const typedNow = rankTyped.current.key === key ? rankTyped.current.codes : [];
+        const has = typedNow.some((c) => String(c) === String(m.code));
+        const typedCodes = has
+          ? typedNow.filter((c) => String(c) !== String(m.code))
+          : [...typedNow, m.code];
+        rankTyped.current = { key, codes: typedCodes };
+        const rest = codes.filter((c) => !typedCodes.some((x) => String(x) === String(c)));
+        answer(key, [...typedCodes, ...rest]);
+      } else if (m.code !== null) {
         if (q.type === 'multi') {
           const cur = session.getAnswer(key);
           const arr = Array.isArray(cur) ? (cur as (string | number)[]) : [];

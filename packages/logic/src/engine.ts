@@ -167,6 +167,14 @@ export interface ValidationResult {
   canProceed: boolean;
 }
 
+/** Where an answer would take the interview (for interviewers: "skips to …", "ends …"). */
+export type Route =
+  | { kind: 'next' }
+  | { kind: 'skip'; to: string; name: string }
+  | { kind: 'finish' }
+  | { kind: 'endRow' }
+  | { kind: 'end'; disposition: string };
+
 export interface RenderedOption {
   code: string | number;
   label: string;
@@ -249,6 +257,36 @@ class InterviewScope implements Scope {
   }
   label(name: string, code: Value) {
     return this.s.labelOf(name, code);
+  }
+}
+
+/** A scope where one variable reads as a given value, to ask "what if this were the answer". */
+class OverrideScope implements Scope {
+  constructor(
+    private readonly base: Scope,
+    private readonly name: string,
+    private readonly value: Value,
+  ) {}
+  get mode() {
+    return this.base.mode;
+  }
+  get today() {
+    return this.base.today;
+  }
+  get(name: string) {
+    return name === this.name ? this.value : this.base.get(name);
+  }
+  namespace(ns: Namespace) {
+    return this.base.namespace(ns);
+  }
+  rowIndex() {
+    return this.base.rowIndex();
+  }
+  rowScope(rosterName: string, row: number) {
+    return this.base.rowScope(rosterName, row);
+  }
+  label(name: string, code: Value) {
+    return this.base.label(name, code);
   }
 }
 
@@ -484,6 +522,15 @@ export class InterviewSession {
     if (!list.includes(ruleId)) list.push(ruleId);
   }
 
+  /** Takes back a confirmed warning: it blocks Next again until confirmed or fixed. */
+  unconfirmWarning(key: string, ruleId: string): void {
+    const list = this.confirmations[key];
+    if (!list) return;
+    const rest = list.filter((r) => r !== ruleId);
+    if (rest.length) this.confirmations[key] = rest;
+    else delete this.confirmations[key];
+  }
+
   /** Adds a row to an open roster ("add another"). Returns the new 1-based row number. */
   addRosterRow(rosterKey: string, source: AnswerSourceKind = 'interviewer'): number {
     const { frames, node } = this.rosterAt(rosterKey);
@@ -713,6 +760,49 @@ export class InterviewSession {
       })),
       special: this.offeredSpecials(q),
     };
+  }
+
+  /**
+   * Where answering `value` at `key` would lead, without answering: the question's end rules,
+   * then its skips, read as the engine reads them on the way through. Quotas are not counted.
+   */
+  routeFor(key: string, value: AnswerValue): Route {
+    const entry = this.activeKeys.get(key);
+    if (!entry || entry.kind !== 'question') return { kind: 'next' };
+    const node = this.compiled.nodes[own(this.compiled.byId, entry.id)!]!;
+    const q = node.def as Question;
+    const scope = new OverrideScope(
+      new InterviewScope(this, entry.frames),
+      q.name,
+      normaliseEmpty(value) as Value,
+    );
+    const holds = (ast: CompiledExpr['ast']) => {
+      try {
+        return !!ast && truthy(evaluate(ast, scope));
+      } catch {
+        return false;
+      }
+    };
+    for (const rule of node.endIf)
+      if (holds(rule.expr.ast)) return { kind: 'end', disposition: rule.disposition };
+    for (const s of node.skips) {
+      if (!holds(s.expr.ast)) continue;
+      if (s.target === SKIP_END) return { kind: 'finish' };
+      if (s.target === SKIP_END_ROW) return { kind: 'endRow' };
+      if (typeof s.target === 'number') {
+        const target = this.compiled.nodes[s.target]!;
+        return { kind: 'skip', to: target.id, name: target.name ?? target.id };
+      }
+    }
+    return { kind: 'next' };
+  }
+
+  /** Whether the question at `key` has skips or end rules (so its answers can route). */
+  hasRouting(key: string): boolean {
+    const entry = this.activeKeys.get(key);
+    if (!entry || entry.kind !== 'question') return false;
+    const node = this.compiled.nodes[own(this.compiled.byId, entry.id)!]!;
+    return node.skips.length > 0 || node.endIf.length > 0;
   }
 
   labelOf(name: string, code: Value): string | null {

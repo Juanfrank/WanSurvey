@@ -19,6 +19,7 @@ import {
   SingleChoice,
   TextInput,
   type ControlProps,
+  type RouteHint,
 } from './controls.js';
 import { messageText, RENDERER_NS } from './i18n.js';
 import { keyId } from './text.js';
@@ -30,7 +31,8 @@ export interface QuestionViewProps {
   lang: string;
   onAnswer(key: string, value: AnswerValue): void;
   onSpecial(key: string, kind: SpecialKind | null): void;
-  onConfirm(key: string, ruleId: string): void;
+  /** Confirms a warning (soft check), or takes the confirmation back. */
+  onConfirm(key: string, ruleId: string, on?: boolean): void;
   /** Put the prefilled value back (shown only when it differs from the answer). */
   onRevertPrefill?(key: string): void;
   /** Show "required" errors too (after a failed Next). */
@@ -102,6 +104,48 @@ export function QuestionView(p: QuestionViewProps) {
     </span>
   );
 
+  // Interviewers see where each answer leads on questions that branch (not on paper: the
+  // printed form writes the routing as instructions).
+  let routes: Record<string, RouteHint> | undefined;
+  if (
+    interviewer &&
+    p.mode !== 'PAPI' &&
+    ['single', 'yesno', 'scale'].includes(q.type) &&
+    session.hasRouting(entry.key)
+  ) {
+    const codes: (string | number)[] =
+      q.type === 'scale'
+        ? (() => {
+            const out: number[] = [];
+            const sc = q.scale!;
+            if (sc.style !== 'slider')
+              for (let n = sc.min; n <= sc.max; n += sc.step ?? 1) out.push(n);
+            return out;
+          })()
+        : options.map((o) => o.code);
+    routes = {};
+    for (const c of codes) {
+      const r = session.routeFor(entry.key, c);
+      routes[String(c)] =
+        r.kind === 'next'
+          ? { tone: 'next', text: t('route.next') }
+          : r.kind === 'skip'
+            ? { tone: 'jump', text: t('route.skip', { to: r.name }) }
+            : r.kind === 'finish'
+              ? { tone: 'jump', text: t('route.finish') }
+              : r.kind === 'endRow'
+                ? { tone: 'jump', text: t('route.endRow') }
+                : {
+                    tone: 'end',
+                    text: t('route.end', {
+                      disposition: t(`disposition.${r.disposition}`, {
+                        defaultValue: r.disposition,
+                      }),
+                    }),
+                  };
+    }
+  }
+
   const props: ControlProps = {
     question: q,
     options,
@@ -113,6 +157,7 @@ export function QuestionView(p: QuestionViewProps) {
     touch: !!p.touch,
     ...(variant?.displayAs ? { displayAs: variant.displayAs } : {}),
     lang: p.lang,
+    ...(routes ? { routes } : {}),
   };
 
   let control;
@@ -219,7 +264,7 @@ export function QuestionView(p: QuestionViewProps) {
         local={localError}
         errors={errors}
         warnings={warnings}
-        onConfirm={(ruleId) => p.onConfirm(entry.key, ruleId)}
+        onConfirm={(ruleId, on) => p.onConfirm(entry.key, ruleId, on)}
       />
     </section>
   );
@@ -230,7 +275,7 @@ function Messages(p: {
   local: string | null;
   errors: ValidationMessage[];
   warnings: ValidationMessage[];
-  onConfirm(ruleId: string): void;
+  onConfirm(ruleId: string, on: boolean): void;
 }) {
   const { t } = useTranslation(RENDERER_NS);
   if (!p.local && !p.errors.length && !p.warnings.length) return null;
@@ -254,8 +299,7 @@ function Messages(p: {
               type="checkbox"
               className="size-4 accent-amber-700"
               checked={!!w.confirmed}
-              disabled={!!w.confirmed}
-              onChange={() => p.onConfirm(w.ruleId)}
+              onChange={(e) => p.onConfirm(w.ruleId, e.target.checked)}
             />
             {t('question.confirmWarning')}
           </label>

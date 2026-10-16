@@ -34,8 +34,9 @@ function AllQuestions({ session, mode }: { session: InterviewSession; mode: Mode
             else session.clearAnswer(k);
             bump();
           }}
-          onConfirm={(k, r) => {
-            session.confirmWarning(k, r);
+          onConfirm={(k, r, on = true) => {
+            if (on) session.confirmWarning(k, r);
+            else session.unconfirmWarning(k, r);
             bump();
           }}
         />
@@ -65,8 +66,16 @@ describe('answer controls', () => {
     const { user, q, session } = setup('CAWI');
     await user.click(q('Q_SINGLE').getByLabelText('Mango'));
     expect(session.getAnswer('Q_SINGLE')).toBe(3);
-    await user.selectOptions(q('Q_DROPDOWN').getByRole('combobox'), 'Chile');
+    // The dropdown searches as you type (accents ignored); Enter picks the highlighted option.
+    await user.type(q('Q_DROPDOWN').getByRole('combobox'), 'chi');
+    expect(
+      q('Q_DROPDOWN')
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Chile']);
+    await user.keyboard('{Enter}');
     expect(session.getAnswer('Q_DROPDOWN')).toBe(2);
+    expect(q('Q_DROPDOWN').getByTestId('chosen-option').textContent).toMatch(/Chile/);
   });
 
   it('multi choice handles exclusive options and other-specify', async () => {
@@ -100,6 +109,9 @@ describe('answer controls', () => {
     await user.type(q('Q_NUMBER').getByRole('textbox'), '2');
     await user.click(q('Q_NUMBER').getByLabelText(/I have checked this answer/));
     expect(session.validate('Q_NUMBER').canProceed).toBe(true);
+    // The confirmation can be taken back.
+    await user.click(q('Q_NUMBER').getByLabelText(/I have checked this answer/));
+    expect(session.validate('Q_NUMBER').canProceed).toBe(false);
   });
 
   it('scales, grid and ranking', async () => {

@@ -571,3 +571,24 @@ describe('built-in validation messages', () => {
     expect(s.validate('A2_AGE').warnings[0]).toMatchObject({ ruleId: 'old', builtIn: false });
   });
 });
+
+describe('routeFor', () => {
+  it('says where each answer would lead, without answering', () => {
+    const s = start();
+    s.next(); // consent text
+    expect(s.currentKey()).toBe('A1_CONSENT');
+    expect(s.hasRouting('A1_CONSENT')).toBe(true);
+    expect(s.routeFor('A1_CONSENT', 1)).toEqual({ kind: 'next' });
+    expect(s.routeFor('A1_CONSENT', 2)).toEqual({ kind: 'end', disposition: 'REFUSAL' });
+    expect(s.getAnswer('A1_CONSENT')).toBeNull();
+    s.setAnswer('A1_CONSENT', 1);
+    s.next();
+    s.setAnswer('A2_AGE', 40);
+    s.next();
+    s.setAnswer('A3_SEX', 2);
+    s.next();
+    expect(s.routeFor('A4_MARITAL', 1)).toEqual({ kind: 'next' });
+    expect(s.routeFor('A4_MARITAL', 2)).toMatchObject({ kind: 'skip', to: 'A5' });
+    expect(s.hasRouting('A3_SEX')).toBe(false);
+  });
+});

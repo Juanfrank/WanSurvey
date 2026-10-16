@@ -41,6 +41,20 @@ function setup(
 const question = () => document.querySelector('[data-qkey]')!.getAttribute('data-qkey');
 
 describe('InterviewRunner (interviewer modes)', () => {
+  it('shows interviewers where each answer of a branching question leads', async () => {
+    const { user } = setup('CATI');
+    await user.keyboard('{Enter}');
+    expect(question()).toBe('A1_CONSENT');
+    const routes = [...document.querySelectorAll('[data-route]')].map((e) => e.textContent);
+    expect(routes).toEqual(['→ next question', '→ ends: refusal']);
+  });
+
+  it('shows no routes to respondents', async () => {
+    const { user } = setup('CAWI', { narrow: true });
+    await user.keyboard('{Enter}');
+    expect(document.querySelectorAll('[data-route]').length).toBe(0);
+  });
+
   it('runs by keyboard only: digits pick codes, Enter advances, Shift+Enter goes back', async () => {
     const { user, session } = setup('CATI');
     expect(question()).toBe('A0_CONSENT_TEXT');
