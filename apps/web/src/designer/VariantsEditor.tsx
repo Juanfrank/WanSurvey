@@ -181,8 +181,19 @@ export function VariantsEditor({
                 label={t('designer.variants.boxes')}
                 integer
                 value={v.printLayout?.boxes}
+                hint={t('designer.variants.boxesHelp')}
                 onChange={(boxes) => {
                   const pl = clean({ ...(v.printLayout ?? {}), boxes });
+                  set({ printLayout: Object.keys(pl).length ? pl : undefined });
+                }}
+              />
+              <NumberField
+                label={t('designer.variants.decimals')}
+                integer
+                value={v.printLayout?.decimals}
+                hint={t('designer.variants.decimalsHelp')}
+                onChange={(decimals) => {
+                  const pl = clean({ ...(v.printLayout ?? {}), decimals });
                   set({ printLayout: Object.keys(pl).length ? pl : undefined });
                 }}
               />

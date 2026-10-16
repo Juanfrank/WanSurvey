@@ -404,6 +404,7 @@ export function TextInput(p: ControlProps) {
     // Enter stays in the text; the runner moves on with Ctrl+Enter.
     'data-text-answer': '',
   };
+  const format = p.question.format;
   return (
     <div>
       <label htmlFor={id} className="mb-3 block">
@@ -412,7 +413,13 @@ export function TextInput(p: ControlProps) {
       {long ? (
         <textarea {...common} rows={4} onChange={(e) => p.onChange(e.target.value)} />
       ) : (
-        <input {...common} autoComplete="off" onChange={(e) => p.onChange(e.target.value)} />
+        <input
+          {...common}
+          type={format === 'email' ? 'email' : format === 'phone' ? 'tel' : 'text'}
+          inputMode={format === 'email' ? 'email' : format === 'phone' ? 'tel' : undefined}
+          autoComplete="off"
+          onChange={(e) => p.onChange(e.target.value)}
+        />
       )}
     </div>
   );
@@ -420,6 +427,7 @@ export function TextInput(p: ControlProps) {
 
 export function DateTimeInput(p: ControlProps) {
   const id = useId();
+  if (p.question.type === 'date' && p.question.approximateDate) return <ApproximateDate {...p} />;
   const type = p.question.type === 'datetime' ? 'datetime-local' : p.question.type;
   const value =
     typeof p.value === 'string' ? p.value.slice(0, type === 'datetime-local' ? 16 : undefined) : '';
@@ -437,6 +445,65 @@ export function DateTimeInput(p: ControlProps) {
         onChange={(e) => p.onChange(e.target.value === '' ? null : e.target.value)}
       />
     </div>
+  );
+}
+
+/** Day, month and year typed apart, where 00 stands for an unknown day or month. */
+function ApproximateDate(p: ControlProps) {
+  const { t } = useTranslation(RENDERER_NS);
+  const id = useId();
+  const parts = typeof p.value === 'string' ? p.value.split('-') : [];
+  const [d, setD] = useState(parts[2] ?? '');
+  const [m, setM] = useState(parts[1] ?? '');
+  const [y, setY] = useState(parts[0] ?? '');
+  useEffect(() => {
+    const now = typeof p.value === 'string' ? p.value.split('-') : [];
+    setY(now[0] ?? '');
+    setM(now[1] ?? '');
+    setD(now[2] ?? '');
+  }, [p.value]);
+  const emit = (dd: string, mm: string, yy: string) => {
+    if (/^\d{4}$/.test(yy) && /^\d{1,2}$/.test(mm) && /^\d{1,2}$/.test(dd))
+      p.onChange(`${yy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
+    else if (!dd && !mm && !yy) p.onChange(null);
+  };
+  const field = (
+    label: string,
+    value: string,
+    set: (v: string) => void,
+    width: string,
+    max: number,
+    which: 'd' | 'm' | 'y',
+  ) => (
+    <label className="flex flex-col gap-1 text-sm">
+      <span>{label}</span>
+      <input
+        className={`${inputCls} ${width} font-mono`}
+        inputMode="numeric"
+        maxLength={max}
+        autoComplete="off"
+        value={value}
+        aria-describedby={`${id}-hint${p.describedBy ? ` ${p.describedBy}` : ''}`}
+        onChange={(e) => {
+          const v = e.target.value.replace(/\D/g, '').slice(0, max);
+          set(v);
+          emit(which === 'd' ? v : d, which === 'm' ? v : m, which === 'y' ? v : y);
+        }}
+      />
+    </label>
+  );
+  return (
+    <fieldset aria-describedby={p.describedBy}>
+      <legend className="mb-3">{p.heading}</legend>
+      <div className="flex flex-wrap items-end gap-2">
+        {field(t('paper.day'), d, setD, 'w-16', 2, 'd')}
+        {field(t('paper.month'), m, setM, 'w-16', 2, 'm')}
+        {field(t('paper.year'), y, setY, 'w-24', 4, 'y')}
+      </div>
+      <p id={`${id}-hint`} className="mt-1 text-xs text-slate-600">
+        {t('paper.approx')}
+      </p>
+    </fieldset>
   );
 }
 

@@ -115,23 +115,69 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
       </p>
     ) : null;
 
-  const boxes = (count: number, label: string) => (
-    <span className="paper-boxes inline-flex" role="img" aria-label={label}>
-      {Array.from({ length: count }, (_, i) => (
-        <span key={i} className="inline-block size-7 border border-slate-800" />
-      ))}
+  // Character boxes (one character each, for ICR) and circles to fill (OMR).
+  const boxes = (count: number, label: string, caption?: string) => (
+    <span className="inline-flex flex-col items-center gap-0.5">
+      <span className="paper-boxes inline-flex flex-wrap" role="img" aria-label={label}>
+        {Array.from({ length: count }, (_, i) => (
+          <span
+            key={i}
+            className="-ml-px inline-block h-8 w-7 border border-slate-900 first:ml-0"
+          />
+        ))}
+      </span>
+      {caption ? <span className="text-[10px] uppercase tracking-wide">{caption}</span> : null}
+    </span>
+  );
+  const bubble = (label: string) => (
+    <span
+      role="img"
+      aria-label={label}
+      className="paper-bubble inline-block size-4 shrink-0 rounded-full border-[1.5px] border-slate-900"
+    />
+  );
+  const dateBoxes = (approx: boolean) => (
+    <span className="inline-flex flex-wrap items-start gap-2">
+      {boxes(2, t('paper.day'), t('paper.day'))}
+      <span className="pt-1.5">/</span>
+      {boxes(2, t('paper.month'), t('paper.month'))}
+      <span className="pt-1.5">/</span>
+      {boxes(4, t('paper.year'), t('paper.year'))}
+      {approx ? <span className="pt-1.5 text-xs italic">({t('paper.approx')})</span> : null}
+    </span>
+  );
+  const timeBoxes = () => (
+    <span className="inline-flex items-start gap-2">
+      {boxes(2, t('paper.hours'), t('paper.hours'))}
+      <span className="pt-1.5">:</span>
+      {boxes(2, t('paper.minutes'), t('paper.minutes'))}
     </span>
   );
 
+  // Grids go to an annex on a separate sheet (table 1, 2…), so the form and the table can be
+  // held at once; the form says which table.
+  const annex = compiled.nodes.filter(
+    (x) =>
+      x.kind === 'question' &&
+      (x.def as Question).type === 'grid' &&
+      (x.def as Question).variants?.PAPI?.visibleInMode !== false,
+  );
+  const tableOf = new Map(annex.map((x, i) => [x.id, i + 1]));
+
   const answerArea = (def: Question): ReactNode => {
     const options = questionOptions(def, q);
+    const layout = def.variants?.PAPI?.printLayout;
     const optionList = (hint: string) => (
       <>
         <p className="text-sm italic">{hint}</p>
-        <ul className="paper-options ml-4">
+        <ul
+          className="paper-options ml-4 grid gap-x-6 gap-y-1"
+          style={{ gridTemplateColumns: `repeat(${layout?.columns ?? 1}, minmax(0, 1fr))` }}
+        >
           {options.map((o) => (
-            <li key={String(o.code)} className="flex gap-3">
-              <span className="w-10 text-right font-mono font-semibold">{o.code}</span>
+            <li key={String(o.code)} className="flex items-center gap-3">
+              {bubble(`${o.code} ${pick(o.label, lang) ?? ''}`)}
+              <span className="w-8 text-right font-mono font-semibold">{o.code}</span>
               <span>{pick(o.label, lang)}</span>
               {o.otherSpecify ? (
                 <span className="flex-1 border-b border-dotted border-slate-800" />
@@ -148,14 +194,17 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
       case 'multi':
         return optionList(t('paper.selectAll'));
       case 'numeric': {
-        const digits = Math.max(2, String(Math.trunc(Math.abs(def.max ?? 9999))).length);
+        // Boxes: as set for paper, else enough for the maximum; decimals likewise (0: none).
+        const digits =
+          layout?.boxes ?? Math.max(2, String(Math.trunc(Math.abs(def.max ?? 9999))).length);
+        const decimals = layout?.decimals ?? def.decimals ?? 0;
         return (
           <p className="flex items-center gap-2">
             {boxes(digits, t('paper.writeNumber'))}
-            {def.decimals ? (
+            {decimals ? (
               <>
-                <span>{(1.5).toLocaleString(lang).charAt(1)}</span>
-                {boxes(def.decimals, t('paper.writeNumber'))}
+                <span className="text-xl font-bold">{(1.5).toLocaleString(lang).charAt(1)}</span>
+                {boxes(decimals, t('paper.writeNumber'))}
               </>
             ) : null}
             {def.unit ? <span>{pick(def.unit, lang)}</span> : null}
@@ -163,6 +212,15 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
         );
       }
       case 'text':
+        // Formatted texts (phone, e-mail) and texts with a set number of boxes get one box per
+        // character; open answers keep lines (they are read by people, not machines).
+        if (def.format === 'phone' || def.format === 'email' || layout?.boxes)
+          return (
+            <p className="flex flex-wrap items-center gap-2">
+              {def.format ? <span className="text-sm">{t(`paper.${def.format}`)}:</span> : null}
+              {boxes(layout?.boxes ?? (def.format === 'phone' ? 10 : 30), t('paper.writeIn'))}
+            </p>
+          );
         return (
           <div aria-label={t('paper.writeIn')} role="img" className="flex flex-col gap-5 pt-3">
             {Array.from({ length: (def.maxLength ?? 0) > 120 ? 3 : 1 }, (_, i) => (
@@ -171,19 +229,16 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
           </div>
         );
       case 'date':
+        return dateBoxes(def.approximateDate === true);
       case 'datetime':
         return (
-          <p className="font-mono">
-            __ / __ / ____ <span className="ml-2 text-sm">({t('paper.dateFormat')})</span>
-            {def.type === 'datetime' ? <span className="ml-4">__ : __</span> : null}
-          </p>
+          <span className="inline-flex flex-wrap items-start gap-6">
+            {dateBoxes(false)}
+            {timeBoxes()}
+          </span>
         );
       case 'time':
-        return (
-          <p className="font-mono">
-            __ : __ <span className="ml-2 text-sm">({t('paper.timeFormat')})</span>
-          </p>
-        );
+        return timeBoxes();
       case 'scale': {
         const s = def.scale!;
         const points: number[] = [];
@@ -202,8 +257,9 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
               style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}
             >
               {points.map((v) => (
-                <span key={v} className="text-center">
-                  {v}
+                <span key={v} className="flex flex-col items-center gap-1">
+                  <span>{v}</span>
+                  {bubble(String(v))}
                 </span>
               ))}
             </div>
@@ -216,39 +272,9 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
       }
       case 'grid':
         return (
-          <table className="paper-grid border-collapse text-sm">
-            <thead>
-              <tr>
-                <td />
-                {options.map((o) => (
-                  <th
-                    key={String(o.code)}
-                    scope="col"
-                    className="border border-slate-800 px-2 py-1"
-                  >
-                    {pick(o.label, lang)} <span className="font-mono">({o.code})</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(def.rows ?? []).map((r) => (
-                <tr key={String(r.code)}>
-                  <th scope="row" className="border border-slate-800 px-2 py-1 text-left">
-                    {pick(r.label, lang)}
-                  </th>
-                  {options.map((o) => (
-                    <td
-                      key={String(o.code)}
-                      className="border border-slate-800 px-2 py-1 text-center font-mono"
-                    >
-                      {o.code}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p className="font-semibold" data-annex-ref={tableOf.get(def.id)}>
+            ☞ {t('paper.seeAnnex', { n: tableOf.get(def.id) })}
+          </p>
         );
       case 'ranking':
         return (
@@ -393,13 +419,81 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
     }
   };
 
+  const gridTable = (node: CompiledNode) => {
+    const def = node.def as Question;
+    const options = questionOptions(def, q);
+    return (
+      <section
+        key={node.id}
+        className="paper-annex-table flex break-inside-avoid flex-col gap-2"
+        data-annex={tableOf.get(node.id)}
+      >
+        <h3 className="font-bold">
+          {t('paper.tableN', { n: tableOf.get(node.id) })} · {numbers.get(node.id)} ·{' '}
+          {paperText(pick(def.variants?.PAPI?.text ?? def.text, lang) ?? '')}
+        </h3>
+        <table className="paper-grid w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <td />
+              {options.map((o) => (
+                <th key={String(o.code)} scope="col" className="border border-slate-800 px-2 py-1">
+                  {pick(o.label, lang)} <span className="font-mono">({o.code})</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(def.rows ?? []).map((r) => (
+              <tr key={String(r.code)}>
+                <th scope="row" className="border border-slate-800 px-2 py-1 text-left">
+                  {pick(r.label, lang)}
+                </th>
+                {options.map((o) => (
+                  <td key={String(o.code)} className="border border-slate-800 px-2 py-1.5">
+                    <span className="flex justify-center">
+                      {bubble(`${pick(r.label, lang) ?? ''}: ${o.code}`)}
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    );
+  };
+
+  // Registration marks in the corners, for scanners to square up each page.
+  const marks = (
+    <span aria-hidden className="paper-marks">
+      {['left-0 top-0', 'right-0 top-0', 'bottom-0 left-0', 'bottom-0 right-0'].map((pos) => (
+        <span key={pos} className={`absolute ${pos} size-3 bg-slate-950 print:fixed`} />
+      ))}
+    </span>
+  );
+
   return (
-    <article className="paper mx-auto flex max-w-3xl flex-col gap-6 bg-white p-8 font-serif text-slate-900 print:p-0">
+    <article className="paper relative mx-auto flex max-w-3xl flex-col gap-6 bg-white p-8 font-serif text-slate-900 print:p-0">
+      {marks}
       <header>
         <h1 className="text-2xl font-bold">{pick(q.title, lang)}</h1>
         <p className="text-sm italic">{t('paper.interviewerCopy')}</p>
+        <p className="mt-1 text-sm" data-testid="paper-fill-hint">
+          {t('paper.fillHint')}
+        </p>
       </header>
       {compiled.nodes.filter((x) => x.parent === null).map((x) => renderNode(x.index))}
+      {annex.length ? (
+        <section
+          className="paper-annex flex break-before-page flex-col gap-6 border-t-4 border-double border-slate-800 pt-6"
+          data-testid="paper-annex"
+        >
+          <h2 className="text-xl font-bold">{t('paper.annex')}</h2>
+          <p className="text-sm italic">{t('paper.annexHint')}</p>
+          {annex.map(gridTable)}
+        </section>
+      ) : null}
     </article>
   );
 }

@@ -211,6 +211,8 @@ const DEFAULT_MESSAGES = {
   exclusive: 'This option cannot be combined with others',
   maxLength: (n: number) => `Use at most ${n} characters`,
   pattern: 'The answer does not have the expected format',
+  email: 'Enter an e-mail address, such as name@example.com',
+  phone: 'Enter a telephone number (digits, spaces, +, - or brackets)',
   date: 'Enter a valid date',
   special: 'This answer is not available here',
   gridRow: 'Answer every row',
@@ -1448,6 +1450,10 @@ export class InterviewSession {
           }
           if (re && !re.test(s)) add('pattern', DEFAULT_MESSAGES.pattern);
         }
+        if (q.format === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+          add('email', DEFAULT_MESSAGES.email);
+        if (q.format === 'phone' && !/^\+?[\d\s\-().]{6,20}$/.test(s))
+          add('phone', DEFAULT_MESSAGES.phone);
         break;
       }
       case 'time':
@@ -1456,7 +1462,12 @@ export class InterviewSession {
         break;
       case 'date':
       case 'datetime': {
-        const ms = parseIsoDate(value);
+        // Approximate dates keep 00 for an unknown day or month; limits compare them as the 1st.
+        const approx =
+          q.type === 'date' &&
+          q.approximateDate === true &&
+          /^\d{4}-(0\d|1[0-2])-([0-2]\d|3[01])$/.test(value as string);
+        const ms = parseIsoDate(approx ? (value as string).replace(/-00(?=-|$)/g, '-01') : value);
         if (ms === null || (q.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value as string))) {
           add('date', DEFAULT_MESSAGES.date);
           break;

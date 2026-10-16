@@ -687,6 +687,15 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
 
       {q.type === 'text' ? (
         <Group title={t('designer.textRules')}>
+          <SelectField
+            label={t('designer.textFormat')}
+            value={q.format ?? ''}
+            options={(['', 'phone', 'email'] as const).map((f) => ({
+              value: f,
+              label: t(`designer.textFormats.${f || 'plain'}`),
+            }))}
+            onChange={(format) => p({ format: format || undefined })}
+          />
           <NumberField
             label={t('designer.maxLength')}
             integer
@@ -719,6 +728,13 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
             hint={t('designer.dateHelp')}
             onChange={(maxDate) => p({ maxDate: maxDate || undefined }, 'maxDate')}
           />
+          {q.type === 'date' ? (
+            <CheckField
+              label={t('designer.approximateDate')}
+              checked={!!q.approximateDate}
+              onChange={(on) => p({ approximateDate: on || undefined })}
+            />
+          ) : null}
         </Group>
       ) : null}
 

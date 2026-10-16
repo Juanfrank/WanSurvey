@@ -159,6 +159,24 @@ describe('PaperForm (PAPI)', () => {
     expect(screen.getByText('Repeat for each row (up to 10)')).toBeTruthy();
     expect(q('Q20').getByText('Ask only if Q19 is one of “Pozo” (2), “Río” (3)')).toBeTruthy();
     expect(q('Q11').getByText('If Q11 < 5 → go to the next person')).toBeTruthy();
+    // Machine-readable: circles to fill, one box per character for the phone, grids in an annex.
+    expect(q('Q1').getAllByRole('img', { name: /^\d+ / }).length).toBeGreaterThan(1);
+    const phone = container.querySelector('[data-paper-q] .paper-boxes[aria-label="Write in"]');
+    expect(phone?.children.length).toBe(10);
+    const annex = screen.getByTestId('paper-annex');
+    expect(within(annex).getByText(/Table 1/)).toBeTruthy();
+    expect(container.querySelector('[data-annex-ref="1"]')?.textContent).toMatch(/table 1/);
     await expectNoAxeViolations(container);
+  });
+
+  it('prints dates in day, month and year boxes, with 00 allowed when approximate', () => {
+    const def = structuredClone(household);
+    const d4 = def.sections
+      .flatMap((s) => s.items as { name?: string; approximateDate?: boolean }[])
+      .find((i) => i.name === 'D4_LASTVISIT')!;
+    d4.approximateDate = true;
+    render(<PaperForm compiled={compile(def)} lang="en" />);
+    expect(screen.getAllByRole('img', { name: 'Year' }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Write 00 for an unknown day or month/)).toBeTruthy();
   });
 });

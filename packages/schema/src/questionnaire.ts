@@ -82,7 +82,10 @@ export const ModeVariant = z.strictObject({
   printLayout: z
     .strictObject({
       columns: z.number().int().min(1).max(4).optional(),
-      boxes: z.number().int().optional(),
+      /** Character boxes printed for a number, a phone, an e-mail or a text (one per character). */
+      boxes: z.number().int().min(1).max(60).optional(),
+      /** Boxes after the decimal mark for a number; 0 prints none. Defaults to the question's decimals. */
+      decimals: z.number().int().min(0).max(6).optional(),
     })
     .optional(),
   visibleInMode: z.boolean().optional(),
@@ -196,10 +199,14 @@ export const Question = z.strictObject({
   // text
   maxLength: z.number().int().positive().optional(),
   pattern: z.string().optional(),
+  /** A text with a known shape: checked, typed with the right keyboard, boxed on paper. */
+  format: z.enum(['phone', 'email']).optional(),
 
   // date / time (ISO strings or expressions)
   minDate: z.string().optional(),
   maxDate: z.string().optional(),
+  /** Dates may be approximate: 00 for an unknown day and/or month (2019-00-00, 2019-06-00). */
+  approximateDate: z.boolean().optional(),
 
   // special codes
   allowDK: z.boolean().optional(),

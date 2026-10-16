@@ -478,6 +478,7 @@ export const household: QuestionnaireInput = {
           id: 'E2',
           name: 'E2_PHONE',
           type: 'text',
+          format: 'phone',
           pattern: '[0-9]{7,12}',
           personal: true,
           text: es('¿Número de teléfono?'),
