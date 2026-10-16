@@ -22,6 +22,8 @@ export type AuditAction =
   | 'user.invitation_accepted'
   | 'user.role_changed'
   | 'user.deactivated'
+  | 'user.reactivated'
+  | 'user.invitation_resent'
   | 'user.forced_logout'
   | 'tenant.updated'
   | 'project.created'

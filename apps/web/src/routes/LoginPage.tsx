@@ -1,4 +1,4 @@
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -81,6 +81,9 @@ export function LoginPage() {
         <Button type="submit" disabled={busy}>
           {t('login.submit')}
         </Button>
+        <Link to="/forgot-password" className="text-sm text-indigo-ink-700 underline">
+          {t('password.forgotLink')}
+        </Link>
       </form>
       <div className="my-4 flex items-center gap-3 text-sm text-slate-500">
         <span className="h-px flex-1 bg-slate-200" />

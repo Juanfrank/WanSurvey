@@ -56,6 +56,20 @@ export class UsersController {
     await this.users.deactivate(ctx, id);
   }
 
+  @Post(':id/reactivate')
+  @HttpCode(204)
+  @RequirePermission('users.manage')
+  async reactivate(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    await this.users.reactivate(ctx, id);
+  }
+
+  @Post(':id/resend-invitation')
+  @HttpCode(204)
+  @RequirePermission('users.manage')
+  async resendInvitation(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    await this.users.resendInvitation(ctx, id);
+  }
+
   @Post(':id/force-logout')
   @HttpCode(204)
   @RequirePermission('users.manage')

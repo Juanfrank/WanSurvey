@@ -15,7 +15,7 @@ import { tenantRank, type AuthContext, type MembershipGrant } from '../common/au
 import { sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, type Tx } from '../db/database.js';
-import { memberships, projects, sessions, tenantMembers, users } from '../db/schema.js';
+import { memberships, projects, sessions, tenantMembers, userTokens, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 
 const INVITATION_TTL_HOURS = 7 * 24;
@@ -156,18 +156,100 @@ export class UsersService {
         .where(eq(tenantMembers.userId, userId));
       return { member: member!, token };
     });
-    const link = `${this.config.PUBLIC_WEB_URL}/accept-invitation?token=${encodeURIComponent(result.token)}`;
+    await this.sendInvitation(result.member, result.token, !!existingId);
+    return { ...result.member, existingAccount: !!existingId, memberships: input.memberships };
+  }
+
+  private async sendInvitation(
+    member: { email: string; name: string },
+    token: string,
+    existingAccount: boolean,
+  ) {
+    const link = `${this.config.PUBLIC_WEB_URL}/accept-invitation?token=${encodeURIComponent(token)}`;
     await this.mailer.send({
-      to: result.member.email,
-      subject: existingId
+      to: member.email,
+      subject: existingAccount
         ? 'You have been added to an organisation on WanSurvey'
         : 'You have been invited to WanSurvey',
-      text: existingId
-        ? `Hello ${result.member.name},\n\nYou have been added to another organisation. Confirm with your existing password within 7 days:\n${link}`
-        : `Hello ${result.member.name},\n\nAccept your invitation within 7 days:\n${link}`,
-      idempotencyKey: `invite:${sha256Hex(result.token)}`,
+      text: existingAccount
+        ? `Hello ${member.name},\n\nYou have been added to another organisation. Confirm with your existing password within 7 days:\n${link}`
+        : `Hello ${member.name},\n\nAccept your invitation within 7 days:\n${link}`,
+      idempotencyKey: `invite:${sha256Hex(token)}`,
     });
-    return { ...result.member, existingAccount: !!existingId, memberships: input.memberships };
+  }
+
+  /**
+   * A new invitation link for someone who has not accepted yet (the old link may have
+   * expired or been lost); earlier links stop working.
+   */
+  async resendInvitation(ctx: AuthContext, userId: string) {
+    const result = await this.database.withTenant(ctx.tenantId, async (tx) => {
+      await this.loadTarget(tx, ctx, userId);
+      const [member] = await tx
+        .select({ ...memberColumns, userStatus: users.status })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(eq(tenantMembers.userId, userId));
+      if (member!.status !== 'invited')
+        throw new ConflictException({
+          code: 'NOT_INVITED',
+          message: 'This person has already accepted their invitation',
+        });
+      await tx
+        .update(userTokens)
+        .set({ usedAt: new Date() })
+        .where(
+          and(
+            eq(userTokens.userId, userId),
+            eq(userTokens.purpose, 'invitation'),
+            isNull(userTokens.usedAt),
+          ),
+        );
+      const token = await this.auth.issueToken(tx, {
+        tenantId: ctx.tenantId,
+        userId,
+        purpose: 'invitation',
+        ttlHours: INVITATION_TTL_HOURS,
+      });
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'user.invitation_resent',
+          targetType: 'user',
+          targetId: userId,
+        }),
+      );
+      return { member: member!, token };
+    });
+    await this.sendInvitation(result.member, result.token, result.member.userStatus !== 'pending');
+  }
+
+  /** Gives a deactivated member their access back (still invited if they never accepted). */
+  async reactivate(ctx: AuthContext, userId: string) {
+    await this.database.withTenant(ctx.tenantId, async (tx) => {
+      await this.loadTarget(tx, ctx, userId);
+      const [row] = await tx
+        .select({ status: tenantMembers.status, userStatus: users.status })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(eq(tenantMembers.userId, userId));
+      if (row!.status !== 'deactivated')
+        throw new ConflictException({ code: 'NOT_DEACTIVATED', message: 'This person is active' });
+      await tx
+        .update(tenantMembers)
+        .set({ status: row!.userStatus === 'pending' ? 'invited' : 'active', deactivatedAt: null })
+        .where(eq(tenantMembers.userId, userId));
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'user.reactivated',
+          targetType: 'user',
+          targetId: userId,
+        }),
+      );
+    });
   }
 
   async setMemberships(ctx: AuthContext, userId: string, grants: MembershipGrant[]) {

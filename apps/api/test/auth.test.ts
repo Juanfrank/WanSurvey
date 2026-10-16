@@ -280,6 +280,52 @@ describe('authentication', () => {
       );
     });
 
+    it('a lost invitation is sent again; a deactivated member is let back in', async () => {
+      const admin = await createUser(t.admin, tenant.id, [{ role: 'admin' }]);
+      const a = await login(t.app, admin);
+      const post = (path: string, body?: object) =>
+        a.agent.post(`/api/v1${path}`).set('x-csrf-token', a.csrf).send(body);
+      const email = `again-${Date.now()}@example.org`;
+      const inv = await post('/users/invite', {
+        email,
+        name: 'Rita Resend',
+        memberships: [{ role: 'interviewer' }],
+      });
+      const tokenOf = () =>
+        decodeURIComponent(/token=([^\s]+)/.exec(t.mailer.last(email)!.text)![1]!);
+      const first = tokenOf();
+      expect((await post(`/users/${inv.body.id}/resend-invitation`)).status).toBe(204);
+      const second = tokenOf();
+      expect(second).not.toBe(first);
+      // The first link no longer works; the new one does.
+      expect(
+        (
+          await http()
+            .post('/api/v1/auth/invitations/accept')
+            .send({ token: first, password: PASSWORD })
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await http()
+            .post('/api/v1/auth/invitations/accept')
+            .send({ token: second, password: PASSWORD })
+        ).status,
+      ).toBe(204);
+      expect((await post(`/users/${inv.body.id}/resend-invitation`)).body.code).toBe('NOT_INVITED');
+
+      expect((await post(`/users/${inv.body.id}/deactivate`)).status).toBe(204);
+      expect(
+        (await http().post('/api/v1/auth/login').send({ email, password: PASSWORD })).status,
+      ).toBe(401);
+      expect((await post(`/users/${inv.body.id}/reactivate`)).status).toBe(204);
+      await login(t.app, { id: inv.body.id, email, totpSecret: null });
+      expect((await post(`/users/${inv.body.id}/reactivate`)).body.code).toBe('NOT_DEACTIVATED');
+      expect(await auditActions(inv.body.id)).toEqual(
+        expect.arrayContaining(['user.invitation_resent', 'user.reactivated']),
+      );
+    });
+
     it('role changes follow rank rules and are audited', async () => {
       const admin = await createUser(t.admin, tenant.id, [{ role: 'admin' }]);
       const a = await login(t.app, admin);

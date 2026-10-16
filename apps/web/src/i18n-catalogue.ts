@@ -13,6 +13,7 @@ import { deviceEn, deviceEs } from './device/i18n.js';
 import { interviewEn, interviewEs } from './interview/i18n.js';
 import { designerEn, designerEs } from './designer/i18n.js';
 import { messagesEn, messagesEs } from './messages-i18n.js';
+import { passwordEn, passwordEs, teamEn, teamEs } from './team/i18n.js';
 
 const en = {
   app: {
@@ -22,6 +23,7 @@ const en = {
     organisation: 'Organisation',
     home: 'Home',
     preview: 'Questionnaire preview',
+    team: 'Team',
     projects: 'Projects',
     skip: 'Skip to content',
     mainNav: 'Main',
@@ -184,6 +186,8 @@ const en = {
   review: reviewEn,
   analysis: analysisEn,
   device: deviceEn,
+  team: teamEn,
+  password: passwordEn,
   ...messagesEn,
 };
 
@@ -197,6 +201,7 @@ const es: Catalogue = {
     organisation: 'Organización',
     home: 'Inicio',
     preview: 'Vista previa del cuestionario',
+    team: 'Equipo',
     projects: 'Proyectos',
     skip: 'Ir al contenido',
     mainNav: 'Principal',
@@ -369,6 +374,8 @@ const es: Catalogue = {
   review: reviewEs,
   analysis: analysisEs,
   device: deviceEs,
+  team: teamEs,
+  password: passwordEs,
   ...messagesEs,
 };
 

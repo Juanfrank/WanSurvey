@@ -20,6 +20,8 @@ const TwoFactorSetupPage = lazyRouteComponent(
   'TwoFactorSetupPage',
 );
 const WaitingPage = lazyRouteComponent(() => import('./routes/WaitingPage.js'), 'WaitingPage');
+const passwordPage = (name: 'AcceptInvitationPage' | 'ResetPasswordPage' | 'ForgotPasswordPage') =>
+  lazyRouteComponent(() => import('./routes/PasswordPages.js'), name);
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -43,6 +45,23 @@ const twoFactorSetupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login/2fa/setup',
   component: TwoFactorSetupPage,
+});
+
+// Links from e-mails (an invitation, a password reset) and asking for one.
+const acceptInvitationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/accept-invitation',
+  component: passwordPage('AcceptInvitationPage'),
+});
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  component: passwordPage('ResetPasswordPage'),
+});
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: passwordPage('ForgotPasswordPage'),
 });
 
 // Respondent pages: outside the staff application, no sign-in (the link is the credential).
@@ -79,6 +98,12 @@ const waitingRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/waiting',
   component: WaitingPage,
+});
+// The organisation's people and their roles.
+const teamRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/team',
+  component: lazyRouteComponent(() => import('./team/TeamPage.js'), 'TeamPage'),
 });
 // The preview (logic engine, renderer, samples) loads only when opened.
 const previewRoute = createRoute({
@@ -175,6 +200,9 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   twoFactorRoute,
   twoFactorSetupRoute,
+  acceptInvitationRoute,
+  resetPasswordRoute,
+  forgotPasswordRoute,
   respondentRoute,
   openLinkRoute,
   feedbackRoute,
@@ -184,6 +212,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     waitingRoute,
     previewRoute,
+    teamRoute,
     projectsRoute,
     projectRoute,
     designerRoute,

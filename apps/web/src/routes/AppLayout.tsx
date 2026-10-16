@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, type Me } from '../api.js';
 import { AccountMenu } from './AccountMenu.js';
-import { EyeIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
+import { EyeIcon, FolderIcon, HomeIcon, MenuIcon, UsersIcon } from './icons.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
 
 const ME_KEY = 'wansurvey.me';
@@ -121,6 +121,8 @@ const COMPACT_UP_TO = '(max-width: 1180px)';
  */
 function SidePanel({ waiting }: { waiting: boolean }) {
   const { t } = useTranslation();
+  const me = useMe();
+  const canSeeTeam = !!me.data?.permissions.includes('users.read');
   const wide = useMedia('(min-width: 900px)');
   const small = useMedia(COMPACT_UP_TO);
   const [compact, setCompact] = useStoredFlag('ws.sidebar.compact', small);
@@ -204,6 +206,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
             {link('/', t('app.home'), <HomeIcon />, true)}
             {link('/projects', t('app.projects'), <FolderIcon />)}
             {link('/preview', t('app.preview'), <EyeIcon />)}
+            {canSeeTeam ? link('/team', t('app.team'), <UsersIcon />) : null}
           </nav>
         ) : null}
       </div>
