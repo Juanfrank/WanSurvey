@@ -7,6 +7,7 @@ const en = {
   script: { label: 'Read to the respondent' },
   nav: {
     nextKey: 'Enter',
+    nextKeyText: 'Ctrl+Enter',
     backKey: 'Shift+Enter',
     next: 'Next',
     back: 'Back',
@@ -26,6 +27,7 @@ const en = {
     rank: 'Rank {{n}}',
     notSet: 'Not answered yet',
     sliderValue: 'Selected: {{value}}',
+    sliderType: 'Or type a number from {{min}} to {{max}}:',
     confirmWarning: 'I have checked this answer; continue',
     row: 'Row',
     addRow: 'Add another',
@@ -112,6 +114,7 @@ const es: Catalogue = {
   script: { label: 'Leer al entrevistado' },
   nav: {
     nextKey: 'Intro',
+    nextKeyText: 'Ctrl+Intro',
     backKey: 'Mayús+Intro',
     next: 'Siguiente',
     back: 'Atrás',
@@ -131,6 +134,7 @@ const es: Catalogue = {
     rank: 'Posición {{n}}',
     notSet: 'Aún sin responder',
     sliderValue: 'Seleccionado: {{value}}',
+    sliderType: 'O escriba un número del {{min}} al {{max}}:',
     confirmWarning: 'He verificado esta respuesta; continuar',
     row: 'Fila',
     addRow: 'Agregar otro',

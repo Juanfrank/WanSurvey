@@ -291,6 +291,31 @@ function checkQuestion(
       );
     }
   }
+  // Options and grid rows need a label: a code alone means nothing to whoever answers.
+  const unlabelled = (list: { code: string | number; label: Record<string, string> }[]) =>
+    list
+      .filter((o) => !Object.values(o.label ?? {}).some((v) => v.trim() !== ''))
+      .map((o) => String(o.code));
+  const noLabel = unlabelled(q.answerSetId ? [] : (q.options ?? []));
+  if (noLabel.length)
+    add({
+      severity: 'warning',
+      code: 'empty_option_label',
+      message: `Options ${noLabel.join(', ')} of ${q.name} have no label`,
+      msg: { id: 'empty_option_label', params: { name: q.name, codes: noLabel.join(', ') } },
+      itemId: node.id,
+      field: 'options',
+    });
+  const noRowLabel = unlabelled(q.rows ?? []);
+  if (noRowLabel.length)
+    add({
+      severity: 'warning',
+      code: 'empty_option_label',
+      message: `Rows ${noRowLabel.join(', ')} of ${q.name} have no label`,
+      msg: { id: 'empty_row_label', params: { name: q.name, codes: noRowLabel.join(', ') } },
+      itemId: node.id,
+      field: 'rows',
+    });
   if (q.type === 'grid' && (!q.rows || q.rows.length === 0))
     err('missing_rows', `Grid ${q.name} has no rows`, 'rows');
   if (q.min !== undefined && q.max !== undefined && q.min > q.max)

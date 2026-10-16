@@ -185,6 +185,11 @@ export const Question = z.strictObject({
       step: z.number().positive().optional(),
       minLabel: LocalizedText.optional(),
       maxLabel: LocalizedText.optional(),
+      /**
+       * Optional colours for the points: `diverging` goes red → amber → green, `sequential`
+       * light → dark, `nps` marks detractors (0–6), passives (7–8) and promoters (9–10).
+       */
+      palette: z.enum(['diverging', 'sequential', 'nps']).optional(),
     })
     .optional(),
 

@@ -94,13 +94,30 @@ export function Progress({ value, max, label }: { value: number; max: number; la
   );
 }
 
-/** Completes per day as columns, with the table behind it one click away. */
-export function DayColumns({ days }: { days: { day: string; completes: number }[] }) {
+/** Every day of the 30 ending with the last day given (or today), missing days as 0. */
+function fillDays(days: { day: string; completes: number }[], span = 30) {
+  const by = new Map(days.map((d) => [d.day, d.completes]));
+  const today = new Date().toISOString().slice(0, 10);
+  const lastDay = days.reduce((m, d) => (d.day > m ? d.day : m), today);
+  const end = new Date(`${lastDay}T12:00:00Z`);
+  return Array.from({ length: span }, (_, i) => {
+    const d = new Date(end);
+    d.setUTCDate(end.getUTCDate() - (span - 1 - i));
+    const day = d.toISOString().slice(0, 10);
+    return { day, completes: by.get(day) ?? 0 };
+  });
+}
+
+/**
+ * Completes per day as columns, with the table behind it one click away. Drawn with HTML
+ * boxes rather than a stretched SVG, so the figures keep their shape at any width and the
+ * tallest column still has room for its label.
+ */
+export function DayColumns({ days: given }: { days: { day: string; completes: number }[] }) {
   const { t, i18n } = useTranslation();
-  if (!days.length) return <p className="text-slate-600">–</p>;
+  if (!given.length) return <p className="text-slate-600">–</p>;
+  const days = fillDays(given);
   const max = Math.max(1, ...days.map((d) => d.completes));
-  const w = 16;
-  const h = 80;
   const short = (d: string) =>
     new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, {
       day: 'numeric',
@@ -109,50 +126,36 @@ export function DayColumns({ days }: { days: { day: string; completes: number }[
     });
   return (
     <div>
-      <svg
+      <div
         role="img"
         aria-label={days.map((d) => `${short(d.day)}: ${d.completes}`).join(', ')}
-        viewBox={`0 0 ${days.length * w} ${h + 14}`}
-        className="h-28 w-full max-w-xl"
-        preserveAspectRatio="none"
+        className="w-full max-w-2xl"
       >
-        {days.map((d, i) => {
-          const bh = (h * d.completes) / max;
-          return (
-            <g key={d.day}>
-              <rect
-                x={i * w + 2}
-                y={h - bh}
-                width={w - 4}
-                height={bh}
-                className="fill-indigo-600"
+        <div className="flex h-32 items-end gap-[2px] border-b border-slate-300 pt-4">
+          {days.map((d) => (
+            <div
+              key={d.day}
+              title={`${short(d.day)}: ${d.completes}`}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+            >
+              {d.completes ? (
+                <span className="mb-0.5 text-[10px] leading-none tabular-nums text-slate-700">
+                  {d.completes}
+                </span>
+              ) : null}
+              <div
+                aria-hidden="true"
+                className="w-full max-w-6 rounded-t-sm bg-indigo-600 print:bg-slate-700"
+                style={{ height: `${(100 * d.completes) / max}%` }}
               />
-              <text
-                x={i * w + w / 2}
-                y={h - bh - 2}
-                textAnchor="middle"
-                className="fill-slate-700"
-                fontSize="7"
-              >
-                {d.completes}
-              </text>
-            </g>
-          );
-        })}
-        <line x1="0" x2={days.length * w} y1={h} y2={h} className="stroke-slate-300" />
-        <text x="0" y={h + 11} fontSize="7" className="fill-slate-600">
-          {short(days[0]!.day)}
-        </text>
-        <text
-          x={days.length * w}
-          y={h + 11}
-          fontSize="7"
-          textAnchor="end"
-          className="fill-slate-600"
-        >
-          {short(days[days.length - 1]!.day)}
-        </text>
-      </svg>
+            </div>
+          ))}
+        </div>
+        <div className="mt-1 flex justify-between text-xs text-slate-600">
+          <span>{short(days[0]!.day)}</span>
+          <span>{short(days[days.length - 1]!.day)}</span>
+        </div>
+      </div>
       <details className="mt-1 text-sm">
         <summary className="cursor-pointer text-indigo-ink-700">{t('analysis.live.table')}</summary>
         <table className="mt-1 text-sm">

@@ -100,7 +100,7 @@ describe('InterviewRunner (interviewer modes)', () => {
   it('announces answers cleared by a path change', async () => {
     const { user, session } = setup('CATI');
     await user.keyboard('{Enter}1{Enter}40{Enter}2{Enter}1{Enter}');
-    await user.keyboard('Pat{Enter}');
+    await user.keyboard('Pat{Control>}{Enter}{/Control}');
     expect(session.getAnswer('A4_SPOUSE')).toBe('Pat');
     await user.keyboard('{Shift>}{Enter}{/Shift}{Shift>}{Enter}{/Shift}');
     expect(question()).toBe('A4_MARITAL');

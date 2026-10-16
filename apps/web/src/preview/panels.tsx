@@ -175,46 +175,48 @@ export function ComparePanel({
     <section className="flex flex-col gap-3">
       <p className="text-sm text-slate-600">{t('preview.compareHelp')}</p>
       <div className="grid gap-3 md:grid-cols-2">
-        {MODES.map((mode) => {
-          const s = createInterview(compiled, {
-            mode,
-            language: options.language,
-            context: options.context,
-            now: () => new Date(`${options.today}T12:00:00Z`),
-            state: session.state(),
-          });
-          const inMode = s.trace().find((e) => e.key === key);
-          const variant = def.variants?.[mode];
-          const differs = !!variant?.text;
-          return (
-            <article
-              key={mode}
-              className="rounded-lg border border-slate-200 bg-white p-4"
-              data-compare-mode={mode}
-            >
-              <h3 className="mb-2 flex items-center gap-2 font-semibold">
-                {mode}
-                <span
-                  className={`rounded px-1.5 text-xs ${differs ? 'bg-amber-100 text-amber-ink-900' : 'bg-slate-100 text-slate-700'}`}
-                >
-                  {differs ? t('preview.differs') : t('preview.base')}
-                </span>
-              </h3>
-              {inMode?.status === 'notInMode' ? (
-                <p className="text-sm italic text-slate-600">{t('preview.hiddenInMode')}</p>
-              ) : (
-                <>
-                  <p>{s.text(key) ?? pick(def.text, options.language)}</p>
-                  {mode !== 'CAWI' && s.text(key, 'interviewerInstruction') ? (
-                    <p className="mt-2 text-sm font-semibold uppercase text-amber-ink-900">
-                      {s.text(key, 'interviewerInstruction')}
-                    </p>
-                  ) : null}
-                </>
-              )}
-            </article>
-          );
-        })}
+        {(compiled.questionnaire.modes?.length ? compiled.questionnaire.modes : MODES).map(
+          (mode) => {
+            const s = createInterview(compiled, {
+              mode,
+              language: options.language,
+              context: options.context,
+              now: () => new Date(`${options.today}T12:00:00Z`),
+              state: session.state(),
+            });
+            const inMode = s.trace().find((e) => e.key === key);
+            const variant = def.variants?.[mode];
+            const differs = !!variant?.text;
+            return (
+              <article
+                key={mode}
+                className="rounded-lg border border-slate-200 bg-white p-4"
+                data-compare-mode={mode}
+              >
+                <h3 className="mb-2 flex items-center gap-2 font-semibold">
+                  {mode}
+                  <span
+                    className={`rounded px-1.5 text-xs ${differs ? 'bg-amber-100 text-amber-ink-900' : 'bg-slate-100 text-slate-700'}`}
+                  >
+                    {differs ? t('preview.differs') : t('preview.base')}
+                  </span>
+                </h3>
+                {inMode?.status === 'notInMode' ? (
+                  <p className="text-sm italic text-slate-600">{t('preview.hiddenInMode')}</p>
+                ) : (
+                  <>
+                    <p>{s.text(key) ?? pick(def.text, options.language)}</p>
+                    {mode !== 'CAWI' && s.text(key, 'interviewerInstruction') ? (
+                      <p className="mt-2 text-sm font-semibold uppercase text-amber-ink-900">
+                        {s.text(key, 'interviewerInstruction')}
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </article>
+            );
+          },
+        )}
       </div>
     </section>
   );

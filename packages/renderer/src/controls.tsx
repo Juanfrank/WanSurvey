@@ -3,6 +3,7 @@ import type { AnswerValue, Question } from '@wansurvey/schema';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RENDERER_NS } from './i18n.js';
+import { scaleColor } from './scaleColors.js';
 import { pick } from './text.js';
 
 /** Shared props of every answer control. */
@@ -110,6 +111,10 @@ export function SingleChoice(p: ControlProps) {
               value={String(o.code)}
               checked={selected !== null && String(selected) === String(o.code)}
               onChange={() => p.onChange(o.code)}
+              // A second click on the chosen option clears it (radios cannot be unticked otherwise).
+              onClick={() => {
+                if (selected !== null && String(selected) === String(o.code)) p.onChange(null);
+              }}
               data-code={String(o.code)}
             />
             <Code code={o.code} show={p.showCodes} />
@@ -203,6 +208,8 @@ export function TextInput(p: ControlProps) {
     'aria-describedby': p.describedBy,
     maxLength: p.question.maxLength,
     value,
+    // Enter stays in the text; the runner moves on with Ctrl+Enter.
+    'data-text-answer': '',
   };
   return (
     <div>
@@ -247,27 +254,66 @@ export function Scale(p: ControlProps) {
   const minLabel = pick(scale.minLabel, p.lang);
   const maxLabel = pick(scale.maxLabel, p.lang);
   const value = typeof p.value === 'number' ? p.value : null;
+  const [typed, setTyped] = useState(value === null ? '' : String(value));
+  useEffect(() => setTyped(value === null ? '' : String(value)), [value]);
   if (scale.style === 'slider') {
+    const step = scale.step ?? 1;
     return (
       <div>
         <label htmlFor={id} className="mb-3 block">
           {p.heading}
         </label>
-        <input
-          id={id}
-          type="range"
-          className="w-full max-w-md accent-indigo-600"
-          min={scale.min}
-          max={scale.max}
-          step={scale.step ?? 1}
-          value={value ?? scale.min}
-          aria-valuetext={value === null ? t('question.notSet') : String(value)}
-          aria-describedby={p.describedBy}
-          onChange={(e) => p.onChange(Number(e.target.value))}
-        />
-        <p className="mt-1 text-sm text-slate-600" aria-hidden="true">
-          {value === null ? t('question.notSet') : t('question.sliderValue', { value })}
-        </p>
+        <div className="flex max-w-xl items-center gap-3">
+          <span className="shrink-0 text-sm tabular-nums text-slate-600" aria-hidden="true">
+            {scale.min}
+          </span>
+          <input
+            id={id}
+            type="range"
+            className="w-full accent-indigo-600"
+            min={scale.min}
+            max={scale.max}
+            step={step}
+            value={value ?? scale.min}
+            aria-valuetext={value === null ? t('question.notSet') : String(value)}
+            aria-describedby={p.describedBy}
+            onChange={(e) => p.onChange(Number(e.target.value))}
+          />
+          <span className="shrink-0 text-sm tabular-nums text-slate-600" aria-hidden="true">
+            {scale.max}
+          </span>
+        </div>
+        {minLabel || maxLabel ? (
+          <div
+            className="mt-1 flex max-w-xl justify-between gap-4 text-sm text-slate-600"
+            aria-hidden="true"
+          >
+            <span>{minLabel}</span>
+            <span>{maxLabel}</span>
+          </div>
+        ) : null}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <label htmlFor={`${id}-typed`} className="text-slate-700">
+            {t('question.sliderType', { min: scale.min, max: scale.max })}
+          </label>
+          <input
+            id={`${id}-typed`}
+            className={`${inputCls} w-24`}
+            inputMode="decimal"
+            autoComplete="off"
+            value={typed}
+            aria-describedby={p.describedBy}
+            onChange={(e) => {
+              setTyped(e.target.value);
+              const n = Number(e.target.value.trim().replace(',', '.'));
+              if (e.target.value.trim() === '') p.onChange(null);
+              else if (Number.isFinite(n) && n >= scale.min && n <= scale.max) p.onChange(n);
+            }}
+          />
+          <span className="text-slate-600" aria-live="polite">
+            {value === null ? t('question.notSet') : t('question.sliderValue', { value })}
+          </span>
+        </div>
       </div>
     );
   }
@@ -276,35 +322,55 @@ export function Scale(p: ControlProps) {
   const name = `${id}-scale`;
   return (
     <Fieldset heading={p.heading} describedBy={p.describedBy}>
-      <div className="flex flex-wrap gap-1.5" data-scale={scale.style}>
-        {points.map((n) => (
-          <label
-            key={n}
-            className={`flex ${p.touch ? 'size-12' : 'size-10'} cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white font-medium has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-on-fill has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500`}
-          >
-            <input
-              type="radio"
-              name={name}
-              className="sr-only"
-              checked={value === n}
-              onChange={() => p.onChange(n)}
-              data-code={String(n)}
-              aria-label={
-                n === scale.min && minLabel
-                  ? `${n} – ${minLabel}`
-                  : n === scale.max && maxLabel
-                    ? `${n} – ${maxLabel}`
-                    : String(n)
-              }
-            />
-            {n}
-          </label>
-        ))}
+      {/* One equal column per point across the whole width, so the ends line up with their labels. */}
+      <div
+        className="grid gap-1.5"
+        style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}
+        data-scale={scale.style}
+        data-palette={scale.palette}
+      >
+        {points.map((n) => {
+          const c = scaleColor(scale.palette, n, scale.min, scale.max);
+          const on = value === n;
+          return (
+            <label
+              key={n}
+              className={`flex ${p.touch ? 'h-12' : 'h-10'} min-w-0 cursor-pointer items-center justify-center rounded-md border font-medium tabular-nums has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${
+                c
+                  ? on
+                    ? 'text-white ring-2 ring-offset-1 ring-slate-900'
+                    : ''
+                  : 'border-slate-300 bg-white has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-on-fill'
+              }`}
+              style={c ? { background: on ? c.fill : c.tint, borderColor: c.border } : undefined}
+            >
+              <input
+                type="radio"
+                name={name}
+                className="sr-only"
+                checked={on}
+                onChange={() => p.onChange(n)}
+                onClick={() => {
+                  if (on) p.onChange(null);
+                }}
+                data-code={String(n)}
+                aria-label={
+                  n === scale.min && minLabel
+                    ? `${n} – ${minLabel}`
+                    : n === scale.max && maxLabel
+                      ? `${n} – ${maxLabel}`
+                      : String(n)
+                }
+              />
+              {n}
+            </label>
+          );
+        })}
       </div>
       {minLabel || maxLabel ? (
         <div className="mt-1 flex justify-between gap-4 text-sm text-slate-600" aria-hidden="true">
           <span>{minLabel}</span>
-          <span>{maxLabel}</span>
+          <span className="text-right">{maxLabel}</span>
         </div>
       ) : null}
     </Fieldset>
@@ -322,6 +388,10 @@ export function Grid(p: ControlProps) {
       : {};
   const set = (row: string | number, code: string | number) =>
     p.onChange({ ...value, [String(row)]: code });
+  const clearRow = (row: string | number) => {
+    const { [String(row)]: _gone, ...rest } = value;
+    p.onChange(Object.keys(rest).length ? rest : null);
+  };
   return (
     <Fieldset heading={p.heading} describedBy={p.describedBy}>
       <div className="flex flex-col divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
@@ -346,6 +416,9 @@ export function Grid(p: ControlProps) {
                     className="size-4 accent-indigo-600"
                     checked={String(value[String(r.code)]) === String(o.code)}
                     onChange={() => set(r.code, o.code)}
+                    onClick={() => {
+                      if (String(value[String(r.code)]) === String(o.code)) clearRow(r.code);
+                    }}
                     data-code={String(o.code)}
                   />
                   <Code code={o.code} show={p.showCodes} />

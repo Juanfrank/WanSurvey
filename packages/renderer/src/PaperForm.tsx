@@ -194,16 +194,22 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
         ) {
           points.push(Math.round(v));
         }
+        // Equal columns over the full width, so the ends sit under their labels.
         return (
           <div>
-            <p className="flex flex-wrap gap-3 font-mono font-semibold">
+            <div
+              className="grid font-mono font-semibold"
+              style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}
+            >
               {points.map((v) => (
-                <span key={v}>{v}</span>
+                <span key={v} className="text-center">
+                  {v}
+                </span>
               ))}
-            </p>
+            </div>
             <p className="flex justify-between text-sm">
               <span>{pick(s.minLabel, lang)}</span>
-              <span>{pick(s.maxLabel, lang)}</span>
+              <span className="text-right">{pick(s.maxLabel, lang)}</span>
             </p>
           </div>
         );

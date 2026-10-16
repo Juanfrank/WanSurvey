@@ -12,9 +12,10 @@ const current = (page: Page) => page.locator('[data-qkey]').first();
 const press = async (page: Page, ...keys: string[]) => {
   for (const k of keys) await page.keyboard.press(k);
 };
+// Ctrl+Enter moves on from every kind of answer, text included (Enter stays in the text).
 const typeAndEnter = async (page: Page, text: string) => {
   await page.keyboard.type(text);
-  await page.keyboard.press('Enter');
+  await page.keyboard.press('Control+Enter');
 };
 
 test('a CATI interviewer completes the household survey with the keyboard only', async ({
@@ -58,7 +59,7 @@ test('a CATI interviewer completes the household survey with the keyboard only',
   await typeAndEnter(page, '3'); // E3 any time → skip to region
   await expect(current(page)).toContainText('Región (confirme)');
   await press(page, 'Enter'); // E5 prefilled from case data
-  await press(page, 'Enter'); // E6 comments are optional
+  await press(page, 'Control+Enter'); // E6 comments are optional
   await expect(page.getByText('The interview is complete. Thank you.')).toBeVisible();
 
   const tracer = page.getByTestId('tracer');

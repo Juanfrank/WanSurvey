@@ -46,6 +46,8 @@ export const messagesEn = {
     // questions
     unknown_answer_set: 'Answer set {{set}} does not exist',
     missing_options: '{{name}} has no answer options',
+    empty_option_label: 'Options {{codes}} of {{name}} have no label',
+    empty_row_label: 'Rows {{codes}} of {{name}} have no label',
     duplicate_code: 'Code {{code}} appears twice in {{name}}',
     special_code_clash: "Code {{code}} in {{name}} is also a special code (Don't know/Refused/NA)",
     missing_rows: 'Grid {{name}} has no rows',
@@ -176,6 +178,8 @@ export const messagesEs: MessagesCatalogue = {
     unreachable: '{{name}} nunca se puede alcanzar',
     unknown_answer_set: 'El conjunto de respuestas {{set}} no existe',
     missing_options: '{{name}} no tiene opciones de respuesta',
+    empty_option_label: 'Las opciones {{codes}} de {{name}} no tienen etiqueta',
+    empty_row_label: 'Las filas {{codes}} de {{name}} no tienen etiqueta',
     duplicate_code: 'El código {{code}} aparece dos veces en {{name}}',
     special_code_clash:
       'El código {{code}} de {{name}} también es un código especial (No sabe/Rehúsa/No aplica)',

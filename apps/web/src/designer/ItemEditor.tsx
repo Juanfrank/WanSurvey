@@ -599,6 +599,19 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
               })
             }
           />
+          {q.scale.style !== 'slider' ? (
+            <SelectField
+              label={t('designer.palette')}
+              value={q.scale.palette ?? ''}
+              options={(['', 'diverging', 'sequential', 'nps'] as const).map((v) => ({
+                value: v,
+                label: t(`designer.palettes.${v || 'none'}`),
+              }))}
+              onChange={(palette) =>
+                p({ scale: clean({ ...q.scale!, palette: palette || undefined }) })
+              }
+            />
+          ) : null}
           <div className="grid grid-cols-3 gap-3">
             <NumberField
               label={t('designer.min')}

@@ -287,11 +287,14 @@ function Runner(p: InterviewRunnerProps) {
       back();
       return;
     }
-    if (
-      e.key === 'Enter' &&
-      !(target instanceof HTMLTextAreaElement) &&
-      !(target instanceof HTMLButtonElement)
-    ) {
+    // In text answers Enter belongs to the text: only Ctrl+Enter (⌘+Enter) moves on.
+    const inText = target instanceof HTMLTextAreaElement || target.hasAttribute('data-text-answer');
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && inText) {
+      e.preventDefault();
+      next();
+      return;
+    }
+    if (e.key === 'Enter' && !inText && !(target instanceof HTMLButtonElement)) {
       e.preventDefault();
       next();
       return;
@@ -339,7 +342,9 @@ function Runner(p: InterviewRunnerProps) {
               : [...arr.filter((c) => !exclusive.has(String(c))), m.code];
           answer(key, nextValue);
         } else {
-          answer(key, m.code);
+          // Typing the chosen code again clears it.
+          const cur = session.getAnswer(key);
+          answer(key, cur !== null && String(cur) === String(m.code) ? null : m.code);
         }
         const input = containerRef.current?.querySelector<HTMLInputElement>(
           `[data-qkey="${CSS.escape(key)}"] input[data-code="${CSS.escape(String(m.code))}"]`,
@@ -351,6 +356,11 @@ function Runner(p: InterviewRunnerProps) {
     }
   };
 
+  const textOnScreen = entries.some((e) => {
+    if (e.kind !== 'question') return false;
+    const q = session.compiled.nodes[own(session.compiled.byId, e.id)!]!.def as Question;
+    return q.type === 'text';
+  });
   const pendingRosters = openRostersBefore(session, currentKey);
   const finished = status.state !== 'in_progress';
   const percent = Math.round(status.progress * 100);
@@ -474,7 +484,9 @@ function Runner(p: InterviewRunnerProps) {
             onClick={next}
           >
             {t('nav.next')}
-            <span className="ml-2 text-xs text-on-fill/80">{t('nav.nextKey')}</span>
+            <span className="ml-2 text-xs text-on-fill/80">
+              {textOnScreen ? t('nav.nextKeyText') : t('nav.nextKey')}
+            </span>
           </button>
         </div>
       ) : null}
