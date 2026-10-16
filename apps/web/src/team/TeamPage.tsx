@@ -291,7 +291,7 @@ export function TeamPage() {
                     {manageable(m) ? (
                       <button
                         type="button"
-                        className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm hover:border-indigo-600"
+                        className="whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-1 text-sm hover:border-indigo-600"
                         aria-haspopup="menu"
                         aria-expanded={menu?.m.id === m.id}
                         aria-label={t('team.actions', { name: m.name })}
@@ -345,7 +345,7 @@ function StatusChip({ status }: { status: StatusFilter }) {
           ? 'bg-amber-50 text-amber-ink-800'
           : 'bg-slate-100 text-slate-700';
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>
+    <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>
       {status ? t(`team.status.${status}`) : ''}
     </span>
   );
