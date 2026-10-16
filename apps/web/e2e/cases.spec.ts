@@ -71,6 +71,19 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
   await page.getByRole('button', { name: 'Continue with the design' }).click();
   await expect(selector.getByTestId('frame-units')).toHaveText('10 units');
 
+  // Each term has an (i): hovering or focusing it explains it, with the usual standard.
+  const tip = selector.locator('[data-tip="deff"]');
+  await tip.hover();
+  const bubble = page.getByRole('tooltip').filter({ hasText: 'Design effect' });
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toContainText('Suggested standard:');
+  await shot(page, 'cases-sampling-tooltip', { fullPage: false });
+  await page.mouse.move(0, 0);
+  await expect(bubble).toBeHidden();
+  await selector.locator('[data-tip="stratified"]').focus();
+  await expect(page.getByRole('tooltip').filter({ hasText: 'Stratified sampling' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
   // Layer 2: every unit of the list. Layer 3: the size follows the frame; no sampling error.
   await selector
     .getByTestId('layer-2')

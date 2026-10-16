@@ -93,9 +93,65 @@ function Layer({
   );
 }
 
+/**
+ * An (i) next to a term: on hover, focus or tap it explains the term and the usual standard
+ * (`cases.sampling.tips.<id>`). The explanation is the button's description for screen readers.
+ */
+export function InfoTip({ id, term }: { id: string; term: string }) {
+  const { t } = useTranslation();
+  const tipId = useId();
+  const [open, setOpen] = useState(false);
+  const std = t(`cases.sampling.tips.${id}.std`, { defaultValue: '' });
+  return (
+    <span
+      className="relative inline-flex align-middle"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className="ml-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-slate-400 font-serif text-[10px] font-bold italic leading-none text-slate-600 hover:border-indigo-600 hover:text-indigo-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        aria-label={t('cases.sampling.tip.label', { term })}
+        aria-describedby={tipId}
+        aria-expanded={open}
+        data-tip={id}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false);
+        }}
+      >
+        i
+      </button>
+      <span
+        role="tooltip"
+        id={tipId}
+        hidden={!open}
+        className="absolute left-1/2 top-full z-30 mt-1.5 w-72 max-w-[80vw] -translate-x-1/2 rounded-lg border border-slate-200 bg-white p-3 text-left text-xs font-normal not-italic leading-relaxed text-slate-700 shadow-lg"
+      >
+        <span className="block">{t(`cases.sampling.tips.${id}.text`)}</span>
+        {std ? (
+          <span className="mt-1.5 block">
+            <strong className="font-semibold text-slate-900">
+              {t('cases.sampling.tip.standard')}
+            </strong>{' '}
+            {std}
+          </span>
+        ) : null}
+      </span>
+    </span>
+  );
+}
+
 /** A choice among cards (radio group), each with a short explanation. */
 function Choice<T extends string>({
   legend,
+  tip,
   value,
   options,
   onChange,
@@ -103,8 +159,9 @@ function Choice<T extends string>({
   columns = 2,
 }: {
   legend: string;
+  tip?: string;
   value: T;
-  options: { value: T; label: string; hint?: string }[];
+  options: { value: T; label: string; hint?: string; tip?: string }[];
   onChange(v: T): void;
   disabled?: boolean;
   columns?: number;
@@ -112,7 +169,10 @@ function Choice<T extends string>({
   const name = useId();
   return (
     <fieldset disabled={disabled} className="min-w-0">
-      <legend className="mb-2 text-sm font-medium text-slate-700">{legend}</legend>
+      <legend className="mb-2 text-sm font-medium text-slate-700">
+        {legend}
+        {tip ? <InfoTip id={tip} term={legend} /> : null}
+      </legend>
       <div
         className="grid gap-2"
         style={{
@@ -120,22 +180,26 @@ function Choice<T extends string>({
         }}
       >
         {options.map((o) => (
-          <label
-            key={o.value}
-            className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
-          >
-            <input
-              type="radio"
-              name={name}
-              className="mt-0.5"
-              checked={value === o.value}
-              onChange={() => onChange(o.value)}
-            />
-            <span>
-              <span className="block font-medium">{o.label}</span>
-              {o.hint ? <span className="block text-xs text-slate-600">{o.hint}</span> : null}
-            </span>
-          </label>
+          <div key={o.value} className="relative">
+            <label className="flex h-full cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white p-3 pr-7 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+              <input
+                type="radio"
+                name={name}
+                className="mt-0.5"
+                checked={value === o.value}
+                onChange={() => onChange(o.value)}
+              />
+              <span>
+                <span className="block font-medium">{o.label}</span>
+                {o.hint ? <span className="block text-xs text-slate-600">{o.hint}</span> : null}
+              </span>
+            </label>
+            {o.tip ? (
+              <span className="absolute right-2 top-2.5">
+                <InfoTip id={o.tip} term={o.label} />
+              </span>
+            ) : null}
+          </div>
         ))}
       </div>
     </fieldset>
@@ -144,11 +208,13 @@ function Choice<T extends string>({
 
 function YesNo({
   label,
+  tip,
   value,
   onChange,
   disabled,
 }: {
   label: string;
+  tip?: string;
   value: boolean;
   onChange(v: boolean): void;
   disabled?: boolean;
@@ -157,7 +223,10 @@ function YesNo({
   const name = useId();
   return (
     <fieldset disabled={disabled} className="flex flex-wrap items-center gap-3 text-sm">
-      <legend className="mb-1 w-full font-medium text-slate-700">{label}</legend>
+      <legend className="mb-1 w-full font-medium text-slate-700">
+        {label}
+        {tip ? <InfoTip id={tip} term={label} /> : null}
+      </legend>
       {[true, false].map((v) => (
         <label key={String(v)} className="flex items-center gap-1.5">
           <input type="radio" name={name} checked={value === v} onChange={() => onChange(v)} />
@@ -170,6 +239,7 @@ function YesNo({
 
 function Num({
   label,
+  tip,
   value,
   onChange,
   step = 'any',
@@ -179,6 +249,7 @@ function Num({
   disabled,
 }: {
   label: string;
+  tip?: string;
   value: number | null;
   onChange(v: number | null): void;
   step?: string;
@@ -194,8 +265,13 @@ function Num({
   const [text, setText] = useState(shown);
   useEffect(() => setText(shown), [shown]);
   return (
-    <label htmlFor={id} className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+    <div className="flex flex-col gap-1 text-sm">
+      <span className="flex items-center">
+        <label htmlFor={id} className="font-medium text-slate-700">
+          {label}
+        </label>
+        {tip ? <InfoTip id={tip} term={label} /> : null}
+      </span>
       <span className="flex items-center gap-1">
         <input
           id={id}
@@ -215,18 +291,20 @@ function Num({
         />
         {percent ? <span aria-hidden>%</span> : null}
       </span>
-    </label>
+    </div>
   );
 }
 
 function VarSelect({
   label,
+  tip,
   value,
   fields,
   onChange,
   disabled,
 }: {
   label: string;
+  tip?: string;
   value: string;
   fields: string[];
   onChange(v: string): void;
@@ -235,8 +313,13 @@ function VarSelect({
   const { t } = useTranslation();
   const id = useId();
   return (
-    <label htmlFor={id} className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+    <div className="flex flex-col gap-1 text-sm">
+      <span className="flex items-center">
+        <label htmlFor={id} className="font-medium text-slate-700">
+          {label}
+        </label>
+        {tip ? <InfoTip id={tip} term={label} /> : null}
+      </span>
       <select
         id={id}
         className={`${controlCls} w-auto`}
@@ -251,7 +334,7 @@ function VarSelect({
           </option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
 
@@ -351,6 +434,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
       >
         <Choice
           legend={t('cases.sampling.layer1')}
+          tip="source"
           value={plan.source.kind}
           disabled={locked}
           options={(['frame', 'registry', 'field', 'combined'] as const).map((k) => ({
@@ -366,16 +450,22 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           }
         />
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">{t('cases.sampling.unit')}</span>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center">
+              <label htmlFor="sp-unit" className="font-medium text-slate-700">
+                {t('cases.sampling.unit')}
+              </label>
+              <InfoTip id="unit" term={t('cases.sampling.unit')} />
+            </span>
             <input
+              id="sp-unit"
               className={inputCls}
               value={plan.source.unit}
               placeholder={t('cases.sampling.unitPlaceholder')}
               disabled={locked}
               onChange={(e) => setSource({ unit: e.target.value })}
             />
-          </label>
+          </div>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">{t('cases.sampling.description')}</span>
             <textarea
@@ -391,6 +481,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           <div className="flex flex-col gap-2">
             <YesNo
               label={t('cases.sampling.populationKnown')}
+              tip="populationKnown"
               value={plan.source.populationKnown}
               disabled={locked}
               onChange={(populationKnown) => setSource({ populationKnown })}
@@ -398,6 +489,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {plan.source.populationKnown ? (
               <Num
                 label={t('cases.sampling.populationSize')}
+                tip="populationKnown"
                 value={plan.source.populationSize}
                 step="1"
                 min={1}
@@ -408,6 +500,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           </div>
           <YesNo
             label={t('cases.sampling.frameAvailable')}
+            tip="frameAvailable"
             value={plan.source.frameAvailable}
             disabled={locked || plan.source.kind === 'field'}
             onChange={(frameAvailable) => setSource({ frameAvailable })}
@@ -485,12 +578,14 @@ export function SamplingTab({ projectId }: { projectId: string }) {
       >
         <Choice
           legend={t('cases.sampling.layer2')}
+          tip="family"
           value={plan.design.family}
           disabled={locked}
           columns={4}
           options={(['probability', 'nonprobability', 'special', 'census'] as const).map((f) => ({
             value: f,
             label: t(`cases.sampling.families.${f}`),
+            ...(f === 'census' ? { tip: 'census' } : {}),
             hint: t(`cases.sampling.familyHints.${f}`),
           }))}
           onChange={(family) => setDesign({ family, method: METHODS[family][0]! })}
@@ -504,6 +599,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             options={METHODS[plan.design.family].map((x) => ({
               value: x,
               label: t(`cases.sampling.methods.${x}`),
+              tip: x,
               hint: t(`cases.sampling.methodHints.${x}`),
             }))}
             onChange={(method) => setDesign({ method })}
@@ -514,6 +610,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {m === 'stratified' || m === 'multistage' ? (
               <VarSelect
                 label={t('cases.sampling.strataVar')}
+                tip="strataVar"
                 value={plan.design.strataVar}
                 fields={d.fields}
                 disabled={locked}
@@ -523,6 +620,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {m === 'cluster' || m === 'multistage' ? (
               <VarSelect
                 label={t('cases.sampling.clusterVar')}
+                tip="clusterVar"
                 value={plan.design.clusterVar}
                 fields={d.fields}
                 disabled={locked}
@@ -532,6 +630,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {(m === 'cluster' && plan.design.pps) || m === 'multistage' ? (
               <VarSelect
                 label={t('cases.sampling.sizeVar')}
+                tip="sizeVar"
                 value={plan.design.sizeVar}
                 fields={d.fields}
                 disabled={locked}
@@ -541,6 +640,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {m === 'systematic' || (m === 'stratified' && plan.design.within === 'systematic') ? (
               <VarSelect
                 label={t('cases.sampling.sortVar')}
+                tip="sortVar"
                 value={plan.design.sortVar}
                 fields={d.fields}
                 disabled={locked}
@@ -549,11 +649,15 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             ) : null}
             {m === 'stratified' ? (
               <>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium text-slate-700">
-                    {t('cases.sampling.allocation')}
+                <div className="flex flex-col gap-1 text-sm">
+                  <span className="flex items-center">
+                    <label htmlFor="sp-allocation" className="font-medium text-slate-700">
+                      {t('cases.sampling.allocation')}
+                    </label>
+                    <InfoTip id="allocation" term={t('cases.sampling.allocation')} />
                   </span>
                   <select
+                    id="sp-allocation"
                     className={`${controlCls} w-auto`}
                     value={plan.design.allocation}
                     disabled={locked}
@@ -567,10 +671,16 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium text-slate-700">{t('cases.sampling.within')}</span>
+                </div>
+                <div className="flex flex-col gap-1 text-sm">
+                  <span className="flex items-center">
+                    <label htmlFor="sp-within" className="font-medium text-slate-700">
+                      {t('cases.sampling.within')}
+                    </label>
+                    <InfoTip id="within" term={t('cases.sampling.within')} />
+                  </span>
                   <select
+                    id="sp-within"
                     className={`${controlCls} w-auto`}
                     value={plan.design.within}
                     disabled={locked}
@@ -582,7 +692,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                       </option>
                     ))}
                   </select>
-                </label>
+                </div>
               </>
             ) : null}
             {m === 'cluster' || m === 'multistage' ? (
@@ -593,6 +703,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                       ? t('cases.sampling.clustersPerStratum')
                       : t('cases.sampling.clusters')
                   }
+                  tip="clusters"
                   value={plan.design.clusters}
                   step="1"
                   min={1}
@@ -601,6 +712,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                 />
                 <Num
                   label={t('cases.sampling.perCluster')}
+                  tip="perCluster"
                   value={plan.design.perCluster}
                   step="1"
                   min={0}
@@ -608,15 +720,18 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                   onChange={(n) => setDesign({ perCluster: Math.max(0, Math.round(n ?? 0)) })}
                 />
                 {m === 'cluster' ? (
-                  <label className="flex items-center gap-2 self-end text-sm">
-                    <input
-                      type="checkbox"
-                      checked={plan.design.pps}
-                      disabled={locked}
-                      onChange={(e) => setDesign({ pps: e.target.checked })}
-                    />
-                    {t('cases.sampling.pps')}
-                  </label>
+                  <span className="flex items-center self-end">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={plan.design.pps}
+                        disabled={locked}
+                        onChange={(e) => setDesign({ pps: e.target.checked })}
+                      />
+                      {t('cases.sampling.pps')}
+                    </label>
+                    <InfoTip id="pps" term={t('cases.sampling.pps')} />
+                  </span>
                 ) : null}
               </>
             ) : null}
@@ -663,7 +778,10 @@ export function SamplingTab({ projectId }: { projectId: string }) {
         ) : null}
 
         <div className="flex flex-col gap-2 border-t border-slate-200 pt-4" data-testid="quotas">
-          <h3 className="font-semibold">{t('cases.sampling.quotas')}</h3>
+          <h3 className="flex items-center font-semibold">
+            {t('cases.sampling.quotas')}
+            <InfoTip id="quotas" term={t('cases.sampling.quotas')} />
+          </h3>
           <p className="text-xs text-slate-600">
             {probability || census
               ? t('cases.sampling.quotasHelpProb')
@@ -748,14 +866,23 @@ export function SamplingTab({ projectId }: { projectId: string }) {
         testId="layer-3"
       >
         <div className="flex flex-col gap-3">
-          <h3 className="font-semibold">{t('cases.sampling.size')}</h3>
+          <h3 className="flex items-center font-semibold">
+            {t('cases.sampling.size')}
+            <InfoTip id="sizes" term={t('cases.sampling.size')} />
+          </h3>
           {census ? (
             <p className="text-sm text-slate-700">{t('cases.sampling.censusSize')}</p>
           ) : null}
           <div className={census ? 'hidden' : 'flex flex-wrap items-end gap-4'}>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">{t('cases.sampling.objective')}</span>
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="flex items-center">
+                <label htmlFor="sp-objective" className="font-medium text-slate-700">
+                  {t('cases.sampling.objective')}
+                </label>
+                <InfoTip id="objective" term={t('cases.sampling.objective')} />
+              </span>
               <select
+                id="sp-objective"
                 className={`${controlCls} w-auto`}
                 value={plan.size.objective}
                 disabled={locked}
@@ -769,10 +896,11 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
             {plan.size.objective === 'fixed' ? (
               <Num
                 label={t('cases.sampling.fixedN')}
+                tip="fixedN"
                 value={plan.size.fixedN}
                 step="1"
                 min={1}
@@ -782,6 +910,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             ) : (
               <Num
                 label={t('cases.sampling.confidence')}
+                tip="confidence"
                 value={plan.size.confidence}
                 percent
                 disabled={locked}
@@ -792,6 +921,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               <>
                 <Num
                   label={t('cases.sampling.margin')}
+                  tip="margin"
                   value={plan.size.margin}
                   percent
                   disabled={locked}
@@ -799,6 +929,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                 />
                 <Num
                   label={t('cases.sampling.p')}
+                  tip="p"
                   value={plan.size.p}
                   percent
                   disabled={locked}
@@ -810,12 +941,14 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               <>
                 <Num
                   label={t('cases.sampling.marginMean')}
+                  tip="marginMean"
                   value={plan.size.margin}
                   disabled={locked}
                   onChange={(n) => n && setSize({ margin: n })}
                 />
                 <Num
                   label={t('cases.sampling.sd')}
+                  tip="sd"
                   value={plan.size.sd}
                   disabled={locked}
                   onChange={(n) => n && setSize({ sd: n })}
@@ -826,6 +959,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               <>
                 <Num
                   label={t('cases.sampling.p1')}
+                  tip="p1"
                   value={plan.size.p1}
                   percent
                   disabled={locked}
@@ -833,6 +967,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                 />
                 <Num
                   label={t('cases.sampling.p2')}
+                  tip="p2"
                   value={plan.size.p2}
                   percent
                   disabled={locked}
@@ -840,6 +975,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                 />
                 <Num
                   label={t('cases.sampling.power')}
+                  tip="power"
                   value={plan.size.power}
                   percent
                   disabled={locked}
@@ -850,6 +986,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {plan.size.objective !== 'fixed' ? (
               <Num
                 label={t('cases.sampling.deff')}
+                tip="deff"
                 value={plan.size.deff}
                 disabled={locked}
                 onChange={(n) => n && setSize({ deff: Math.max(1, n) })}
@@ -860,6 +997,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {census ? null : (
               <Num
                 label={t('cases.sampling.eligibilityRate')}
+                tip="eligibilityRate"
                 value={plan.size.eligibility}
                 percent
                 disabled={locked}
@@ -868,6 +1006,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             )}
             <Num
               label={t('cases.sampling.responseRate')}
+              tip="responseRate"
               value={plan.size.response}
               percent
               disabled={locked}
@@ -876,6 +1015,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {census ? null : (
               <Num
                 label={t('cases.sampling.reserveRate')}
+                tip="reserveRate"
                 value={plan.size.reserve}
                 percent
                 disabled={locked}
@@ -904,13 +1044,20 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {sizes.fpcApplied && sizes.population
               ? t('cases.sampling.fpc', { n: fmt(sizes.population) })
               : t('cases.sampling.noFpc')}
+            <InfoTip id="fpc" term="FPC" />
           </p>
         </div>
 
         <div className="grid gap-4 border-t border-slate-200 pt-4 md:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">{t('cases.sampling.eligibility')}</span>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center">
+              <label htmlFor="sp-eligibility" className="font-medium text-slate-700">
+                {t('cases.sampling.eligibility')}
+              </label>
+              <InfoTip id="eligibility" term={t('cases.sampling.eligibility')} />
+            </span>
             <input
+              id="sp-eligibility"
               className={`${inputCls} font-mono`}
               value={plan.eligibility ?? ''}
               disabled={locked}
@@ -918,17 +1065,23 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               onChange={(e) => set({ eligibility: e.target.value || null })}
             />
             <span className="text-xs text-slate-600">{t('cases.sampling.eligibilityHelp')}</span>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">{t('cases.sampling.exclusions')}</span>
+          </div>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center">
+              <label htmlFor="sp-exclusions" className="font-medium text-slate-700">
+                {t('cases.sampling.exclusions')}
+              </label>
+              <InfoTip id="exclusions" term={t('cases.sampling.exclusions')} />
+            </span>
             <input
+              id="sp-exclusions"
               className={`${inputCls} font-mono`}
               value={plan.exclusions ?? ''}
               disabled={locked}
               onChange={(e) => set({ exclusions: e.target.value || null })}
             />
             <span className="text-xs text-slate-600">{t('cases.sampling.exclusionsHelp')}</span>
-          </label>
+          </div>
         </div>
         {usesFrame ? (
           <div className="flex flex-col gap-2">
@@ -967,7 +1120,10 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           className="flex flex-col gap-2 border-t border-slate-200 pt-4"
           data-testid="substitution"
         >
-          <h3 className="font-semibold">{t('cases.sampling.substitution')}</h3>
+          <h3 className="flex items-center font-semibold">
+            {t('cases.sampling.substitution')}
+            <InfoTip id="substitution" term={t('cases.sampling.substitution')} />
+          </h3>
           <p className="text-xs text-slate-600">{t('cases.sampling.substitutionHelp')}</p>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -981,9 +1137,15 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           </label>
           {plan.substitution.allowed ? (
             <div className="flex flex-wrap gap-4">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">{t('cases.sampling.rule')}</span>
+              <div className="flex flex-col gap-1 text-sm">
+                <span className="flex items-center">
+                  <label htmlFor="sp-rule" className="font-medium text-slate-700">
+                    {t('cases.sampling.rule')}
+                  </label>
+                  <InfoTip id="rule" term={t('cases.sampling.rule')} />
+                </span>
                 <select
+                  id="sp-rule"
                   className={`${controlCls} w-auto`}
                   value={plan.substitution.rule}
                   onChange={(e) =>
@@ -1001,10 +1163,11 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                     </option>
                   ))}
                 </select>
-              </label>
+              </div>
               <fieldset className="text-sm">
                 <legend className="mb-1 font-medium text-slate-700">
                   {t('cases.sampling.reasons')}
+                  <InfoTip id="reasons" term={t('cases.sampling.reasons')} />
                 </legend>
                 <div className="flex flex-wrap gap-3">
                   {Object.keys(DISPOSITIONS)

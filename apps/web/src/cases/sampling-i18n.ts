@@ -1,10 +1,13 @@
 import i18next from 'i18next';
+import { tipsEn, tipsEs } from './sampling-tips.js';
 
 /**
  * The sampling selector's words (S1), kept out of the start-up catalogue: they load with the
  * project pages, not with what a web respondent downloads first (H6).
  */
 export const samplingEn = {
+  tips: tipsEn,
+  tip: { label: 'What is {{term}}?', standard: 'Suggested standard:' },
   tab: 'Sampling selector',
   intro:
     'Decide how the sample is obtained and how the cases for the interviews are made, in three layers. Nothing becomes a case until the sample is selected.',
@@ -253,6 +256,8 @@ export const samplingEn = {
 };
 
 export const samplingEs: typeof samplingEn = {
+  tips: tipsEs,
+  tip: { label: '¿Qué es {{term}}?', standard: 'Estándar sugerido:' },
   tab: 'Selector muestral',
   intro:
     'Defina cómo se obtiene la muestra y cómo se generan los casos para las entrevistas, en tres capas. Nada se convierte en caso hasta que se selecciona la muestra.',
