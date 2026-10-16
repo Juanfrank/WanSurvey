@@ -127,6 +127,8 @@ function Runner(p: InterviewRunnerProps) {
     timer: null,
   });
   const containerRef = useRef<HTMLDivElement>(null);
+  // The grid row a typed code goes to while focus is still moving there (fast typing).
+  const gridNext = useRef<{ key: string; from: string; to: string } | null>(null);
   // Codes typed for a ranking, in order (the first typed is rank 1), per question.
   const rankTyped = useRef<{ key: string; codes: (string | number)[] }>({ key: '', codes: [] });
   const narrow = useNarrow(p.narrow);
@@ -336,14 +338,21 @@ function Runner(p: InterviewRunnerProps) {
           cur && typeof cur === 'object' && !Array.isArray(cur) && !('$special' in cur)
             ? (cur as Record<string, string | number>)
             : {};
-        const focusedRow = target.closest<HTMLElement>('[data-row]')?.dataset.row;
+        const pending = gridNext.current;
+        const focusedRow =
+          pending?.key === key &&
+          pending.from === target.closest<HTMLElement>('[data-row]')?.dataset.row
+            ? pending.to
+            : target.closest<HTMLElement>('[data-row]')?.dataset.row;
         const row =
           focusedRow && rows.includes(focusedRow)
             ? focusedRow
             : (rows.find((r) => value[r] === undefined) ?? rows.at(-1)!);
         answer(key, { ...value, [row]: m.code });
         const next = rows[rows.indexOf(row) + 1];
+        gridNext.current = next ? { key, from: row, to: next } : null;
         requestAnimationFrame(() => {
+          gridNext.current = null;
           const scope = containerRef.current?.querySelector(`[data-qkey="${CSS.escape(key)}"]`);
           const el = next
             ? scope?.querySelector<HTMLInputElement>(`[data-row="${CSS.escape(next)}"] input`)
