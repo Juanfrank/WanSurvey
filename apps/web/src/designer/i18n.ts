@@ -35,6 +35,7 @@ export const designerEn = {
     CAPI: 'Face to face',
     CAWI: 'Web',
     PAPI: 'Paper',
+    LIKERT: 'Likert scale: link, widget or slip',
   },
   tabs: 'Designer sections',
   tab: {
@@ -122,6 +123,7 @@ export const designerEn = {
   scriptsItemHelp:
     'Read by the interviewer on this question (CATI, CAPI) or printed before it (paper). It moves and is renamed with the question.',
   scriptsSectionHelp: 'Read when the interview reaches this section.',
+  statusCol: 'Status',
   qActions: {
     label: 'Actions',
     menu: 'Actions for {{name}}',
@@ -726,6 +728,7 @@ export const designerEs: DesignerCatalogue = {
     CAPI: 'Presencial',
     CAWI: 'Web',
     PAPI: 'Papel',
+    LIKERT: 'Escala Likert: enlace, widget u hojita',
   },
   tabs: 'Secciones del diseñador',
   tab: {
@@ -813,6 +816,7 @@ export const designerEs: DesignerCatalogue = {
   scriptsItemHelp:
     'Lo lee el entrevistador en esta pregunta (CATI, CAPI) o se imprime antes de ella (papel). Se mueve y se renombra con la pregunta.',
   scriptsSectionHelp: 'Se lee cuando la entrevista llega a esta sección.',
+  statusCol: 'Estado',
   qActions: {
     label: 'Acciones',
     menu: 'Acciones de {{name}}',

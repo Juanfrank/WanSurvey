@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { FeedbackItem } from '@wansurvey/schema/feedback';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -16,6 +17,9 @@ export interface FeedbackPoint {
   url: string;
   counts: Record<string, number>;
   createdAt?: string;
+  updatedAt?: string;
+  version: number;
+  items: FeedbackItem[];
 }
 
 interface Results {
@@ -23,6 +27,8 @@ interface Results {
   counts: Record<string, number>;
   channels: Record<string, number>;
   comments: { score: number; comment: string; ref: string | null; at: string }[];
+  itemCounts?: Record<string, Record<string, number>>;
+  texts?: { item: string; score: number; text: string; ref: string | null; at: string }[];
 }
 
 const btn =
@@ -283,11 +289,68 @@ export function FeedbackResults({ projectId, point }: { projectId: string; point
           </p>
         </div>
       </div>
+      {point.items?.some((it) => it.type !== 'text') ? (
+        <div className="flex flex-col gap-3 md:col-span-2" data-testid="feedback-items">
+          <h3 className="text-sm font-medium">{t('feedback.itemsResults')}</h3>
+          {point.items
+            .filter((it) => it.type !== 'text')
+            .map((it) => {
+              const c = data?.itemCounts?.[it.id] ?? {};
+              const n = Object.values(c).reduce((a, b) => a + b, 0);
+              const rows =
+                it.type === 'yesno'
+                  ? [
+                      { code: 1, label: t('feedback.yes') },
+                      { code: 2, label: t('feedback.no') },
+                    ]
+                  : it.type === 'number'
+                    ? Object.keys(c)
+                        .map(Number)
+                        .sort((a, b) => a - b)
+                        .map((code) => ({ code, label: String(code) }))
+                    : (it.options ?? []).map((o) => ({
+                        code: o.code,
+                        label: o.label[Object.keys(o.label)[0]!] ?? String(o.code),
+                      }));
+              return (
+                <table key={it.id} className="w-full text-sm" data-item-results={it.id}>
+                  <caption className="mb-1 text-left text-xs text-slate-600">
+                    <span className="font-mono">{it.id}</span> · {it.text[Object.keys(it.text)[0]!]}
+                  </caption>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.code}>
+                        <th scope="row" className="w-48 py-0.5 pr-2 text-left font-normal">
+                          {r.label}
+                        </th>
+                        <td className="w-full py-0.5">
+                          <div className="h-3 rounded-sm bg-slate-200">
+                            <div
+                              aria-hidden
+                              className="h-3 rounded-sm bg-indigo-600"
+                              style={{ width: `${n ? (100 * (c[r.code] ?? 0)) / n : 0}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="pl-2 text-right tabular-nums" data-code={r.code}>
+                          {c[r.code] ?? 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })}
+        </div>
+      ) : null}
       <div>
         <h3 className="mb-1 text-sm font-medium">{t('feedback.comments')}</h3>
-        {data?.comments.length ? (
+        {data?.texts?.length || data?.comments.length ? (
           <ul className="flex max-h-64 flex-col gap-2 overflow-auto text-sm">
-            {data.comments.map((c, i) => (
+            {(data.texts?.length
+              ? data.texts.map((x) => ({ score: x.score, comment: x.text, ref: x.ref }))
+              : data.comments
+            ).map((c, i) => (
               <li key={i} className="flex gap-2">
                 <Face score={c.score} faces={point.faces} size={18} />
                 <span>

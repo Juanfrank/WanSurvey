@@ -13,6 +13,10 @@
     "./sampling": {
       "types": "./dist/sampling.d.ts",
       "default": "./dist/sampling.js"
+    },
+    "./feedback": {
+      "types": "./dist/feedback.d.ts",
+      "default": "./dist/feedback.js"
     }
   },
   "files": [

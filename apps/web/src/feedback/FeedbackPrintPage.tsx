@@ -6,6 +6,8 @@ import { api } from '../api.js';
 import { QrCode } from '../papi/QrCode.js';
 import { Button } from '../routes/ui.js';
 import { Face } from './Faces.js';
+import type { FeedbackItem } from '@wansurvey/schema/feedback';
+import type { TFunction } from 'i18next';
 import type { FeedbackPoint } from './FeedbackParts.js';
 
 const LAYOUTS = [4, 6, 8] as const;
@@ -21,7 +23,9 @@ export function FeedbackPrintPage() {
     pointId: string;
   };
   const { t, i18n } = useTranslation();
-  const [perPage, setPerPage] = useState<(typeof LAYOUTS)[number]>(8);
+  const [perPage, setPerPage] = useState<(typeof LAYOUTS)[number]>(6);
+  // Questions with a link parameter can be fixed for a print run (e.g. one branch).
+  const [fixed, setFixed] = useState<Record<string, string>>({});
   const list = useQuery({
     queryKey: ['feedback', projectId],
     queryFn: () => api<FeedbackPoint[]>(`/projects/${projectId}/feedback`),
@@ -30,6 +34,16 @@ export function FeedbackPrintPage() {
   const labels = p ? (t(`feedback.labels${p.faces}`, { returnObjects: true }) as string[]) : [];
   const question = p ? (p.question[i18n.language] ?? Object.values(p.question)[0] ?? '') : '';
   const rows = perPage / 2;
+  const lang = i18n.language;
+  const text = (x: Record<string, string>) => x[lang] ?? Object.values(x)[0] ?? '';
+  const items = p?.items ?? [];
+  const asked = items.filter((it) => !(it.param && fixed[it.param]));
+  const query = Object.entries(fixed)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');
+  const url = p ? (query ? `${p.url}?${query}` : p.url) : '';
+  const small = perPage === 8;
   return (
     <div className="flex flex-col gap-6" data-testid="feedback-print">
       <div className="no-print flex flex-wrap items-end gap-3">
@@ -57,6 +71,33 @@ export function FeedbackPrintPage() {
             ))}
           </select>
         </label>
+        {items
+          .filter((it) => it.param && (it.type === 'single' || it.type === 'yesno'))
+          .map((it) => (
+            <label key={it.id} className="flex flex-col gap-1 text-sm">
+              <span>
+                {t('feedback.presetOnSlips')}: {text(it.text)}
+              </span>
+              <select
+                className="rounded-md border border-slate-300 bg-white px-2 py-1"
+                value={fixed[it.param!] ?? ''}
+                onChange={(e) => setFixed({ ...fixed, [it.param!]: e.target.value })}
+              >
+                <option value="">{t('feedback.presetNone')}</option>
+                {(it.type === 'yesno'
+                  ? [
+                      { code: 1, label: { [lang]: t('feedback.yes') } },
+                      { code: 2, label: { [lang]: t('feedback.no') } },
+                    ]
+                  : (it.options ?? [])
+                ).map((o) => (
+                  <option key={o.code} value={String(o.code)}>
+                    {text(o.label)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
         <Button type="button" onClick={() => window.print()} disabled={!p}>
           {t('feedback.printNow')}
         </Button>
@@ -89,22 +130,88 @@ export function FeedbackPrintPage() {
                   </span>
                 ))}
               </div>
-              {p.askComment && perPage <= 6 ? (
-                <div className="flex flex-col gap-3 pt-1 text-[11px]">
-                  <span>{t('feedback.slipComment')}</span>
-                  <span className="block border-b border-slate-700" />
-                  <span className="block border-b border-slate-700" />
-                </div>
+              {Object.entries(fixed).some(([, v]) => v) ? (
+                <p className="text-[10px] text-slate-700" data-fixed>
+                  {items
+                    .filter((it) => it.param && fixed[it.param])
+                    .map((it) => {
+                      const code = Number(fixed[it.param!]);
+                      const o =
+                        it.type === 'yesno'
+                          ? code === 1
+                            ? t('feedback.yes')
+                            : t('feedback.no')
+                          : text(it.options?.find((x) => x.code === code)?.label ?? {});
+                      return `${text(it.text)} ${o}`;
+                    })
+                    .join(' · ')}
+                </p>
               ) : null}
+              {asked.map((it, k) => (
+                <SlipItem key={it.id} n={k + 2} item={it} text={text} t={t} small={small} />
+              ))}
               <div className="mt-auto flex items-end justify-between gap-2">
                 <span className="text-[10px] italic">{t('feedback.slipScan')}</span>
-                <QrCode value={p.url} label={p.url} size={perPage === 8 ? 56 : 72} />
+                <QrCode value={url} label={url} size={small ? 56 : 72} />
               </div>
             </article>
           ))}
         </div>
       ) : (
         <p aria-busy="true">…</p>
+      )}
+    </div>
+  );
+}
+
+/** A follow-up question on a slip: circles to fill, small boxes, or lines to write on. */
+function SlipItem({
+  n,
+  item,
+  text,
+  t,
+  small,
+}: {
+  n: number;
+  item: FeedbackItem;
+  text(x: Record<string, string>): string;
+  t: TFunction;
+  small: boolean;
+}) {
+  const options =
+    item.type === 'yesno'
+      ? [
+          { code: 1, label: t('feedback.yes') },
+          { code: 2, label: t('feedback.no') },
+        ]
+      : (item.options ?? []).map((o) => ({ code: o.code, label: text(o.label) }));
+  return (
+    <div className="flex flex-col gap-1 text-[11px]" data-slip-item={item.id}>
+      <p className="leading-snug">
+        <span className="font-mono text-[9px] text-slate-600">{n}.</span> {text(item.text)}
+      </p>
+      {item.type === 'text' ? (
+        <>
+          <span className="block h-3 border-b border-slate-700" />
+          {item.long && !small ? <span className="block h-3 border-b border-slate-700" /> : null}
+        </>
+      ) : item.type === 'number' ? (
+        <span className="flex gap-0.5">
+          {Array.from({ length: 4 }, (_, i) => (
+            <span key={i} className="inline-block size-4 border border-slate-900" />
+          ))}
+        </span>
+      ) : (
+        <span className="flex flex-wrap gap-x-3 gap-y-1">
+          {options.map((o) => (
+            <span key={o.code} className="flex items-center gap-1">
+              <span
+                className={`inline-block size-3 border-[1.5px] border-slate-900 ${item.type === 'multi' ? '' : 'rounded-full'}`}
+              />
+              {o.label}
+            </span>
+          ))}
+        </span>
       )}
     </div>
   );

@@ -95,4 +95,92 @@ describe('quick feedback (faces)', () => {
     await pm.agent.delete(`${base}/${spare.body.id}`).set('x-csrf-token', pm.csrf).expect(204);
     expect((await pm.agent.get(base).expect(200)).body).toHaveLength(1);
   });
+
+  it('a Likert with follow-up questions: link parameters answer some beforehand, the rest once', async () => {
+    const created = await post(pm, base, {
+      name: 'Sedes',
+      question: { es: '¿Cómo lo atendimos?' },
+      faces: 5,
+      items: [
+        {
+          id: 'SEDE',
+          type: 'single',
+          text: { es: '¿A cuál sede acudió?' },
+          options: [
+            { code: 1, label: { es: 'Centro' } },
+            { code: 2, label: { es: 'Norte' } },
+          ],
+          param: 'sede',
+          required: true,
+        },
+        {
+          id: 'MOTIVO',
+          type: 'text',
+          long: true,
+          text: { es: '¿Qué salió mal?' },
+          required: true,
+          showIf: { min: 1, max: 2 },
+        },
+        { id: 'VOLVERIA', type: 'yesno', text: { es: '¿Volvería?' } },
+      ],
+    }).expect(201);
+    const { id, slug } = created.body as { id: string; slug: string };
+    expect(created.body.version).toBe(1);
+    // Too many questions, or a repeated parameter, are refused.
+    const six = Array.from({ length: 6 }, (_, i) => ({
+      id: `Q${i}`,
+      type: 'text',
+      text: { es: 'x' },
+    }));
+    expect((await post(pm, base, { name: 'x', question: { es: 'x' }, items: six })).status).toBe(
+      400,
+    );
+
+    const pub = request(t.app.getHttpServer());
+    const info = await pub.get(`/api/v1/public/f/${slug}`).expect(200);
+    expect(info.body.items).toHaveLength(3);
+    // The link says the branch: it is recorded and not asked; an unhappy face asks why.
+    const a = await pub
+      .post(`/api/v1/public/f/${slug}`)
+      .send({ score: 1, params: { sede: '2', otro: 'x' } })
+      .expect(200);
+    expect(a.body.preset).toEqual(['SEDE']);
+    const bad = await pub
+      .post(`/api/v1/public/f/${slug}/answers`)
+      .send({ id: a.body.id, key: a.body.key, answers: { VOLVERIA: 2 } });
+    expect(bad.status).toBe(400);
+    expect(bad.body.problems).toEqual({ MOTIVO: 'required' });
+    await pub
+      .post(`/api/v1/public/f/${slug}/answers`)
+      .send({
+        id: a.body.id,
+        key: a.body.key,
+        answers: { MOTIVO: 'Esperé mucho', VOLVERIA: 2, SEDE: 1 },
+      })
+      .expect(200);
+    // A happy face: the reason is not asked, so only the yes/no remains.
+    const b = await pub.post(`/api/v1/public/f/${slug}`).send({ score: 5, params: { sede: '1' } });
+    await pub
+      .post(`/api/v1/public/f/${slug}/answers`)
+      .send({ id: b.body.id, key: b.body.key, answers: { VOLVERIA: 1, MOTIVO: 'no' } })
+      .expect(200);
+
+    const results = await pm.agent.get(`${base}/${id}/results`).expect(200);
+    expect(results.body.itemCounts).toEqual({ SEDE: { 1: 1, 2: 1 }, VOLVERIA: { 1: 1, 2: 1 } });
+    expect(results.body.texts).toMatchObject([{ item: 'MOTIVO', score: 1, text: 'Esperé mucho' }]);
+
+    // Changing what is asked is a new version; renaming is not.
+    const renamed = await pm.agent
+      .patch(`${base}/${id}`)
+      .set('x-csrf-token', pm.csrf)
+      .send({ name: 'Sedes 2026' })
+      .expect(200);
+    expect(renamed.body.version).toBe(1);
+    const edited = await pm.agent
+      .patch(`${base}/${id}`)
+      .set('x-csrf-token', pm.csrf)
+      .send({ items: [created.body.items[0]] })
+      .expect(200);
+    expect(edited.body.version).toBe(2);
+  });
 });

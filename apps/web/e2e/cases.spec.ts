@@ -14,6 +14,9 @@ async function openProject(page: Page, email?: string) {
     .click();
   await page.getByRole('link', { name: 'Household Survey 2026' }).click();
   await expect(page.getByRole('tablist', { name: 'Project sections' })).toBeVisible();
+  // Questionnaires come first; the case work is in the Cases tab.
+  const cases = page.getByRole('tab', { name: 'Cases', exact: true });
+  if (await cases.count()) await cases.click();
 }
 
 /** 12 households with ids X…, two bad e-mails and a repeated id, as an .xlsx file. */

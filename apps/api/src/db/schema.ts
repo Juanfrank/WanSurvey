@@ -1074,7 +1074,12 @@ export const feedbackPoints = pgTable(
     askComment: boolean('ask_comment').notNull().default(true),
     slug: text('slug').notNull().unique(),
     active: boolean('active').notNull().default(true),
+    /** Goes up when the questions change (F2). */
+    version: integer('version').notNull().default(1),
+    /** Follow-up questions after the Likert (FeedbackItem[]). */
+    items: jsonb('items').notNull().default([]),
     createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('feedback_points_project_idx').on(t.tenantId, t.projectId)],
 );
@@ -1096,6 +1101,8 @@ export const feedbackResponses = pgTable(
     comment: text('comment'),
     /** Lets the browser that answered add a comment once (hash of a one-time key). */
     editHash: text('edit_hash'),
+    /** Answers to the follow-up questions, by item id (F2). */
+    answers: jsonb('answers'),
     createdAt: createdAt(),
   },
   (t) => [index('feedback_responses_point_idx').on(t.tenantId, t.pointId, t.createdAt)],

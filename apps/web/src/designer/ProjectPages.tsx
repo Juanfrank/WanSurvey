@@ -13,7 +13,6 @@ import { AssignmentsTab } from '../cases/AssignmentsTab.js';
 import { CasesTab } from '../cases/CasesTab.js';
 import { SamplingTab } from '../cases/SamplingTab.js';
 import {
-  FacesIcon,
   FeedbackFields,
   FeedbackLinks,
   FeedbackResults,
@@ -22,6 +21,7 @@ import {
   type FeedbackDraft,
   type FeedbackPoint,
 } from '../feedback/FeedbackParts.js';
+import { FeedbackDesigner } from '../feedback/FeedbackDesigner.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
 import { CallsTab } from '../cati/CallsTab.js';
 import { CawiTab } from '../cawi/CawiTab.js';
@@ -98,7 +98,11 @@ type SourceKind = 'blank' | 'sample' | 'json';
 
 type QPanel =
   | { kind: 'web' | 'paper'; name: string }
-  | { kind: 'feedbackLinks' | 'feedbackResults'; name: string; point: FeedbackPoint }
+  | {
+      kind: 'feedbackDesign' | 'feedbackLinks' | 'feedbackResults';
+      name: string;
+      point: FeedbackPoint;
+    }
   | null;
 
 /** What a new item of the questionnaire list is: a questionnaire, or quick feedback (F1). */
@@ -189,6 +193,12 @@ function QuestionnairesSection({
       ),
   });
   const feedbackActions = (p: FeedbackPoint): MenuEntry[] => [
+    {
+      type: 'item',
+      id: 'design',
+      label: t('feedback.editQuestions'),
+      onSelect: () => onPanel({ kind: 'feedbackDesign', name: p.name, point: p }),
+    },
     {
       type: 'item',
       id: 'links',
@@ -356,7 +366,7 @@ function QuestionnairesSection({
       setName('');
       setDraft({ question: '', faces: 3, askComment: true });
       await qc.invalidateQueries({ queryKey: ['feedback', projectId] });
-      onPanel({ kind: 'feedbackLinks', name: p.name, point: p });
+      onPanel({ kind: 'feedbackDesign', name: p.name, point: p });
     },
     onError: (e) => setError(localiseError(t, e)),
   });
@@ -400,11 +410,13 @@ function QuestionnairesSection({
             {panel.name
               ? t('designer.qActions.panelTitle', {
                   what:
-                    panel.kind === 'feedbackLinks'
-                      ? t('feedback.links')
-                      : panel.kind === 'feedbackResults'
-                        ? t('feedback.results')
-                        : t(`designer.qActions.${panel.kind}`),
+                    panel.kind === 'feedbackDesign'
+                      ? t('feedback.editQuestions')
+                      : panel.kind === 'feedbackLinks'
+                        ? t('feedback.links')
+                        : panel.kind === 'feedbackResults'
+                          ? t('feedback.results')
+                          : t(`designer.qActions.${panel.kind}`),
                   name: panel.name,
                 })
               : panel.kind === 'web' || panel.kind === 'paper'
@@ -418,6 +430,15 @@ function QuestionnairesSection({
           ) : null
         ) : panel.kind === 'paper' ? (
           <PaperTab projectId={projectId} notice={notice} />
+        ) : panel.kind === 'feedbackDesign' ? (
+          <Card>
+            <FeedbackDesigner
+              projectId={projectId}
+              point={panel.point}
+              lang={projectRow?.languages[0] ?? 'es'}
+              onSaved={(p) => onPanel({ kind: 'feedbackDesign', name: p.name, point: p })}
+            />
+          </Card>
         ) : panel.kind === 'feedbackLinks' ? (
           <Card>
             <FeedbackLinks point={panel.point} />
@@ -446,6 +467,7 @@ function QuestionnairesSection({
                 </th>
                 <th scope="col">{t('designer.modes')}</th>
                 <th scope="col">{t('designer.latestVersion')}</th>
+                <th scope="col">{t('designer.statusCol')}</th>
                 <th scope="col">{t('designer.lastEdited')}</th>
                 <th scope="col">
                   <span className="sr-only">{t('designer.qActions.label')}</span>
@@ -467,9 +489,12 @@ function QuestionnairesSection({
                   <td>
                     <ModeChips modes={q.modes} />
                   </td>
+                  <td className="font-mono">
+                    {q.latestVersion ? `v${q.latestVersion.version}` : '—'}
+                  </td>
                   <td>
                     {q.latestVersion
-                      ? `v${q.latestVersion.version} · ${t(`designer.versions.${q.latestVersion.status}`)}`
+                      ? t(`designer.versions.${q.latestVersion.status}`)
                       : t('designer.unpublished')}
                   </td>
                   <td>{dateTime(q.updatedAt)}</td>
@@ -495,33 +520,22 @@ function QuestionnairesSection({
                     <td className="py-2">
                       <button
                         type="button"
-                        className="flex items-center gap-2 text-left font-medium text-indigo-ink-700 hover:underline"
-                        onClick={() => onPanel({ kind: 'feedbackLinks', name: p.name, point: p })}
+                        className="text-left font-medium text-indigo-ink-700 hover:underline"
+                        onClick={() => onPanel({ kind: 'feedbackDesign', name: p.name, point: p })}
                       >
-                        <FacesIcon faces={p.faces} />
                         {p.name}
                       </button>
                     </td>
                     <td>
-                      <span className="flex flex-wrap items-center gap-1">
-                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-ink-900">
-                          {t('feedback.chip')}
-                        </span>
-                        <span className="text-xs text-slate-600">
-                          {t('feedback.channelsShort')}
-                        </span>
-                      </span>
+                      <ModeChips modes={['LIKERT']} />
                     </td>
+                    <td className="font-mono">v{p.version}</td>
                     <td>
+                      {p.active ? t('feedback.active') : t('feedback.inactive')} ·{' '}
                       {t('feedback.answers', { count: total })} ·{' '}
                       {t('feedback.satisfied', { pct: pct(satisfied(p)) })}
-                      {!p.active ? (
-                        <span className="ml-1 rounded bg-slate-100 px-1.5 text-xs text-slate-700">
-                          {t('feedback.inactive')}
-                        </span>
-                      ) : null}
                     </td>
-                    <td>{p.createdAt ? dateTime(p.createdAt) : '—'}</td>
+                    <td>{dateTime(p.updatedAt ?? p.createdAt ?? '')}</td>
                     <td className="text-right">
                       <button
                         type="button"
@@ -598,7 +612,6 @@ function QuestionnairesSection({
                       />
                       <span>
                         <span className="flex items-center gap-2 font-medium">
-                          {f === 'feedback' ? <FacesIcon faces={3} /> : null}
                           {t(`feedback.formats.${f}`)}
                         </span>
                         <span className="block text-xs text-slate-600">
@@ -809,8 +822,9 @@ export function ProjectPage() {
     ...(canMetrics ? (['metrics'] as const) : []),
   ];
   const tabs: ProjectTab[] = [
-    ...(casesSubs.length ? (['cases'] as const) : []),
+    // The questionnaires are defined first; then the sample says who answers them.
     ...(canQuestionnaires ? (['questionnaires'] as const) : []),
+    ...(casesSubs.length ? (['cases'] as const) : []),
     ...(canCall ? (['calls'] as const) : []),
     // Data-entry clerks who do not see the questionnaires keep paper forms as a tab.
     ...(canPaper && !canQuestionnaires ? (['paper'] as const) : []),

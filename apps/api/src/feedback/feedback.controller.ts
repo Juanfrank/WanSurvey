@@ -18,6 +18,7 @@ import {
   AnswerBody,
   CommentBody,
   FeedbackService,
+  FollowUpBody,
   PaperBody,
   PointBody,
   PointPatch,
@@ -120,6 +121,18 @@ export class PublicFeedbackController {
     @Body(new ZodPipe(AnswerBody)) body: z.infer<typeof AnswerBody>,
   ) {
     return this.feedback.answer(slug, body);
+  }
+
+  @Public()
+  @Throttle(respondentLimit)
+  @Post('answers')
+  @HttpCode(200)
+  @ApiBody({ schema: z.toJSONSchema(FollowUpBody) as object })
+  followUp(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(FollowUpBody)) body: z.infer<typeof FollowUpBody>,
+  ) {
+    return this.feedback.followUp(slug, body);
   }
 
   @Public()

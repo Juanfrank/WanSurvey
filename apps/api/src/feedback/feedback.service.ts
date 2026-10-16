@@ -1,5 +1,17 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { LocalizedText } from '@wansurvey/schema';
+import {
+  FeedbackItems,
+  feedbackAnswerError,
+  feedbackItemShown,
+  type FeedbackItem,
+} from '@wansurvey/schema/feedback';
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { randomToken, safeEqual, sha256Hex } from '../common/crypto.js';
@@ -11,15 +23,64 @@ export const PointBody = z.object({
   name: z.string().trim().min(1).max(200),
   question: LocalizedText,
   faces: z.union([z.literal(3), z.literal(5)]).default(3),
+  /** Older clients: a comment box becomes the first follow-up question. */
   askComment: z.boolean().default(true),
+  items: FeedbackItems.optional(),
 });
-export const PointPatch = PointBody.partial().extend({ active: z.boolean().optional() });
+// No defaults here: a patch changes only what it names.
+export const PointPatch = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  question: LocalizedText.optional(),
+  faces: z.union([z.literal(3), z.literal(5)]).optional(),
+  items: FeedbackItems.optional(),
+  active: z.boolean().optional(),
+});
+
+/** Answers to follow-up questions, by item id. */
+const Answers = z.record(
+  z.string().max(32),
+  z.union([z.string().max(2000), z.number(), z.array(z.number()).max(30), z.null()]),
+);
 
 export const AnswerBody = z.object({
   score: z.number().int().min(1).max(5),
   ref: z.string().trim().max(120).optional(),
   channel: z.enum(['link', 'widget']).default('link'),
+  /** Raw link parameters (`?sede=2`): those a question takes answer it beforehand. */
+  params: z.record(z.string().max(32), z.string().max(200)).optional(),
 });
+export const FollowUpBody = z.object({
+  id: z.uuid(),
+  key: z.string().min(16).max(64),
+  answers: Answers,
+});
+
+const COMMENT_ITEM = (lang: string): FeedbackItem => ({
+  id: 'COMENTARIO',
+  type: 'text',
+  long: true,
+  required: false,
+  text: {
+    [lang]:
+      lang === 'es' ? '¿Quiere contarnos algo más?' : 'Anything else you would like to tell us?',
+  },
+});
+
+/** A link parameter as the answer its question takes, or undefined when it does not fit. */
+function fromParam(item: FeedbackItem, raw: string): unknown {
+  const n = Number(raw);
+  switch (item.type) {
+    case 'text':
+      return raw;
+    case 'number':
+      return Number.isFinite(n) ? n : undefined;
+    case 'yesno':
+    case 'single':
+      return Number.isInteger(n) ? n : undefined;
+    case 'multi':
+      return raw.split(/[,;]/).map(Number);
+  }
+}
 export const CommentBody = z.object({
   id: z.uuid(),
   key: z.string().min(16).max(64),
@@ -55,7 +116,10 @@ export class FeedbackService {
       active: p.active,
       slug: p.slug,
       url: this.url(p.slug),
+      version: p.version,
+      items: p.items as FeedbackItem[],
       createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
     };
   }
 
@@ -94,7 +158,18 @@ export class FeedbackService {
     return this.database.withTenant(tenantId, async (tx) => {
       const [p] = await tx
         .insert(feedbackPoints)
-        .values({ tenantId, projectId, ...body, slug: randomToken(9) })
+        .values({
+          tenantId,
+          projectId,
+          name: body.name,
+          question: body.question,
+          faces: body.faces,
+          askComment: body.askComment,
+          items:
+            body.items ??
+            (body.askComment ? [COMMENT_ITEM(Object.keys(body.question)[0] ?? 'es')] : []),
+          slug: randomToken(9),
+        })
         .returning();
       return { ...this.shape(p!), counts: {} };
     });
@@ -102,9 +177,15 @@ export class FeedbackService {
 
   update(tenantId: string, projectId: string, id: string, body: z.infer<typeof PointPatch>) {
     return this.database.withTenant(tenantId, async (tx) => {
+      // A change to what is asked is a new version of the point.
+      const asked =
+        body.question !== undefined || body.faces !== undefined || body.items !== undefined;
       const [p] = await tx
         .update(feedbackPoints)
-        .set(body)
+        .set({
+          ...body,
+          ...(asked ? { version: sql`${feedbackPoints.version} + 1`, updatedAt: new Date() } : {}),
+        })
         .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)))
         .returning();
       if (!p) throw new NotFoundException('Feedback point not found');
@@ -160,11 +241,44 @@ export class FeedbackService {
         .where(and(eq(feedbackResponses.pointId, id), isNotNull(feedbackResponses.comment)))
         .orderBy(desc(feedbackResponses.createdAt))
         .limit(50);
+      // Follow-up answers: counts per option, and the latest texts.
+      const rows = await tx
+        .select({
+          score: feedbackResponses.score,
+          answers: feedbackResponses.answers,
+          ref: feedbackResponses.ref,
+          at: feedbackResponses.createdAt,
+        })
+        .from(feedbackResponses)
+        .where(and(eq(feedbackResponses.pointId, id), isNotNull(feedbackResponses.answers)))
+        .orderBy(desc(feedbackResponses.createdAt))
+        .limit(20_000);
+      const items = p.items as FeedbackItem[];
+      const itemCounts: Record<string, Record<string, number>> = {};
+      const texts: { item: string; score: number; text: string; ref: string | null; at: Date }[] =
+        [];
+      for (const r of rows) {
+        const a = (r.answers ?? {}) as Record<string, unknown>;
+        for (const it of items) {
+          const v = a[it.id];
+          if (v === undefined || v === null) continue;
+          if (it.type === 'text') {
+            if (texts.length < 100)
+              texts.push({ item: it.id, score: r.score, text: String(v), ref: r.ref, at: r.at });
+            continue;
+          }
+          const bucket = (itemCounts[it.id] ??= {});
+          for (const c of Array.isArray(v) ? v : [v])
+            bucket[String(c)] = (bucket[String(c)] ?? 0) + 1;
+        }
+      }
       return {
         point: this.shape(p),
         counts,
         channels: Object.fromEntries(byChannel.map((c) => [c.channel, c.n])),
         comments,
+        itemCounts,
+        texts,
       };
     });
   }
@@ -198,7 +312,9 @@ export class FeedbackService {
       return {
         question: p!.question as Record<string, string>,
         faces: p!.faces,
-        askComment: p!.askComment,
+        items: p!.items as FeedbackItem[],
+        // Older pages read this; the comment is now an item.
+        askComment: (p!.items as FeedbackItem[]).length > 0,
       };
     });
   }
@@ -209,6 +325,16 @@ export class FeedbackService {
     return this.database.withTenant(found.tenantId, async (tx) => {
       const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
       if (body.score > p!.faces) throw new NotFoundException('No such face');
+      const items = p!.items as FeedbackItem[];
+      // Questions a link parameter answers are recorded now and never shown.
+      const preset: Record<string, unknown> = {};
+      for (const it of items) {
+        const raw = it.param ? body.params?.[it.param] : undefined;
+        if (raw === undefined) continue;
+        const v = fromParam(it, raw);
+        if (v !== undefined && !feedbackAnswerError(it, v)) preset[it.id] = v;
+      }
+      const open = items.some((it) => !(it.id in preset) && feedbackItemShown(it, body.score));
       const key = randomToken(18);
       const [r] = await tx
         .insert(feedbackResponses)
@@ -218,10 +344,54 @@ export class FeedbackService {
           score: body.score,
           channel: body.channel,
           ref: body.ref ?? null,
-          editHash: p!.askComment ? sha256Hex(key) : null,
+          answers: Object.keys(preset).length ? preset : null,
+          editHash: open ? sha256Hex(key) : null,
         })
         .returning({ id: feedbackResponses.id });
-      return { id: r!.id, ...(p!.askComment ? { key } : {}) };
+      return { id: r!.id, preset: Object.keys(preset), ...(open ? { key } : {}) };
+    });
+  }
+
+  /** The follow-up answers of one face, once (the key is spent). */
+  async followUp(slug: string, body: z.infer<typeof FollowUpBody>) {
+    const found = await this.bySlug(slug);
+    return this.database.withTenant(found.tenantId, async (tx) => {
+      const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
+      const [r] = await tx
+        .select()
+        .from(feedbackResponses)
+        .where(and(eq(feedbackResponses.id, body.id), eq(feedbackResponses.pointId, found.id)))
+        .for('update');
+      if (!r?.editHash || !safeEqual(r.editHash, sha256Hex(body.key)))
+        throw new NotFoundException('Not found');
+      const before = (r.answers ?? {}) as Record<string, unknown>;
+      const answers: Record<string, unknown> = { ...before };
+      const problems: Record<string, string> = {};
+      for (const it of p!.items as FeedbackItem[]) {
+        if (it.id in before || !feedbackItemShown(it, r.score)) continue;
+        const v = body.answers[it.id] ?? null;
+        const err = feedbackAnswerError(it, v);
+        if (err) problems[it.id] = err;
+        else if (v !== null && v !== '') answers[it.id] = typeof v === 'string' ? v.trim() : v;
+      }
+      if (Object.keys(problems).length)
+        throw new BadRequestException({
+          code: 'INVALID_ANSWERS',
+          message: 'Check the answers',
+          problems,
+        });
+      const text = (p!.items as FeedbackItem[]).find((it) => it.type === 'text' && it.long);
+      await tx
+        .update(feedbackResponses)
+        .set({
+          answers,
+          editHash: null,
+          ...(text && typeof answers[text.id] === 'string'
+            ? { comment: answers[text.id] as string }
+            : {}),
+        })
+        .where(eq(feedbackResponses.id, r.id));
+      return { ok: true };
     });
   }
 
