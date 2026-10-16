@@ -56,11 +56,11 @@ describe('paper conditions', () => {
     expect(printExpr(parse('a + b * 2'))).toBe('a + b * 2');
   });
 
-  it('prints pipes as placeholders on paper', () => {
-    expect(paperText('How old is {{M_NAME}}?')).toBe('How old is «M_NAME»?');
+  it('prints answers not known yet as a line to fill on paper', () => {
+    expect(paperText('How old is {{M_NAME}}?')).toBe('How old is ________?');
     expect(paperText('Name of {{#if A3 == 1}}your wife{{else}}your husband{{/if}}')).toBe(
       'Name of [your wife / your husband]',
     );
-    expect(paperText('{{roster.HH[i].NAME}} {{Q7 | label}}')).toBe('«HH[i].NAME» «Q7»');
+    expect(paperText('{{roster.HH[i].NAME}} {{Q7 | label}}')).toBe('________ ________');
   });
 });

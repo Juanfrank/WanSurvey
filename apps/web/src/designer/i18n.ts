@@ -378,6 +378,27 @@ export const designerEn = {
     optionFilterHelp: 'Use code for the option being tested, e.g. code != Q3.',
     prefill: 'Prefill with',
     prefillHelp: 'An expression, e.g. case.region.',
+    fromData: 'From the case data',
+    fromDataHelp:
+      'Data imported with the cases can answer this question, be offered to confirm, or fill it only when it came blank.',
+    caseField: 'Case field',
+    caseFieldNone: '— none —',
+    prefillMode: 'How to use it',
+    prefillModes: {
+      confirm: 'Prefilled, to confirm',
+      ifMissing: 'Ask only if it came blank',
+      fixed: 'Fill in automatically',
+    },
+    prefillModeHints: {
+      confirm: 'Shown with the value; it can be changed and is checked as any answer.',
+      ifMissing: 'Recorded and not asked when the case has it; asked when it is blank.',
+      fixed: 'Always taken from the data and never asked, even when blank.',
+    },
+    urlParam: 'Link parameter (optional)',
+    urlParamHelp:
+      'A web link with this parameter answers the question beforehand: recorded, never shown, and the logic follows it.',
+    urlParamExample:
+      'E.g. …?{{param}}=2 answers it with code 2 and skips it; the logic goes on from that answer.',
   },
   variants: {
     unusedMode: 'not used',
@@ -1078,6 +1099,28 @@ export const designerEs: DesignerCatalogue = {
     optionFilterHelp: 'Use code para la opción evaluada, por ejemplo code != Q3.',
     prefill: 'Precargar con',
     prefillHelp: 'Una expresión, por ejemplo case.region.',
+    fromData: 'Desde los datos del caso',
+    fromDataHelp:
+      'Los datos importados con los casos pueden responder esta pregunta, ofrecerse para confirmar, o llenarla solo si vinieron en blanco.',
+    caseField: 'Campo del caso',
+    caseFieldNone: '— ninguno —',
+    prefillMode: 'Cómo usarlo',
+    prefillModes: {
+      confirm: 'Prellenado, para confirmar',
+      ifMissing: 'Preguntar solo si vino en blanco',
+      fixed: 'Llenar automáticamente',
+    },
+    prefillModeHints: {
+      confirm: 'Se muestra con el valor; se puede cambiar y se valida como cualquier respuesta.',
+      ifMissing:
+        'Se registra y no se pregunta cuando el caso lo trae; se pregunta si vino en blanco.',
+      fixed: 'Siempre se toma de los datos y nunca se pregunta, aunque venga en blanco.',
+    },
+    urlParam: 'Parámetro del enlace (opcional)',
+    urlParamHelp:
+      'Un enlace web con este parámetro responde la pregunta de antemano: se registra, nunca se muestra y la lógica sigue esa respuesta.',
+    urlParamExample:
+      'Ej.: …?{{param}}=2 la responde con el código 2 y la salta; la lógica continúa desde esa respuesta.',
   },
   variants: {
     unusedMode: 'no se usa',

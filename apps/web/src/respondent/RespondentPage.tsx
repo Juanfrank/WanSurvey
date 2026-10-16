@@ -37,6 +37,26 @@ const hasState = (s: unknown): s is Partial<InterviewState> =>
  * one question per page on phones; every change is kept on the device and sent at once, so a
  * respondent can stop and come back with the same link, on any device.
  */
+/**
+ * The link's parameters (`?sede=2`): questions with that link parameter take them. They are
+ * remembered for this invitation, so coming back without them keeps the same answers.
+ */
+export function linkParams(token: string): Record<string, string> {
+  const fresh: Record<string, string> = {};
+  new URLSearchParams(window.location.search).forEach((v, k) => {
+    if (/^[a-z][a-z0-9_]{0,31}$/.test(k) && !['lang', 'ref'].includes(k))
+      fresh[k] = v.slice(0, 200);
+  });
+  const key = `ws.params.${token}`;
+  try {
+    if (Object.keys(fresh).length) localStorage.setItem(key, JSON.stringify(fresh));
+    else return JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, string>;
+  } catch {
+    // Without storage the parameters still work for this visit.
+  }
+  return fresh;
+}
+
 export function RespondentPage() {
   const { token } = useParams({ strict: false }) as { token: string };
   const [payload, setPayload] = useState<RespondentPayload | null>(null);
@@ -89,7 +109,11 @@ export function RespondentPage() {
           language: p.interview.language,
           seed: id,
           now: () => new Date(p.interview.startedAt),
-          context: { case: p.context.case, respondent: respondentFromCase(p.context.case) },
+          context: {
+            case: p.context.case,
+            respondent: respondentFromCase(p.context.case),
+            params: linkParams(token),
+          },
           ...(hasState(state) ? { state: state as Partial<InterviewState> } : {}),
         });
         s.drainEvents();

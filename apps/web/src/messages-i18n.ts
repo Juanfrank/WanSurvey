@@ -46,6 +46,9 @@ export const messagesEn = {
     // questions
     unknown_answer_set: 'Answer set {{set}} does not exist',
     missing_options: '{{name}} has no answer options',
+    duplicate_url_param: '{{name}} and {{other}} take the same link parameter “{{param}}”',
+    url_param_in_roster: '{{name}} is in a roster: a link parameter cannot answer it',
+    prefill_mode_without_prefill: '{{name}} has a prefill use but no prefill value',
     empty_option_label_one: 'Option {{codes}} of {{name}} has no label',
     empty_option_label_other: 'Options {{codes}} of {{name}} have no label',
     empty_row_label_one: 'Row {{codes}} of {{name}} has no label',
@@ -189,6 +192,11 @@ export const messagesEs: MessagesCatalogue = {
     unreachable: '{{name}} nunca se puede alcanzar',
     unknown_answer_set: 'El conjunto de respuestas {{set}} no existe',
     missing_options: '{{name}} no tiene opciones de respuesta',
+    duplicate_url_param: '{{name}} y {{other}} toman el mismo parámetro de enlace «{{param}}»',
+    url_param_in_roster:
+      '{{name}} está en una lista repetida: un parámetro de enlace no puede responderla',
+    prefill_mode_without_prefill:
+      '{{name}} tiene un uso de prellenado pero ningún valor de prellenado',
     empty_option_label_one: 'La opción {{codes}} de {{name}} no tiene etiqueta',
     empty_option_label_other: 'Las opciones {{codes}} de {{name}} no tienen etiqueta',
     empty_row_label_one: 'La fila {{codes}} de {{name}} no tiene etiqueta',

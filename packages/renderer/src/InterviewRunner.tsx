@@ -510,7 +510,7 @@ function Runner(p: InterviewRunnerProps) {
                 onClick={() => addRow(r)}
               >
                 {t('question.addRow')}
-                {def.title ? `: ${pick(def.title, p.lang)}` : ''}
+                {def.title ? `: ${p.session.renderText(def.title) ?? pick(def.title, p.lang)}` : ''}
               </button>
             );
           })}

@@ -40,6 +40,8 @@ export interface InterviewContext {
   interviewer?: Record<string, unknown>;
   project?: Record<string, unknown>;
   respondent?: Record<string, unknown>;
+  /** The link's parameters (`?sede=2`); questions with that `urlParam` take them. */
+  params?: Record<string, string>;
 }
 
 /** Answers quota questions; the server counts completes per cell. */
@@ -86,6 +88,11 @@ export interface TraceEntry {
   why: Why;
   depth: number;
   frames: Frame[];
+  /**
+   * Answered by the system (a link parameter or fixed case data): it counts for the logic and
+   * keeps its value, but is not shown or navigable.
+   */
+  auto?: 'urlParam' | 'prefill';
 }
 
 /** Why a node is on or off the path. `text` is the English wording. */
@@ -127,6 +134,7 @@ export interface ChangeEvent {
     | 'path_restored'
     | 'prefill'
     | 'prefill_restored'
+    | 'url_param'
     | 'computed'
     | 'row_removed'
     | 'roster_resized';
@@ -452,6 +460,8 @@ export class InterviewSession {
       return fail(`'${parsed.name}' is not a question`);
     const questionKey = formatKey(parsed.frames, this.compiled.nodes[info.node]!.name!);
     if (!this.activeKeys.has(questionKey)) return fail(`${questionKey} is not on the current path`);
+    if (this.activeKeys.get(questionKey)!.auto && source !== 'system')
+      return fail(`${questionKey} is answered automatically`);
     const node = this.compiled.nodes[info.node]!;
     if (info.kind === 'question') {
       const err = this.shapeError(node, value);
@@ -739,11 +749,15 @@ export class InterviewSession {
   ): string | null {
     const src = pickLanguage(text, this.language, this.compiled.questionnaire.defaultLanguage);
     if (src === null) return null;
-    return renderTemplate(src, new InterviewScope(this, frames), {
+    // A value not known (yet): respondents see nothing, interviewers a blank to fill or say;
+    // never the raw reference.
+    const blank = this.mode === 'CAWI' ? '' : '____';
+    const out = renderTemplate(src, new InterviewScope(this, frames), {
       lang: this.language,
-      ...(placeholder ? { placeholder } : {}),
+      placeholder: placeholder ?? (() => blank),
       specialLabel: (k) => this.specialLabel(k as SpecialKind),
     });
+    return blank === '' && !placeholder ? tidyBlanks(out) : out;
   }
 
   /** Options to display for a question: filtered, randomised (seeded) and labelled. */
@@ -900,7 +914,7 @@ export class InterviewSession {
     this.walking = null;
     this.trace_ = w.entries;
     this.path_ = w.entries.filter(
-      (e) => e.status === 'active' && (e.kind === 'question' || e.kind === 'static'),
+      (e) => e.status === 'active' && !e.auto && (e.kind === 'question' || e.kind === 'static'),
     );
     this.activeKeys = new Map(
       w.entries.filter((e) => e.status === 'active').map((e) => [e.key, e]),
@@ -1150,7 +1164,43 @@ export class InterviewSession {
     this.restoreIfMissing(frames, `${q.name}_OTHER`, formatKey(frames, `${q.name}_OTHER`));
 
     let value = (this.container(frames, false)?.[q.name] as Value | undefined) ?? null;
-    if (!isAnswered(value) && node.prefill && !this.prefilled.has(key)) {
+    // Answered automatically: by the link (urlParam), or by case data used as fixed or as
+    // "ask only if missing". Such questions count for the logic but are never shown.
+    let auto: TraceEntry['auto'];
+    const setAuto = (v: AnswerValue, reason: 'url_param' | 'prefill') => {
+      if (!jsonEqual(v, value as AnswerValue)) {
+        this.write(frames, q.name, v);
+        this.events.push({
+          key,
+          oldValue: value as AnswerValue,
+          newValue: v,
+          source: 'system',
+          reason,
+        });
+      }
+      value = v as Value;
+    };
+    const raw = q.urlParam && frames.length === 0 ? this.context.params?.[q.urlParam] : undefined;
+    const fromLink = raw === undefined ? undefined : fromParam(q, raw);
+    if (
+      fromLink !== undefined &&
+      !this.shapeError(node, fromLink) &&
+      fitsOptions(q, questionOptions(q, this.compiled.questionnaire), fromLink)
+    ) {
+      setAuto(fromLink, 'url_param');
+      auto = 'urlParam';
+    } else if (node.prefill && (q.prefillMode === 'fixed' || q.prefillMode === 'ifMissing')) {
+      const v = evaluate(node.prefill.ast!, new InterviewScope(this, frames));
+      const ok = isAnswered(v) && !this.shapeError(node, v as AnswerValue);
+      if (ok) {
+        setAuto(v as AnswerValue, 'prefill');
+        auto = 'prefill';
+      } else if (q.prefillMode === 'fixed') auto = 'prefill';
+    }
+    if (auto) {
+      const e = this.entry(node, frames, 'active', shownWhy(node), depth);
+      e.auto = auto;
+    } else if (!isAnswered(value) && node.prefill && !this.prefilled.has(key)) {
       const v = evaluate(node.prefill.ast!, new InterviewScope(this, frames));
       if (isAnswered(v) && !this.shapeError(node, v as AnswerValue)) {
         this.write(frames, q.name, v as AnswerValue);
@@ -1165,7 +1215,7 @@ export class InterviewSession {
         value = v;
       }
     }
-    this.entry(node, frames, 'active', shownWhy(node), depth);
+    if (!auto) this.entry(node, frames, 'active', shownWhy(node), depth);
     if (!isAnswered(value)) return;
 
     for (const rule of node.endIf) {
@@ -1595,6 +1645,58 @@ function pickLanguage(text: LocalizedText, lang: string, fallback: string): stri
 function jsonEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** A link's value is one of the question's answers (an option code, a point of the scale). */
+function fitsOptions(q: Question, options: AnswerOption[], v: AnswerValue): boolean {
+  const codes = options.map((o) => String(o.code));
+  switch (q.type) {
+    case 'single':
+      return codes.includes(String(v));
+    case 'multi':
+      return Array.isArray(v) && v.every((c) => codes.includes(String(c)));
+    case 'yesno':
+      return v === 1 || v === 2;
+    case 'scale':
+      return typeof v === 'number' && (!q.scale || (v >= q.scale.min && v <= q.scale.max));
+    default:
+      return true;
+  }
+}
+
+/** A link parameter as the answer its question takes, or undefined when it cannot be one. */
+function fromParam(q: Question, raw: string): AnswerValue | undefined {
+  const s = raw.trim();
+  if (!s) return undefined;
+  const n = Number(s);
+  switch (q.type) {
+    case 'text':
+      return s.slice(0, q.maxLength ?? 500);
+    case 'numeric':
+      return Number.isFinite(n) ? n : undefined;
+    case 'single':
+    case 'yesno':
+    case 'scale':
+      return Number.isFinite(n) ? n : s;
+    case 'multi':
+      return s.split(/[,;]/).map((x) => (Number.isFinite(Number(x)) ? Number(x) : x.trim()));
+    case 'date':
+    case 'time':
+    case 'datetime':
+      return s;
+    default:
+      return undefined;
+  }
+}
+
+/** Spaces and punctuation left by a value left out ("Hola , gracias" → "Hola, gracias"). */
+export function tidyBlanks(s: string): string {
+  return s
+    .replace(/[ \t]+([,.;:?!)])/g, '$1')
+    .replace(/([¿¡(])[ \t]+/g, '$1')
+    .replace(/,(\s*[,.?!])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 function structuredCloneJson<T>(v: T): T {

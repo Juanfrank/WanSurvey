@@ -65,6 +65,7 @@ export function analyze(questionnaire: Questionnaire): AnalysisResult {
     checkVariants(node, questionnaire.modes, add);
     checkTexts(model, node, specialCodes, add);
   }
+  checkLinkParams(model, add);
   checkUnreachable(model, add);
   checkComputedCycles(model, add);
   checkQuotas(model, specialCodes, add);
@@ -244,6 +245,47 @@ function checkSkips(model: Model, node: CompiledNode, add: (d: Diagnostic) => vo
       });
     }
   });
+}
+
+/** Link parameters: one question each, outside rosters; a prefill mode needs a prefill. */
+function checkLinkParams(model: Model, add: (d: Diagnostic) => void) {
+  const seen = new Map<string, string>();
+  for (const node of model.nodes) {
+    if (node.kind !== 'question') continue;
+    const q = node.def as Question;
+    const at = { itemId: node.id };
+    if (q.urlParam) {
+      const other = seen.get(q.urlParam);
+      if (other)
+        add({
+          severity: 'error',
+          code: 'duplicate_url_param',
+          message: `${q.name} and ${other} take the same link parameter '${q.urlParam}'`,
+          msg: { id: 'duplicate_url_param', params: { name: q.name, other, param: q.urlParam } },
+          ...at,
+          field: 'urlParam',
+        });
+      else seen.set(q.urlParam, q.name);
+      if (node.rosterChain.length)
+        add({
+          severity: 'error',
+          code: 'url_param_in_roster',
+          message: `${q.name} is in a roster; a link parameter cannot answer it`,
+          msg: { id: 'url_param_in_roster', params: { name: q.name } },
+          ...at,
+          field: 'urlParam',
+        });
+    }
+    if (q.prefillMode && q.prefillMode !== 'confirm' && !q.prefill)
+      add({
+        severity: 'warning',
+        code: 'prefill_mode_without_prefill',
+        message: `${q.name} uses its prefill as ${q.prefillMode}, but has no prefill`,
+        msg: { id: 'prefill_mode_without_prefill', params: { name: q.name } },
+        ...at,
+        field: 'prefill',
+      });
+  }
 }
 
 function checkQuestion(

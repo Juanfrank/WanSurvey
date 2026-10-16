@@ -21,24 +21,46 @@ import { pick } from './text.js';
 export interface PaperFormProps {
   compiled: CompiledQuestionnaire;
   lang: string;
+  /** The case the form is printed for, to fill its data into the texts. */
+  context?: PaperContext;
 }
 
-/** Pipes cannot be resolved on paper: `{{NAME}}` becomes «NAME», conditional text shows both forms. */
-export function paperText(src: string): string {
+/** What the printed form may know: the case's sample data and the respondent's name. */
+export interface PaperContext {
+  case?: Record<string, unknown>;
+  respondent?: Record<string, unknown>;
+}
+
+/**
+ * Pipes on paper: case data and the respondent's name are filled in when the form is printed
+ * for a case; answers are not known yet, so they become a line to read the answer from
+ * (or the `default` text when there is one). Conditional text shows both forms.
+ */
+export function paperText(src: string, ctx: PaperContext = {}): string {
   return src
     .replace(/\{\{#if [^}]*\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, '[$1 / $2]')
     .replace(/\{\{#if [^}]*\}\}([\s\S]*?)\{\{\/if\}\}/g, '[$1]')
-    .replace(
-      /\{\{\s*([^}|]+?)\s*(\|[^}]*)?\}\}/g,
-      (_m, expr: string) => `«${expr.replace(/^roster\./, '')}»`,
-    );
+    .replace(/\{\{\s*([^}|]+?)\s*(\|[^}]*)?\}\}/g, (_m, expr: string, filters?: string) => {
+      const [scope, ...path] = expr.split('.');
+      const from =
+        scope === 'case' ? ctx.case : scope === 'respondent' ? ctx.respondent : undefined;
+      const v = from && path.length === 1 ? from[path[0]!] : undefined;
+      if (v !== undefined && v !== null && v !== '' && v !== '•••') return String(v);
+      const fallback = /\|\s*default\s*:\s*(?:"([^"]*)"|'([^']*)')/.exec(filters ?? '');
+      return fallback ? (fallback[1] ?? fallback[2] ?? '') : '________';
+    });
 }
 
 /**
  * The questionnaire as a printable paper form (PAPI): numbered questions, codes beside
  * options, routing printed as instructions, rosters repeated.
  */
-export function PaperForm({ compiled, lang }: PaperFormProps) {
+export function PaperForm({ compiled, lang, context = {} }: PaperFormProps) {
+  // Every text on the form, in its language and with its pipes made printable.
+  const tx = (text: Parameters<typeof pick>[0], l: string) => {
+    const v = pick(text, l);
+    return v === null || v === undefined ? v : paperText(v, context);
+  };
   const { t } = useTranslation(RENDERER_NS);
   const q = compiled.questionnaire;
 
@@ -62,7 +84,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
       if (!info || info.kind !== 'question') return null;
       const def = compiled.nodes[info.node]!.def as Question;
       const o = questionOptions(def, q).find((x) => String(x.code) === String(code));
-      return o ? (pick(o.label, lang) ?? null) : null;
+      return o ? (tx(o.label, lang) ?? null) : null;
     },
     t: (key, vars) => t(key, vars),
   };
@@ -73,7 +95,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
     if (typeof target !== 'number') return '?';
     const node = compiled.nodes[target]!;
     if (node.kind === 'question') return numbers.get(node.id) ?? node.id;
-    if (node.kind === 'section') return pick((node.def as Section).title, lang) ?? node.id;
+    if (node.kind === 'section') return tx((node.def as Section).title, lang) ?? node.id;
     // Block/roster: its first question.
     const first = compiled.nodes.slice(node.index, node.end + 1).find((x) => numbers.has(x.id));
     return first ? numbers.get(first.id)! : node.id;
@@ -176,9 +198,9 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
         >
           {options.map((o) => (
             <li key={String(o.code)} className="flex items-center gap-3">
-              {bubble(`${o.code} ${pick(o.label, lang) ?? ''}`)}
+              {bubble(`${o.code} ${tx(o.label, lang) ?? ''}`)}
               <span className="w-8 text-right font-mono font-semibold">{o.code}</span>
-              <span>{pick(o.label, lang)}</span>
+              <span>{tx(o.label, lang)}</span>
               {o.otherSpecify ? (
                 <span className="flex-1 border-b border-dotted border-slate-800" />
               ) : null}
@@ -207,7 +229,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
                 {boxes(decimals, t('paper.writeNumber'))}
               </>
             ) : null}
-            {def.unit ? <span>{pick(def.unit, lang)}</span> : null}
+            {def.unit ? <span>{tx(def.unit, lang)}</span> : null}
           </p>
         );
       }
@@ -264,8 +286,8 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
               ))}
             </div>
             <p className="flex justify-between text-sm">
-              <span>{pick(s.minLabel, lang)}</span>
-              <span className="text-right">{pick(s.maxLabel, lang)}</span>
+              <span>{tx(s.minLabel, lang)}</span>
+              <span className="text-right">{tx(s.maxLabel, lang)}</span>
             </p>
           </div>
         );
@@ -284,7 +306,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
               {options.map((o) => (
                 <li key={String(o.code)} className="flex items-center gap-3">
                   {boxes(1, t('paper.writeNumber'))}
-                  <span>{pick(o.label, lang)}</span>
+                  <span>{tx(o.label, lang)}</span>
                 </li>
               ))}
             </ul>
@@ -301,7 +323,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
         return (
           <section key={node.id} className="paper-section flex flex-col gap-5">
             <h2 className="border-b-2 border-slate-800 pb-1 text-xl font-bold">
-              {pick(def.title, lang)}
+              {tx(def.title, lang)}
             </h2>
             {askIf(node)}
             {node.children.map(renderNode)}
@@ -328,7 +350,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
             key={node.id}
             className="paper-roster flex flex-col gap-4 rounded border-2 border-slate-800 p-3"
           >
-            <h3 className="font-bold">{pick(def.title, lang) ?? def.name}</h3>
+            <h3 className="font-bold">{tx(def.title, lang) ?? def.name}</h3>
             {askIf(node)}
             <p className="text-sm italic">{t('paper.rosterRows', { n: String(rows) })}</p>
             {node.children.map(renderNode)}
@@ -365,8 +387,8 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
         const def = node.def as Question;
         if (def.variants?.PAPI?.visibleInMode === false) return null;
         const variant = def.variants?.PAPI;
-        const text = pick(variant?.text ?? def.text, lang) ?? '';
-        const instruction = pick(variant?.interviewerInstruction, lang);
+        const text = tx(variant?.text ?? def.text, lang) ?? '';
+        const instruction = tx(variant?.interviewerInstruction, lang);
         return (
           <div
             key={node.id}
@@ -376,7 +398,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
             <span className="w-12 shrink-0 font-bold">{numbers.get(node.id)}</span>
             <div className="flex flex-1 flex-col gap-2">
               {askIf(node)}
-              <p className="font-medium">{paperText(text)}</p>
+              <p className="font-medium">{paperText(text, context)}</p>
               {instruction ? (
                 <p className="text-sm font-semibold uppercase">{instruction}</p>
               ) : null}
@@ -392,7 +414,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
                     {offered.map(([kind, cfg]) => (
                       <span key={kind}>
                         <span className="font-mono font-semibold">{cfg.code}</span>{' '}
-                        {pick(cfg.label, lang)}
+                        {tx(cfg.label, lang)}
                       </span>
                     ))}
                   </p>
@@ -405,10 +427,10 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
       }
       case 'static': {
         const def = node.def as StaticText;
-        const text = pick(def.variants?.PAPI?.text ?? def.text, lang) ?? '';
+        const text = tx(def.variants?.PAPI?.text ?? def.text, lang) ?? '';
         return (
           <p key={node.id} className="paper-static italic">
-            {paperText(text)}
+            {paperText(text, context)}
           </p>
         );
       }
@@ -430,7 +452,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
       >
         <h3 className="font-bold">
           {t('paper.tableN', { n: tableOf.get(node.id) })} · {numbers.get(node.id)} ·{' '}
-          {paperText(pick(def.variants?.PAPI?.text ?? def.text, lang) ?? '')}
+          {tx(def.variants?.PAPI?.text ?? def.text, lang) ?? ''}
         </h3>
         <table className="paper-grid w-full border-collapse text-sm">
           <thead>
@@ -438,7 +460,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
               <td />
               {options.map((o) => (
                 <th key={String(o.code)} scope="col" className="border border-slate-800 px-2 py-1">
-                  {pick(o.label, lang)} <span className="font-mono">({o.code})</span>
+                  {tx(o.label, lang)} <span className="font-mono">({o.code})</span>
                 </th>
               ))}
             </tr>
@@ -447,12 +469,12 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
             {(def.rows ?? []).map((r) => (
               <tr key={String(r.code)}>
                 <th scope="row" className="border border-slate-800 px-2 py-1 text-left">
-                  {pick(r.label, lang)}
+                  {tx(r.label, lang)}
                 </th>
                 {options.map((o) => (
                   <td key={String(o.code)} className="border border-slate-800 px-2 py-1.5">
                     <span className="flex justify-center">
-                      {bubble(`${pick(r.label, lang) ?? ''}: ${o.code}`)}
+                      {bubble(`${tx(r.label, lang) ?? ''}: ${o.code}`)}
                     </span>
                   </td>
                 ))}
@@ -477,7 +499,7 @@ export function PaperForm({ compiled, lang }: PaperFormProps) {
     <article className="paper relative mx-auto flex max-w-3xl flex-col gap-6 bg-white p-8 font-serif text-slate-900 print:p-0">
       {marks}
       <header>
-        <h1 className="text-2xl font-bold">{pick(q.title, lang)}</h1>
+        <h1 className="text-2xl font-bold">{tx(q.title, lang)}</h1>
         <p className="text-sm italic">{t('paper.interviewerCopy')}</p>
         <p className="mt-1 text-sm" data-testid="paper-fill-hint">
           {t('paper.fillHint')}

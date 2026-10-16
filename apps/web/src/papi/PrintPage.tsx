@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-import type { CompiledQuestionnaire } from '@wansurvey/logic';
+import { respondentFromCase, type CompiledQuestionnaire } from '@wansurvey/logic';
 import { PaperForm, pick } from '@wansurvey/renderer';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -97,7 +97,11 @@ export function PrintPage() {
             </div>
             <QrCode value={c.externalId} label={t('papi.print.qr', { id: c.externalId })} />
           </header>
-          <PaperForm compiled={f.compiled} lang={lang} />
+          <PaperForm
+            compiled={f.compiled}
+            lang={lang}
+            context={{ case: c.sample, respondent: respondentFromCase(c.sample) }}
+          />
         </article>
       ))}
     </div>

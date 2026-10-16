@@ -592,3 +592,118 @@ describe('routeFor', () => {
     expect(s.hasRouting('A3_SEX')).toBe(false);
   });
 });
+
+describe('values not known yet in texts', () => {
+  it('respondents see nothing, interviewers a blank; a default stands in for both', async () => {
+    const { compile, createInterview } = await import('../src/index.js');
+    const q = {
+      id: 'P',
+      title: { es: 'P' },
+      defaultLanguage: 'es',
+      languages: ['es'],
+      sections: [
+        {
+          id: 'S',
+          title: { es: 'S' },
+          items: [
+            {
+              kind: 'static',
+              id: 'HI',
+              role: 'info',
+              text: {
+                es: 'Hola {{respondent.firstName}}, en {{case.city | default:"su ciudad"}}.',
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const compiled = compile(q as never);
+    const web = createInterview(compiled, { mode: 'CAWI', seed: 'x', now: () => new Date() });
+    expect(web.text('HI')).toBe('Hola, en su ciudad.');
+    const phone = createInterview(compiled, { mode: 'CATI', seed: 'x', now: () => new Date() });
+    expect(phone.text('HI')).toBe('Hola ____, en su ciudad.');
+  });
+});
+
+describe('answers from the link and from case data', () => {
+  const q = {
+    id: 'U',
+    title: { es: 'U' },
+    defaultLanguage: 'es',
+    languages: ['es'],
+    sections: [
+      {
+        id: 'S',
+        title: { es: 'S' },
+        items: [
+          {
+            kind: 'question',
+            id: 'SEDE',
+            name: 'SEDE',
+            type: 'single',
+            text: { es: '¿A cuál sede acudió?' },
+            options: [
+              { code: 1, label: { es: 'Centro' } },
+              { code: 2, label: { es: 'Norte' } },
+            ],
+            urlParam: 'sede',
+            skips: [{ when: 'SEDE == 2', to: 'NORTE' }],
+          },
+          { kind: 'question', id: 'CENTRO', name: 'CENTRO', type: 'text', text: { es: 'c' } },
+          { kind: 'question', id: 'NORTE', name: 'NORTE', type: 'text', text: { es: 'n' } },
+          {
+            kind: 'question',
+            id: 'REGION',
+            name: 'REGION',
+            type: 'numeric',
+            text: { es: 'Región' },
+            prefill: 'case.region',
+            prefillMode: 'ifMissing',
+          },
+          {
+            kind: 'question',
+            id: 'TIPO',
+            name: 'TIPO',
+            type: 'numeric',
+            text: { es: 'Tipo' },
+            prefill: 'case.tipo',
+            prefillMode: 'fixed',
+          },
+        ],
+      },
+    ],
+  };
+
+  it('a link parameter answers the question, never shown, and the logic follows it', async () => {
+    const { compile, createInterview } = await import('../src/index.js');
+    const compiled = compile(q as never);
+    const s = createInterview(compiled, {
+      mode: 'CAWI',
+      seed: 'x',
+      now: () => new Date(),
+      context: { params: { sede: '2' }, case: { region: 3, tipo: 7 } },
+    });
+    expect(s.getAnswer('SEDE')).toBe(2);
+    // SEDE is answered and skipped over: Norte follows; Centro is skipped by the logic.
+    expect(s.pathKeys()).toEqual(['NORTE']);
+    expect(s.setAnswer('SEDE', 1, 'respondent').ok).toBe(false);
+    // Case data: the region came, so it is not asked; the type is fixed and never asked.
+    expect(s.getAnswer('REGION')).toBe(3);
+    expect(s.getAnswer('TIPO')).toBe(7);
+  });
+
+  it('without the parameter the question is asked; "ifMissing" asks when the data is blank', async () => {
+    const { compile, createInterview } = await import('../src/index.js');
+    const compiled = compile(q as never);
+    const s = createInterview(compiled, {
+      mode: 'CAWI',
+      seed: 'x',
+      now: () => new Date(),
+      context: { params: { sede: '9' }, case: {} },
+    });
+    // 9 is not an option: the link cannot answer it.
+    expect(s.pathKeys()).toEqual(['SEDE', 'CENTRO', 'NORTE', 'REGION']);
+    expect(s.getAnswer('TIPO')).toBeNull();
+  });
+});

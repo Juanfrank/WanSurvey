@@ -214,6 +214,19 @@ export const Question = z.strictObject({
 
   // logic
   prefill: Expression.optional(),
+  /**
+   * How the prefill is used: `confirm` shows it to check and change (default); `fixed` records
+   * it and never asks; `ifMissing` asks only when the data came blank.
+   */
+  prefillMode: z.enum(['confirm', 'fixed', 'ifMissing']).optional(),
+  /**
+   * A link parameter that answers this question beforehand (`?sede=2`): recorded, never shown,
+   * and the logic follows it. Only for questions outside rosters.
+   */
+  urlParam: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,31}$/)
+    .optional(),
   validations: z.array(ValidationRule).optional(),
   skips: z.array(SkipRule).optional(),
   endIf: z.array(EndRule).optional(),

@@ -14,6 +14,7 @@ import {
   FieldError,
   Group,
   Hint,
+  controlCls,
   inputCls,
   LocalizedField,
   SelectField,
@@ -318,13 +319,79 @@ export function LogicEditor({
           onChange={(optionFilter) => onPatch({ optionFilter })}
         />
       ) : null}
-      <ExpressionField
-        label={t('designer.logic.prefill')}
-        hint={t('designer.logic.prefillHelp')}
-        value={node.prefill}
-        variables={variables}
-        onChange={(prefill) => onPatch({ prefill })}
-      />
+      <Group title={t('designer.logic.fromData')}>
+        <p className="text-xs text-slate-600">{t('designer.logic.fromDataHelp')}</p>
+        {variables.some((v) => v.kind === 'case') ? (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">{t('designer.logic.caseField')}</span>
+            <select
+              className={`${controlCls} w-auto`}
+              value={
+                variables.some((v) => v.kind === 'case' && v.name === node.prefill)
+                  ? node.prefill
+                  : ''
+              }
+              onChange={(e) => onPatch({ prefill: e.target.value || undefined })}
+            >
+              <option value="">{t('designer.logic.caseFieldNone')}</option>
+              {variables
+                .filter((v) => v.kind === 'case')
+                .map((v) => (
+                  <option key={v.name} value={v.name}>
+                    {v.text} ({v.name})
+                  </option>
+                ))}
+            </select>
+          </label>
+        ) : null}
+        <ExpressionField
+          label={t('designer.logic.prefill')}
+          hint={t('designer.logic.prefillHelp')}
+          value={node.prefill}
+          variables={variables}
+          onChange={(prefill) => onPatch({ prefill })}
+        />
+        {node.prefill ? (
+          <fieldset className="flex flex-col gap-1.5 text-sm">
+            <legend className="mb-1 font-medium">{t('designer.logic.prefillMode')}</legend>
+            {(['confirm', 'ifMissing', 'fixed'] as const).map((m) => (
+              <label key={m} className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  className="mt-1"
+                  name={`prefill-mode-${node.id}`}
+                  checked={(node.prefillMode ?? 'confirm') === m}
+                  onChange={() => onPatch({ prefillMode: m === 'confirm' ? undefined : m })}
+                />
+                <span>
+                  <span className="font-medium">{t(`designer.logic.prefillModes.${m}`)}</span>
+                  <span className="block text-xs text-slate-600">
+                    {t(`designer.logic.prefillModeHints.${m}`)}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+      </Group>
+      <label className="flex max-w-md flex-col gap-1 text-sm">
+        <span className="font-medium">{t('designer.logic.urlParam')}</span>
+        <input
+          className={`${controlCls} font-mono`}
+          value={node.urlParam ?? ''}
+          placeholder="sede"
+          onChange={(e) =>
+            onPatch({
+              urlParam: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') || undefined,
+            })
+          }
+        />
+        <span className="text-xs text-slate-600">
+          {node.urlParam
+            ? t('designer.logic.urlParamExample', { param: node.urlParam })
+            : t('designer.logic.urlParamHelp')}
+        </span>
+      </label>
     </div>
   );
 }

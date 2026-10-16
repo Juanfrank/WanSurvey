@@ -21,7 +21,7 @@ export type Segment =
   | { type: 'expr'; src: string; expr: Node; filters: PipeFilter[] }
   | { type: 'if'; src: string; cond: Node; then: Segment[]; else: Segment[] };
 
-export const PIPE_FILTERS = ['label', 'date'] as const;
+export const PIPE_FILTERS = ['label', 'date', 'default'] as const;
 
 export class TemplateError extends Error {
   constructor(
@@ -237,7 +237,9 @@ function renderExpr(
   opts: RenderOptions,
 ): string | null {
   let value: Value = evaluate(seg.expr, scope);
-  if (!isAnswered(value)) return null;
+  // `| default:"su ciudad"` stands in for a value that is missing.
+  const fallback = seg.filters.find((f) => f.name === 'default')?.arg;
+  if (!isAnswered(value)) return fallback ?? null;
   let text: string | null = null;
   for (const f of seg.filters) {
     if (f.name === 'label') {
