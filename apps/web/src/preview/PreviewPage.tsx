@@ -1,6 +1,6 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import { SAMPLES } from '@wansurvey/fixtures';
-import { InterviewRunner, PaperForm, pick } from '@wansurvey/renderer';
+import { InterviewRunner, PaperForm, pick, type PaperContext } from '@wansurvey/renderer';
 import { MODES, type Mode } from '@wansurvey/schema';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -265,7 +265,11 @@ export function PreviewWorkbench({
                   {t('preview.printPaper')}
                 </button>
                 <div className="rounded-lg border border-slate-200 shadow-sm print:border-0 print:shadow-none">
-                  <PaperForm compiled={p.loaded.compiled} lang={p.options.language} />
+                  <PaperForm
+                    compiled={p.loaded.compiled}
+                    lang={p.options.language}
+                    context={p.options.context as PaperContext}
+                  />
                 </div>
               </div>
             ) : (

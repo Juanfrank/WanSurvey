@@ -107,7 +107,7 @@ export function PathTracer({
               <span className="flex items-center gap-2">
                 <span className="font-mono">{e.key}</span>
                 <span className={`rounded px-1.5 text-xs ${STATUS_STYLE[e.status]}`}>
-                  {t(`preview.status.${e.status}`)}
+                  {e.auto ? t(`preview.auto.${e.auto}`) : t(`preview.status.${e.status}`)}
                 </span>
                 {e.key === current ? (
                   <span className="rounded bg-indigo-600 px-1.5 text-xs text-on-fill">

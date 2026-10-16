@@ -154,6 +154,7 @@ const en = {
       notInMode: 'not in this mode',
       ended: 'after end',
     },
+    auto: { urlParam: 'answered by the link', prefill: 'from the case data, not asked' },
     current: 'current',
     compareHelp:
       'The current item in each interviewer and respondent mode. Wording that differs from the base text is marked.',
@@ -335,6 +336,10 @@ const es: Catalogue = {
       skipped: 'saltado',
       notInMode: 'no en este modo',
       ended: 'después del fin',
+    },
+    auto: {
+      urlParam: 'respondida por el enlace',
+      prefill: 'desde los datos del caso, no se pregunta',
     },
     current: 'actual',
     compareHelp: 'El ítem actual en cada modo. Se marcan los textos distintos del texto base.',

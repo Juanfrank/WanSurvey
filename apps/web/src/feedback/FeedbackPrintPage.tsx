@@ -110,14 +110,19 @@ export function FeedbackPrintPage() {
           {Array.from({ length: perPage }, (_, i) => (
             <article
               key={i}
-              className="flex break-inside-avoid flex-col gap-2 border border-dashed border-slate-400 p-4 font-serif"
+              className="relative flex break-inside-avoid flex-col gap-2 overflow-hidden border border-dashed border-slate-400 p-4 font-serif"
               style={{ height: `${277 / rows}mm` }}
               data-slip={i + 1}
             >
-              <p className="text-xs uppercase tracking-wide text-slate-600">{p.name}</p>
-              <p className="font-semibold leading-snug">{question}</p>
+              {/* The QR code sits in the corner, so the questions below always fit the slip. */}
+              <span className="absolute right-3 top-3 flex flex-col items-center gap-0.5">
+                <QrCode value={url} label={url} size={small ? 52 : 60} />
+                <span className="text-[8px] italic">{t('feedback.slipScan')}</span>
+              </span>
+              <p className="pr-20 text-xs uppercase tracking-wide text-slate-600">{p.name}</p>
+              <p className="pr-20 font-semibold leading-snug">{question}</p>
               <p className="text-[11px] italic">{t('feedback.slipFill')}</p>
-              <div className="flex justify-around">
+              <div className="flex justify-around pr-20">
                 {Array.from({ length: p.faces }, (_, k) => k + 1).map((s) => (
                   <span key={s} className="flex flex-col items-center gap-1">
                     <Face score={s} faces={p.faces} size={perPage === 8 ? 30 : 38} filled={false} />
@@ -150,10 +155,6 @@ export function FeedbackPrintPage() {
               {asked.map((it, k) => (
                 <SlipItem key={it.id} n={k + 2} item={it} text={text} t={t} small={small} />
               ))}
-              <div className="mt-auto flex items-end justify-between gap-2">
-                <span className="text-[10px] italic">{t('feedback.slipScan')}</span>
-                <QrCode value={url} label={url} size={small ? 56 : 72} />
-              </div>
             </article>
           ))}
         </div>

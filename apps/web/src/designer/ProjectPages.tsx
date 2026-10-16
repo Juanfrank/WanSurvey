@@ -532,8 +532,8 @@ function QuestionnairesSection({
                     <td className="font-mono">v{p.version}</td>
                     <td>
                       {p.active ? t('feedback.active') : t('feedback.inactive')} ·{' '}
-                      {t('feedback.answers', { count: total })} ·{' '}
-                      {t('feedback.satisfied', { pct: pct(satisfied(p)) })}
+                      {t('feedback.answers', { count: total })}
+                      {total ? ` · ${t('feedback.satisfied', { pct: pct(satisfied(p)) })}` : ''}
                     </td>
                     <td>{dateTime(p.updatedAt ?? p.createdAt ?? '')}</td>
                     <td className="text-right">

@@ -518,9 +518,7 @@ export function PaperForm({ compiled, lang, context = {}, formId }: PaperFormPro
         data-band="start"
       >
         <span>{t('paper.formStart')}</span>
-        <span>
-          {formId ?? ''} · {q.id}
-        </span>
+        <span>{[formId, q.id].filter(Boolean).join(' · ')}</span>
       </p>
       <header>
         <h1 className="text-2xl font-bold">{tx(q.title, lang)}</h1>
@@ -545,9 +543,7 @@ export function PaperForm({ compiled, lang, context = {}, formId }: PaperFormPro
         data-band="end"
       >
         <span>{t('paper.formEnd')}</span>
-        <span>
-          {formId ?? ''} · {q.id}
-        </span>
+        <span>{[formId, q.id].filter(Boolean).join(' · ')}</span>
       </p>
     </article>
   );
