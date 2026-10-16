@@ -16,7 +16,19 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { MODES } from '@wansurvey/schema';
-import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
@@ -190,6 +202,11 @@ export class CasesController {
         .select({ n: sql<number>`count(*)::int` })
         .from(cases)
         .where(and(...base, eq(cases.status, 'finalised'), eq(cases.disposition, 'COMPLETE')));
+      // Assigned: held by someone, whatever their state.
+      const [held] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(cases)
+        .where(and(...base, isNotNull(cases.assignedTo)));
       const fields = await this.fields(tx, projectId);
       // Lists mask personal fields; clear values come from an audited reveal per case, or,
       // for an interviewer's own cases, automatically with the first view recorded.
@@ -202,6 +219,7 @@ export class CasesController {
         limit: q.limit,
         counts: Object.fromEntries(counts.map((c) => [c.status, c.n])),
         completed: done?.n ?? 0,
+        held: held?.n ?? 0,
         fields,
         assignmentMode: settings.assignmentMode,
         piiMasked: pii.size > 0,

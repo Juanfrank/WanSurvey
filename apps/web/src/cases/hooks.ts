@@ -16,6 +16,8 @@ export interface CaseRow {
   assignedTo: string | null;
   assignedName: string | null;
   updatedAt: string;
+  assignedAt?: string | null;
+  questionnaireId?: string | null;
 }
 
 export interface CaseList {
@@ -23,6 +25,10 @@ export interface CaseList {
   page: number;
   limit: number;
   counts: Partial<Record<CaseStatus, number>>;
+  /** Finished with a complete interview. */
+  completed?: number;
+  /** Held by someone, whatever their state. */
+  held?: number;
   fields: SampleField[];
   assignmentMode: 'assigned' | 'pool';
   piiMasked: boolean;

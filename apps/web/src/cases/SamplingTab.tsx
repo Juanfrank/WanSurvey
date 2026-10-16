@@ -10,6 +10,7 @@ import {
 } from '@wansurvey/schema/sampling';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
@@ -346,9 +347,11 @@ function VarSelect({
 export function SamplingTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
+  const scoped = useScoped();
+  const questionnaire = useQuestionnaireScope();
   const data = useQuery({
-    queryKey: ['sampling', projectId],
-    queryFn: () => api<Sampling>(`/projects/${projectId}/sampling`),
+    queryKey: ['sampling', projectId, questionnaire],
+    queryFn: () => api<Sampling>(scoped(`/projects/${projectId}/sampling`)),
   });
   const [plan, setPlan] = useState<Plan | null>(null);
   const [message, setMessage] = useState('');
@@ -365,7 +368,8 @@ export function SamplingTab({ projectId }: { projectId: string }) {
     await qc.invalidateQueries({ queryKey: ['cases', projectId] });
   };
   const save = useMutation({
-    mutationFn: (p: Plan) => api(`/projects/${projectId}/sampling`, { method: 'PUT', body: p }),
+    mutationFn: (p: Plan) =>
+      api(scoped(`/projects/${projectId}/sampling`), { method: 'PUT', body: p }),
     onSuccess: async () => {
       setMessage(t('cases.sampling.saved'));
       setError(null);
@@ -375,8 +379,8 @@ export function SamplingTab({ projectId }: { projectId: string }) {
   });
   const runPreview = useMutation({
     mutationFn: async (p: Plan) => {
-      await api(`/projects/${projectId}/sampling`, { method: 'PUT', body: p });
-      return api<Preview>(`/projects/${projectId}/sampling/preview`, { method: 'POST' });
+      await api(scoped(`/projects/${projectId}/sampling`), { method: 'PUT', body: p });
+      return api<Preview>(scoped(`/projects/${projectId}/sampling/preview`), { method: 'POST' });
     },
     onSuccess: async (r) => {
       setPreview(r);
@@ -387,8 +391,10 @@ export function SamplingTab({ projectId }: { projectId: string }) {
   });
   const select = useMutation({
     mutationFn: async (p: Plan) => {
-      await api(`/projects/${projectId}/sampling`, { method: 'PUT', body: p });
-      return api<{ created: number }>(`/projects/${projectId}/sampling/select`, { method: 'POST' });
+      await api(scoped(`/projects/${projectId}/sampling`), { method: 'PUT', body: p });
+      return api<{ created: number }>(scoped(`/projects/${projectId}/sampling/select`), {
+        method: 'POST',
+      });
     },
     onSuccess: async () => {
       setPreview(null);
@@ -398,7 +404,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
     onError: (e) => setError(localiseError(t, e)),
   });
   const clear = useMutation({
-    mutationFn: () => api(`/projects/${projectId}/sampling/frame`, { method: 'DELETE' }),
+    mutationFn: () => api(scoped(`/projects/${projectId}/sampling/frame`), { method: 'DELETE' }),
     onSuccess: refresh,
     onError: (e) => setError(localiseError(t, e)),
   });
@@ -1357,6 +1363,7 @@ function ReleaseForm({
   onDone(): Promise<void>;
 }) {
   const { t } = useTranslation();
+  const scoped = useScoped();
   const [count, setCount] = useState(1);
   const [stratum, setStratum] = useState('');
   const [reason, setReason] = useState('');
@@ -1364,7 +1371,7 @@ function ReleaseForm({
   const [error, setError] = useState<string | null>(null);
   const release = useMutation({
     mutationFn: () =>
-      api<{ released: number }>(`/projects/${projectId}/sampling/release`, {
+      api<{ released: number }>(scoped(`/projects/${projectId}/sampling/release`), {
         method: 'POST',
         body: { count, stratum: stratum || null, reason },
       }),
@@ -1434,6 +1441,7 @@ function ReleaseForm({
 
 function FieldForm({ projectId, onDone }: { projectId: string; onDone(): Promise<void> }) {
   const { t } = useTranslation();
+  const scoped = useScoped();
   const [count, setCount] = useState(10);
   const [prefix, setPrefix] = useState('F');
   const [cell, setCell] = useState('');
@@ -1441,7 +1449,7 @@ function FieldForm({ projectId, onDone }: { projectId: string; onDone(): Promise
   const [error, setError] = useState<string | null>(null);
   const make = useMutation({
     mutationFn: () =>
-      api<{ created: number }>(`/projects/${projectId}/sampling/field-cases`, {
+      api<{ created: number }>(scoped(`/projects/${projectId}/sampling/field-cases`), {
         method: 'POST',
         body: { count, prefix, ...(cell.trim() ? { cell: cell.trim() } : {}) },
       }),

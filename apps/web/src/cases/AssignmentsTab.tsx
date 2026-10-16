@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { describeCondition, tryParse } from '@wansurvey/logic';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
@@ -35,9 +36,11 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
   });
   const fields = useSampleFields(projectId);
   const variables = useMemo(() => caseVariables(fields.data ?? []), [fields.data]);
+  const questionnaire = useQuestionnaireScope();
+  const scoped = useScoped();
   const rules = useQuery({
-    queryKey: ['rules', projectId],
-    queryFn: () => api<Rule[]>(`/projects/${projectId}/assignments`),
+    queryKey: ['rules', projectId, questionnaire],
+    queryFn: () => api<Rule[]>(scoped(`/projects/${projectId}/assignments`)),
   });
   const [userId, setUserId] = useState('');
   const [name, setName] = useState('');
@@ -60,19 +63,25 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
     const id = setTimeout(() => {
       api<{ matching: number; unassigned: number }>(`/projects/${projectId}/assignments/preview`, {
         method: 'POST',
-        body: { filter },
+        body: { filter, ...(questionnaire ? { questionnaireId: questionnaire } : {}) },
       })
         .then(setPreview)
         .catch(() => setPreview(null));
     }, 300);
     return () => clearTimeout(id);
-  }, [filter, projectId]);
+  }, [filter, projectId, questionnaire]);
 
   const create = useMutation({
     mutationFn: () =>
       api(`/projects/${projectId}/assignments`, {
         method: 'POST',
-        body: { userId, filter, ...(name ? { name } : {}), quota: quota ?? null },
+        body: {
+          userId,
+          filter,
+          ...(name ? { name } : {}),
+          quota: quota ?? null,
+          ...(questionnaire ? { questionnaireId: questionnaire } : {}),
+        },
       }),
     onSuccess: async () => {
       setName('');
@@ -99,7 +108,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
     mutationFn: () =>
       api<{ assigned: number }>(`/projects/${projectId}/assignments/apply`, {
         method: 'POST',
-        body: {},
+        body: questionnaire ? { questionnaireId: questionnaire } : {},
       }),
     onSuccess: async (r) => {
       setMessage(t('cases.rules.applied', { count: r.assigned }));

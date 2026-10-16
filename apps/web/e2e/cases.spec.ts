@@ -123,6 +123,8 @@ test('bulk-assign cases; the clerk sees only theirs, with personal data hidden',
   await expect(page.getByText('4 cases assigned.')).toBeVisible();
   const row = page.locator('tr[data-case="XHH0003"]');
   await expect(row).toContainText('Demo data_entry');
+  // When it was assigned, and how long ago.
+  await expect(row.locator('[data-col="since"]')).toHaveText('under 1 h');
   await expect(row).toContainText('•••');
   await shot(page, 'cases-list');
   await expectAccessible(page);
@@ -153,8 +155,10 @@ test('bulk-assign cases; the clerk sees only theirs, with personal data hidden',
 
 test('an assignment rule gives matching unassigned cases to a person', async ({ page }) => {
   await openProject(page);
-  await page.getByRole('tab', { name: 'Assignments' }).click();
-  await expect(page.getByTestId('rules')).toContainText('Region 1');
+  // The rules are behind the gear beside the assignment controls of the case list.
+  await page.getByRole('button', { name: 'Assignment rules' }).click();
+  let rules = page.getByRole('dialog', { name: 'Assignment rules' });
+  await expect(rules.getByTestId('rules')).toContainText('Region 1');
   await page.getByLabel('Rule name').fill('Region 3 to the clerk');
   await page.getByLabel('Assign to').selectOption({ label: 'Demo data_entry' });
   const when = page.getByRole('group', { name: 'Cases where' });
@@ -166,12 +170,22 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await page.getByLabel('At most (cases held by the person)').fill('10');
   await page.getByRole('button', { name: 'Add rule' }).last().click();
   await expect(page.getByTestId('rules')).toContainText('Region 3 to the clerk');
-  await page.getByRole('button', { name: 'Apply rules to unassigned cases now' }).click();
-  await expect(page.getByText(/cases? assigned\./)).toBeVisible();
-  const clerkRow = page.getByTestId('workload').locator(`tr[data-person="${CLERK}"]`);
-  await expect(clerkRow.locator('td').first()).toHaveText('10');
   await shot(page, 'cases-assignments');
   await expectAccessible(page);
+  await rules.getByRole('button', { name: 'Close' }).last().click();
+
+  // Back in the list, the free cases go out by the rules.
+  const before = Number(await page.locator('[data-kpi="assigned"] p').last().textContent());
+  await page.getByLabel('How to assign').selectOption({ label: 'By the assignment rules' });
+  await expect(page.getByText('Assign free cases by the rules')).toBeVisible();
+  await page.getByRole('button', { name: 'Assign', exact: true }).click();
+  await expect(page.getByText(/cases? assigned\./)).toBeVisible();
+  await expect(page.locator('[data-kpi="assigned"] p').last()).not.toHaveText(String(before));
+  await shot(page, 'cases-kpis');
+  await page.getByRole('button', { name: 'Assignment rules' }).click();
+  rules = page.getByRole('dialog', { name: 'Assignment rules' });
+  const clerkRow = rules.getByTestId('workload').locator(`tr[data-person="${CLERK}"]`);
+  await expect(clerkRow.locator('td').first()).toHaveText('10');
 });
 
 test('interviewers see their cases automatically; in pool mode the first to take a case holds it', async ({
@@ -243,7 +257,7 @@ test('interviewers see their cases automatically; in pool mode the first to take
   await expect(page.getByText('Settings saved.')).toBeVisible();
 });
 
-test('duplicates across projects are flagged; addresses are found and shown on the map', async ({
+test('duplicates across projects are flagged; the drawer says where the case comes from', async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -313,22 +327,4 @@ test('duplicates across projects are flagged; addresses are found and shown on t
   await expect(drawer.getByTestId('case-sampling')).toContainText('Main');
   await expect(drawer.getByTestId('case-sampling')).toContainText('Probability of inclusion1');
   await drawer.getByRole('button', { name: 'Close' }).click();
-
-  // Geocode the addresses and see the points.
-  await page.getByRole('button', { name: 'Map', exact: true }).click();
-  await expect(page.getByTestId('case-map')).toContainText('Addresses are sent to OpenStreetMap');
-  await page.getByRole('button', { name: 'Find addresses on the map' }).click();
-  await expect(page.getByTestId('geocode-status')).toContainText(/Addresses: \d+ found/, {
-    timeout: 20_000,
-  });
-  await page.getByText(/points? as a table/).click();
-  const points = page.getByTestId('map-points');
-  await expect(points).toContainText(`G${code}-2`);
-  await expect(page.getByRole('region', { name: /Map of \d+ geocoded cases/ })).toBeVisible();
-  await shot(page, 'cases-map');
-  await points.getByRole('button', { name: `G${code}-2` }).click();
-  const d2 = page.getByRole('dialog', { name: `Case G${code}-2` });
-  await d2.getByRole('button', { name: 'Show personal data' }).click();
-  await expect(d2.getByTestId('coordinates')).toContainText('-12.');
-  await expect(d2.getByRole('link', { name: 'Open in OpenStreetMap' })).toBeVisible();
 });

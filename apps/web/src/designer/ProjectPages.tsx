@@ -9,9 +9,7 @@ import { api, ApiError } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field, FileInput } from '../routes/ui.js';
-import { AssignmentsTab } from '../cases/AssignmentsTab.js';
-import { CasesTab } from '../cases/CasesTab.js';
-import { SamplingTab } from '../cases/SamplingTab.js';
+import { ProjectCases, type CasesSub } from '../cases/ProjectCases.js';
 import {
   FeedbackFields,
   FeedbackLinks,
@@ -871,7 +869,6 @@ const tabCls =
 
 type ProjectTab =
   'cases' | 'questionnaires' | 'calls' | 'paper' | 'review' | 'results' | 'exports' | 'settings';
-type CasesSub = 'list' | 'sampling' | 'assignments';
 type ResultsSub = 'topline' | 'dashboard' | 'metrics';
 
 /** Old `?tab=` values still land in the right place: web and paper forms, dashboard, import… */
@@ -882,7 +879,7 @@ const FROM_SEARCH: Record<
   cases: { tab: 'cases' },
   import: { tab: 'cases', cases: 'sampling' },
   sampling: { tab: 'cases', cases: 'sampling' },
-  assignments: { tab: 'cases', cases: 'assignments' },
+  assignments: { tab: 'cases' },
   questionnaires: { tab: 'questionnaires' },
   web: { tab: 'questionnaires', panel: 'web' },
   paper: { tab: 'questionnaires', panel: 'paper' },
@@ -915,7 +912,6 @@ export function ProjectPage() {
   const canCasesAll = useCan('cases.read_all', projectId);
   const canCasesOwn = useCan('cases.read_assigned', projectId);
   const canImport = useCan('cases.import', projectId);
-  const canAssign = useCan('cases.assign', projectId);
   const canSettings = useCan('projects.update', projectId);
   const canWeb =
     useCan('cawi.waves', projectId) &&
@@ -940,9 +936,8 @@ export function ProjectPage() {
     (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CATI'));
 
   const casesSubs: CasesSub[] = [
-    ...(canCasesAll || canCasesOwn ? (['list'] as const) : []),
     ...(canImport ? (['sampling'] as const) : []),
-    ...(canAssign ? (['assignments'] as const) : []),
+    ...(canCasesAll || canCasesOwn ? (['list'] as const) : []),
   ];
   const resultsSubs: ResultsSub[] = [
     ...(canDashboard ? (['topline', 'dashboard'] as const) : []),
@@ -983,7 +978,7 @@ export function ProjectPage() {
         ? 'cases'
         : (tabs[0] ?? null);
   const current = tab && tabs.includes(tab) ? tab : start;
-  const cases = casesSubs.includes(casesSub) ? casesSub : casesSubs[0]!;
+  const cases = casesSubs.includes(casesSub) ? casesSub : casesSubs.at(-1)!;
   const results = resultsSubs.includes(resultsSub) ? resultsSub : resultsSubs[0]!;
   // The place in the page is kept in the address (?tab=…), so Back and reload return to it.
   const navigate = useNavigate();
@@ -1004,7 +999,7 @@ export function ProjectPage() {
     void navigate({
       to: '/projects/$projectId',
       params: { projectId },
-      search: { tab: place },
+      search: (s: Record<string, unknown>) => ({ ...s, tab: place }),
       replace: true,
     });
   }, [place]);
@@ -1057,39 +1052,7 @@ export function ProjectPage() {
             ))}
           </Tabs.List>
           <Tabs.Content value="cases">
-            {casesSubs.length > 1 ? (
-              <Tabs.Root
-                value={cases}
-                onValueChange={(v) => setCasesSub(v as CasesSub)}
-                className="flex flex-col gap-4"
-              >
-                <Tabs.List
-                  aria-label={t('cases.tabs.casesSections')}
-                  className="flex flex-wrap gap-1"
-                >
-                  {casesSubs.map((x) => (
-                    <Tabs.Trigger key={x} value={x} className={subTabCls}>
-                      {t(`cases.tabs.${x}`)}
-                    </Tabs.Trigger>
-                  ))}
-                </Tabs.List>
-                <Tabs.Content value="list">
-                  <CasesTab projectId={projectId} />
-                </Tabs.Content>
-                <Tabs.Content value="sampling">
-                  <SamplingTab projectId={projectId} />
-                </Tabs.Content>
-                <Tabs.Content value="assignments">
-                  <AssignmentsTab projectId={projectId} />
-                </Tabs.Content>
-              </Tabs.Root>
-            ) : cases === 'list' ? (
-              <CasesTab projectId={projectId} />
-            ) : cases === 'sampling' ? (
-              <SamplingTab projectId={projectId} />
-            ) : (
-              <AssignmentsTab projectId={projectId} />
-            )}
+            <ProjectCases projectId={projectId} sub={cases} onSub={setCasesSub} />
           </Tabs.Content>
           <Tabs.Content value="questionnaires">
             <QuestionnairesSection

@@ -124,8 +124,10 @@ const projectRoute = createRoute({
   component: lazyRouteComponent(() => import('./designer/ProjectPages.js'), 'ProjectPage'),
   validateSearch: (
     s: Record<string, unknown>,
-  ): { tab?: string; notice?: string; call?: string } => ({
+  ): { tab?: string; notice?: string; call?: string; q?: string } => ({
     ...(typeof s.tab === 'string' ? { tab: s.tab } : {}),
+    // The questionnaire whose cases are shown.
+    ...(typeof s.q === 'string' ? { q: s.q } : {}),
     ...(typeof s.notice === 'string' ? { notice: s.notice } : {}),
     // A case to call at once (from the case drawer).
     ...(typeof s.call === 'string' ? { call: s.call } : {}),

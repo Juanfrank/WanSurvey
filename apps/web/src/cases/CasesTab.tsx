@@ -2,6 +2,7 @@ import './sampling-i18n.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
@@ -17,8 +18,20 @@ import { CallHistory, InterviewHistory, StartInterview } from './CaseInterviews.
 import { useMe } from '../routes/AppLayout.js';
 import { qs, STATUSES, useAssignees, type CaseList, type CaseRow } from './hooks.js';
 import { dateTime } from '../format.js';
+import { AssignmentsTab } from './AssignmentsTab.js';
+import { useQuestionnaireScope } from './scope.js';
 
 const MAX_FIELD_COLUMNS = 4;
+/** The map view, column picker and rule filter come back later; their code stays. */
+const SHOW_LATER = false as boolean;
+
+/** How long ago a case was assigned: under an hour, hours, then days. */
+export function assignedAge(t: TFunction, at: string, now = Date.now()) {
+  const hours = Math.floor((now - Date.parse(at)) / 3_600_000);
+  if (hours < 1) return t('cases.list.age.lessHour');
+  if (hours < 48) return t('cases.list.age.hours', { count: hours });
+  return t('cases.list.age.days', { count: Math.floor(hours / 24) });
+}
 
 /**
  * The project's cases: filters, a selectable table, bulk assignment and the case drawer.
@@ -43,6 +56,9 @@ export function CasesTab({ projectId }: { projectId: string }) {
   const [assignee, setAssignee] = useState('');
   const [message, setMessage] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
+  const [how, setHow] = useState<'person' | 'rules'>('person');
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const questionnaire = useQuestionnaireScope();
   const openCase = useCallback((id: string) => setOpen(id), []);
   const limit = 25;
 
@@ -56,10 +72,10 @@ export function CasesTab({ projectId }: { projectId: string }) {
   }, [status, assignedTo, term, filter]);
 
   const list = useQuery({
-    queryKey: ['cases', projectId, status, assignedTo, term, filter, page],
+    queryKey: ['cases', projectId, questionnaire, status, assignedTo, term, filter, page],
     queryFn: () =>
       api<CaseList>(
-        `/projects/${projectId}/cases?${qs({ status, assignedTo, q: term, filter, page, limit })}`,
+        `/projects/${projectId}/cases?${qs({ questionnaireId: questionnaire, status, assignedTo, q: term, filter, page, limit })}`,
       ),
     placeholderData: (prev) => prev,
   });
@@ -88,6 +104,35 @@ export function CasesTab({ projectId }: { projectId: string }) {
     },
     onError: (e) => setMessage(localiseError(t, e)),
   });
+  // The selected cases (or every free one) go out by the questionnaire's assignment rules.
+  const byRules = useMutation({
+    mutationFn: () =>
+      api<{ assigned: number }>(`/projects/${projectId}/assignments/apply`, {
+        method: 'POST',
+        body: {
+          ...(selected.size ? { caseIds: [...selected] } : {}),
+          ...(questionnaire ? { questionnaireId: questionnaire } : {}),
+        },
+      }),
+    onSuccess: async (r) => {
+      setMessage(t('cases.rules.applied', { count: r.assigned }));
+      setSelected(new Set());
+      await qc.invalidateQueries({ queryKey: ['cases', projectId] });
+      await qc.invalidateQueries({ queryKey: ['assignees', projectId] });
+      await qc.invalidateQueries({ queryKey: ['rules', projectId] });
+    },
+    onError: (e) => setMessage(localiseError(t, e)),
+  });
+  const counts = data?.counts ?? {};
+  const kpis = [
+    { key: 'assigned', n: data?.held ?? 0 },
+    { key: 'toAssign', n: counts.fresh ?? 0 },
+    { key: 'completed', n: data?.completed ?? 0 },
+    {
+      key: 'toComplete',
+      n: (counts.fresh ?? 0) + (counts.assigned ?? 0) + (counts.in_progress ?? 0),
+    },
+  ];
 
   const rows = data?.rows ?? [];
   const toggle = (i: number, shift: boolean) => {
@@ -136,7 +181,19 @@ export function CasesTab({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col gap-4">
       {canConductHere ? <ReturnedToMe projectId={projectId} /> : null}
-      {viewSwitch}
+      {SHOW_LATER ? viewSwitch : null}
+      <ul aria-label={t('cases.list.kpi.label')} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {kpis.map((k) => (
+          <li
+            key={k.key}
+            data-kpi={k.key}
+            className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+          >
+            <p className="text-xs font-medium text-slate-600">{t(`cases.list.kpi.${k.key}`)}</p>
+            <p className="text-2xl font-bold tabular-nums">{data ? k.n : '…'}</p>
+          </li>
+        ))}
+      </ul>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">{t('cases.list.search')}</span>
@@ -195,7 +252,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
             </select>
           </label>
         ) : null}
-        {fields.length > MAX_FIELD_COLUMNS ? (
+        {SHOW_LATER && fields.length > MAX_FIELD_COLUMNS ? (
           <details className="text-sm">
             <summary className="cursor-pointer font-medium">{t('cases.list.columns')}</summary>
             <div className="mt-1 flex flex-col gap-1 rounded-md border border-slate-200 bg-white p-2">
@@ -219,7 +276,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
           </details>
         ) : null}
       </div>
-      {canReadAll && fields.length ? (
+      {SHOW_LATER && canReadAll && fields.length ? (
         <details>
           <summary className="cursor-pointer text-sm font-medium">{t('cases.list.filter')}</summary>
           <div className="mt-2">
@@ -243,40 +300,73 @@ export function CasesTab({ projectId }: { projectId: string }) {
           <span>
             {selected.size
               ? t('cases.list.selected', { count: selected.size })
-              : filter
-                ? t('cases.list.assignMatching')
-                : t('cases.list.assignSelected')}
+              : how === 'rules'
+                ? t('cases.list.byRulesAll')
+                : filter
+                  ? t('cases.list.assignMatching')
+                  : t('cases.list.assignSelected')}
           </span>
-          <label className="sr-only" htmlFor="assign-to">
-            {t('cases.list.assignSelected')}
+          <label className="sr-only" htmlFor="assign-how">
+            {t('cases.list.assignHow')}
           </label>
           <select
-            id="assign-to"
+            id="assign-how"
             className={`${controlCls} w-auto`}
-            value={assignee}
-            onChange={(e) => setAssignee(e.target.value)}
+            value={how}
+            onChange={(e) => setHow(e.target.value as 'person' | 'rules')}
           >
-            <option value="">{t('cases.list.pickPerson')}</option>
-            {(people.data ?? []).map((p) => (
-              <option key={p.userId} value={p.userId}>
-                {p.name}
-              </option>
-            ))}
+            <option value="person">{t('cases.list.toPerson')}</option>
+            <option value="rules">{t('cases.list.byRules')}</option>
           </select>
+          {how === 'person' ? (
+            <>
+              <label className="sr-only" htmlFor="assign-to">
+                {t('cases.list.assignSelected')}
+              </label>
+              <select
+                id="assign-to"
+                className={`${controlCls} w-auto`}
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+              >
+                <option value="">{t('cases.list.pickPerson')}</option>
+                {(people.data ?? []).map((p) => (
+                  <option key={p.userId} value={p.userId}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : null}
           <Button
             type="button"
             className="px-3 py-1 text-sm"
-            disabled={!assignee || (!selected.size && !filter) || assign.isPending}
+            disabled={
+              how === 'rules'
+                ? byRules.isPending
+                : !assignee || (!selected.size && !filter) || assign.isPending
+            }
             onClick={() =>
-              assign.mutate(
-                selected.size
-                  ? { caseIds: [...selected], userId: assignee }
-                  : { filter, userId: assignee },
-              )
+              how === 'rules'
+                ? byRules.mutate()
+                : assign.mutate(
+                    selected.size
+                      ? { caseIds: [...selected], userId: assignee }
+                      : { filter, userId: assignee },
+                  )
             }
           >
             {t('cases.list.assign')}
           </Button>
+          <button
+            type="button"
+            className={`${smallBtn} inline-flex items-center gap-1`}
+            aria-label={t('cases.list.rules')}
+            title={t('cases.list.rules')}
+            onClick={() => setRulesOpen(true)}
+          >
+            <span aria-hidden="true">⚙</span>
+          </button>
           <button
             type="button"
             className={smallBtn}
@@ -288,6 +378,16 @@ export function CasesTab({ projectId }: { projectId: string }) {
         </div>
       ) : null}
 
+      {rulesOpen ? (
+        <Dialog title={t('cases.list.rules')} onClose={() => setRulesOpen(false)} wide>
+          <AssignmentsTab projectId={projectId} />
+          <div className="mt-4 flex justify-end">
+            <button type="button" className={smallBtn} onClick={() => setRulesOpen(false)}>
+              {t('cases.detail.close')}
+            </button>
+          </div>
+        </Dialog>
+      ) : null}
       {!canReadAll && pool ? (
         <p className="text-xs text-slate-600">{t('cases.list.poolNote')}</p>
       ) : null}
@@ -329,9 +429,17 @@ export function CasesTab({ projectId }: { projectId: string }) {
                 {t('cases.list.col.status')}
               </th>
               {canReadAll ? (
-                <th scope="col" className="px-2 py-2">
-                  {t('cases.list.col.assignedTo')}
-                </th>
+                <>
+                  <th scope="col" className="px-2 py-2">
+                    {t('cases.list.col.assignedTo')}
+                  </th>
+                  <th scope="col" className="px-2 py-2">
+                    {t('cases.list.col.assignedAt')}
+                  </th>
+                  <th scope="col" className="px-2 py-2">
+                    {t('cases.list.col.since')}
+                  </th>
+                </>
               ) : null}
               <th scope="col" className="px-2 py-2">
                 {t('cases.list.col.priority')}
@@ -385,7 +493,17 @@ export function CasesTab({ projectId }: { projectId: string }) {
                     </span>
                   ) : null}
                 </td>
-                {canReadAll ? <td className="px-2 py-1.5">{r.assignedName ?? '—'}</td> : null}
+                {canReadAll ? (
+                  <>
+                    <td className="px-2 py-1.5">{r.assignedName ?? '—'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {r.assignedTo && r.assignedAt ? dateTime(r.assignedAt) : '—'}
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap" data-col="since">
+                      {r.assignedTo && r.assignedAt ? assignedAge(t, r.assignedAt) : '—'}
+                    </td>
+                  </>
+                ) : null}
                 <td className="px-2 py-1.5">{r.priority}</td>
                 {shownFields.map((f) => (
                   <td key={f.name} className="px-2 py-1.5">
@@ -659,7 +777,14 @@ function CaseDrawer({
               </span>
             ) : null}
             {c.attempts ? <span>· {t('cases.detail.attempts', { count: c.attempts })}</span> : null}
-            {c.assignedName ? <span>· {c.assignedName}</span> : null}
+            {c.assignedName ? (
+              <span>
+                · {c.assignedName}
+                {c.assignedAt
+                  ? ` · ${t('cases.list.assignedOn', { date: dateTime(c.assignedAt), age: assignedAge(t, c.assignedAt) })}`
+                  : ''}
+              </span>
+            ) : null}
             {c.pii.masked ? (
               <span className="ml-auto flex items-center gap-2">
                 <span className="text-slate-600">{t('cases.detail.masked')}</span>

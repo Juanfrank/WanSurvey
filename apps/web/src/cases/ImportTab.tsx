@@ -2,6 +2,7 @@ import './sampling-i18n.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api, upload } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
@@ -94,11 +95,13 @@ export function ImportTab({
   const [report, setReport] = useState<Report | null>(null);
   const [summary, setSummary] = useState<Record<string, number> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const questionnaire = useQuestionnaireScope();
+  const scoped = useScoped();
   const history = useQuery({
-    queryKey: ['imports', projectId],
+    queryKey: ['imports', projectId, questionnaire],
     queryFn: () =>
       api<{ id: string; fileName: string; rows: number; status: string; createdAt: string }[]>(
-        `/projects/${projectId}/imports`,
+        scoped(`/projects/${projectId}/imports`),
       ),
   });
   const fail = (e: unknown) => setError(localiseError(t, e));
@@ -107,6 +110,7 @@ export function ImportTab({
     mutationFn: (file: File) => {
       const form = new FormData();
       form.append('file', file);
+      if (questionnaire) form.append('questionnaireId', questionnaire);
       if (target === 'frame') {
         form.append('target', 'frame');
         if (sourceLabel?.trim()) form.append('sourceLabel', sourceLabel.trim());
