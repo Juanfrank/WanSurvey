@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Disposition } from './disposition.js';
 
 /**
  * The sampling plan of a project (S1), in three layers: where the units come from, how they
@@ -86,6 +87,19 @@ export const SamplingSubstitution = z.object({
   reasons: z.array(z.string()).default(['REFUSAL', 'NON_CONTACT']),
 });
 
+/**
+ * A cross-case check: a unit is not eligible when the same person (all the listed fields
+ * equal: sample fields, or `phone` / `email` from the contacts) had one of these results in
+ * the last `withinDays` days, in this project or in any project of the organisation.
+ */
+export const CrossCheck = z.object({
+  fields: z.array(z.string().trim().min(1).max(64)).min(1).max(5),
+  scope: z.enum(['project', 'organisation']).default('project'),
+  withinDays: z.number().int().min(1).max(36_500),
+  results: z.array(Disposition).min(1).default(['COMPLETE']),
+});
+export type CrossCheck = z.infer<typeof CrossCheck>;
+
 export const SamplingPlanInput = z.object({
   source: SamplingSource.default(SamplingSource.parse({})),
   design: SamplingDesign.default(SamplingDesign.parse({})),
@@ -94,5 +108,6 @@ export const SamplingPlanInput = z.object({
   exclusions: z.string().max(1000).nullable().default(null),
   quotas: z.array(SamplingQuota).max(100).default([]),
   substitution: SamplingSubstitution.default(SamplingSubstitution.parse({})),
+  crossChecks: z.array(CrossCheck).max(10).default([]),
 });
 export type SamplingPlanInput = z.infer<typeof SamplingPlanInput>;

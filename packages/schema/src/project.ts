@@ -49,6 +49,11 @@ export type ReviewSettings = z.infer<typeof ReviewSettings>;
 export const FieldworkSettings = z.object({
   /** Completed interviews the project aims for; the dashboard shows progress against it. */
   targetCompletes: z.number().int().min(0).max(10_000_000).nullable().default(null),
+  /**
+   * Days a case may stay with an interviewer after assignment; when they pass without a
+   * final result the case closes as EXPIRED. Null: cases do not expire.
+   */
+  caseExpiryDays: z.number().int().min(1).max(3650).nullable().default(null),
 });
 export type FieldworkSettings = z.infer<typeof FieldworkSettings>;
 

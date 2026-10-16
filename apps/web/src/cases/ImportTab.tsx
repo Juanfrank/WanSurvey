@@ -505,7 +505,10 @@ export function ImportTab({
                 (summary.added !== undefined
                   ? ` ${t('cases.sampling.addedCases', { count: summary.added })}`
                   : '')
-              : t('cases.import.done', summary)}
+              : t('cases.import.done', summary) +
+                (summary.crossChecked
+                  ? ` ${t('cases.import.crossChecked', { count: summary.crossChecked })}`
+                  : '')}
           </p>
           <div className="flex gap-2">
             <Button type="button" onClick={onDone}>

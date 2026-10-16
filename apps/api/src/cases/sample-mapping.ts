@@ -165,7 +165,9 @@ export type IssueCode =
   | 'invalid_mode'
   | 'empty_row'
   /** A phone or e-mail already belongs to a case in another project (informational). */
-  | 'duplicate_elsewhere';
+  | 'duplicate_elsewhere'
+  /** The same person answered recently (the plan's cross-case checks): not created. */
+  | 'cross_check';
 
 /** Issues that make a row unusable; `existing_id` and `empty_row` are informational. */
 const BLOCKING = new Set<IssueCode>([
@@ -209,6 +211,8 @@ export interface PreparedRow {
   modePreference?: string;
   valid: boolean;
   exists: boolean;
+  /** Not eligible by a cross-case check: left out on commit. */
+  crossChecked?: boolean;
 }
 
 /**

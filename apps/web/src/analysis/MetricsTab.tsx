@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls } from '../designer/fields.js';
 import { fmtNum, fmtPct } from './charts.js';
+import { GoalsSection } from './GoalsSection.js';
 
 const KEYS = [
   'completes',
@@ -72,6 +73,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="metrics">
+      <GoalsSection projectId={projectId} />
       <h2 className="text-lg font-semibold">
         {data.data && !data.data.team ? t('analysis.metrics.mine') : t('analysis.metrics.title')}
       </h2>

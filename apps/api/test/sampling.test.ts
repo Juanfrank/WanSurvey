@@ -92,16 +92,18 @@ describe('sampling selector', () => {
       expect(r.inclusion_prob).toBeGreaterThan(0);
       expect(r.base_weight).toBeCloseTo(1 / r.inclusion_prob);
     }
-    // The frame cannot change once selected.
+    // Once selected, the frame only grows: new units wait for a later batch, none is a case yet.
+    const lateTable = sampleTable(3).map((r, i) => (i ? [`L${r[0]}`, ...r.slice(1)] : r));
     const late = await pm.agent
       .post(`${base}/imports`)
       .set('x-csrf-token', pm.csrf)
       .field('target', 'frame')
-      .attach('file', Buffer.from(toCsv(sampleTable(3))), 'late.csv');
+      .attach('file', Buffer.from(toCsv(lateTable)), 'late.csv');
     await put(`${base}/imports/${late.body.id}/mapping`, late.body.suggested);
-    expect((await post(`${base}/imports/${late.body.id}/commit`)).body.code).toBe(
-      'SAMPLE_SELECTED',
-    );
+    const grown = await post(`${base}/imports/${late.body.id}/commit`);
+    expect(grown.status, JSON.stringify(grown.body)).toBe(200);
+    expect(grown.body).toMatchObject({ created: 3, frame: true });
+    expect(grown.body.added).toBeUndefined();
 
     // Reserves are released by decision, in order, and probabilities follow.
     const region1 = rows.filter((r) => r.region === '1');
@@ -144,6 +146,35 @@ describe('sampling selector', () => {
     const events = await t.admin<{ type: string }[]>`
       select type from case_events where case_id = ${refused!.id}`;
     expect(events.map((e) => e.type)).toContain('substituted');
+
+    // Another batch is added next to the cases already there; nothing is replaced.
+    const [count0] = await t.admin<{ n: number }[]>`
+      select count(*)::int as n from cases where project_id = ${project}`;
+    const before1 = count0!.n;
+    const ids0 = await t.admin<
+      { id: string }[]
+    >`select id from cases where project_id = ${project}`;
+    expect((await post(`${base}/sampling/batch`, { count: 6 })).status).toBe(400);
+    const batch = await post(`${base}/sampling/batch`, {
+      count: 6,
+      reason: 'Más casos para cerrar el campo',
+    });
+    expect(batch.status, JSON.stringify(batch.body)).toBe(200);
+    expect(batch.body).toMatchObject({ added: 6, batch: 2 });
+    const all = await t.admin<{ id: string; region: string; inclusion_prob: number }[]>`
+      select id, sample->>'region' as region, inclusion_prob from cases where project_id = ${project}`;
+    expect(all).toHaveLength(before1 + 6);
+    expect(ids0.every((c) => all.some((a) => a.id === c.id))).toBe(true);
+    // Within a stratum every case has the same, updated probability.
+    for (const region of ['1', '2', '3']) {
+      const ps = new Set(all.filter((c) => c.region === region).map((c) => c.inclusion_prob));
+      expect(ps.size).toBeLessThanOrEqual(1);
+    }
+    const plan2 = await pm.agent.get(`${base}/sampling`).expect(200);
+    expect(plan2.body.result.batches).toHaveLength(1);
+    const [audit] = await t.admin<{ n: number }[]>`
+      select count(*)::int as n from audit_log where action = 'sampling.batch_added'`;
+    expect(audit!.n).toBeGreaterThan(0);
   });
 
   it('non-probability and field designs: no π, field cases on demand', async () => {

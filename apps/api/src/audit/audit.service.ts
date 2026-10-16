@@ -33,6 +33,7 @@ export type AuditAction =
   | 'questionnaire.deleted'
   | 'sampling.selected'
   | 'sampling.reserves_released'
+  | 'sampling.batch_added'
   | 'sampling.substituted'
   | 'questionnaire.draft_saved'
   | 'questionnaire.published'

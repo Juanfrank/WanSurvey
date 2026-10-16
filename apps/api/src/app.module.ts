@@ -26,6 +26,7 @@ import { PublicSurveyController } from './cawi/public.controller.js';
 import { PapiController } from './papi/papi.controller.js';
 import { PapiService } from './papi/papi.service.js';
 import { AnalysisController, PublicShareController } from './analysis/analysis.controller.js';
+import { GoalsController } from './metrics/goals.controller.js';
 import { AnalysisService } from './analysis/analysis.service.js';
 import { DatasetService } from './analysis/dataset.service.js';
 import { ShareService } from './analysis/share.service.js';
@@ -36,6 +37,7 @@ import { JobsService, PROCESS_ROLE, type ProcessRole } from './jobs/jobs.service
 import { MetricsService } from './metrics/metrics.service.js';
 import { StatsService } from './stats/stats.service.js';
 import { PrivacyController } from './privacy/privacy.controller.js';
+import { ExpiryService } from './cases/expiry.service.js';
 import { PrivacyService } from './privacy/privacy.service.js';
 import { ReviewController } from './review/review.controller.js';
 import { ReviewService } from './review/review.service.js';
@@ -142,6 +144,7 @@ export class AppModule {
         PapiController,
         ReviewController,
         AnalysisController,
+        GoalsController,
         PublicShareController,
         PrivacyController,
         CasesController,
@@ -197,6 +200,7 @@ export class AppModule {
         ExportsService,
         ShareService,
         PrivacyService,
+        ExpiryService,
         FeedbackService,
         SamplingService,
         {

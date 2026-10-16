@@ -17,6 +17,8 @@ import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { dateTime } from '../format.js';
 import { Button, Card, ErrorText } from '../routes/ui.js';
 import { ImportTab } from './ImportTab.js';
+import { CrossChecks } from './CrossChecks.js';
+import { useSampleFields } from './hooks.js';
 
 type Plan = SamplingPlanInput;
 type Family = Plan['design']['family'];
@@ -38,9 +40,12 @@ interface Sampling {
     clusters: number;
     byStratum: { stratum: string; units: number }[];
     sources: { label: string; units: number }[];
+    /** Units left out by the cross-case checks. */
+    crossChecked?: number;
   };
   cases: Record<string, number>;
   reservesLeft: number;
+  unitsLeft: number;
   fields: string[];
 }
 
@@ -349,6 +354,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const scoped = useScoped();
   const questionnaire = useQuestionnaireScope();
+  const sampleFields = useSampleFields(projectId);
   const data = useQuery({
     queryKey: ['sampling', projectId, questionnaire],
     queryFn: () => api<Sampling>(scoped(`/projects/${projectId}/sampling`)),
@@ -531,7 +537,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                 ))}
               </ul>
             ) : null}
-            {locked && probability ? null : importing ? (
+            {importing ? (
               <div className="flex flex-col gap-3">
                 <label className="flex max-w-md flex-col gap-1 text-sm">
                   <span className="font-medium text-slate-700">
@@ -1089,6 +1095,17 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             <span className="text-xs text-slate-600">{t('cases.sampling.exclusionsHelp')}</span>
           </div>
         </div>
+        {/* Applies to units loaded or selected from now on, so it stays editable. */}
+        <CrossChecks
+          value={plan.crossChecks ?? []}
+          fields={[...new Set([...d.fields, ...(sampleFields.data ?? []).map((f) => f.name)])]}
+          onChange={(crossChecks) => set({ crossChecks })}
+        />
+        {d.frame.crossChecked ? (
+          <p className="text-sm" data-testid="cross-checked">
+            {t('cases.sampling.cross.excluded', { count: d.frame.crossChecked })}
+          </p>
+        ) : null}
         {usesFrame ? (
           <div className="flex flex-col gap-2">
             <p className="text-sm" data-testid="frame-summary">
@@ -1345,11 +1362,86 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           </ul>
         </div>
         {locked ? <ReleaseForm projectId={projectId} data={d} onDone={refresh} /> : null}
+        {locked &&
+        probability &&
+        ['srs', 'systematic', 'stratified'].includes(plan.design.method) ? (
+          <BatchForm projectId={projectId} data={d} onDone={refresh} />
+        ) : null}
         {!usesFrame || (plan.design.family !== 'probability' && plan.source.kind === 'field') ? (
           <FieldForm projectId={projectId} onDone={refresh} />
         ) : null}
       </Layer>
     </div>
+  );
+}
+
+/** Another batch from the units never selected, added to the cases already in the sample. */
+function BatchForm({
+  projectId,
+  data,
+  onDone,
+}: {
+  projectId: string;
+  data: Sampling;
+  onDone(): Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const scoped = useScoped();
+  const [count, setCount] = useState(10);
+  const [reason, setReason] = useState('');
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const add = useMutation({
+    mutationFn: () =>
+      api<{ added: number }>(scoped(`/projects/${projectId}/sampling/batch`), {
+        method: 'POST',
+        body: { count, reason },
+      }),
+    onSuccess: async (r) => {
+      setStatus(t('cases.sampling.batchDone', { count: r.added }));
+      setReason('');
+      setError(null);
+      await onDone();
+    },
+    onError: (e) => setError(localiseError(t, e)),
+  });
+  return (
+    <form
+      className="flex flex-col gap-2 border-t border-slate-200 pt-3"
+      data-testid="batch"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (reason.trim()) add.mutate();
+      }}
+    >
+      <h3 className="font-semibold">
+        {t('cases.sampling.batch')} ·{' '}
+        <span className="font-normal text-slate-600">
+          {t('cases.sampling.unitsLeft', { count: data.unitsLeft })}
+        </span>
+      </h3>
+      <p className="text-sm text-slate-600">{t('cases.sampling.batchHelp')}</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <Num
+          label={t('cases.sampling.batchCount')}
+          value={count}
+          step="1"
+          min={1}
+          onChange={(n) => setCount(Math.max(1, Math.round(n ?? 1)))}
+        />
+        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-sm">
+          <span className="font-medium text-slate-700">{t('cases.sampling.releaseReason')}</span>
+          <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </label>
+        <Button type="submit" disabled={!reason.trim() || !data.unitsLeft || add.isPending}>
+          {t('cases.sampling.batchAdd')}
+        </Button>
+      </div>
+      <p role="status" className="text-sm text-emerald-ink-800">
+        {status}
+      </p>
+      <ErrorText>{error}</ErrorText>
+    </form>
   );
 }
 

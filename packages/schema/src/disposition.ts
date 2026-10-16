@@ -22,6 +22,8 @@ export const DISPOSITIONS = {
   DISCONNECTED: { aapor: '4.31', group: 'not_eligible', final: true },
   SCREENED_OUT: { aapor: '4.70', group: 'not_eligible', final: true },
   QUOTA_FULL: { aapor: '4.80', group: 'not_eligible', final: true },
+  /** Not worked within the project's deadline after assignment (unknown eligibility). */
+  EXPIRED: { aapor: '3.90', group: 'unknown_eligibility', final: true },
 } as const;
 
 export type Disposition = keyof typeof DISPOSITIONS;

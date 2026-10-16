@@ -25,6 +25,10 @@ const MAX_FIELD_COLUMNS = 4;
 /** The map view, column picker and rule filter come back later; their code stays. */
 const SHOW_LATER = false as boolean;
 
+/** When an assigned case expires, if the project sets a deadline. */
+export const dueAt = (at: string, days: number | null | undefined) =>
+  days ? new Date(Date.parse(at) + days * 86_400_000) : null;
+
 /** How long ago a case was assigned: under an hour, hours, then days. */
 export function assignedAge(t: TFunction, at: string, now = Date.now()) {
   const hours = Math.floor((now - Date.parse(at)) / 3_600_000);
@@ -501,6 +505,15 @@ export function CasesTab({ projectId }: { projectId: string }) {
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap" data-col="since">
                       {r.assignedTo && r.assignedAt ? assignedAge(t, r.assignedAt) : '—'}
+                      {r.assignedAt &&
+                      (r.status === 'assigned' || r.status === 'in_progress') &&
+                      dueAt(r.assignedAt, data?.caseExpiryDays) ? (
+                        <span className="block text-xs text-slate-600" data-col="due">
+                          {t('cases.list.dueOn', {
+                            date: dateTime(dueAt(r.assignedAt, data?.caseExpiryDays)!),
+                          })}
+                        </span>
+                      ) : null}
                     </td>
                   </>
                 ) : null}
@@ -949,7 +962,15 @@ function CaseDrawer({
               >
                 {t('cases.detail.save')}
               </button>
-              {c.status === 'withdrawn' ? (
+              {c.status === 'finalised' && c.disposition === 'EXPIRED' ? (
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => patch.mutate({ status: 'fresh' })}
+                >
+                  {t('cases.detail.reopen')}
+                </button>
+              ) : c.status === 'withdrawn' ? (
                 <button
                   type="button"
                   className={smallBtn}

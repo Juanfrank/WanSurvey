@@ -23,6 +23,7 @@ import { Database, type Tx } from '../db/database.js';
 import { cases, contacts, frameUnits, samplingPlans } from '../db/schema.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
 import { chunks, CasesService, ofQuestionnaire } from '../cases/cases.service.js';
+import { CrossChecker } from './cross-check.js';
 
 export const ReleaseBody = z.object({
   count: z.number().int().min(1).max(10_000),
@@ -30,6 +31,13 @@ export const ReleaseBody = z.object({
   reason: z.string().trim().min(1).max(500),
 });
 export const SubstituteBody = z.object({ reason: z.string().trim().min(1).max(500) });
+/** Another batch from the units never selected, added to the cases already in the sample. */
+export const BatchBody = z.object({
+  count: z.number().int().min(1).max(100_000),
+  reason: z.string().trim().min(1).max(500),
+});
+/** Designs whose probabilities can be recomputed exactly when a batch is added. */
+const BATCH_METHODS = ['srs', 'systematic', 'stratified'];
 export const FieldCasesBody = z.object({
   count: z.number().int().min(1).max(5000),
   prefix: z
@@ -77,6 +85,7 @@ export class SamplingService {
             exclusions: plan.exclusions,
             quotas: plan.quotas,
             substitution: plan.substitution,
+            crossChecks: plan.crossChecks,
           }
         : {},
     );
@@ -98,8 +107,16 @@ export class SamplingService {
       .orderBy(asc(frameUnits.externalId));
   }
 
-  /** Eligibility and exclusions applied to the frame (units keep a reason when out). */
-  private screen(input: SamplingPlanInput, units: Unit[]) {
+  /** The plan's cross-case checks against cases already answered (null when there are none). */
+  private checker(tx: Tx, projectId: string, input: SamplingPlanInput) {
+    return CrossChecker.load(tx, this.casesService.pii, projectId, input.crossChecks);
+  }
+
+  /**
+   * Eligibility, exclusions and cross-case checks applied to the frame (units keep a reason
+   * when out: ineligible, excluded, cross_check).
+   */
+  private screen(input: SamplingPlanInput, units: Unit[], checker: CrossChecker | null = null) {
     const eligible = compileRule(input.eligibility);
     const excluded = input.exclusions?.trim() ? compileRule(input.exclusions) : () => false;
     return units.map((u) => {
@@ -109,7 +126,16 @@ export class SamplingService {
         priority: 0,
         modePreference: null,
       };
-      const why = !eligible(c) ? 'ineligible' : excluded(c) ? 'excluded' : null;
+      const why = !eligible(c)
+        ? 'ineligible'
+        : excluded(c)
+          ? 'excluded'
+          : checker?.check({
+                sample: c.sample,
+                contacts: u.contacts as { type: string; value: string }[],
+              }) != null
+            ? 'cross_check'
+            : null;
       return { unit: u, sample: c.sample, out: why };
     });
   }
@@ -164,14 +190,17 @@ export class SamplingService {
       const plan = await this.plan(tx, projectId, q);
       const input = this.input(plan);
       const units = await this.units(tx, projectId, q);
-      const screened = this.screen(input, units);
+      const screened = this.screen(input, units, await this.checker(tx, projectId, input));
       const stats = this.stats(input, screened);
+      const crossChecked = screened.filter((s) => s.out === 'cross_check').length;
       const roles = await tx
         .select({ role: cases.selectionRole, n: sql<number>`count(*)::int` })
         .from(cases)
         .where(and(eq(cases.projectId, projectId), ofQuestionnaire(q)))
         .groupBy(cases.selectionRole);
       const reservesLeft = units.filter((u) => u.role === 'reserve' && !u.caseId).length;
+      // Never selected: what a further batch can draw from.
+      const unitsLeft = units.filter((u) => !u.role && !u.caseId && u.eligible !== false).length;
       const sources = [...new Set(units.map((u) => u.sourceLabel ?? ''))].map((label) => ({
         label,
         units: units.filter((u) => (u.sourceLabel ?? '') === label).length,
@@ -185,9 +214,10 @@ export class SamplingService {
         result: plan?.result ?? null,
         sizes: planSizes(input, stats.eligible || undefined),
         checks: planChecks(input, stats),
-        frame: { ...stats, sources },
+        frame: { ...stats, sources, crossChecked },
         cases: Object.fromEntries(roles.map((r) => [r.role ?? 'none', r.n])),
         reservesLeft,
+        unitsLeft,
         fields: [
           ...new Set(units.flatMap((u) => Object.keys(this.casesService.pii.read(u)))),
         ].sort(),
@@ -211,6 +241,8 @@ export class SamplingService {
           .set({
             quotas: body.quotas,
             substitution: body.substitution,
+            // Later units (batches, additions) are checked with the current rules.
+            crossChecks: body.crossChecks,
             updatedAt: new Date(),
             updatedBy: ctx.userId,
           })
@@ -245,13 +277,23 @@ export class SamplingService {
     });
   }
 
-  private async run(tx: Tx, projectId: string, q: Q, input: SamplingPlanInput, seed: string) {
-    const units = await this.units(tx, projectId, q);
-    const screened = this.screen(input, units);
+  private async run(
+    tx: Tx,
+    projectId: string,
+    q: Q,
+    input: SamplingPlanInput,
+    seed: string,
+    batch?: { units: Unit[]; count: number },
+  ) {
+    const units = batch?.units ?? (await this.units(tx, projectId, q));
+    const screened = this.screen(input, units, await this.checker(tx, projectId, input));
     const stats = this.stats(input, screened);
     const sizes = planSizes(input, stats.eligible || undefined);
-    const errors = planChecks(input, stats).filter((c) => c.severity === 'error');
-    const design = planDesign(input, sizes.selected);
+    const errors = batch ? [] : planChecks(input, stats).filter((c) => c.severity === 'error');
+    const design = planDesign(
+      input,
+      batch ? Math.min(batch.count, stats.eligible) : sizes.selected,
+    );
     // Known probabilities: a probability design, or a census (every unit, π = 1).
     const probability = input.design.family === 'probability' || input.design.family === 'census';
     const result =
@@ -259,7 +301,7 @@ export class SamplingService {
         ? { main: [], reserve: [], strata: [], warnings: [] }
         : selectSample(this.frameUnitsFor(input, screened), design, {
             seed,
-            reserve: input.design.family === 'probability' ? input.size.reserve : 0,
+            reserve: input.design.family === 'probability' && !batch ? input.size.reserve : 0,
           });
     const probs = result.main.map((m) => m.prob);
     return {
@@ -374,7 +416,7 @@ export class SamplingService {
     if (!unitIds.length) return 0;
     const input = this.input(await this.plan(tx, projectId, q));
     const units = await tx.select().from(frameUnits).where(inArray(frameUnits.id, unitIds));
-    const screened = this.screen(input, units);
+    const screened = this.screen(input, units, await this.checker(tx, projectId, input));
     for (const s of screened)
       if (s.out)
         await tx
@@ -495,6 +537,95 @@ export class SamplingService {
   }
 
   /**
+   * Adds a batch to a selected probability sample: units never selected (not reserves, no
+   * case) go through the same design, and the chosen ones become cases next to the existing
+   * ones; nothing is replaced. Probabilities are recomputed per stratum as (cases) / N.
+   */
+  batch(
+    ctx: AuthContext,
+    projectId: string,
+    body: z.infer<typeof BatchBody>,
+    questionnaireId?: string,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
+      const [plan] = await tx
+        .select()
+        .from(samplingPlans)
+        .where(and(eq(samplingPlans.projectId, projectId), sameQ(samplingPlans.questionnaireId, q)))
+        .for('update');
+      if (plan?.status !== 'selected')
+        throw new ConflictException({ code: 'NOT_SELECTED', message: 'Select the sample first' });
+      const input = this.input(plan);
+      if (input.design.family !== 'probability' || !BATCH_METHODS.includes(input.design.method))
+        throw new ConflictException({
+          code: 'BATCH_DESIGN',
+          message: 'Batches are for simple, systematic and stratified samples; use reserves',
+        });
+      const free = (await this.units(tx, projectId, q)).filter((u) => !u.role && !u.caseId);
+      const previous = ((plan.result as { batches?: unknown[] } | null)?.batches ?? []) as {
+        n: number;
+      }[];
+      const n = previous.length + 2;
+      const run = await this.run(tx, projectId, q, input, `${plan.seed}:batch${n}`, {
+        units: free,
+        count: body.count,
+      });
+      if (!run.result.main.length)
+        throw new ConflictException({ code: 'NO_UNITS', message: 'No eligible units left' });
+      for (const s of run.screened)
+        if (s.out)
+          await tx
+            .update(frameUnits)
+            .set({ eligible: s.out !== 'ineligible', exclusion: s.out })
+            .where(eq(frameUnits.id, s.unit.id));
+      const byId = new Map(run.screened.map((s) => [s.unit.id, s.unit]));
+      const created = await this.makeCases(
+        tx,
+        ctx,
+        projectId,
+        q,
+        run.result.main.map((m) => ({
+          unit: byId.get(m.id)!,
+          role: 'main' as const,
+          prob: m.prob,
+          stratum: m.stratum,
+        })),
+      );
+      await this.reweigh(tx, projectId, q, input, [
+        ...new Set(run.result.main.map((m) => m.stratum)),
+      ]);
+      const entry = {
+        n,
+        count: created.length,
+        at: new Date().toISOString(),
+        by: ctx.userId,
+        reason: body.reason,
+      };
+      await tx
+        .update(samplingPlans)
+        .set({
+          result: {
+            ...((plan.result as Record<string, unknown> | null) ?? {}),
+            batches: [...previous, entry],
+          },
+        })
+        .where(eq(samplingPlans.id, plan.id));
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'sampling.batch_added',
+          targetType: 'project',
+          targetId: projectId,
+          details: { questionnaireId: q, ...entry },
+        }),
+      );
+      return { added: created.length, batch: n, left: free.length - created.length };
+    });
+  }
+
+  /**
    * Releases the next reserves (in order, optionally of one stratum), by decision and with a
    * reason. For equal-probability designs the stratum's probabilities are updated to
    * (selected + released) / N, on units and cases.
@@ -563,6 +694,7 @@ export class SamplingService {
     const m = input.design.method;
     if (input.design.family !== 'probability' || !['srs', 'systematic', 'stratified'].includes(m))
       return;
+    const checker = await this.checker(tx, projectId, input);
     for (const stratum of strata) {
       const inStratum = await tx
         .select({
@@ -582,7 +714,7 @@ export class SamplingService {
       // N of the stratum: eligible units of the frame in it (stratum is set at selection on
       // selected units only, so for N the frame is read by the stratum variable).
       const all = await this.units(tx, projectId, q);
-      const screened = this.screen(input, all).filter((s) => !s.out);
+      const screened = this.screen(input, all, checker).filter((s) => !s.out);
       const N =
         m === 'stratified'
           ? screened.filter(

@@ -31,6 +31,8 @@ export interface CaseList {
   held?: number;
   fields: SampleField[];
   assignmentMode: 'assigned' | 'pool';
+  /** Days a case may stay assigned before it expires; null: no deadline. */
+  caseExpiryDays?: number | null;
   piiMasked: boolean;
   autoReveal: boolean;
   canReveal: boolean;

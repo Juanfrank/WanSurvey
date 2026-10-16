@@ -39,6 +39,10 @@ import {
 } from '../db/schema.js';
 import { chunks, CasesService } from './cases.service.js';
 import { SamplingService } from '../sampling/sampling.service.js';
+import { CrossChecker } from '../sampling/cross-check.js';
+import { CrossCheck } from '@wansurvey/schema/sampling';
+
+const CrossCheckList = z.array(CrossCheck);
 import { parseSampleFile, SampleFileError } from './sample-file.js';
 import { ImportMapping, suggestMapping, validateRows, type PreparedRow } from './sample-mapping.js';
 
@@ -315,7 +319,7 @@ export class ImportsController {
       if (imp.target === 'frame')
         return this.commitFrame(tx, ctx, projectId, imp, mapping, report, prepared);
       const rows = prepared.filter((r) => r.valid);
-      const fresh = rows.filter((r) => !r.exists);
+      const fresh = rows.filter((r) => !r.exists && !r.crossChecked);
       const updates = mapping.existing === 'update' ? rows.filter((r) => r.exists) : [];
       const created: string[] = [];
       // Personal fields are sealed (H1); the field list is the one just saved.
@@ -404,6 +408,8 @@ export class ImportsController {
         created: created.length,
         updated: updated.length,
         skipped: report.invalid,
+        /** Not made: the same person answered recently (cross-case checks). */
+        crossChecked: rows.filter((r) => r.crossChecked && !r.exists).length,
         assigned,
       };
       await tx
@@ -515,7 +521,48 @@ export class ImportsController {
     }
     const result = validateRows(headers, rows, mapping, existing, maxExamples);
     await this.flagElsewhere(tx, projectId, result, maxExamples);
+    await this.flagCrossChecks(tx, projectId, q, result, maxExamples);
     return result;
+  }
+
+  /**
+   * The plan's cross-case checks (S1): rows of people who answered recently are marked and
+   * reported (`cross_check`); new cases are not made for them. In a frame file the units stay
+   * in the frame and the selection leaves them out with that reason.
+   */
+  private async flagCrossChecks(
+    tx: Tx,
+    projectId: string,
+    q: string | null,
+    { report, prepared }: ReturnType<typeof validateRows>,
+    maxExamples: number,
+  ) {
+    const [plan] = await tx
+      .select({ crossChecks: samplingPlans.crossChecks })
+      .from(samplingPlans)
+      .where(
+        and(
+          eq(samplingPlans.projectId, projectId),
+          q ? eq(samplingPlans.questionnaireId, q) : isNull(samplingPlans.questionnaireId),
+        ),
+      );
+    const rules = CrossCheckList.parse(plan?.crossChecks ?? []);
+    const checker = await CrossChecker.load(tx, this.casesService.pii, projectId, rules);
+    if (!checker) return;
+    const hit = prepared.filter((r) => r.valid && checker.check(r) !== null);
+    if (!hit.length) return;
+    for (const r of hit) r.crossChecked = true;
+    report.toCreate -= hit.filter((r) => !r.exists).length;
+    report.issues.push({
+      code: 'cross_check',
+      count: hit.length,
+      blocking: false,
+      examples: hit.slice(0, maxExamples).map((r) => ({
+        row: r.rowNo,
+        column: '',
+        value: r.externalId,
+      })),
+    });
   }
 
   /**
@@ -585,14 +632,12 @@ export class ImportsController {
           q ? eq(samplingPlans.questionnaireId, q) : isNull(samplingPlans.questionnaireId),
         ),
       );
-    // A probability sample keeps its frame once selected (decision 6); a census or a
-    // non-probability design takes later units straight in as cases ("added").
-    const adding = plan?.status === 'selected';
-    if (adding && (plan.design as { family?: string }).family === 'probability')
-      throw new ConflictException({
-        code: 'SAMPLE_SELECTED',
-        message: 'The sample has been selected; the frame cannot change any more',
-      });
+    // Once selected, units already in the frame never change (decision 6). New units are
+    // added: a census or a non-probability design takes them in as cases at once ("added");
+    // a probability sample keeps them for a later batch.
+    const selected = plan?.status === 'selected';
+    const probability = (plan?.design as { family?: string } | undefined)?.family === 'probability';
+    const adding = selected && !probability;
     const rows = prepared.filter((r) => r.valid);
     const pii = await this.casesService.piiFields(tx, projectId);
     const existing = new Set(
@@ -627,7 +672,7 @@ export class ImportsController {
         added.push(...ins.map((x) => x.id));
         created += fresh.length;
       }
-      if (mapping.existing === 'update')
+      if (mapping.existing === 'update' && !selected)
         for (const r of part.filter((x) => existing.has(x.externalId))) {
           await tx
             .update(frameUnits)

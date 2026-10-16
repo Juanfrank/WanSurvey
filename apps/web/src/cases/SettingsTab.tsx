@@ -116,6 +116,32 @@ export function SettingsTab({ project }: { project: Project }) {
                   {t('cases.settings.poolHelp')}
                 </p>
               </fieldset>
+              <div className="flex flex-col gap-1">
+                <label className="flex items-center gap-2 font-medium">
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    className={`${controlCls} w-24`}
+                    aria-describedby="settings-expiry-help"
+                    value={form.fieldwork.caseExpiryDays ?? ''}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        fieldwork: {
+                          ...form.fieldwork,
+                          caseExpiryDays:
+                            e.target.value === '' ? null : Math.max(1, Number(e.target.value)),
+                        },
+                      })
+                    }
+                  />
+                  {t('cases.settings.expiry')}
+                </label>
+                <p id="settings-expiry-help" className="text-slate-600">
+                  {t('cases.settings.expiryHelp')}
+                </p>
+              </div>
             </>,
           )}
         </Tabs.Content>
@@ -318,6 +344,7 @@ export function SettingsTab({ project }: { project: Project }) {
                       setForm({
                         ...form,
                         fieldwork: {
+                          ...form.fieldwork,
                           targetCompletes:
                             e.target.value === '' ? null : Math.max(0, Number(e.target.value)),
                         },

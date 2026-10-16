@@ -222,6 +222,7 @@ export class CasesController {
         held: held?.n ?? 0,
         fields,
         assignmentMode: settings.assignmentMode,
+        caseExpiryDays: settings.fieldwork.caseExpiryDays,
         piiMasked: pii.size > 0,
         /** The caller's own cases are listed with personal data shown. */
         autoReveal: auto && pii.size > 0,
@@ -333,6 +334,7 @@ export class CasesController {
         history,
         pii: { masked: hasPii && !show, canReveal: canSee && hasPii && !show, auto },
         assignmentMode: settings.assignmentMode,
+        caseExpiryDays: settings.fieldwork.caseExpiryDays,
         elsewhere,
         canClaim: pool && free && can(ctx.memberships, 'cases.read_assigned', projectId),
         canRelease:
@@ -354,8 +356,14 @@ export class CasesController {
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const before = await this.loadCase(tx, ctx, projectId, caseId);
+      // An expired case is reopened as a fresh one, without its deadline holder.
+      const reopen =
+        body.status === 'fresh' &&
+        before.status === 'finalised' &&
+        before.disposition === 'EXPIRED';
       if (
         body.status &&
+        !reopen &&
         before.status !== 'fresh' &&
         before.status !== 'assigned' &&
         before.status !== 'withdrawn'
@@ -364,14 +372,20 @@ export class CasesController {
           'Cases with interviews in progress or finished cannot change status here',
         );
       }
-      const status =
-        body.status === 'fresh' ? (before.assignedTo ? 'assigned' : 'fresh') : body.status;
+      const status = reopen
+        ? 'fresh'
+        : body.status === 'fresh'
+          ? before.assignedTo
+            ? 'assigned'
+            : 'fresh'
+          : body.status;
       const [row] = await tx
         .update(cases)
         .set({
           ...(body.priority !== undefined ? { priority: body.priority } : {}),
           ...(body.modePreference !== undefined ? { modePreference: body.modePreference } : {}),
           ...(status ? { status } : {}),
+          ...(reopen ? { disposition: null, assignedTo: null, assignedAt: null } : {}),
           ...(body.sample
             ? this.svc.pii.seal(
                 { ...(before.sample as Record<string, unknown>), ...body.sample },

@@ -439,6 +439,7 @@ export const cases = pgTable(
     // Nulls not distinct (migration 0026): one id per questionnaire of the project.
     uniqueIndex('cases_external_uq').on(t.projectId, t.questionnaireId, t.externalId),
     index('cases_questionnaire_idx').on(t.projectId, t.questionnaireId, t.status),
+    index('cases_expiry_idx').on(t.projectId, t.status, t.assignedAt),
     index('cases_next_contact_idx').on(t.projectId, t.nextContactAt),
     index('cases_status_idx').on(t.projectId, t.status),
     index('cases_assigned_idx').on(t.projectId, t.assignedTo),
@@ -1137,6 +1138,8 @@ export const samplingPlans = pgTable('sampling_plans', {
   exclusions: text('exclusions'),
   quotas: jsonb('quotas').notNull().default([]),
   substitution: jsonb('substitution').notNull().default({}),
+  /** Cross-case checks: a unit is not eligible if the same person answered recently. */
+  crossChecks: jsonb('cross_checks').notNull().default([]),
   seed: text('seed').notNull(),
   /** draft | selected */
   status: text('status').notNull().default('draft'),
@@ -1146,6 +1149,29 @@ export const samplingPlans = pgTable('sampling_plans', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid('updated_by'),
 });
+
+/** A completes target for one interviewer over a period, optionally for one questionnaire. */
+export const interviewerGoals = pgTable(
+  'interviewer_goals',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    /** Null: completes of any questionnaire of the project count. */
+    questionnaireId: uuid('questionnaire_id').references(() => questionnaires.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    startsOn: date('starts_on', { mode: 'string' }).notNull(),
+    endsOn: date('ends_on', { mode: 'string' }).notNull(),
+    target: integer('target').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('interviewer_goals_project_idx').on(t.tenantId, t.projectId, t.userId)],
+);
 
 /** Units of the sampling frame, before and after selection (S1). */
 export const frameUnits = pgTable(
