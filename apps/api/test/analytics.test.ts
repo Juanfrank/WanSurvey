@@ -325,7 +325,7 @@ describe('metrics, live dashboard, topline, exports and share links', () => {
     const text = file.text;
     expect(text.charCodeAt(0)).toBe(0xfeff);
     expect(text.slice(1).split('\r\n')[0]).toBe(
-      'interview_id,case_id,mode,status,disposition,interviewer,started_at,submitted_at,active_seconds,version,language,selection_role,stratum,inclusion_prob,base_weight,AGE,WORK,ZONE,MEDIA_1,MEDIA_2',
+      'interview_id,case_id,case_code,mode,status,disposition,interviewer,started_at,submitted_at,active_seconds,version,language,selection_role,stratum,inclusion_prob,base_weight,AGE,WORK,ZONE,MEDIA_1,MEDIA_2',
     );
     const bin = await get(pm, `/projects/${project}/exports/${sav.body.id}/file`)
       .buffer(true)

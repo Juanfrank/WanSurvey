@@ -455,6 +455,7 @@ function formatValue(v: unknown): string {
 }
 
 interface CaseDetail extends CaseRow {
+  attempts?: number;
   contacts: {
     id: string;
     type: string;
@@ -493,7 +494,7 @@ function SamplingFacts({
   c: CaseDetail;
   onDone(): Promise<void>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [reason, setReason] = useState('');
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState('');
@@ -511,7 +512,7 @@ function SamplingFacts({
     onError: (e) => setNote(localiseError(t, e)),
   });
   const n = (x: number | null | undefined, digits: number) =>
-    x == null ? '—' : x.toLocaleString(undefined, { maximumFractionDigits: digits });
+    x == null ? '—' : x.toLocaleString(i18n.language, { maximumFractionDigits: digits });
   return (
     <section aria-labelledby="cd-sampling" data-testid="case-sampling">
       <h3 id="cd-sampling" className="mb-1 font-semibold">
@@ -649,6 +650,15 @@ function CaseDrawer({
         <div className="flex flex-col gap-4 text-sm" data-testid="case-detail">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={c.status} />
+            {c.disposition ? (
+              <span data-testid="case-disposition">
+                ·{' '}
+                {t(`analysis.dispositionLabels.${c.disposition}`, {
+                  defaultValue: c.disposition,
+                })}
+              </span>
+            ) : null}
+            {c.attempts ? <span>· {t('cases.detail.attempts', { count: c.attempts })}</span> : null}
             {c.assignedName ? <span>· {c.assignedName}</span> : null}
             {c.pii.masked ? (
               <span className="ml-auto flex items-center gap-2">

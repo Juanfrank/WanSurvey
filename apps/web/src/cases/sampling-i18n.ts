@@ -7,7 +7,7 @@ import { tipsEn, tipsEs } from './sampling-tips.js';
  */
 export const samplingEn = {
   tips: tipsEn,
-  tip: { label: 'What is {{term}}?', standard: 'Suggested standard:' },
+  tip: { label: 'About: {{term}}', standard: 'Suggested standard:' },
   tab: 'Sampling selector',
   intro:
     'Decide how the sample is obtained and how the cases for the interviews are made, in three layers. Nothing becomes a case until the sample is selected.',
@@ -257,7 +257,7 @@ export const samplingEn = {
 
 export const samplingEs: typeof samplingEn = {
   tips: tipsEs,
-  tip: { label: '¿Qué es {{term}}?', standard: 'Estándar sugerido:' },
+  tip: { label: 'Ayuda: {{term}}', standard: 'Estándar sugerido:' },
   tab: 'Selector muestral',
   intro:
     'Defina cómo se obtiene la muestra y cómo se generan los casos para las entrevistas, en tres capas. Nada se convierte en caso hasta que se selecciona la muestra.',

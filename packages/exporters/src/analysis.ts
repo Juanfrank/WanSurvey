@@ -11,7 +11,15 @@ export interface Frequency {
 }
 
 export type ToplineItem =
-  | { kind: 'single'; name: string; label: string; base: number; rows: Frequency[] }
+  | {
+      kind: 'single';
+      name: string;
+      label: string;
+      base: number;
+      rows: Frequency[];
+      /** For an ordinal scale: the mean of the valid answers. */
+      mean?: number | null;
+    }
   | {
       kind: 'multi';
       name: string;
@@ -19,6 +27,15 @@ export type ToplineItem =
       /** Respondents who answered the question. */
       base: number;
       rows: { code: string; label: string; count: number; percent: number | null }[];
+    }
+  | {
+      kind: 'text';
+      name: string;
+      label: string;
+      /** Respondents who wrote something. */
+      n: number;
+      /** The latest answers, newest first (at most `TEXT_EXAMPLES`). */
+      latest: string[];
     }
   | {
       kind: 'numeric';
@@ -30,6 +47,9 @@ export type ToplineItem =
       min: number | null;
       max: number | null;
     };
+
+/** How many open answers the topline shows per question. */
+export const TEXT_EXAMPLES = 10;
 
 const pct = (a: number, b: number) => (b > 0 ? (100 * a) / b : null);
 
@@ -79,14 +99,28 @@ function frequencies(table: Table, i: number): { base: number; rows: Frequency[]
 }
 
 /**
- * The topline of a dataset (S1): a frequency table for each coded question, the share choosing
- * each option of a multiple choice, and summary statistics for numbers. Meta, text and
- * paradata columns are left out.
+ * The topline of a dataset (S1): a frequency table for each coded question (with the mean for
+ * a scale), the share choosing each option of a multiple choice, summary statistics for
+ * numbers, and the latest open answers. Meta and paradata columns are left out.
  */
 export function topline(table: Table): ToplineItem[] {
   const items: ToplineItem[] = [];
   const done = new Set<string>();
   table.columns.forEach((col, i) => {
+    if (col.variable && col.open) {
+      const special = new Set((col.missing ?? []).map(String));
+      const written = table.rows
+        .map((r) => r[i])
+        .filter((v): v is string => typeof v === 'string' && !!v.trim() && !special.has(v));
+      items.push({
+        kind: 'text',
+        name: col.name,
+        label: col.label,
+        n: written.length,
+        latest: written.slice(-TEXT_EXAMPLES).reverse(),
+      });
+      return;
+    }
     if (!col.variable || col.type !== 'numeric') return;
     if (col.group) {
       if (done.has(col.group.name)) return;
@@ -124,7 +158,17 @@ export function topline(table: Table): ToplineItem[] {
     }
     if (isCoded(col)) {
       const f = frequencies(table, i);
-      items.push({ kind: 'single', name: col.name, label: col.label, ...f });
+      const mean =
+        col.measure === 'ordinal' && f.base
+          ? f.rows.reduce((a, r) => a + (r.missing ? 0 : r.code * r.count), 0) / f.base
+          : undefined;
+      items.push({
+        kind: 'single',
+        name: col.name,
+        label: col.label,
+        ...f,
+        ...(mean === undefined ? {} : { mean }),
+      });
       return;
     }
     const missing = new Set(col.missing ?? []);

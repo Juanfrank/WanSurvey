@@ -60,6 +60,7 @@ export class DatasetService {
     const rows = await tx.execute<{
       id: string;
       caseId: string | null;
+      caseCode: string | null;
       mode: string;
       status: string;
       disposition: string | null;
@@ -80,7 +81,7 @@ export class DatasetService {
       prob: number | null;
       weight: number | null;
     }>(sql`
-      select i.id, i.case_id as "caseId", i.mode, i.status, i.disposition, u.name as interviewer,
+      select i.id, i.case_id as "caseId", c.external_id as "caseCode", i.mode, i.status, i.disposition, u.name as interviewer,
              c.selection_role as role, fu.stratum, c.inclusion_prob as prob, c.base_weight as weight,
              i.started_at as "startedAt", i.submitted_at as "submittedAt", i.active_ms as "activeMs",
              v.version, i.language, i.answers, i.flags

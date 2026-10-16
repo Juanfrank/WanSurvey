@@ -60,6 +60,8 @@ interface QuestionnaireRow {
 export function ProjectsPage() {
   const { t } = useTranslation();
   const me = useMe();
+  const canCreate = useCan('projects.create', null);
+  const [creating, setCreating] = useState(false);
   const projects = useQuery({
     queryKey: ['projects', me.data?.tenantId],
     queryFn: () => api<Project[]>('/projects'),
@@ -67,7 +69,13 @@ export function ProjectsPage() {
   });
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('designer.projects')}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{t('designer.projects')}</h1>
+        {canCreate && !creating && (
+          <Button onClick={() => setCreating(true)}>{t('designer.newProject.open')}</Button>
+        )}
+      </div>
+      {creating && <NewProjectForm onCancel={() => setCreating(false)} />}
       <Card>
         {projects.data?.length ? (
           <ul className="divide-y divide-slate-100" data-testid="projects">
@@ -91,6 +99,125 @@ export function ProjectsPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+/** A code from the name: capitals and digits, as in HH2026 (the person can change it). */
+const codeFrom = (name: string) =>
+  name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => (/^\d+$/.test(w) ? w : w[0]!.toUpperCase()))
+    .join('')
+    .slice(0, 32);
+
+/** A new project: name, code, the modes it uses and its time zone; it opens at once. */
+function NewProjectForm({ onCancel }: { onCancel: () => void }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [codeTouched, setCodeTouched] = useState(false);
+  const [modes, setModes] = useState<Mode[]>([...MODES]);
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const create = useMutation({
+    mutationFn: () =>
+      api<Project>('/projects', {
+        method: 'POST',
+        body: { name, code, modesEnabled: modes, timezone: zone, languages: ['es'] },
+      }),
+    onSuccess: async (p) => {
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      await navigate({ to: '/projects/$projectId', params: { projectId: p.id } });
+    },
+  });
+  const codeOk = /^[A-Za-z0-9_-]{1,32}$/.test(code);
+  return (
+    <Card>
+      <form
+        className="flex flex-col gap-4"
+        aria-label={t('designer.newProject.title')}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim() && codeOk && modes.length) create.mutate();
+        }}
+      >
+        <h2 className="text-lg font-semibold">{t('designer.newProject.title')}</h2>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <Field
+            id="new-project-name"
+            label={t('designer.newProject.name')}
+            value={name}
+            required
+            maxLength={200}
+            autoFocus
+            onChange={(e) => {
+              setName(e.target.value);
+              if (!codeTouched) setCode(codeFrom(e.target.value));
+            }}
+          />
+          <Field
+            id="new-project-code"
+            label={t('designer.newProject.code')}
+            value={code}
+            required
+            maxLength={32}
+            pattern="[A-Za-z0-9_\-]{1,32}"
+            aria-describedby="new-project-code-help"
+            onChange={(e) => {
+              setCode(e.target.value);
+              setCodeTouched(true);
+            }}
+          />
+        </div>
+        <p id="new-project-code-help" className="-mt-2 text-sm text-slate-600">
+          {t('designer.newProject.codeHelp')}
+        </p>
+        <fieldset className="flex flex-wrap gap-4">
+          <legend className="mb-1 text-sm font-medium text-slate-700">
+            {t('designer.newProject.modes')}
+          </legend>
+          {MODES.map((m) => (
+            <label key={m} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={modes.includes(m)}
+                onChange={(e) =>
+                  setModes((cur) =>
+                    e.target.checked
+                      ? MODES.filter((x) => x === m || cur.includes(x))
+                      : cur.filter((x) => x !== m),
+                  )
+                }
+              />
+              {t(`designer.modeNames.${m}`, { defaultValue: m })}
+            </label>
+          ))}
+        </fieldset>
+        <p className="text-sm text-slate-600">{t('designer.newProject.zone', { zone })}</p>
+        {create.isError && (
+          <ErrorText>
+            {create.error instanceof ApiError && create.error.status === 409
+              ? t('designer.newProject.duplicate')
+              : t('designer.newProject.failed')}
+          </ErrorText>
+        )}
+        <div className="flex gap-2">
+          <Button
+            type="submit"
+            disabled={create.isPending || !name.trim() || !codeOk || !modes.length}
+          >
+            {t('designer.newProject.create')}
+          </Button>
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            {t('designer.newProject.cancel')}
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -844,7 +971,10 @@ export function ProjectPage() {
   const [panel, setPanel] = useState<QPanel>(
     initial?.panel ? { kind: initial.panel, name: '' } : null,
   );
-  const current = tab && tabs.includes(tab) ? tab : (tabs[0] ?? null);
+  // Who designs starts at the questionnaires; interviewers and clerks at their cases.
+  const canDesign = useCan('questionnaires.edit', projectId);
+  const start = !canDesign && tabs.includes('cases') ? 'cases' : (tabs[0] ?? null);
+  const current = tab && tabs.includes(tab) ? tab : start;
   const cases = casesSubs.includes(casesSub) ? casesSub : casesSubs[0]!;
   const results = resultsSubs.includes(resultsSub) ? resultsSub : resultsSubs[0]!;
   // The place in the page is kept in the address (?tab=…), so Back and reload return to it.

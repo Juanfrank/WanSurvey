@@ -840,7 +840,10 @@ export function CallList({ rows }: { rows: CallRow[] }) {
             who: r.interviewer ?? '—',
           })}
           {r.numberMasked ? (
-            <span className="ml-1 font-mono text-slate-600">{r.numberMasked}</span>
+            <>
+              {' · '}
+              <span className="font-mono text-slate-600">{r.numberMasked}</span>
+            </>
           ) : null}
           {r.note ? <span className="block text-slate-600">“{r.note}”</span> : null}
         </li>

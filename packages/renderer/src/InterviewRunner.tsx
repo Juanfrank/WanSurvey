@@ -524,17 +524,22 @@ function Runner(p: InterviewRunnerProps) {
             className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 disabled:opacity-40"
             onClick={back}
             disabled={session.path()[0]?.key === currentKey}
+            aria-keyshortcuts="Shift+Enter"
           >
             {t('nav.back')}
-            <span className="ml-2 text-xs text-slate-500">{t('nav.backKey')}</span>
+            {/* Shortcut hints help with a keyboard; on a touch screen they are noise. */}
+            <span aria-hidden className="ml-2 text-xs text-slate-500 pointer-coarse:hidden">
+              {t('nav.backKey')}
+            </span>
           </button>
           <button
             type="button"
             className="min-h-11 rounded-md bg-indigo-600 px-5 py-2 font-medium text-on-fill hover:bg-indigo-700"
             onClick={next}
+            aria-keyshortcuts={textOnScreen ? 'Control+Enter' : 'Enter'}
           >
             {t('nav.next')}
-            <span className="ml-2 text-xs text-on-fill/80">
+            <span aria-hidden className="ml-2 text-xs text-on-fill/80 pointer-coarse:hidden">
               {textOnScreen ? t('nav.nextKeyText') : t('nav.nextKey')}
             </span>
           </button>

@@ -6,6 +6,8 @@ import type { Cell, Column, Table } from './table.js';
 export interface ExportInterview {
   id: string;
   caseId: string | null;
+  /** The case's code from the sample (its external id), to join the frame. */
+  caseCode?: string | null;
   mode: string;
   status: string;
   disposition: string | null;
@@ -42,16 +44,16 @@ type Special = { $special: string };
 const isSpecial = (v: unknown): v is Special =>
   !!v && typeof v === 'object' && !Array.isArray(v) && '$special' in v;
 
-/** Plain text of a label: tags stripped, pipes kept as «name», whitespace collapsed. */
+/**
+ * Plain text of a label: tags stripped, a piped value (it differs per respondent) shown as …,
+ * never as written; whitespace collapsed.
+ */
 function plain(text: LocalizedText | undefined, lang: string, fallback: string): string {
   const t = text?.[lang] ?? (text ? Object.values(text)[0] : undefined) ?? fallback;
   return t
     .replace(/<[^>]+>/g, ' ')
     .replace(/\{\{#if [^}]*\}\}|\{\{else\}\}|\{\{\/if\}\}/g, '')
-    .replace(
-      /\{\{\s*([^}|]+?)\s*(\|[^}]*)?\}\}/g,
-      (_m, e: string) => `«${e.replace(/^roster\./, '')}»`,
-    )
+    .replace(/\{\{[^}]*\}\}/g, '…')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -205,8 +207,38 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
         });
         break;
       }
+      case 'scale': {
+        // A Likert or NPS scale is a few labelled points: ordinal, with a label per point, so
+        // it gets a frequency table and crosstabs. A slider stays a number.
+        const sc = def.scale;
+        const step = sc?.step ?? 1;
+        const points =
+          sc && sc.style !== 'slider' && Number.isInteger(step) && (sc.max - sc.min) / step < 11
+            ? Array.from(
+                { length: Math.floor((sc.max - sc.min) / step) + 1 },
+                (_, k) => sc.min + k * step,
+              )
+            : null;
+        if (sc && points) {
+          const labels = new Map<number, string>();
+          for (const p of points) {
+            const end = p === sc.min ? sc.minLabel : p === sc.max ? sc.maxLabel : undefined;
+            labels.set(p, end ? `${p} – ${plain(end, lang, '')}` : String(p));
+          }
+          for (const [c, l] of specialLabels) labels.set(c, l);
+          fields.push({
+            source: name,
+            chain,
+            columns: [
+              { name, label, type: 'numeric', valueLabels: labels, missing, measure: 'ordinal' },
+            ],
+            cells: (v) => [code(v)],
+          });
+          break;
+        }
+      }
+      // falls through
       case 'numeric':
-      case 'scale':
         fields.push({
           source: name,
           chain,
@@ -220,7 +252,11 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
         fields.push({
           source: name,
           chain,
-          columns: [{ name, label, type: 'string' }],
+          columns: [
+            def.type === 'text'
+              ? { name, label, type: 'string', open: true, missing }
+              : { name, label, type: 'string' },
+          ],
           cells: (v) => [
             v === null || v === undefined
               ? null
@@ -237,7 +273,7 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
       fields.push({
         source: `${name}_OTHER`,
         chain,
-        columns: [{ name: `${name}_OTHER`, label: `${label} (otro)`, type: 'string' }],
+        columns: [{ name: `${name}_OTHER`, label: `${label} (otro)`, type: 'string', open: true }],
         cells: (v) => [typeof v === 'string' && v.trim() ? v : null],
       });
     }
@@ -250,6 +286,7 @@ const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
 const META: Column[] = [
   { name: 'interview_id', label: 'Interview id', type: 'string' },
   { name: 'case_id', label: 'Case id', type: 'string' },
+  { name: 'case_code', label: 'Case code (from the sample)', type: 'string' },
   { name: 'mode', label: 'Mode', type: 'string' },
   { name: 'status', label: 'Status', type: 'string' },
   { name: 'disposition', label: 'Disposition', type: 'string' },
@@ -281,6 +318,7 @@ function meta(i: ExportInterview): Cell[] {
   return [
     i.id,
     i.caseId,
+    i.caseCode ?? null,
     i.mode,
     i.status,
     i.disposition,

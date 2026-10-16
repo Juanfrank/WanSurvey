@@ -123,14 +123,14 @@ describe('export dataset', () => {
     });
     expect(rosters).toEqual([]);
     const names = main.columns.map((c) => c.name);
-    expect(names.slice(0, 3)).toEqual(['interview_id', 'case_id', 'mode']);
-    expect(names.slice(11, 15)).toEqual([
+    expect(names.slice(0, 4)).toEqual(['interview_id', 'case_id', 'case_code', 'mode']);
+    expect(names.slice(12, 16)).toEqual([
       'selection_role',
       'stratum',
       'inclusion_prob',
       'base_weight',
     ]);
-    expect(names.slice(15)).toEqual([
+    expect(names.slice(16)).toEqual([
       'SEX',
       'SEX_OTHER',
       'MEDIA_1',
@@ -164,7 +164,7 @@ describe('export dataset', () => {
     expect(sex.valueLabels?.get(2)).toBe('Mujer');
     expect(sex.valueLabels?.get(-8)).toBe('No sabe');
     expect(sex.missing).toEqual(expect.arrayContaining([-8, -9]));
-    expect(main.columns.find((c) => c.name === 'AGE_2')!.label).toBe('Edad de «NAME» [2]');
+    expect(main.columns.find((c) => c.name === 'AGE_2')!.label).toBe('Edad de … [2]');
   });
 
   it('rosters long: a table per roster with row numbers', () => {

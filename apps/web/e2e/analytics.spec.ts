@@ -158,7 +158,7 @@ test('exports are built by the worker and download with the expected header', as
   const text = readFileSync(file, 'utf8');
   expect(text.charCodeAt(0)).toBe(0xfeff);
   const header = text.slice(1).split('\r\n')[0]!.split(',');
-  expect(header.slice(0, 3)).toEqual(['interview_id', 'case_id', 'mode']);
+  expect(header.slice(0, 4)).toEqual(['interview_id', 'case_id', 'case_code', 'mode']);
   expect(header).toContain('A3_SEX');
   // The 60 demo completes, plus any interview submitted by earlier tests.
   expect(text.trim().split('\r\n').length).toBeGreaterThanOrEqual(61);

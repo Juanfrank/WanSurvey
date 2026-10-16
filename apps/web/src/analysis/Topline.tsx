@@ -14,6 +14,8 @@ export type ToplineItem =
         percent: number | null;
         missing: boolean;
       }[];
+      /** For an ordinal scale: the mean of the valid answers. */
+      mean?: number | null;
     }
   | {
       kind: 'multi';
@@ -22,6 +24,7 @@ export type ToplineItem =
       base: number;
       rows: { code: string; label: string; count: number; percent: number | null }[];
     }
+  | { kind: 'text'; name: string; label: string; n: number; latest: string[] }
   | {
       kind: 'numeric';
       name: string;
@@ -47,10 +50,30 @@ export function ToplineItems({ items }: { items: ToplineItem[] }) {
           data-variable={item.name}
         >
           <h3 id={`q-${item.name}`} className="font-medium">
-            <span className="mr-2 font-mono text-xs text-slate-500">{item.name}</span>
-            {item.label}
+            <span className="mr-2 font-mono text-xs text-slate-500">{item.name}</span> {item.label}
           </h3>
-          {item.kind === 'numeric' ? (
+          {item.kind === 'text' ? (
+            <div className="mt-1">
+              <p className="text-slate-600">{t('analysis.results.written', { count: item.n })}</p>
+              {item.latest.length ? (
+                <>
+                  <h4 className="sr-only">{t('analysis.results.latest')}</h4>
+                  <ul className="mt-1 flex flex-col gap-1" data-testid={`latest-${item.name}`}>
+                    {item.latest.map((text, i) => (
+                      <li
+                        key={i}
+                        className="rounded-md border-l-4 border-indigo-200 bg-slate-50 px-3 py-1.5 text-slate-800"
+                      >
+                        {text}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="text-slate-600">{t('analysis.results.noneWritten')}</p>
+              )}
+            </div>
+          ) : item.kind === 'numeric' ? (
             <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-5">
               {(
                 [
@@ -71,6 +94,12 @@ export function ToplineItems({ items }: { items: ToplineItem[] }) {
             <>
               <p className="mb-1 text-slate-600">
                 {t('analysis.results.base', { count: item.base })}
+                {item.kind === 'single' && item.mean !== undefined ? (
+                  <>
+                    {' · '}
+                    {t('analysis.results.mean')}: {fmtNum(lang, item.mean ?? null, 1)}
+                  </>
+                ) : null}
               </p>
               <BarTable
                 max={item.base || undefined}

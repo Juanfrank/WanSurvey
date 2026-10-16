@@ -15,6 +15,8 @@ export interface Column {
   group?: { name: string; label: string };
   /** A variable of the questionnaire (not a meta or paradata column). */
   variable?: boolean;
+  /** Free text written by the respondent (an open answer, or "other, specify"). */
+  open?: boolean;
 }
 
 export type Cell = number | string | null;

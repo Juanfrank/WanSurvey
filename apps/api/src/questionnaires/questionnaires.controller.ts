@@ -755,13 +755,26 @@ function diagnosticsOf(definition: unknown) {
   return analyze(parsed.data).diagnostics;
 }
 
+/** An id from the name, as exports show it: SATISFACCION_CON_SERVICIOS. */
+export function questionnaireIdFrom(name: string): string {
+  const id = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 32)
+    .replace(/_+$/, '');
+  return /^[A-Z]/.test(id) ? id : id ? `Q_${id}`.slice(0, 32) : 'QUESTIONNAIRE';
+}
+
 /**
  * A new questionnaire: one empty section, in Spanish. Interviews are conducted in Spanish;
  * other languages are added to the questionnaire when needed (L43).
  */
 export function blankQuestionnaire(name: string): Record<string, unknown> {
   return {
-    id: 'QUESTIONNAIRE',
+    id: questionnaireIdFrom(name),
     title: { es: name },
     defaultLanguage: 'es',
     languages: ['es'],

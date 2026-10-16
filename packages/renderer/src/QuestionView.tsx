@@ -240,7 +240,7 @@ export function QuestionView(p: QuestionViewProps) {
                 onClick={() => p.onSpecial(entry.key, pressed ? null : kind)}
               >
                 {t(`special.${kind}`)}
-                <span className="ml-1 text-xs opacity-70">
+                <span aria-hidden className="ml-1 text-xs opacity-70 pointer-coarse:hidden">
                   {(p.specialKeys ?? { DK: 'F7', RF: 'F8' })[kind as 'DK' | 'RF']}
                 </span>
               </button>

@@ -192,7 +192,12 @@ export function InterviewPage() {
       <header className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <h1 className="text-lg font-semibold">
           {t('interview.case', { id: payload.context.externalId ?? '' })}
-          {name ? <span className="ml-2 font-normal text-slate-700">{name}</span> : null}
+          {name ? (
+            <>
+              {' '}
+              <span className="ml-2 font-normal text-slate-700">{name}</span>
+            </>
+          ) : null}
         </h1>
         {payload.interview.interviewer ? (
           <span className="text-sm text-slate-600">

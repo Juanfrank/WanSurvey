@@ -766,6 +766,7 @@ export class CasesController {
         samplePii: cases.samplePii,
         status: cases.status,
         disposition: cases.disposition,
+        attempts: cases.attempts,
         priority: cases.priority,
         modePreference: cases.modePreference,
         assignedTo: cases.assignedTo,

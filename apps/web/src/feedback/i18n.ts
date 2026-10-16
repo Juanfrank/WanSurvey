@@ -1,16 +1,16 @@
 /** Strings for quick feedback (namespace `app`, key `feedback`). */
 export const feedbackEn = {
-  title: 'Quick feedback: faces and slips',
-  help: 'One question answered with faces: a link per face for e-mails and web pages, a widget to embed, and small printed slips. Each answer is counted at once.',
+  title: 'Likert: quick feedback',
+  help: 'A Likert scale (3 or 5 points) and up to five short questions after it: a link per point for e-mails and web pages, a widget to embed, and small printed slips. Each answer is counted at once.',
   none: 'No feedback points yet.',
   create: 'New feedback point',
   name: 'Name (for you)',
   question: 'Question',
   questionDefault: 'How did we do today?',
-  faces: 'Faces',
-  faces3: '3 faces (bad, OK, good)',
-  faces5: '5 faces (very bad … very good)',
-  askComment: 'Offer a comment box after the face',
+  faces: 'Likert scale',
+  faces3: '3 points (bad, OK, good)',
+  faces5: '5 points (very bad … very good)',
+  askComment: 'Offer a comment box after the scale',
   add: 'Create',
   answers_one: '{{count}} answer',
   answers_other: '{{count}} answers',
@@ -50,7 +50,7 @@ export const feedbackEn = {
   formatHints: {
     questionnaire: 'Interviews and forms in the modes you choose: phone, face to face, web, paper.',
     feedback:
-      'A Likert scale answered with faces, and up to five short questions after it: by link, embedded widget or printed slip.',
+      'A Likert scale and up to five short questions after it: by link, embedded widget or printed slip.',
   },
   chip: 'LIKERT',
   channelsShort: 'link · widget · slip',
@@ -85,7 +85,7 @@ export const feedbackEn = {
     long: 'Several lines',
     showIf: 'Ask it',
     always: 'Always',
-    faceRange: 'Only for faces {{min}} to {{max}}',
+    faceRange: 'Only for points {{min}} to {{max}}',
     param: 'Link parameter (optional)',
     paramHelp:
       'A link with ?{{param}}=… answers this question beforehand: it is recorded and not shown, so each branch or channel can have its own link.',
@@ -105,17 +105,17 @@ export const feedbackEn = {
 };
 
 export const feedbackEs: typeof feedbackEn = {
-  title: 'Retroalimentación rápida: caritas y hojitas',
-  help: 'Una pregunta que se responde con caritas: un enlace por carita para correos y páginas web, un widget para insertar y hojitas impresas pequeñas. Cada respuesta se cuenta al instante.',
+  title: 'Likert: retroalimentación rápida',
+  help: 'Una escala Likert (3 o 5 puntos) y hasta cinco preguntas cortas después: un enlace por punto para correos y páginas web, un widget para insertar y hojitas impresas pequeñas. Cada respuesta se cuenta al instante.',
   none: 'Aún no hay puntos de retroalimentación.',
   create: 'Nuevo punto de retroalimentación',
   name: 'Nombre (para usted)',
   question: 'Pregunta',
   questionDefault: '¿Cómo lo atendimos hoy?',
-  faces: 'Caritas',
-  faces3: '3 caritas (mal, regular, bien)',
-  faces5: '5 caritas (muy mal … muy bien)',
-  askComment: 'Ofrecer un comentario después de la carita',
+  faces: 'Escala Likert',
+  faces3: '3 puntos (mal, regular, bien)',
+  faces5: '5 puntos (muy mal … muy bien)',
+  askComment: 'Ofrecer un comentario después de la escala',
   add: 'Crear',
   answers_one: '{{count}} respuesta',
   answers_other: '{{count}} respuestas',
@@ -156,7 +156,7 @@ export const feedbackEs: typeof feedbackEn = {
     questionnaire:
       'Entrevistas y formularios en los modos que elija: teléfono, presencial, web, papel.',
     feedback:
-      'Una pregunta que se responde con caritas: por enlace, widget insertado u hojita impresa.',
+      'Una escala Likert y hasta cinco preguntas cortas después: por enlace, widget insertado u hojita impresa.',
   },
   chip: 'LIKERT',
   channelsShort: 'enlace · widget · hojita',
@@ -191,7 +191,7 @@ export const feedbackEs: typeof feedbackEn = {
     long: 'Varias líneas',
     showIf: 'Preguntarla',
     always: 'Siempre',
-    faceRange: 'Solo para las caritas {{min}} a {{max}}',
+    faceRange: 'Solo para los puntos {{min}} a {{max}}',
     param: 'Parámetro del enlace (opcional)',
     paramHelp:
       'Un enlace con ?{{param}}=… responde esta pregunta de antemano: se registra y no se muestra, así cada sede o canal puede tener su propio enlace.',

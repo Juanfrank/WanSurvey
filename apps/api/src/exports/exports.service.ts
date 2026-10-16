@@ -136,8 +136,12 @@ export class ExportsService implements OnModuleInit {
         details: { projectId, ...body, questionnaireId: qid },
       }),
     );
-    await this.jobs.enqueue('exports.build', { tenantId: ctx.tenantId, exportId: row!.id });
     return row!;
+  }
+
+  /** Builds the export in the background; call it after the request's transaction commits. */
+  queue(tenantId: string, exportId: string) {
+    return this.jobs.enqueue('exports.build', { tenantId, exportId });
   }
 
   async list(tx: Tx, projectId: string) {
@@ -189,7 +193,9 @@ export class ExportsService implements OnModuleInit {
   async build(tenantId: string, exportId: string): Promise<void> {
     const job = await this.database.withTenant(tenantId, async (tx) => {
       const [row] = await tx.select().from(exports).where(eq(exports.id, exportId));
-      if (!row || row.status === 'done') return null;
+      // Not visible yet (its transaction still open): fail, and the queue tries again.
+      if (!row) throw new Error(`Export ${exportId} not found yet`);
+      if (row.status === 'done') return null;
       await tx.update(exports).set({ status: 'running' }).where(eq(exports.id, exportId));
       return row;
     });

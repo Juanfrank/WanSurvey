@@ -118,14 +118,17 @@ export class AnalysisController {
   @Post('exports')
   @RequirePermission('exports.run', PERM)
   @ApiBody({ schema: z.toJSONSchema(ExportBody, { io: 'input' }) as object })
-  requestExport(
+  async requestExport(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(ExportBody)) body: z.infer<typeof ExportBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
+    const row = await this.database.withTenant(ctx.tenantId, (tx) =>
       this.exportsService.request(tx, ctx, projectId, body),
     );
+    // Queued once the row is committed, so the worker always finds it.
+    await this.exportsService.queue(ctx.tenantId, row.id);
+    return row;
   }
 
   @Get('exports/:id/file')

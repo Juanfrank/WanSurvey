@@ -91,6 +91,10 @@ export function DesignerPage() {
   const lang =
     editLang && draft?.languages.includes(editLang) ? editLang : (draft?.defaultLanguage ?? 'es');
   // The project's sample fields are offered as case.* in conditions.
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<{ name: string }>(`/projects/${projectId}`),
+  });
   const sampleFields = useQuery({
     queryKey: ['sample-fields', projectId],
     queryFn: () => api<SampleField[]>(`/projects/${projectId}/sample-fields`),
@@ -169,7 +173,7 @@ export function DesignerPage() {
               </Link>{' '}
               /{' '}
               <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
-                {t('designer.project')}
+                {project.data?.name ?? t('designer.project')}
               </Link>
             </nav>
             <div className="flex flex-wrap items-center gap-3">

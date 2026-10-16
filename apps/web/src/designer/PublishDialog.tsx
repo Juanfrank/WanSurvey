@@ -79,6 +79,9 @@ export function PublishDialog({
         body: { baseRevision: revision, ...(check?.breaking.length ? { mapping } : {}) },
       });
       await qc.invalidateQueries({ queryKey: ['versions', qid] });
+      // The project's questionnaire list shows the latest version and its status.
+      await qc.invalidateQueries({ queryKey: ['questionnaires'] });
+      await qc.invalidateQueries({ queryKey: ['data-questionnaires'] });
       onPublished(res.version);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'PUBLISH_BLOCKED') {
