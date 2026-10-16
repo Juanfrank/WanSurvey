@@ -134,9 +134,7 @@ export class FeedbackService {
           at: feedbackResponses.createdAt,
         })
         .from(feedbackResponses)
-        .where(
-          and(eq(feedbackResponses.pointId, id), sql`${feedbackResponses.comment} is not null`),
-        )
+        .where(and(eq(feedbackResponses.pointId, id), isNotNull(feedbackResponses.comment)))
         .orderBy(desc(feedbackResponses.createdAt))
         .limit(50);
       return {
