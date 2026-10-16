@@ -332,6 +332,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
   const sizes = planSizes(plan, d.frame.eligible || undefined);
   const checks = planChecks(plan, d.frame);
   const probability = plan.design.family === 'probability';
+  const census = plan.design.family === 'census';
   const usesFrame = plan.source.kind !== 'field' && plan.source.frameAvailable;
   const pct = (v: number) =>
     new Intl.NumberFormat(i18n.language, { maximumSignificantDigits: 3 }).format(v);
@@ -425,7 +426,8 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               <ul className="text-sm text-slate-700">
                 {d.frame.sources.map((s) => (
                   <li key={s.label}>
-                    {s.label || '—'}: {t('cases.sampling.frameUnits', { count: s.units })}
+                    {s.label || t('cases.sampling.unnamedSource')}:{' '}
+                    {t('cases.sampling.frameUnits', { count: s.units })}
                   </li>
                 ))}
               </ul>
@@ -663,7 +665,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
         <div className="flex flex-col gap-2 border-t border-slate-200 pt-4" data-testid="quotas">
           <h3 className="font-semibold">{t('cases.sampling.quotas')}</h3>
           <p className="text-xs text-slate-600">
-            {probability
+            {probability || census
               ? t('cases.sampling.quotasHelpProb')
               : t('cases.sampling.quotasHelpNonProb')}
           </p>
@@ -747,7 +749,10 @@ export function SamplingTab({ projectId }: { projectId: string }) {
       >
         <div className="flex flex-col gap-3">
           <h3 className="font-semibold">{t('cases.sampling.size')}</h3>
-          <div className="flex flex-wrap items-end gap-4">
+          {census ? (
+            <p className="text-sm text-slate-700">{t('cases.sampling.censusSize')}</p>
+          ) : null}
+          <div className={census ? 'hidden' : 'flex flex-wrap items-end gap-4'}>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">{t('cases.sampling.objective')}</span>
               <select
@@ -852,13 +857,15 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             ) : null}
           </div>
           <div className="flex flex-wrap items-end gap-4">
-            <Num
-              label={t('cases.sampling.eligibilityRate')}
-              value={plan.size.eligibility}
-              percent
-              disabled={locked}
-              onChange={(n) => n && setSize({ eligibility: Math.min(1, Math.max(0.01, n)) })}
-            />
+            {census ? null : (
+              <Num
+                label={t('cases.sampling.eligibilityRate')}
+                value={plan.size.eligibility}
+                percent
+                disabled={locked}
+                onChange={(n) => n && setSize({ eligibility: Math.min(1, Math.max(0.01, n)) })}
+              />
+            )}
             <Num
               label={t('cases.sampling.responseRate')}
               value={plan.size.response}
@@ -866,13 +873,15 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               disabled={locked}
               onChange={(n) => n && setSize({ response: Math.min(1, Math.max(0.01, n)) })}
             />
-            <Num
-              label={t('cases.sampling.reserveRate')}
-              value={plan.size.reserve}
-              percent
-              disabled={locked}
-              onChange={(n) => setSize({ reserve: Math.max(0, n ?? 0) })}
-            />
+            {census ? null : (
+              <Num
+                label={t('cases.sampling.reserveRate')}
+                value={plan.size.reserve}
+                percent
+                disabled={locked}
+                onChange={(n) => setSize({ reserve: Math.max(0, n ?? 0) })}
+              />
+            )}
           </div>
           <dl className="grid gap-3 sm:grid-cols-3" data-testid="sizes">
             {(

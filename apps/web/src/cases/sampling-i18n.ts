@@ -113,6 +113,9 @@ export const samplingEn = {
   quotas: 'Control quotas',
   quotasHelpProb:
     'Here quotas monitor the sample; they do not change the probabilities. Do not replace units to fill them.',
+  unnamedSource: 'Unnamed source',
+  censusSize:
+    'A census takes every eligible unit of the frame: there is no size to compute and no reserves. The response rate below gives the completes to expect.',
   quotasHelpNonProb: 'Here quotas are how units are selected: cells and targets.',
   quotaName: 'Cell',
   quotaWhen: 'Condition',
@@ -357,6 +360,9 @@ export const samplingEs: typeof samplingEn = {
   quotas: 'Cuotas de control',
   quotasHelpProb:
     'Aquí las cuotas vigilan la muestra; no cambian las probabilidades. No sustituya unidades para llenarlas.',
+  unnamedSource: 'Fuente sin nombre',
+  censusSize:
+    'Un censo toma todas las unidades elegibles del marco: no hay tamaño que calcular ni reservas. La tasa de respuesta de abajo da las entrevistas completas esperadas.',
   quotasHelpNonProb: 'Aquí las cuotas son la forma de seleccionar: celdas y metas.',
   quotaName: 'Celda',
   quotaWhen: 'Condición',

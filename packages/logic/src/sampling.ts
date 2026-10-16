@@ -424,12 +424,31 @@ export const baseWeight = (prob: number) => (prob > 0 ? 1 / prob : null);
 // ---------------------------------------------------------------------------
 
 /** Completes required, units to select and cases to field, from the plan's size settings. */
-export function planSizes(plan: Pick<SamplingPlanInput, 'size' | 'source'>, frameSize?: number) {
+export function planSizes(
+  plan: Pick<SamplingPlanInput, 'size' | 'source'> & {
+    design?: Pick<SamplingPlanInput['design'], 'family'>;
+  },
+  frameSize?: number,
+) {
   const s = plan.size;
   const population =
     plan.source.populationKnown && plan.source.populationSize
       ? plan.source.populationSize
       : (frameSize ?? null);
+  // A census takes every eligible unit: no size to compute, no reserves; the completes
+  // expected are what the response rate leaves.
+  if (plan.design?.family === 'census') {
+    const all = frameSize ?? 0;
+    return {
+      required: Math.round(all * s.response),
+      selected: all,
+      reserves: 0,
+      cases: all,
+      base: all,
+      fpcApplied: false,
+      population,
+    };
+  }
   const need =
     s.objective === 'fixed'
       ? { base: s.fixedN, required: s.fixedN, fpcApplied: false }

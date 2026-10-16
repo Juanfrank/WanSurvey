@@ -77,8 +77,9 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
     .getByRole('radio', { name: /Every unit of the list/ })
     .check();
   await expect(selector.locator('[data-check="census_no_sampling_error"]')).toBeVisible();
+  await expect(selector.locator('[data-size="toSelect"]')).toHaveText('10');
   await expect(selector.locator('[data-check="no_margin_of_error"]')).toHaveCount(0);
-  await shot(page, 'cases-sampling');
+  await shot(page, 'cases-sampling', { fullPage: true });
   await expectAccessible(page);
   page.once('dialog', (d) => void d.accept());
   await selector.getByRole('button', { name: 'Select the sample and create the cases…' }).click();

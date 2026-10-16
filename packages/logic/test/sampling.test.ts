@@ -1,5 +1,7 @@
+import { SamplingPlanInput } from '@wansurvey/schema/sampling';
 import { describe, expect, it } from 'vitest';
 import {
+  planSizes,
   allocate,
   operationalSize,
   requiredSize,
@@ -148,5 +150,19 @@ describe('selection', () => {
       { seed: 'w' },
     );
     expect(r.main).toHaveLength(6);
+  });
+});
+
+describe('census sizes', () => {
+  it('takes every eligible unit, with no reserves and no size formula', () => {
+    const sizes = planSizes(
+      {
+        source: SamplingPlanInput.parse({}).source,
+        size: { ...SamplingPlanInput.parse({}).size, response: 0.8, reserve: 0.2 },
+        design: { family: 'census' },
+      },
+      10,
+    );
+    expect(sizes).toMatchObject({ required: 8, selected: 10, reserves: 0, cases: 10 });
   });
 });
