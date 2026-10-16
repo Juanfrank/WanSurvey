@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next';
 import { casesEn, casesEs } from './cases/i18n.js';
 import { catiEn, catiEs } from './cati/i18n.js';
 import { cawiEn, cawiEs } from './cawi/i18n.js';
+import { feedbackEn, feedbackEs } from './feedback/i18n.js';
 import { papiEn, papiEs } from './papi/i18n.js';
 import { reviewEn, reviewEs } from './review/i18n.js';
 import { analysisEn, analysisEs } from './analysis/i18n.js';
@@ -181,6 +182,7 @@ const en = {
   interview: interviewEn,
   cati: catiEn,
   cawi: cawiEn,
+  feedback: feedbackEn,
   papi: papiEn,
   review: reviewEn,
   analysis: analysisEn,
@@ -361,6 +363,7 @@ const es: Catalogue = {
   interview: interviewEs,
   cati: catiEs,
   cawi: cawiEs,
+  feedback: feedbackEs,
   papi: papiEs,
   review: reviewEs,
   analysis: analysisEs,

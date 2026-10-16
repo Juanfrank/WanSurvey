@@ -12,6 +12,7 @@ import { Button, Card, ErrorText, Field, FileInput } from '../routes/ui.js';
 import { AssignmentsTab } from '../cases/AssignmentsTab.js';
 import { CasesTab } from '../cases/CasesTab.js';
 import { ImportTab } from '../cases/ImportTab.js';
+import { FeedbackSection } from '../feedback/FeedbackSection.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
 import { CallsTab } from '../cati/CallsTab.js';
 import { CawiTab } from '../cawi/CawiTab.js';
@@ -353,6 +354,9 @@ function QuestionnairesSection({
           />
         ) : null}
       </Card>
+      {canWeb ? (
+        <FeedbackSection projectId={projectId} lang={projectRow?.languages[0] ?? 'es'} />
+      ) : null}
       {canEdit ? (
         <Card>
           <h2 className="mb-3 text-lg font-semibold">{t('designer.create.title')}</h2>

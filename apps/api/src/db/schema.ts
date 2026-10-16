@@ -8,6 +8,7 @@ import {
   index,
   integer,
   primaryKey,
+  smallint,
   jsonb,
   pgTable,
   text,
@@ -1044,3 +1045,46 @@ export const TENANT_TABLES = [
   'share_links',
   'audit_log',
 ] as const;
+
+/** Quick feedback (F1): one question answered with 3 or 5 faces, by link, widget or slip. */
+export const feedbackPoints = pgTable(
+  'feedback_points',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    name: text('name').notNull(),
+    /** LocalizedText. */
+    question: jsonb('question').notNull(),
+    faces: smallint('faces').notNull().default(3),
+    askComment: boolean('ask_comment').notNull().default(true),
+    slug: text('slug').notNull().unique(),
+    active: boolean('active').notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index('feedback_points_project_idx').on(t.tenantId, t.projectId)],
+);
+
+export const feedbackResponses = pgTable(
+  'feedback_responses',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    pointId: uuid('point_id')
+      .notNull()
+      .references(() => feedbackPoints.id),
+    /** 1 (worst) … faces (best). */
+    score: smallint('score').notNull(),
+    /** link | widget | paper */
+    channel: text('channel').notNull().default('link'),
+    /** What the answer is about, from the link (?ref=ticket-123). */
+    ref: text('ref'),
+    comment: text('comment'),
+    /** Lets the browser that answered add a comment once (hash of a one-time key). */
+    editHash: text('edit_hash'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('feedback_responses_point_idx').on(t.tenantId, t.pointId, t.createdAt)],
+);

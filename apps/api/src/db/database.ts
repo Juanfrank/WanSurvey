@@ -225,6 +225,12 @@ export class Database implements OnModuleDestroy {
     return r ? { id: r.id, tenantId: r.tenant_id } : null;
   }
 
+  async feedbackPointBySlug(slug: string): Promise<{ id: string; tenantId: string } | null> {
+    const [r] = await this.client<{ id: string; tenant_id: string }[]>`
+      select * from feedback_point_by_slug(${slug})`;
+    return r ? { id: r.id, tenantId: r.tenant_id } : null;
+  }
+
   async tenantsWithMailDue(): Promise<string[]> {
     const rows = await this.client<{ tenant_id: string }[]>`select * from tenants_with_mail_due()`;
     return rows.map((r) => r.tenant_id);

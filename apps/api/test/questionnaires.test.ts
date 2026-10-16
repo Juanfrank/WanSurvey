@@ -199,9 +199,9 @@ describe('questionnaires', () => {
     expect(scen.status, JSON.stringify(scen.body)).toBe(200);
     expect((await del(url)).status).toBe(204);
     expect((await pm.agent.get(url)).status).toBe(404);
-    const [{ n }] = await t.admin<{ n: number }[]>`
+    const left = await t.admin<{ n: number }[]>`
       select count(*)::int as n from questionnaire_scenarios where questionnaire_id = ${q.id}`;
-    expect(n).toBe(0);
+    expect(left[0]!.n).toBe(0);
   });
 
   it('publishes, blocks on errors, failing scenarios, missing mappings and no changes', async () => {

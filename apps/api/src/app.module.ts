@@ -1,3 +1,5 @@
+import { FeedbackController, PublicFeedbackController } from './feedback/feedback.controller.js';
+import { FeedbackService } from './feedback/feedback.service.js';
 import {
   Inject,
   Injectable,
@@ -143,6 +145,8 @@ export class AppModule {
         CasesController,
         ImportsController,
         AuditController,
+        FeedbackController,
+        PublicFeedbackController,
       ],
       providers: [
         { provide: CONFIG, useValue: config },
@@ -190,6 +194,7 @@ export class AppModule {
         ExportsService,
         ShareService,
         PrivacyService,
+        FeedbackService,
         {
           provide: GEOCODER,
           useValue:

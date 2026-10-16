@@ -42,6 +42,17 @@ const openLinkRoute = createRoute({
   path: '/o/$slug',
   component: lazyRouteComponent(() => import('./respondent/OpenLinkPage.js'), 'OpenLinkPage'),
 });
+// Quick feedback (F1): a face per link, or the widget for an iframe.
+const feedbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/f/$slug',
+  component: lazyRouteComponent(() => import('./feedback/FeedbackPage.js'), 'FeedbackPage'),
+  validateSearch: (s: Record<string, unknown>): { r?: number; ref?: string; embed?: boolean } => ({
+    ...(Number.isInteger(Number(s.r)) ? { r: Number(s.r) } : {}),
+    ...(typeof s.ref === 'string' || typeof s.ref === 'number' ? { ref: String(s.ref) } : {}),
+    ...(s.embed === 1 || s.embed === '1' || s.embed === true ? { embed: true } : {}),
+  }),
+});
 const unsubscribeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/u/$token',
@@ -112,6 +123,15 @@ const printRoute = createRoute({
   }),
 });
 
+const feedbackPrintRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/projects/$projectId/feedback/$pointId/print',
+  component: lazyRouteComponent(
+    () => import('./feedback/FeedbackPrintPage.js'),
+    'FeedbackPrintPage',
+  ),
+});
+
 // Answer review (slice 11).
 const reviewRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -143,6 +163,7 @@ const routeTree = rootRoute.addChildren([
   twoFactorSetupRoute,
   respondentRoute,
   openLinkRoute,
+  feedbackRoute,
   unsubscribeRoute,
   shareRoute,
   appRoute.addChildren([
@@ -155,6 +176,7 @@ const routeTree = rootRoute.addChildren([
     interviewRoute,
     deviceRoute,
     printRoute,
+    feedbackPrintRoute,
     reviewRoute,
     summaryRoute,
   ]),

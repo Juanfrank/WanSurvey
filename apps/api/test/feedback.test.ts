@@ -1,0 +1,85 @@
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  bootstrap,
+  createProject,
+  createTenant,
+  createUser,
+  login,
+  type Session,
+  type TestApp,
+} from './harness.js';
+
+describe('quick feedback (faces)', () => {
+  let t: TestApp;
+  let tenant: { id: string; slug: string };
+  let project: string;
+  let pm: Session;
+  let interviewer: Session;
+  let base: string;
+
+  beforeAll(async () => {
+    t = await bootstrap();
+    tenant = await createTenant(t.admin);
+    project = await createProject(t.admin, tenant.id);
+    pm = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'project_manager' }]));
+    interviewer = await login(
+      t.app,
+      await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]),
+    );
+    base = `/api/v1/projects/${project}/feedback`;
+  });
+  afterAll(() => t.close());
+
+  const post = (s: Session, path: string, body: object = {}) =>
+    s.agent.post(path).set('x-csrf-token', s.csrf).send(body);
+
+  it('records a face from its link, a comment once, and slips keyed in the office', async () => {
+    const created = await post(pm, base, {
+      name: 'Atención en ventanilla',
+      question: { es: '¿Cómo lo atendimos hoy?' },
+      faces: 3,
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const { id, slug, url } = created.body as { id: string; slug: string; url: string };
+    expect(url).toMatch(new RegExp(`/f/${slug}$`));
+    expect((await post(interviewer, base, { name: 'x', question: { es: 'x' } })).status).toBe(403);
+
+    // Anyone with the link answers, without signing in.
+    const pub = request(t.app.getHttpServer());
+    const info = await pub.get(`/api/v1/public/f/${slug}`).expect(200);
+    expect(info.body).toMatchObject({ faces: 3, askComment: true });
+    expect((await pub.post(`/api/v1/public/f/${slug}`).send({ score: 4 })).status).toBe(404);
+    const answered = await pub
+      .post(`/api/v1/public/f/${slug}`)
+      .send({ score: 3, ref: 'ticket-9' })
+      .expect(200);
+    const { id: rid, key } = answered.body as { id: string; key: string };
+    await pub
+      .post(`/api/v1/public/f/${slug}/comment`)
+      .send({ id: rid, key, comment: 'Rápido' })
+      .expect(200);
+    // The key is spent: no second comment, and a wrong key does nothing.
+    expect(
+      (await pub.post(`/api/v1/public/f/${slug}/comment`).send({ id: rid, key, comment: 'Otra' }))
+        .status,
+    ).toBe(404);
+    await pub.post(`/api/v1/public/f/${slug}`).send({ score: 1, channel: 'widget' }).expect(200);
+    await post(pm, `${base}/${id}/paper`, { score: 2 }).expect(200);
+
+    const results = await pm.agent.get(`${base}/${id}/results`).expect(200);
+    expect(results.body.counts).toEqual({ 1: 1, 2: 1, 3: 1 });
+    expect(results.body.channels).toEqual({ link: 1, widget: 1, paper: 1 });
+    expect(results.body.comments).toMatchObject([{ score: 3, comment: 'Rápido', ref: 'ticket-9' }]);
+
+    // Switched off: the link stops answering.
+    await pm.agent
+      .patch(`${base}/${id}`)
+      .set('x-csrf-token', pm.csrf)
+      .send({ active: false })
+      .expect(200);
+    expect((await pub.get(`/api/v1/public/f/${slug}`)).status).toBe(404);
+    const list = await pm.agent.get(base).expect(200);
+    expect(list.body[0]).toMatchObject({ id, active: false, counts: { 1: 1, 2: 1, 3: 1 } });
+  });
+});
