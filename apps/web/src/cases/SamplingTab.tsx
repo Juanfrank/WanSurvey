@@ -278,10 +278,10 @@ function Num({
         </label>
         {tip ? <InfoTip id={tip} term={label} /> : null}
       </span>
-      <span className="flex items-center gap-1">
+      <span className="relative flex items-center">
         <input
           id={id}
-          className={`${inputCls} w-28`}
+          className={`${controlCls} w-full tabular-nums ${percent ? 'pr-7' : ''}`}
           inputMode="decimal"
           value={text}
           disabled={disabled}
@@ -295,7 +295,11 @@ function Num({
             else if (Number.isFinite(n)) onChange(percent ? n / 100 : n);
           }}
         />
-        {percent ? <span aria-hidden>%</span> : null}
+        {percent ? (
+          <span aria-hidden className="pointer-events-none absolute right-2.5 text-slate-500">
+            %
+          </span>
+        ) : null}
       </span>
     </div>
   );
@@ -885,155 +889,172 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           {census ? (
             <p className="text-sm text-slate-700">{t('cases.sampling.censusSize')}</p>
           ) : null}
-          <div className={census ? 'hidden' : 'flex flex-wrap items-end gap-4'}>
-            <div className="flex flex-col gap-1 text-sm">
-              <span className="flex items-center">
-                <label htmlFor="sp-objective" className="font-medium text-slate-700">
-                  {t('cases.sampling.objective')}
-                </label>
-                <InfoTip id="objective" term={t('cases.sampling.objective')} />
-              </span>
-              <select
-                id="sp-objective"
-                className={`${controlCls} w-auto`}
-                value={plan.size.objective}
-                disabled={locked}
-                onChange={(e) =>
-                  setSize({ objective: e.target.value as Plan['size']['objective'] })
-                }
-              >
-                {(['proportion', 'mean', 'difference', 'fixed'] as const).map((o) => (
-                  <option key={o} value={o}>
-                    {t(`cases.sampling.objectives.${o}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {plan.size.objective === 'fixed' ? (
-              <Num
-                label={t('cases.sampling.fixedN')}
-                tip="fixedN"
-                value={plan.size.fixedN}
-                step="1"
-                min={1}
-                disabled={locked}
-                onChange={(n) => setSize({ fixedN: Math.max(1, Math.round(n ?? 1)) })}
-              />
-            ) : (
-              <Num
-                label={t('cases.sampling.confidence')}
-                tip="confidence"
-                value={plan.size.confidence}
-                percent
-                disabled={locked}
-                onChange={(n) => n && setSize({ confidence: Math.min(0.999, Math.max(0.5, n)) })}
-              />
-            )}
-            {plan.size.objective === 'proportion' ? (
-              <>
+          {/* Two panels on wide screens: what precision is wanted, and what is lost on the way. */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <fieldset
+              className={census ? 'hidden' : 'rounded-lg border border-slate-200 bg-white p-4'}
+            >
+              <legend className="px-1 text-sm font-semibold text-slate-700">
+                {t('cases.sampling.precision')}
+              </legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1 text-sm sm:col-span-2">
+                  <span className="flex items-center">
+                    <label htmlFor="sp-objective" className="font-medium text-slate-700">
+                      {t('cases.sampling.objective')}
+                    </label>
+                    <InfoTip id="objective" term={t('cases.sampling.objective')} />
+                  </span>
+                  <select
+                    id="sp-objective"
+                    className={`${controlCls} w-full`}
+                    value={plan.size.objective}
+                    disabled={locked}
+                    onChange={(e) =>
+                      setSize({ objective: e.target.value as Plan['size']['objective'] })
+                    }
+                  >
+                    {(['proportion', 'mean', 'difference', 'fixed'] as const).map((o) => (
+                      <option key={o} value={o}>
+                        {t(`cases.sampling.objectives.${o}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {plan.size.objective === 'fixed' ? (
+                  <Num
+                    label={t('cases.sampling.fixedN')}
+                    tip="fixedN"
+                    value={plan.size.fixedN}
+                    step="1"
+                    min={1}
+                    disabled={locked}
+                    onChange={(n) => setSize({ fixedN: Math.max(1, Math.round(n ?? 1)) })}
+                  />
+                ) : (
+                  <Num
+                    label={t('cases.sampling.confidence')}
+                    tip="confidence"
+                    value={plan.size.confidence}
+                    percent
+                    disabled={locked}
+                    onChange={(n) =>
+                      n && setSize({ confidence: Math.min(0.999, Math.max(0.5, n)) })
+                    }
+                  />
+                )}
+                {plan.size.objective === 'proportion' ? (
+                  <>
+                    <Num
+                      label={t('cases.sampling.margin')}
+                      tip="margin"
+                      value={plan.size.margin}
+                      percent
+                      disabled={locked}
+                      onChange={(n) => n && setSize({ margin: n })}
+                    />
+                    <Num
+                      label={t('cases.sampling.p')}
+                      tip="p"
+                      value={plan.size.p}
+                      percent
+                      disabled={locked}
+                      onChange={(n) => n && setSize({ p: Math.min(0.99, Math.max(0.01, n)) })}
+                    />
+                  </>
+                ) : null}
+                {plan.size.objective === 'mean' ? (
+                  <>
+                    <Num
+                      label={t('cases.sampling.marginMean')}
+                      tip="marginMean"
+                      value={plan.size.margin}
+                      disabled={locked}
+                      onChange={(n) => n && setSize({ margin: n })}
+                    />
+                    <Num
+                      label={t('cases.sampling.sd')}
+                      tip="sd"
+                      value={plan.size.sd}
+                      disabled={locked}
+                      onChange={(n) => n && setSize({ sd: n })}
+                    />
+                  </>
+                ) : null}
+                {plan.size.objective === 'difference' ? (
+                  <>
+                    <Num
+                      label={t('cases.sampling.p1')}
+                      tip="p1"
+                      value={plan.size.p1}
+                      percent
+                      disabled={locked}
+                      onChange={(n) => n && setSize({ p1: Math.min(0.99, Math.max(0.01, n)) })}
+                    />
+                    <Num
+                      label={t('cases.sampling.p2')}
+                      tip="p2"
+                      value={plan.size.p2}
+                      percent
+                      disabled={locked}
+                      onChange={(n) => n && setSize({ p2: Math.min(0.99, Math.max(0.01, n)) })}
+                    />
+                    <Num
+                      label={t('cases.sampling.power')}
+                      tip="power"
+                      value={plan.size.power}
+                      percent
+                      disabled={locked}
+                      onChange={(n) => n && setSize({ power: Math.min(0.99, Math.max(0.5, n)) })}
+                    />
+                  </>
+                ) : null}
+                {plan.size.objective !== 'fixed' ? (
+                  <Num
+                    label={t('cases.sampling.deff')}
+                    tip="deff"
+                    value={plan.size.deff}
+                    disabled={locked}
+                    onChange={(n) => n && setSize({ deff: Math.max(1, n) })}
+                  />
+                ) : null}
+              </div>
+            </fieldset>
+            <fieldset className="rounded-lg border border-slate-200 bg-white p-4">
+              <legend className="px-1 text-sm font-semibold text-slate-700">
+                {t('cases.sampling.losses')}
+              </legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {census ? null : (
+                  <Num
+                    label={t('cases.sampling.eligibilityRate')}
+                    tip="eligibilityRate"
+                    value={plan.size.eligibility}
+                    percent
+                    disabled={locked}
+                    onChange={(n) => n && setSize({ eligibility: Math.min(1, Math.max(0.01, n)) })}
+                  />
+                )}
                 <Num
-                  label={t('cases.sampling.margin')}
-                  tip="margin"
-                  value={plan.size.margin}
+                  label={t('cases.sampling.responseRate')}
+                  tip="responseRate"
+                  value={plan.size.response}
                   percent
                   disabled={locked}
-                  onChange={(n) => n && setSize({ margin: n })}
+                  onChange={(n) => n && setSize({ response: Math.min(1, Math.max(0.01, n)) })}
                 />
-                <Num
-                  label={t('cases.sampling.p')}
-                  tip="p"
-                  value={plan.size.p}
-                  percent
-                  disabled={locked}
-                  onChange={(n) => n && setSize({ p: Math.min(0.99, Math.max(0.01, n)) })}
-                />
-              </>
-            ) : null}
-            {plan.size.objective === 'mean' ? (
-              <>
-                <Num
-                  label={t('cases.sampling.marginMean')}
-                  tip="marginMean"
-                  value={plan.size.margin}
-                  disabled={locked}
-                  onChange={(n) => n && setSize({ margin: n })}
-                />
-                <Num
-                  label={t('cases.sampling.sd')}
-                  tip="sd"
-                  value={plan.size.sd}
-                  disabled={locked}
-                  onChange={(n) => n && setSize({ sd: n })}
-                />
-              </>
-            ) : null}
-            {plan.size.objective === 'difference' ? (
-              <>
-                <Num
-                  label={t('cases.sampling.p1')}
-                  tip="p1"
-                  value={plan.size.p1}
-                  percent
-                  disabled={locked}
-                  onChange={(n) => n && setSize({ p1: Math.min(0.99, Math.max(0.01, n)) })}
-                />
-                <Num
-                  label={t('cases.sampling.p2')}
-                  tip="p2"
-                  value={plan.size.p2}
-                  percent
-                  disabled={locked}
-                  onChange={(n) => n && setSize({ p2: Math.min(0.99, Math.max(0.01, n)) })}
-                />
-                <Num
-                  label={t('cases.sampling.power')}
-                  tip="power"
-                  value={plan.size.power}
-                  percent
-                  disabled={locked}
-                  onChange={(n) => n && setSize({ power: Math.min(0.99, Math.max(0.5, n)) })}
-                />
-              </>
-            ) : null}
-            {plan.size.objective !== 'fixed' ? (
-              <Num
-                label={t('cases.sampling.deff')}
-                tip="deff"
-                value={plan.size.deff}
-                disabled={locked}
-                onChange={(n) => n && setSize({ deff: Math.max(1, n) })}
-              />
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-end gap-4">
-            {census ? null : (
-              <Num
-                label={t('cases.sampling.eligibilityRate')}
-                tip="eligibilityRate"
-                value={plan.size.eligibility}
-                percent
-                disabled={locked}
-                onChange={(n) => n && setSize({ eligibility: Math.min(1, Math.max(0.01, n)) })}
-              />
-            )}
-            <Num
-              label={t('cases.sampling.responseRate')}
-              tip="responseRate"
-              value={plan.size.response}
-              percent
-              disabled={locked}
-              onChange={(n) => n && setSize({ response: Math.min(1, Math.max(0.01, n)) })}
-            />
-            {census ? null : (
-              <Num
-                label={t('cases.sampling.reserveRate')}
-                tip="reserveRate"
-                value={plan.size.reserve}
-                percent
-                disabled={locked}
-                onChange={(n) => setSize({ reserve: Math.max(0, n ?? 0) })}
-              />
-            )}
+                {census ? null : (
+                  <Num
+                    label={t('cases.sampling.reserveRate')}
+                    tip="reserveRate"
+                    value={plan.size.reserve}
+                    percent
+                    disabled={locked}
+                    onChange={(n) => setSize({ reserve: Math.max(0, n ?? 0) })}
+                  />
+                )}
+              </div>
+            </fieldset>
           </div>
           <dl className="grid gap-3 sm:grid-cols-3" data-testid="sizes">
             {(

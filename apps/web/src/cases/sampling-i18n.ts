@@ -126,6 +126,8 @@ export const samplingEn = {
   addQuota: 'Add a cell',
   removeQuota: 'Remove {{name}}',
   size: 'Sample size',
+  precision: 'Precision wanted',
+  losses: 'Expected losses',
   objective: 'Objective',
   objectives: {
     proportion: 'Estimate a proportion',
@@ -407,6 +409,8 @@ export const samplingEs: typeof samplingEn = {
   addQuota: 'Agregar celda',
   removeQuota: 'Quitar {{name}}',
   size: 'Tamaño de la muestra',
+  precision: 'Precisión buscada',
+  losses: 'Pérdidas esperadas',
   objective: 'Objetivo',
   objectives: {
     proportion: 'Estimar una proporción',

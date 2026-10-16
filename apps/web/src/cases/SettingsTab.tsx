@@ -73,7 +73,8 @@ export function SettingsTab({ project }: { project: Project }) {
 
   return (
     <div className="flex max-w-2xl flex-col gap-4 text-sm">
-      <h2 id="settings-title" className="text-lg font-semibold">
+      {/* The tab already says where we are; the heading stays for screen readers. */}
+      <h2 id="settings-title" className="sr-only">
         {t('cases.settings.title')}
       </h2>
       <Tabs.Root value={current} onValueChange={setSub} className="flex flex-col gap-4">
