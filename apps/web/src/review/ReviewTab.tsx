@@ -379,7 +379,7 @@ function Coding({ projectId }: { projectId: string }) {
                   </button>
                   <Button
                     type="button"
-                    className="px-3 py-1 text-sm"
+                    size="sm"
                     disabled={saveCodes.isPending}
                     onClick={() => saveCodes.mutate()}
                   >
@@ -443,7 +443,7 @@ function Coding({ projectId }: { projectId: string }) {
                 </label>
                 <Button
                   type="button"
-                  className="px-3 py-1.5 text-sm"
+                  size="sm"
                   disabled={!picked.size || assign.isPending}
                   onClick={() => assign.mutate()}
                 >

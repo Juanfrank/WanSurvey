@@ -96,12 +96,16 @@ export function ssoStartUrl(email: string, returnTo = '/'): string {
 }
 
 /** Multipart upload (sample files); same cookies and CSRF header as `api`. */
-export async function upload<T = unknown>(path: string, form: FormData): Promise<T> {
+export async function upload<T = unknown>(
+  path: string,
+  form: FormData,
+  method: 'POST' | 'PUT' = 'POST',
+): Promise<T> {
   const headers: Record<string, string> = { accept: 'application/json' };
   const csrf = readCookie('ws_csrf');
   if (csrf) headers['x-csrf-token'] = csrf;
   const res = await fetch(`/api/v1${path}`, {
-    method: 'POST',
+    method,
     headers,
     credentials: 'include',
     body: form,

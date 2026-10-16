@@ -12,6 +12,7 @@ import { api, ApiError } from '../api.js';
 import { InterviewStore, type NewOp } from '../interview/store.js';
 import { Syncer, type SyncResult } from '../interview/sync.js';
 import { respondentText } from './text.js';
+import { themeStyle, type Branding } from './theme.js';
 
 interface RespondentPayload {
   interview: {
@@ -28,6 +29,8 @@ interface RespondentPayload {
   compiled: CompiledQuestionnaire;
   lastSeq: number;
   completion: { message: string; redirectUrl: string };
+  /** The project's look: colours, type, corners and logo (project settings). */
+  branding?: Branding;
 }
 
 const hasState = (s: unknown): s is Partial<InterviewState> =>
@@ -236,7 +239,7 @@ export function RespondentPage() {
   if (phase === 'done' || phase === 'already') {
     const message = phase === 'already' ? t.already : payload.completion.message || t.thanks;
     return (
-      <Shell title={title}>
+      <Shell title={title} branding={payload.branding}>
         <div className="flex flex-col items-start gap-4" data-testid="completed">
           <p className="text-lg font-medium" role="status">
             {message}
@@ -253,11 +256,17 @@ export function RespondentPage() {
       </Shell>
     );
   }
-  if (!session) return <Shell title={title}>{<p aria-busy="true">{t.loading}</p>}</Shell>;
+  if (!session)
+    return (
+      <Shell title={title} branding={payload.branding}>
+        {<p aria-busy="true">{t.loading}</p>}
+      </Shell>
+    );
   const finished = session.status().state !== 'in_progress';
   return (
     <Shell
       title={title}
+      branding={payload.branding}
       status={save === 'saving' ? t.saving : save === 'offline' ? t.offline : t.saved}
     >
       <InterviewRunner
@@ -291,20 +300,38 @@ export function Shell({
   status,
   children,
   embedded,
+  branding,
 }: {
   title: string;
   status?: string;
   children: React.ReactNode;
   /** Inside the staff preview: no page landmarks, no full-screen height. */
   embedded?: boolean;
+  branding?: Branding;
 }) {
   const Heading = embedded ? 'p' : 'h1';
   const Body = embedded ? 'div' : 'main';
+  const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
+  const logoAt = branding?.logo ? branding.theme.logo : 'hidden';
+  const logo =
+    branding?.logo && logoAt !== 'hidden' ? (
+      <img src={branding.logo} alt="" className="h-10 w-auto max-w-[10rem] object-contain" />
+    ) : null;
   return (
-    <div className={`${embedded ? '' : 'min-h-screen'} bg-slate-50`}>
+    <div
+      className={`${embedded ? '' : 'min-h-screen'} bg-slate-50`}
+      style={themeStyle(branding?.theme, dark)}
+      data-testid="respondent-shell"
+    >
       <header className="border-b border-slate-200 bg-white">
+        {logoAt === 'center' && logo ? (
+          <div className="mx-auto flex max-w-3xl justify-center px-4 pt-3">{logo}</div>
+        ) : null}
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-          <Heading className="text-base font-semibold text-indigo-ink-800">{title}</Heading>
+          <span className="flex min-w-0 items-center gap-3">
+            {logoAt === 'left' ? logo : null}
+            <Heading className="text-base font-semibold text-indigo-ink-800">{title}</Heading>
+          </span>
           {status ? (
             <p className="text-xs text-slate-600" role="status" data-testid="respondent-save">
               {status}

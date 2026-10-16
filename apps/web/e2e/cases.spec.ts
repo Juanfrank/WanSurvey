@@ -176,7 +176,7 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
 
   // Back in the list, the free cases go out by the rules.
   const before = Number(await page.locator('[data-kpi="assigned"] p').last().textContent());
-  await page.getByLabel('How to assign').selectOption({ label: 'By the assignment rules' });
+  await page.getByLabel('How to assign').selectOption({ label: 'By the rules' });
   await expect(page.getByText('Assign free cases by the rules')).toBeVisible();
   await page.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(page.getByText(/cases? assigned\./)).toBeVisible();

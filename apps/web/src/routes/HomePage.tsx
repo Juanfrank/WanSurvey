@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import { ProjectLogo } from './ProjectLogo.js';
 import { api } from '../api.js';
 import { useMe } from './AppLayout.js';
 import { Card } from './ui.js';
@@ -32,14 +33,17 @@ export function HomePage() {
         {projects.data?.length ? (
           <ul className="divide-y divide-slate-100">
             {projects.data.map((p) => (
-              <li key={p.id} className="flex justify-between py-2">
-                <Link
-                  to="/projects/$projectId"
-                  params={{ projectId: p.id }}
-                  className="text-indigo-ink-700 hover:underline"
-                >
-                  {p.name}
-                </Link>
+              <li key={p.id} className="flex items-center justify-between py-2">
+                <span className="flex items-center gap-3">
+                  <ProjectLogo project={p} className="h-6 w-auto max-w-[5rem]" />
+                  <Link
+                    to="/projects/$projectId"
+                    params={{ projectId: p.id }}
+                    className="text-indigo-ink-700 hover:underline"
+                  >
+                    {p.name}
+                  </Link>
+                </span>
                 <span className="font-mono text-sm text-slate-500">
                   {p.code} · {t(`app.projectStatus.${p.status}`, { defaultValue: p.status })}
                 </span>

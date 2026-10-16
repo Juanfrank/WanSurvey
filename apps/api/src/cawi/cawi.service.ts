@@ -10,6 +10,7 @@ import {
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
+import type { CawiTheme } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
@@ -26,6 +27,7 @@ import {
   interviews,
   invitations,
   openLinks,
+  projectLogos,
   projects,
   questionnaires,
   suppressions,
@@ -877,7 +879,36 @@ export class CawiService implements OnModuleInit {
           message: settings.cawi.completionMessage,
           redirectUrl: settings.cawi.redirectUrl,
         },
+        branding: await this.branding(tx, inv.projectId, settings.cawi.theme, token),
       };
+    });
+  }
+
+  /** The project's look for respondents: the theme, and the logo's address when there is one. */
+  private async branding(tx: Tx, projectId: string, theme: CawiTheme, token: string) {
+    const [p] = await tx
+      .select({ logoUpdatedAt: projects.logoUpdatedAt })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    const at = p?.logoUpdatedAt;
+    return {
+      theme,
+      logo:
+        at && theme.logo !== 'hidden'
+          ? `/api/v1/public/s/${encodeURIComponent(token)}/logo?v=${at.getTime()}`
+          : null,
+    };
+  }
+
+  /** The logo of the link's project, for the respondent's page. */
+  respondentLogo(token: string) {
+    return this.byToken(token, async (tx, inv) => {
+      const [logo] = await tx
+        .select({ contentType: projectLogos.contentType, image: projectLogos.image })
+        .from(projectLogos)
+        .where(eq(projectLogos.projectId, inv.projectId));
+      if (!logo) throw new NotFoundException('No logo');
+      return logo;
     });
   }
 

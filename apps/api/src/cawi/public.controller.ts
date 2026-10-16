@@ -75,6 +75,18 @@ export class PublicSurveyController {
     return this.cawi.respondentSubmit(token, body);
   }
 
+  /** The project logo on the respondent's page (cached; the address changes with the logo). */
+  @Public()
+  @Throttle(respondentLimit)
+  @Get('public/s/:token/logo')
+  async logo(@Param('token') token: string, @Res() res: Response) {
+    const logo = await this.cawi.respondentLogo(token);
+    res.setHeader('Content-Type', logo.contentType);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(logo.image);
+  }
+
   /** Starts an anonymous interview from an open link. */
   @Public()
   @Throttle({ default: { limit: 20, ttl: 60_000 } })

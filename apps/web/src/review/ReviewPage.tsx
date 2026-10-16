@@ -205,7 +205,7 @@ export function ReviewPage() {
               key={to}
               type="button"
               variant={to === 'approved' ? 'primary' : 'secondary'}
-              className="px-3 py-1.5 text-sm"
+              size="sm"
               disabled={move.isPending}
               aria-keyshortcuts={to === 'approved' ? 'A' : to === 'returned' ? 'R' : undefined}
               onClick={() =>

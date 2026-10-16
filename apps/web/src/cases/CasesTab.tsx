@@ -299,9 +299,10 @@ export function CasesTab({ projectId }: { projectId: string }) {
         {message}
       </p>
 
+      {/* One row: every control the same height (h-8). */}
       {canAssign ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
-          <span>
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-sm min-[900px]:flex-nowrap">
+          <span className="whitespace-nowrap">
             {selected.size
               ? t('cases.list.selected', { count: selected.size })
               : how === 'rules'
@@ -315,7 +316,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
           </label>
           <select
             id="assign-how"
-            className={`${controlCls} w-auto`}
+            className={`${controlCls} h-8 w-auto py-0`}
             value={how}
             onChange={(e) => setHow(e.target.value as 'person' | 'rules')}
           >
@@ -329,7 +330,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
               </label>
               <select
                 id="assign-to"
-                className={`${controlCls} w-auto`}
+                className={`${controlCls} h-8 w-auto min-w-0 max-w-[14rem] py-0`}
                 value={assignee}
                 onChange={(e) => setAssignee(e.target.value)}
               >
@@ -344,7 +345,8 @@ export function CasesTab({ projectId }: { projectId: string }) {
           ) : null}
           <Button
             type="button"
-            className="px-3 py-1 text-sm"
+            size="sm"
+            className="h-8 whitespace-nowrap"
             disabled={
               how === 'rules'
                 ? byRules.isPending
@@ -364,7 +366,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
           </Button>
           <button
             type="button"
-            className={`${smallBtn} inline-flex items-center gap-1`}
+            className={`${smallBtn} inline-flex h-8 items-center gap-1`}
             aria-label={t('cases.list.rules')}
             title={t('cases.list.rules')}
             onClick={() => setRulesOpen(true)}
@@ -373,7 +375,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
           </button>
           <button
             type="button"
-            className={smallBtn}
+            className={`${smallBtn} h-8 whitespace-nowrap`}
             disabled={!selected.size || assign.isPending}
             onClick={() => assign.mutate({ caseIds: [...selected], userId: null })}
           >
@@ -691,11 +693,7 @@ function SamplingFacts({
                 onChange={(e) => setReason(e.target.value)}
               />
             </label>
-            <Button
-              type="submit"
-              className="px-3 py-1 text-sm"
-              disabled={!reason.trim() || substitute.isPending}
-            >
+            <Button type="submit" size="sm" disabled={!reason.trim() || substitute.isPending}>
               {t('cases.sampling.substituteGo')}
             </Button>
           </form>
@@ -842,7 +840,7 @@ function CaseDrawer({
               {c.canClaim ? (
                 <Button
                   type="button"
-                  className="px-3 py-1 text-sm"
+                  size="sm"
                   disabled={hand.isPending}
                   onClick={() => hand.mutate('claim')}
                 >

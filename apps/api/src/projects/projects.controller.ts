@@ -1,14 +1,25 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Patch,
+  PayloadTooLargeException,
   Post,
+  Put,
+  Res,
+  UnprocessableEntityException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import {
   ASSIGNMENT_MODES,
   CapiSettings,
@@ -28,7 +39,20 @@ import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
-import { projects } from '../db/schema.js';
+import { projectLogos, projects } from '../db/schema.js';
+
+const LOGO_MAX = 512 * 1024;
+
+/** The image type from its first bytes (the file name and declared type are not trusted). */
+export function imageType(b: Buffer): string | null {
+  if (b.length < 12) return null;
+  if (b[0] === 0x89 && b.toString('ascii', 1, 4) === 'PNG') return 'image/png';
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.toString('ascii', 0, 4) === 'GIF8') return 'image/gif';
+  if (b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP')
+    return 'image/webp';
+  return null;
+}
 
 const ProjectFields = z.object({
   name: z.string().min(1).max(200),
@@ -171,6 +195,100 @@ export class ProjectsController {
         }),
       );
       return withSettings(project!);
+    });
+  }
+
+  /** Uploads the project's logo (PNG, JPEG, WebP or GIF, up to 512 KB), replacing any other. */
+  @Put(':id/logo')
+  @RequirePermission('projects.update', { projectParam: 'id' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: LOGO_MAX } }))
+  uploadLogo(
+    @Auth() ctx: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: { buffer: Buffer; size: number } | undefined,
+  ) {
+    if (!file) throw new BadRequestException('Attach the image as "file"');
+    if (file.size > LOGO_MAX) throw new PayloadTooLargeException();
+    const contentType = imageType(file.buffer);
+    if (!contentType)
+      throw new UnprocessableEntityException({
+        code: 'NOT_AN_IMAGE',
+        message: 'Use a PNG, JPEG, WebP or GIF image',
+      });
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const [p] = await tx.select({ id: projects.id }).from(projects).where(eq(projects.id, id));
+      if (!p) throw new NotFoundException('Project not found');
+      const now = new Date();
+      await tx
+        .insert(projectLogos)
+        .values({ projectId: id, tenantId: ctx.tenantId, contentType, image: file.buffer })
+        .onConflictDoUpdate({
+          target: projectLogos.projectId,
+          set: { contentType, image: file.buffer, updatedAt: now },
+        });
+      const [project] = await tx
+        .update(projects)
+        .set({ logoUpdatedAt: now })
+        .where(eq(projects.id, id))
+        .returning();
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'project.updated',
+          targetType: 'project',
+          targetId: id,
+          details: { logo: contentType, size: file.size },
+        }),
+      );
+      return withSettings(project!);
+    });
+  }
+
+  @Get(':id/logo')
+  @RequirePermission('projects.read', { projectParam: 'id' })
+  async logo(
+    @Auth() ctx: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ) {
+    const logo = await this.database.withTenant(ctx.tenantId, async (tx) => {
+      const [l] = await tx
+        .select({ contentType: projectLogos.contentType, image: projectLogos.image })
+        .from(projectLogos)
+        .where(eq(projectLogos.projectId, id));
+      return l;
+    });
+    if (!logo) throw new NotFoundException('No logo');
+    res.setHeader('Content-Type', logo.contentType);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(logo.image);
+  }
+
+  @Delete(':id/logo')
+  @RequirePermission('projects.update', { projectParam: 'id' })
+  removeLogo(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      await tx.delete(projectLogos).where(eq(projectLogos.projectId, id));
+      const [project] = await tx
+        .update(projects)
+        .set({ logoUpdatedAt: null })
+        .where(eq(projects.id, id))
+        .returning();
+      if (!project) throw new NotFoundException('Project not found');
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'project.updated',
+          targetType: 'project',
+          targetId: id,
+          details: { logo: null },
+        }),
+      );
+      return withSettings(project);
     });
   }
 }

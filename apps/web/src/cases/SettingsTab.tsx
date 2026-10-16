@@ -10,6 +10,7 @@ import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { SubTabBar } from '../routes/tabs.js';
 import { CawiProjectSettings } from '../cawi/CawiTab.js';
+import { BrandingSettings } from './BrandingSettings.js';
 import { useCan } from '../designer/hooks.js';
 
 /** Per-project switches: automatic personal data for interviewers, and the assignment mode. */
@@ -43,6 +44,7 @@ export function SettingsTab({ project }: { project: Project }) {
     'fieldwork',
     'shortcuts',
     'privacy',
+    'look',
   ];
   const [sub, setSub] = useState('assignment');
   const current = subs.includes(sub) ? sub : 'assignment';
@@ -443,6 +445,9 @@ export function SettingsTab({ project }: { project: Project }) {
               </fieldset>
             </>,
           )}
+        </Tabs.Content>
+        <Tabs.Content value="look">
+          <BrandingSettings project={project} />
         </Tabs.Content>
         <Tabs.Content value="web">
           <CawiProjectSettings project={project} />

@@ -114,10 +114,23 @@ export const projects = pgTable(
       .default(sql`'{es}'::text[]`),
     /** `ProjectSettings` from @wansurvey/schema; read through `projectSettings()` for defaults. */
     settings: jsonb('settings').notNull().default({}),
+    /** When the logo last changed (null: none); the image is in `project_logos`. */
+    logoUpdatedAt: timestamp('logo_updated_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('projects_tenant_code_uq').on(t.tenantId, t.code)],
 );
+
+/** A project's logo (PNG, JPEG, WebP or GIF; small), shown in the app and on web surveys. */
+export const projectLogos = pgTable('project_logos', {
+  projectId: uuid('project_id')
+    .primaryKey()
+    .references(() => projects.id),
+  tenantId: tenantId().references(() => tenants.id),
+  contentType: text('content_type').notNull(),
+  image: bytea('image').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const memberships = pgTable(
   'memberships',

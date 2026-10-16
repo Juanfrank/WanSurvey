@@ -591,7 +591,7 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
             onChange={(e) => setExtra(e.target.value)}
           />
         </label>
-        <Button type="button" className="px-3 py-1 text-sm" onClick={csv}>
+        <Button type="button" size="sm" onClick={csv}>
           {t('cawi.links.download')}
         </Button>
       </div>

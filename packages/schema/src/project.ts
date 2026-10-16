@@ -17,6 +17,21 @@ export type CapiSettings = z.infer<typeof CapiSettings>;
 export const LAWFUL_BASES = ['consent', 'legitimate_interest', 'contract', 'public_task'] as const;
 export type LawfulBasis = (typeof LAWFUL_BASES)[number];
 
+const Hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
+/** How the web survey looks to respondents: colours, type, corners and the project logo. */
+export const CawiTheme = z.object({
+  /** Buttons, selected answers and links; shades are derived from it. */
+  primary: Hex.default('#0050dd'),
+  /** The page behind the questions. */
+  background: Hex.default('#f8fafc'),
+  font: z.enum(['sans', 'system', 'serif']).default('sans'),
+  corners: z.enum(['rounded', 'square', 'pill']).default('rounded'),
+  /** Where the project logo goes in the header, or not shown. */
+  logo: z.enum(['left', 'center', 'hidden']).default('left'),
+});
+export type CawiTheme = z.infer<typeof CawiTheme>;
+
 export const CawiSettings = z.object({
   lawfulBasis: z.enum(LAWFUL_BASES).nullable().default(null),
   /** Shown as the sender of invitations ("Encuesta de hogares <…>"). */
@@ -25,6 +40,7 @@ export const CawiSettings = z.object({
   completionMessage: z.string().max(2000).default(''),
   /** Where respondents go after finishing (optional). */
   redirectUrl: z.union([z.literal(''), z.url()]).default(''),
+  theme: CawiTheme.default(CawiTheme.parse({})),
 });
 export type CawiSettings = z.infer<typeof CawiSettings>;
 

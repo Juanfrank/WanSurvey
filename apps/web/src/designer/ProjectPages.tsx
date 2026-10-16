@@ -5,6 +5,7 @@ import { SAMPLES } from '@wansurvey/fixtures';
 import { MODES, type Mode, type ProjectSettings } from '@wansurvey/schema';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ProjectLogo } from '../routes/ProjectLogo.js';
 import { subTabCls, tabCls } from '../routes/tabs.js';
 import { api, ApiError } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
@@ -42,6 +43,8 @@ export interface Project {
   languages: string[];
   modesEnabled: string[];
   settings: ProjectSettings;
+  /** When the logo last changed; null: no logo. */
+  logoUpdatedAt?: string | null;
 }
 
 interface QuestionnaireRow {
@@ -79,14 +82,17 @@ export function ProjectsPage() {
         {projects.data?.length ? (
           <ul className="divide-y divide-slate-100" data-testid="projects">
             {projects.data.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
-                <Link
-                  to="/projects/$projectId"
-                  params={{ projectId: p.id }}
-                  className="font-medium text-indigo-ink-700 hover:underline"
-                >
-                  {p.name}
-                </Link>
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="flex items-center gap-3">
+                  <ProjectLogo project={p} className="h-7 w-auto max-w-[6rem]" />
+                  <Link
+                    to="/projects/$projectId"
+                    params={{ projectId: p.id }}
+                    className="font-medium text-indigo-ink-700 hover:underline"
+                  >
+                    {p.name}
+                  </Link>
+                </span>
                 <span className="font-mono text-sm text-slate-600">
                   {p.code} · {t(`app.projectStatus.${p.status}`, { defaultValue: p.status })}
                 </span>
@@ -1030,6 +1036,9 @@ export function ProjectPage() {
         </Link>
       </nav>
       <div className="flex flex-wrap items-center gap-4">
+        {project.data ? (
+          <ProjectLogo project={project.data} className="h-10 w-auto max-w-[10rem]" />
+        ) : null}
         <h1 className="text-2xl font-bold">{project.data?.name ?? '…'}</h1>
         {canDevice ? (
           <Link

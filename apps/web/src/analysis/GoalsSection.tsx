@@ -247,7 +247,7 @@ export function GoalsSection({ projectId }: { projectId: string }) {
               onChange={(e) => setForm({ ...form, target: Math.max(1, Number(e.target.value)) })}
             />
           </label>
-          <Button type="submit" className="px-3 py-1.5" disabled={!form.userId || create.isPending}>
+          <Button type="submit" size="sm" disabled={!form.userId || create.isPending}>
             {t('analysis.goals.add')}
           </Button>
           <ErrorText>{error}</ErrorText>
