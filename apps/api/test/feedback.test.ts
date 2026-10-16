@@ -81,5 +81,18 @@ describe('quick feedback (faces)', () => {
     expect((await pub.get(`/api/v1/public/f/${slug}`)).status).toBe(404);
     const list = await pm.agent.get(base).expect(200);
     expect(list.body[0]).toMatchObject({ id, active: false, counts: { 1: 1, 2: 1, 3: 1 } });
+
+    // Renamed; an answered point cannot be deleted, an unanswered one can.
+    await pm.agent
+      .patch(`${base}/${id}`)
+      .set('x-csrf-token', pm.csrf)
+      .send({ name: 'Mostrador central' })
+      .expect(200);
+    const kept = await pm.agent.delete(`${base}/${id}`).set('x-csrf-token', pm.csrf);
+    expect(kept.status).toBe(409);
+    expect(kept.body.code).toBe('IN_USE');
+    const spare = await post(pm, base, { name: 'Sin uso', question: { es: '¿Qué tal?' } });
+    await pm.agent.delete(`${base}/${spare.body.id}`).set('x-csrf-token', pm.csrf).expect(204);
+    expect((await pm.agent.get(base).expect(200)).body).toHaveLength(1);
   });
 });

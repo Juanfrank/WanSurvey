@@ -1,10 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { localiseError } from '../i18n-messages.js';
-import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import { Field } from '../routes/ui.js';
 import { EMOJI, Face } from './Faces.js';
 
 export interface FeedbackPoint {
@@ -17,6 +15,7 @@ export interface FeedbackPoint {
   slug: string;
   url: string;
   counts: Record<string, number>;
+  createdAt?: string;
 }
 
 interface Results {
@@ -37,204 +36,78 @@ export function satisfied(p: { faces: 3 | 5; counts: Record<string, number> }) {
   return good / total;
 }
 
-/**
- * Quick feedback in a project: faces answered by link, widget or printed slip (F1). Set up
- * here, with each point's links and embedding code, its slips to print and its results.
- */
-export function FeedbackSection({ projectId, lang }: { projectId: string; lang: string }) {
-  const { t, i18n } = useTranslation();
-  const qc = useQueryClient();
-  const list = useQuery({
+/** The quick-feedback points of a project (they sit in its questionnaire list). */
+export function useFeedbackPoints(projectId: string, enabled: boolean) {
+  return useQuery({
     queryKey: ['feedback', projectId],
     queryFn: () => api<FeedbackPoint[]>(`/projects/${projectId}/feedback`),
+    enabled,
   });
-  const [open, setOpen] = useState<{ id: string; view: 'links' | 'results' } | null>(null);
-  const [name, setName] = useState('');
-  const [question, setQuestion] = useState('');
-  const [faces, setFaces] = useState<3 | 5>(3);
-  const [askComment, setAskComment] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const create = useMutation({
-    mutationFn: () =>
-      api<FeedbackPoint>(`/projects/${projectId}/feedback`, {
-        method: 'POST',
-        body: {
-          name: name.trim(),
-          question: { [lang]: question.trim() || t('feedback.questionDefault') },
-          faces,
-          askComment,
-        },
-      }),
-    onSuccess: async (p) => {
-      setName('');
-      setQuestion('');
-      await qc.invalidateQueries({ queryKey: ['feedback', projectId] });
-      setOpen({ id: p.id, view: 'links' });
-    },
-    onError: (e) => setError(localiseError(t, e)),
-  });
-  const toggle = useMutation({
-    mutationFn: (p: FeedbackPoint) =>
-      api(`/projects/${projectId}/feedback/${p.id}`, {
-        method: 'PATCH',
-        body: { active: !p.active },
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['feedback', projectId] }),
-  });
-  const pct = (v: number | null) =>
-    v === null
-      ? '–'
-      : new Intl.NumberFormat(i18n.language, { style: 'percent', maximumFractionDigits: 0 }).format(
-          v,
-        );
+}
 
+export interface FeedbackDraft {
+  question: string;
+  faces: 3 | 5;
+  askComment: boolean;
+}
+
+/** The parts of the new-item form that only quick feedback has: question, faces, comment. */
+export function FeedbackFields({
+  value,
+  onChange,
+}: {
+  value: FeedbackDraft;
+  onChange(v: FeedbackDraft): void;
+}) {
+  const { t } = useTranslation();
   return (
-    <Card>
-      <section
-        aria-labelledby="fb-h"
-        className="flex flex-col gap-4"
-        data-testid="feedback-section"
-      >
-        <div>
-          <h2 id="fb-h" className="text-lg font-semibold">
-            {t('feedback.title')}
-          </h2>
-          <p className="text-sm text-slate-600">{t('feedback.help')}</p>
-        </div>
-        {list.data?.length ? (
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {list.data.map((p) => {
-              const total = Object.values(p.counts).reduce((a, b) => a + b, 0);
-              return (
-                <li key={p.id} className="flex flex-col gap-3 py-3" data-feedback={p.name}>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="flex -space-x-1" aria-hidden>
-                      {Array.from({ length: p.faces }, (_, i) => (
-                        <Face key={i} score={i + 1} faces={p.faces} size={22} />
-                      ))}
-                    </span>
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-sm text-slate-600">
-                      {t('feedback.answers', { count: total })} ·{' '}
-                      {t('feedback.satisfied', { pct: pct(satisfied(p)) })}
-                    </span>
-                    {!p.active ? (
-                      <span className="rounded bg-slate-100 px-1.5 text-xs text-slate-700">
-                        {t('feedback.inactive')}
-                      </span>
-                    ) : null}
-                    <span className="ml-auto flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        className={btn}
-                        aria-pressed={open?.id === p.id && open.view === 'links'}
-                        onClick={() =>
-                          setOpen((o) =>
-                            o?.id === p.id && o.view === 'links'
-                              ? null
-                              : { id: p.id, view: 'links' },
-                          )
-                        }
-                      >
-                        {t('feedback.links')}
-                      </button>
-                      <Link
-                        to="/projects/$projectId/feedback/$pointId/print"
-                        params={{ projectId, pointId: p.id }}
-                        className={btn}
-                      >
-                        {t('feedback.print')}
-                      </Link>
-                      <button
-                        type="button"
-                        className={btn}
-                        aria-pressed={open?.id === p.id && open.view === 'results'}
-                        onClick={() =>
-                          setOpen((o) =>
-                            o?.id === p.id && o.view === 'results'
-                              ? null
-                              : { id: p.id, view: 'results' },
-                          )
-                        }
-                      >
-                        {t('feedback.results')}
-                      </button>
-                      <button type="button" className={btn} onClick={() => toggle.mutate(p)}>
-                        {p.active ? t('feedback.switchOff') : t('feedback.switchOn')}
-                      </button>
-                    </span>
-                  </div>
-                  {open?.id === p.id && open.view === 'links' ? <Links point={p} /> : null}
-                  {open?.id === p.id && open.view === 'results' ? (
-                    <ResultsPanel projectId={projectId} point={p} />
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-sm text-slate-600">{list.isLoading ? '…' : t('feedback.none')}</p>
-        )}
-        <details className="rounded-md border border-slate-200 p-3">
-          <summary className="cursor-pointer font-medium">{t('feedback.create')}</summary>
-          <form
-            className="mt-3 flex max-w-xl flex-col gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setError(null);
-              if (name.trim()) create.mutate();
-            }}
-          >
-            <Field
-              id="fb-name"
-              label={t('feedback.name')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+    <div className="flex flex-col gap-3" data-testid="feedback-fields">
+      <Field
+        id="fb-question"
+        label={t('feedback.question')}
+        value={value.question}
+        placeholder={t('feedback.questionDefault')}
+        onChange={(e) => onChange({ ...value, question: e.target.value })}
+      />
+      <fieldset className="flex flex-col gap-1 text-sm">
+        <legend className="mb-1 font-medium text-slate-700">{t('feedback.faces')}</legend>
+        {([3, 5] as const).map((n) => (
+          <label key={n} className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="fb-faces"
+              checked={value.faces === n}
+              onChange={() => onChange({ ...value, faces: n })}
             />
-            <Field
-              id="fb-question"
-              label={t('feedback.question')}
-              value={question}
-              placeholder={t('feedback.questionDefault')}
-              onChange={(e) => setQuestion(e.target.value)}
-            />
-            <fieldset className="flex flex-col gap-1 text-sm">
-              <legend className="mb-1 font-medium text-slate-700">{t('feedback.faces')}</legend>
-              {([3, 5] as const).map((n) => (
-                <label key={n} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="fb-faces"
-                    checked={faces === n}
-                    onChange={() => setFaces(n)}
-                  />
-                  <span className="flex -space-x-1" aria-hidden>
-                    {Array.from({ length: n }, (_, i) => (
-                      <Face key={i} score={i + 1} faces={n} size={20} />
-                    ))}
-                  </span>
-                  {t(`feedback.faces${n}`)}
-                </label>
+            <span className="flex -space-x-1" aria-hidden>
+              {Array.from({ length: n }, (_, i) => (
+                <Face key={i} score={i + 1} faces={n} size={20} />
               ))}
-            </fieldset>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={askComment}
-                onChange={(e) => setAskComment(e.target.checked)}
-              />
-              {t('feedback.askComment')}
-            </label>
-            <ErrorText>{error}</ErrorText>
-            <div>
-              <Button type="submit" disabled={!name.trim() || create.isPending}>
-                {t('feedback.add')}
-              </Button>
-            </div>
-          </form>
-        </details>
-      </section>
-    </Card>
+            </span>
+            {t(`feedback.faces${n}`)}
+          </label>
+        ))}
+      </fieldset>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={value.askComment}
+          onChange={(e) => onChange({ ...value, askComment: e.target.checked })}
+        />
+        {t('feedback.askComment')}
+      </label>
+    </div>
+  );
+}
+
+/** The faces of a point, small, as its icon in lists. */
+export function FacesIcon({ faces }: { faces: 3 | 5 }) {
+  return (
+    <span className="inline-flex -space-x-1 align-middle" aria-hidden>
+      {Array.from({ length: faces }, (_, i) => (
+        <Face key={i} score={i + 1} faces={faces} size={18} />
+      ))}
+    </span>
   );
 }
 
@@ -276,7 +149,7 @@ function CopyBox({ label, value, id }: { label: string; value: string; id: strin
 }
 
 /** One link per face, and ready-made code for an e-mail and for a web page. */
-function Links({ point }: { point: FeedbackPoint }) {
+export function FeedbackLinks({ point }: { point: FeedbackPoint }) {
   const { t } = useTranslation();
   const scores = Array.from({ length: point.faces }, (_, i) => i + 1);
   const labels = t(`feedback.labels${point.faces}`, { returnObjects: true }) as string[];
@@ -321,7 +194,7 @@ function Links({ point }: { point: FeedbackPoint }) {
 }
 
 /** Counts per face and channel, the latest comments, and keying of paper slips. */
-function ResultsPanel({ projectId, point }: { projectId: string; point: FeedbackPoint }) {
+export function FeedbackResults({ projectId, point }: { projectId: string; point: FeedbackPoint }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [status, setStatus] = useState('');

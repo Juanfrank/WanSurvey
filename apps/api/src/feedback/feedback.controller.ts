@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
@@ -48,6 +58,17 @@ export class FeedbackController {
     @Body(new ZodPipe(PointPatch)) body: z.infer<typeof PointPatch>,
   ) {
     return this.feedback.update(ctx.tenantId, projectId, id, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermission('cawi.waves', PERM)
+  async remove(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    await this.feedback.remove(ctx.tenantId, projectId, id);
   }
 
   @Get(':id/results')

@@ -45,6 +45,17 @@ export const feedbackEn = {
   labels3: ['Bad', 'OK', 'Good'],
   labels5: ['Very bad', 'Bad', 'OK', 'Good', 'Very good'],
   back: 'Back',
+  format: 'What is it?',
+  formats: { questionnaire: 'Questionnaire', feedback: 'Quick feedback (faces)' },
+  formatHints: {
+    questionnaire: 'Interviews and forms in the modes you choose: phone, face to face, web, paper.',
+    feedback: 'One question answered with faces: by link, embedded widget or printed slip.',
+  },
+  chip: 'Faces',
+  channelsShort: 'link · widget · slip',
+  switchedOn: '{{name}} is on.',
+  switchedOff: '{{name}} is switched off: its links no longer take answers.',
+  inUse: 'It already has answers: switch it off instead, so its results stay.',
 };
 
 export const feedbackEs: typeof feedbackEn = {
@@ -93,4 +104,17 @@ export const feedbackEs: typeof feedbackEn = {
   labels3: ['Mal', 'Regular', 'Bien'],
   labels5: ['Muy mal', 'Mal', 'Regular', 'Bien', 'Muy bien'],
   back: 'Volver',
+  format: '¿Qué es?',
+  formats: { questionnaire: 'Cuestionario', feedback: 'Retroalimentación rápida (caritas)' },
+  formatHints: {
+    questionnaire:
+      'Entrevistas y formularios en los modos que elija: teléfono, presencial, web, papel.',
+    feedback:
+      'Una pregunta que se responde con caritas: por enlace, widget insertado u hojita impresa.',
+  },
+  chip: 'Caritas',
+  channelsShort: 'enlace · widget · hojita',
+  switchedOn: '{{name}} está encendido.',
+  switchedOff: '{{name}} está apagado: sus enlaces ya no reciben respuestas.',
+  inUse: 'Ya tiene respuestas: apáguelo en su lugar, así se conservan sus resultados.',
 };

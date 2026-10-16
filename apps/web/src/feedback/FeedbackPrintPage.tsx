@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { QrCode } from '../papi/QrCode.js';
 import { Button } from '../routes/ui.js';
 import { Face } from './Faces.js';
-import type { FeedbackPoint } from './FeedbackSection.js';
+import type { FeedbackPoint } from './FeedbackParts.js';
 
 const LAYOUTS = [4, 6, 8] as const;
 

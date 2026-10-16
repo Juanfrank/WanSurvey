@@ -12,7 +12,16 @@ import { Button, Card, ErrorText, Field, FileInput } from '../routes/ui.js';
 import { AssignmentsTab } from '../cases/AssignmentsTab.js';
 import { CasesTab } from '../cases/CasesTab.js';
 import { SamplingTab } from '../cases/SamplingTab.js';
-import { FeedbackSection } from '../feedback/FeedbackSection.js';
+import {
+  FacesIcon,
+  FeedbackFields,
+  FeedbackLinks,
+  FeedbackResults,
+  satisfied,
+  useFeedbackPoints,
+  type FeedbackDraft,
+  type FeedbackPoint,
+} from '../feedback/FeedbackParts.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
 import { CallsTab } from '../cati/CallsTab.js';
 import { CawiTab } from '../cawi/CawiTab.js';
@@ -87,7 +96,13 @@ export function ProjectsPage() {
 
 type SourceKind = 'blank' | 'sample' | 'json';
 
-type QPanel = { kind: 'web' | 'paper'; name: string } | null;
+type QPanel =
+  | { kind: 'web' | 'paper'; name: string }
+  | { kind: 'feedbackLinks' | 'feedbackResults'; name: string; point: FeedbackPoint }
+  | null;
+
+/** What a new item of the questionnaire list is: a questionnaire, or quick feedback (F1). */
+type NewFormat = 'questionnaire' | 'feedback';
 
 function QuestionnairesSection({
   projectId,
@@ -106,7 +121,7 @@ function QuestionnairesSection({
   panel: QPanel;
   onPanel(p: QPanel): void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const canEdit = useCan('questionnaires.edit', projectId);
@@ -141,6 +156,96 @@ function QuestionnairesSection({
           : localiseError(t, e),
       ),
   });
+  const feedback = useFeedbackPoints(projectId, canWeb);
+  const [fbMenu, setFbMenu] = useState<{
+    p: FeedbackPoint;
+    at: { x: number; y: number };
+  } | null>(null);
+  const fbPatch = useMutation({
+    mutationFn: ({ p, body }: { p: FeedbackPoint; body: { name?: string; active?: boolean } }) =>
+      api<FeedbackPoint>(`/projects/${projectId}/feedback/${p.id}`, { method: 'PATCH', body }),
+    onSuccess: async (r, { body }) => {
+      setStatus(
+        body.name
+          ? t('designer.qActions.renamed', { name: r.name })
+          : r.active
+            ? t('feedback.switchedOn', { name: r.name })
+            : t('feedback.switchedOff', { name: r.name }),
+      );
+      await qc.invalidateQueries({ queryKey: ['feedback', projectId] });
+    },
+    onError: (e) => setStatus(localiseError(t, e)),
+  });
+  const fbRemove = useMutation({
+    mutationFn: (p: FeedbackPoint) =>
+      api(`/projects/${projectId}/feedback/${p.id}`, { method: 'DELETE' }),
+    onSuccess: async (_r, p) => {
+      setStatus(t('designer.qActions.deleted', { name: p.name }));
+      await qc.invalidateQueries({ queryKey: ['feedback', projectId] });
+    },
+    onError: (e) =>
+      setStatus(
+        e instanceof ApiError && e.code === 'IN_USE' ? t('feedback.inUse') : localiseError(t, e),
+      ),
+  });
+  const feedbackActions = (p: FeedbackPoint): MenuEntry[] => [
+    {
+      type: 'item',
+      id: 'links',
+      label: t('feedback.links'),
+      onSelect: () => onPanel({ kind: 'feedbackLinks', name: p.name, point: p }),
+    },
+    {
+      type: 'item',
+      id: 'print',
+      label: t('feedback.print'),
+      onSelect: () =>
+        void navigate({
+          to: '/projects/$projectId/feedback/$pointId/print',
+          params: { projectId, pointId: p.id },
+        }),
+    },
+    {
+      type: 'item',
+      id: 'results',
+      label: t('feedback.results'),
+      onSelect: () => onPanel({ kind: 'feedbackResults', name: p.name, point: p }),
+    },
+    { type: 'separator' },
+    {
+      type: 'item',
+      id: 'rename',
+      label: t('designer.qActions.rename'),
+      onSelect: () => {
+        const name = window.prompt(t('designer.qActions.renamePrompt', { name: p.name }), p.name);
+        if (name && name.trim() && name.trim() !== p.name)
+          fbPatch.mutate({ p, body: { name: name.trim() } });
+      },
+    },
+    {
+      type: 'item',
+      id: 'toggle',
+      label: p.active ? t('feedback.switchOff') : t('feedback.switchOn'),
+      onSelect: () => fbPatch.mutate({ p, body: { active: !p.active } }),
+    },
+    { type: 'separator' },
+    {
+      type: 'item',
+      id: 'delete',
+      label: t('designer.qActions.delete'),
+      onSelect: () => {
+        if (window.confirm(t('designer.qActions.confirmDelete', { name: p.name })))
+          fbRemove.mutate(p);
+      },
+    },
+  ];
+  const pct = (v: number | null) =>
+    v === null
+      ? '–'
+      : new Intl.NumberFormat(i18n.language, {
+          style: 'percent',
+          maximumFractionDigits: 0,
+        }).format(v);
   const actionsFor = (q: QuestionnaireRow): MenuEntry[] => [
     {
       type: 'item',
@@ -227,6 +332,34 @@ function QuestionnairesSection({
   const [modes, setModes] = useState<Mode[] | null>(null);
   const chosen = modes ?? [...offered];
 
+  const [format, setFormat] = useState<NewFormat>('questionnaire');
+  const [draft, setDraft] = useState<FeedbackDraft>({
+    question: '',
+    faces: 3,
+    askComment: true,
+  });
+  const createFeedback = useMutation({
+    mutationFn: () =>
+      api<FeedbackPoint>(`/projects/${projectId}/feedback`, {
+        method: 'POST',
+        body: {
+          name: name.trim(),
+          question: {
+            [projectRow?.languages[0] ?? 'es']:
+              draft.question.trim() || t('feedback.questionDefault'),
+          },
+          faces: draft.faces,
+          askComment: draft.askComment,
+        },
+      }),
+    onSuccess: async (p) => {
+      setName('');
+      setDraft({ question: '', faces: 3, askComment: true });
+      await qc.invalidateQueries({ queryKey: ['feedback', projectId] });
+      onPanel({ kind: 'feedbackLinks', name: p.name, point: p });
+    },
+    onError: (e) => setError(localiseError(t, e)),
+  });
   const create = useMutation({
     mutationFn: () =>
       api<{ id: string }>(`/projects/${projectId}/questionnaires`, {
@@ -266,19 +399,34 @@ function QuestionnairesSection({
           <h2 className="text-lg font-semibold">
             {panel.name
               ? t('designer.qActions.panelTitle', {
-                  what: t(`designer.qActions.${panel.kind}`),
+                  what:
+                    panel.kind === 'feedbackLinks'
+                      ? t('feedback.links')
+                      : panel.kind === 'feedbackResults'
+                        ? t('feedback.results')
+                        : t(`designer.qActions.${panel.kind}`),
                   name: panel.name,
                 })
-              : t(`designer.qActions.${panel.kind}`)}
+              : panel.kind === 'web' || panel.kind === 'paper'
+                ? t(`designer.qActions.${panel.kind}`)
+                : null}
           </h2>
         </div>
         {panel.kind === 'web' ? (
           projectRow ? (
             <CawiTab project={projectRow} />
           ) : null
-        ) : (
+        ) : panel.kind === 'paper' ? (
           <PaperTab projectId={projectId} notice={notice} />
-        )}
+        ) : panel.kind === 'feedbackLinks' ? (
+          <Card>
+            <FeedbackLinks point={panel.point} />
+          </Card>
+        ) : panel.kind === 'feedbackResults' ? (
+          <Card>
+            <FeedbackResults projectId={projectId} point={panel.point} />
+          </Card>
+        ) : null}
       </div>
     );
 
@@ -289,7 +437,7 @@ function QuestionnairesSection({
         <p role="status" aria-live="polite" className="mb-2 text-sm text-slate-700 empty:hidden">
           {status}
         </p>
-        {list.data?.length ? (
+        {list.data?.length || feedback.data?.length ? (
           <table className="w-full text-sm" data-testid="questionnaires">
             <thead>
               <tr className="text-left text-xs text-slate-600">
@@ -305,7 +453,7 @@ function QuestionnairesSection({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {list.data.map((q) => (
+              {(list.data ?? []).map((q) => (
                 <tr key={q.id}>
                   <td className="py-2">
                     <Link
@@ -340,6 +488,55 @@ function QuestionnairesSection({
                   </td>
                 </tr>
               ))}
+              {(feedback.data ?? []).map((p) => {
+                const total = Object.values(p.counts).reduce((a, b) => a + b, 0);
+                return (
+                  <tr key={p.id} data-feedback={p.name}>
+                    <td className="py-2">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 text-left font-medium text-indigo-ink-700 hover:underline"
+                        onClick={() => onPanel({ kind: 'feedbackLinks', name: p.name, point: p })}
+                      >
+                        <FacesIcon faces={p.faces} />
+                        {p.name}
+                      </button>
+                    </td>
+                    <td>
+                      <span className="flex flex-wrap items-center gap-1">
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-ink-900">
+                          {t('feedback.chip')}
+                        </span>
+                        <span className="text-xs text-slate-600">
+                          {t('feedback.channelsShort')}
+                        </span>
+                      </span>
+                    </td>
+                    <td>
+                      {t('feedback.answers', { count: total })} ·{' '}
+                      {t('feedback.satisfied', { pct: pct(satisfied(p)) })}
+                      {!p.active ? (
+                        <span className="ml-1 rounded bg-slate-100 px-1.5 text-xs text-slate-700">
+                          {t('feedback.inactive')}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td>{p.createdAt ? dateTime(p.createdAt) : '—'}</td>
+                    <td className="text-right">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm hover:bg-slate-50"
+                        aria-haspopup="menu"
+                        aria-expanded={fbMenu?.p.id === p.id}
+                        aria-label={t('designer.qActions.menu', { name: p.name })}
+                        onClick={(e) => setFbMenu({ p, at: below(e.currentTarget) })}
+                      >
+                        {t('designer.qActions.label')} ▾
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         ) : (
@@ -353,10 +550,15 @@ function QuestionnairesSection({
             onClose={() => setMenuFor(null)}
           />
         ) : null}
+        {fbMenu ? (
+          <Menu
+            label={t('designer.qActions.menu', { name: fbMenu.p.name })}
+            entries={feedbackActions(fbMenu.p)}
+            at={fbMenu.at}
+            onClose={() => setFbMenu(null)}
+          />
+        ) : null}
       </Card>
-      {canWeb ? (
-        <FeedbackSection projectId={projectId} lang={projectRow?.languages[0] ?? 'es'} />
-      ) : null}
       {canEdit ? (
         <Card>
           <h2 className="mb-3 text-lg font-semibold">{t('designer.create.title')}</h2>
@@ -366,6 +568,7 @@ function QuestionnairesSection({
               e.preventDefault();
               setError(null);
               if (!name.trim()) return setError(t('designer.create.nameRequired'));
+              if (format === 'feedback') return createFeedback.mutate();
               if (kind === 'json' && !json) return setError(t('designer.create.fileRequired'));
               if (!chosen.length) return setError(t('designer.create.modesRequired'));
               create.mutate();
@@ -373,92 +576,128 @@ function QuestionnairesSection({
           >
             <Field
               id="new-q-name"
-              label={t('designer.name')}
+              label={format === 'feedback' ? t('feedback.name') : t('designer.name')}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-            <fieldset className="flex flex-col gap-2 text-sm" data-testid="new-q-modes">
-              <legend className="mb-1 font-medium text-slate-700">
-                {t('designer.create.modes')}
-              </legend>
-              <p className="text-slate-600">{t('designer.create.modesHelp')}</p>
-              <div className="flex flex-wrap gap-2">
-                {offered.map((m) => (
-                  <label
-                    key={m}
-                    className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={chosen.includes(m)}
-                      onChange={(e) =>
-                        setModes(
-                          e.target.checked
-                            ? MODES.filter((x) => x === m || chosen.includes(x))
-                            : chosen.filter((x) => x !== m),
-                        )
-                      }
-                    />
-                    <span className="font-semibold">{m}</span>
-                    <span className="text-slate-600">{t(`designer.modeNames.${m}`)}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset className="flex flex-col gap-2 text-sm">
-              <legend className="mb-1 font-medium text-slate-700">
-                {t('designer.create.start')}
-              </legend>
-              {(['blank', 'sample', 'json'] as const).map((k) => (
-                <label key={k} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="source"
-                    checked={kind === k}
-                    onChange={() => setKind(k)}
-                  />
-                  {t(`designer.create.${k}`)}
-                </label>
-              ))}
-            </fieldset>
-            {kind === 'sample' ? (
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">{t('preview.sample')}</span>
-                <select
-                  className={inputCls}
-                  value={sample}
-                  onChange={(e) => setSample(e.target.value)}
-                >
-                  {SAMPLES.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.title}
-                    </option>
+            {canWeb ? (
+              <fieldset className="flex flex-col gap-2 text-sm" data-testid="new-format">
+                <legend className="mb-1 font-medium text-slate-700">{t('feedback.format')}</legend>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(['questionnaire', 'feedback'] as const).map((f) => (
+                    <label
+                      key={f}
+                      className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white p-3 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
+                    >
+                      <input
+                        type="radio"
+                        name="new-format"
+                        className="mt-0.5"
+                        checked={format === f}
+                        onChange={() => setFormat(f)}
+                      />
+                      <span>
+                        <span className="flex items-center gap-2 font-medium">
+                          {f === 'feedback' ? <FacesIcon faces={3} /> : null}
+                          {t(`feedback.formats.${f}`)}
+                        </span>
+                        <span className="block text-xs text-slate-600">
+                          {t(`feedback.formatHints.${f}`)}
+                        </span>
+                      </span>
+                    </label>
                   ))}
-                </select>
-              </label>
+                </div>
+              </fieldset>
             ) : null}
-            {kind === 'json' ? (
-              <FileInput
-                label={t('preview.openFile')}
-                labelClassName="font-medium text-slate-700"
-                accept="application/json,.json"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    setJson({ name: file.name, definition: JSON.parse(await file.text()) });
-                    setError(null);
-                  } catch (err) {
-                    setJson(null);
-                    setError(t('preview.invalidJson', { error: (err as Error).message }));
-                  }
-                }}
-              />
-            ) : null}
+            {format === 'feedback' ? (
+              <FeedbackFields value={draft} onChange={setDraft} />
+            ) : (
+              <>
+                <fieldset className="flex flex-col gap-2 text-sm" data-testid="new-q-modes">
+                  <legend className="mb-1 font-medium text-slate-700">
+                    {t('designer.create.modes')}
+                  </legend>
+                  <p className="text-slate-600">{t('designer.create.modesHelp')}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {offered.map((m) => (
+                      <label
+                        key={m}
+                        className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={chosen.includes(m)}
+                          onChange={(e) =>
+                            setModes(
+                              e.target.checked
+                                ? MODES.filter((x) => x === m || chosen.includes(x))
+                                : chosen.filter((x) => x !== m),
+                            )
+                          }
+                        />
+                        <span className="font-semibold">{m}</span>
+                        <span className="text-slate-600">{t(`designer.modeNames.${m}`)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset className="flex flex-col gap-2 text-sm">
+                  <legend className="mb-1 font-medium text-slate-700">
+                    {t('designer.create.start')}
+                  </legend>
+                  {(['blank', 'sample', 'json'] as const).map((k) => (
+                    <label key={k} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="source"
+                        checked={kind === k}
+                        onChange={() => setKind(k)}
+                      />
+                      {t(`designer.create.${k}`)}
+                    </label>
+                  ))}
+                </fieldset>
+                {kind === 'sample' ? (
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-slate-700">{t('preview.sample')}</span>
+                    <select
+                      className={inputCls}
+                      value={sample}
+                      onChange={(e) => setSample(e.target.value)}
+                    >
+                      {SAMPLES.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {kind === 'json' ? (
+                  <FileInput
+                    label={t('preview.openFile')}
+                    labelClassName="font-medium text-slate-700"
+                    accept="application/json,.json"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setJson({ name: file.name, definition: JSON.parse(await file.text()) });
+                        setError(null);
+                      } catch (err) {
+                        setJson(null);
+                        setError(t('preview.invalidJson', { error: (err as Error).message }));
+                      }
+                    }}
+                  />
+                ) : null}
+              </>
+            )}
             <ErrorText>{error}</ErrorText>
             <div>
-              <Button type="submit" disabled={create.isPending}>
-                {t('designer.create.submit')}
+              <Button type="submit" disabled={create.isPending || createFeedback.isPending}>
+                {format === 'feedback' ? t('feedback.add') : t('designer.create.submit')}
               </Button>
             </div>
           </form>

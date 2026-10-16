@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { LocalizedText } from '@wansurvey/schema';
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -109,6 +109,29 @@ export class FeedbackService {
         .returning();
       if (!p) throw new NotFoundException('Feedback point not found');
       return this.shape(p);
+    });
+  }
+
+  /** Deletes a point nobody answered (409 IN_USE otherwise: switch it off instead). */
+  remove(tenantId: string, projectId: string, id: string) {
+    return this.database.withTenant(tenantId, async (tx) => {
+      const [p] = await tx
+        .select({ id: feedbackPoints.id })
+        .from(feedbackPoints)
+        .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)))
+        .for('update');
+      if (!p) throw new NotFoundException('Feedback point not found');
+      const [answered] = await tx
+        .select({ id: feedbackResponses.id })
+        .from(feedbackResponses)
+        .where(eq(feedbackResponses.pointId, id))
+        .limit(1);
+      if (answered)
+        throw new ConflictException({
+          code: 'IN_USE',
+          message: 'This feedback point has answers; switch it off instead',
+        });
+      await tx.delete(feedbackPoints).where(eq(feedbackPoints.id, id));
     });
   }
 
