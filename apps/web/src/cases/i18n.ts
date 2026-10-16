@@ -124,6 +124,7 @@ export const casesEn = {
     reinstate: 'Reinstate case',
     close: 'Close',
     event: {
+      link_made: 'Personal web link made',
       anonymised: 'Personal data removed',
       imported: 'Imported',
       updated_by_import: 'Updated by an import',
@@ -414,6 +415,7 @@ export const casesEs: CasesCatalogue = {
     reinstate: 'Reactivar el caso',
     close: 'Cerrar',
     event: {
+      link_made: 'Enlace web personal generado',
       anonymised: 'Datos personales eliminados',
       imported: 'Importado',
       updated_by_import: 'Actualizado por una importación',

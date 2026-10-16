@@ -56,6 +56,8 @@ export const WaveBody = z.strictObject({
   reminderDays: z.array(z.number().int().min(1).max(90)).max(5).default([]),
   sendAt: z.iso.datetime({ offset: true }).optional(),
   bouncesToCati: z.boolean().default(false),
+  /** email: invitations are sent; links: a personal link per case, nothing sent. */
+  channel: z.enum(['email', 'links']).default('email'),
 });
 
 export const OpenLinkBody = z.strictObject({
@@ -250,6 +252,7 @@ export class CawiService implements OnModuleInit {
         reminderDays: [...body.reminderDays].sort((a, b) => a - b),
         sendAt: body.sendAt ? new Date(body.sendAt) : null,
         bouncesToCati: body.bouncesToCati,
+        channel: body.channel,
         createdBy: ctx.userId,
       })
       .returning();
@@ -311,6 +314,11 @@ export class CawiService implements OnModuleInit {
    */
   async sendWave(tx: Tx, ctx: AuthContext, projectId: string, waveId: string) {
     const settings = await this.cases.settings(tx, projectId);
+    const [peek] = await tx
+      .select({ channel: waves.channel })
+      .from(waves)
+      .where(and(eq(waves.id, waveId), eq(waves.projectId, projectId)));
+    if (peek?.channel === 'links') return this.makeLinks(tx, ctx, projectId, waveId);
     if (!settings.cawi.lawfulBasis)
       throw new BadRequestException({
         code: 'NO_LAWFUL_BASIS',
@@ -410,6 +418,93 @@ export class CawiService implements OnModuleInit {
       rows.map((r) => ({ caseId: r.caseId!, type: 'invited', details: { waveId: w.id } })),
     );
     return { queued: rows.length, skipped };
+  }
+
+  /**
+   * A "links only" wave: a personal link for every eligible case matching its rule, e-mail
+   * or not. Nothing is sent; the links are listed and downloaded (W7).
+   */
+  private async makeLinks(tx: Tx, ctx: AuthContext, projectId: string, waveId: string) {
+    const [w] = await tx
+      .select()
+      .from(waves)
+      .where(and(eq(waves.id, waveId), eq(waves.projectId, projectId)))
+      .for('update');
+    if (!w) throw new NotFoundException('Wave not found');
+    if (w.status !== 'draft')
+      throw new ConflictException({ code: 'WAVE_SENT', message: 'This wave has been sent' });
+    const v = await this.runtime.latestVersion(tx, projectId, w.questionnaireId, 'CAWI');
+    const compiled = v.compiled as CompiledQuestionnaire;
+    const match = compileRule(w.filter);
+    const candidates = (
+      await tx
+        .select({
+          id: cases.id,
+          sample: cases.sample,
+          samplePii: cases.samplePii,
+          status: cases.status,
+          priority: cases.priority,
+          modePreference: cases.modePreference,
+        })
+        .from(cases)
+        .where(and(eq(cases.projectId, projectId), inArray(cases.status, ['fresh', 'assigned'])))
+        .orderBy(asc(cases.externalId))
+    )
+      .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
+      .filter(match);
+    const rows: (typeof invitations.$inferInsert)[] = candidates.map((c) => {
+      const t = this.newToken();
+      const sample = c.sample as Record<string, unknown>;
+      const language =
+        typeof sample.language === 'string' &&
+        compiled.questionnaire.languages.includes(sample.language)
+          ? sample.language
+          : compiled.questionnaire.defaultLanguage;
+      return {
+        tenantId: ctx.tenantId,
+        projectId,
+        questionnaireId: w.questionnaireId,
+        waveId: w.id,
+        caseId: c.id,
+        status: 'link',
+        tokenHash: t.tokenHash,
+        tokenEnc: t.tokenEnc,
+        language,
+      };
+    });
+    for (let i = 0; i < rows.length; i += 500)
+      await tx
+        .insert(invitations)
+        .values(rows.slice(i, i + 500))
+        .onConflictDoNothing();
+    await tx.update(waves).set({ status: 'sent', sentAt: new Date() }).where(eq(waves.id, w.id));
+    await this.cases.events(
+      tx,
+      ctx.tenantId,
+      ctx.userId,
+      rows.map((r) => ({ caseId: r.caseId!, type: 'link_made', details: { waveId: w.id } })),
+    );
+    return { queued: 0, links: rows.length, skipped: { noEmail: 0, suppressed: 0, optedOut: 0 } };
+  }
+
+  /** The personal links of a wave, one per case, with how far each got. */
+  async waveLinks(tx: Tx, projectId: string, waveId: string) {
+    const rows = await tx
+      .select({
+        tokenEnc: invitations.tokenEnc,
+        externalId: cases.externalId,
+        startedAt: invitations.startedAt,
+        completedAt: invitations.completedAt,
+      })
+      .from(invitations)
+      .innerJoin(cases, eq(cases.id, invitations.caseId))
+      .where(and(eq(invitations.projectId, projectId), eq(invitations.waveId, waveId)))
+      .orderBy(asc(cases.externalId));
+    return rows.map((r) => ({
+      externalId: r.externalId,
+      url: this.surveyUrl(decryptField(r.tokenEnc, this.config.APP_ENCRYPTION_KEY)),
+      status: r.completedAt ? 'completed' : r.startedAt ? 'started' : 'notStarted',
+    }));
   }
 
   async suppressionList(tx: Tx) {

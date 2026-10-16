@@ -766,6 +766,8 @@ export const waves = pgTable(
     name: text('name').notNull(),
     /** draft | sending | sent */
     status: text('status').notNull().default('draft'),
+    /** email (invitations are sent) | links (a personal link per case, nothing sent) */
+    channel: text('channel').notNull().default('email'),
     /** Case rule (as in assignment rules); null means every eligible case. */
     filter: text('filter'),
     /** Days after the invitation for each reminder, e.g. {3,7}. */

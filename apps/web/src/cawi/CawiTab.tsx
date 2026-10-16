@@ -37,6 +37,7 @@ interface Wave {
   filter: string | null;
   createdAt: string;
   funnel: Funnel;
+  channel: 'email' | 'links';
 }
 
 const STEPS = [
@@ -338,6 +339,8 @@ function WavesSection({ projectId }: { projectId: string }) {
   const [filter, setFilter] = useState('');
   const [reminders, setReminders] = useState('3, 7');
   const [toCati, setToCati] = useState(false);
+  const [channel, setChannel] = useState<'email' | 'links'>('email');
+  const [linksOf, setLinksOf] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const create = useMutation({
     mutationFn: () =>
@@ -347,12 +350,13 @@ function WavesSection({ projectId }: { projectId: string }) {
           name: name.trim(),
           questionnaireId: qid || usable[0]?.id,
           ...(filter.trim() ? { filter: filter.trim() } : {}),
-          reminderDays: reminders
+          reminderDays: (channel === 'links' ? '' : reminders)
             .split(/[,\s]+/)
             .filter(Boolean)
             .map(Number)
             .filter((n) => Number.isInteger(n) && n > 0),
           bouncesToCati: toCati,
+          channel,
         },
       }),
     onSuccess: async () => {
@@ -364,14 +368,19 @@ function WavesSection({ projectId }: { projectId: string }) {
   });
   const send = useMutation({
     mutationFn: (id: string) =>
-      api<{ queued: number; skipped: { noEmail: number; optedOut: number; suppressed: number } }>(
-        `/projects/${projectId}/waves/${id}/send`,
-        { method: 'POST' },
-      ),
-    onSuccess: async (r) => {
-      setMessage(
-        `${t('cawi.waves.queued', { count: r.queued })} ${t('cawi.waves.skipped', r.skipped)}`,
-      );
+      api<{
+        queued: number;
+        links?: number;
+        skipped: { noEmail: number; optedOut: number; suppressed: number };
+      }>(`/projects/${projectId}/waves/${id}/send`, { method: 'POST' }),
+    onSuccess: async (r, id) => {
+      if (r.links !== undefined) {
+        setMessage(t('cawi.links.made', { count: r.links }));
+        setLinksOf(id);
+      } else
+        setMessage(
+          `${t('cawi.waves.queued', { count: r.queued })} ${t('cawi.waves.skipped', r.skipped)}`,
+        );
       await qc.invalidateQueries({ queryKey: ['waves', projectId] });
     },
     onError: (e) => setMessage(localiseError(t, e)),
@@ -404,13 +413,34 @@ function WavesSection({ projectId }: { projectId: string }) {
                     type="button"
                     className="ml-auto px-3 py-1 text-sm"
                     disabled={send.isPending}
-                    aria-label={t('cawi.waves.send', { name: w.name })}
+                    aria-label={
+                      w.channel === 'links'
+                        ? t('cawi.links.make', { name: w.name })
+                        : t('cawi.waves.send', { name: w.name })
+                    }
                     onClick={() => send.mutate(w.id)}
                   >
-                    {t('cawi.waves.sendConfirm')}
+                    {w.channel === 'links'
+                      ? t('cawi.links.makeShort')
+                      : t('cawi.waves.sendConfirm')}
                   </Button>
+                ) : w.channel === 'links' ? (
+                  <button
+                    type="button"
+                    className="ml-auto rounded-md border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
+                    aria-expanded={linksOf === w.id}
+                    onClick={() => setLinksOf(linksOf === w.id ? null : w.id)}
+                  >
+                    {t('cawi.links.show')}
+                  </button>
+                ) : null}
+                {w.channel === 'links' ? (
+                  <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs text-indigo-ink-800">
+                    {t('cawi.links.chip')}
+                  </span>
                 ) : null}
               </div>
+              {linksOf === w.id ? <WaveLinks projectId={projectId} wave={w} /> : null}
               <FunnelChart name={w.name} funnel={w.funnel} />
             </li>
           ))}
@@ -465,7 +495,7 @@ function WavesSection({ projectId }: { projectId: string }) {
               onChange={(e) => setFilter(e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-1">
+          <label className={`flex flex-col gap-1 ${channel === 'links' ? 'hidden' : ''}`}>
             <span className="font-medium">{t('cawi.waves.reminders')}</span>
             <input
               className={controlCls}
@@ -478,10 +508,32 @@ function WavesSection({ projectId }: { projectId: string }) {
             </span>
           </label>
         </div>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={toCati} onChange={(e) => setToCati(e.target.checked)} />
-          {t('cawi.waves.bouncesToCati')}
-        </label>
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1 font-medium">{t('cawi.links.channel')}</legend>
+          {(['email', 'links'] as const).map((c) => (
+            <label key={c} className="flex items-start gap-2">
+              <input
+                type="radio"
+                className="mt-1"
+                name="wave-channel"
+                checked={channel === c}
+                onChange={() => setChannel(c)}
+              />
+              <span>
+                <span className="font-medium">{t(`cawi.links.channels.${c}`)}</span>
+                <span className="block text-xs text-slate-600">
+                  {t(`cawi.links.channelHints.${c}`)}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        {channel === 'email' ? (
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={toCati} onChange={(e) => setToCati(e.target.checked)} />
+            {t('cawi.waves.bouncesToCati')}
+          </label>
+        ) : null}
         <div>
           <Button type="submit" disabled={create.isPending || !name.trim() || !usable.length}>
             {t('cawi.waves.create')}
@@ -489,6 +541,83 @@ function WavesSection({ projectId }: { projectId: string }) {
         </div>
       </form>
     </section>
+  );
+}
+
+/**
+ * The personal links of a "links only" wave: one per case, to hand out by any channel. Link
+ * parameters can be added to all of them (e.g. ?sede=2 for a branch).
+ */
+function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
+  const { t } = useTranslation();
+  const [extra, setExtra] = useState('');
+  const links = useQuery({
+    queryKey: ['wave-links', wave.id],
+    queryFn: () =>
+      api<{ externalId: string; url: string; status: string }[]>(
+        `/projects/${projectId}/waves/${wave.id}/links`,
+      ),
+  });
+  const params = extra.trim().replace(/^[?&]+/, '');
+  const withParams = (url: string) => (params ? `${url}?${params}` : url);
+  const csv = () => {
+    const rows = [
+      ['case', 'url', 'status'],
+      ...(links.data ?? []).map((l) => [l.externalId, withParams(l.url), l.status]),
+    ];
+    const text = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    a.download = `${wave.name.normalize('NFKD').replace(/[^\w-]+/g, '-') || 'enlaces'}.csv`;
+    // Attached for the click, so browsers keep the file name.
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  return (
+    <div className="mb-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3" data-testid="wave-links">
+      <p className="text-sm text-slate-600">{t('cawi.links.help')}</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">{t('cawi.links.params')}</span>
+          <input
+            className={`${controlCls} font-mono`}
+            value={extra}
+            placeholder="sede=2"
+            onChange={(e) => setExtra(e.target.value)}
+          />
+        </label>
+        <Button type="button" className="px-3 py-1 text-sm" onClick={csv}>
+          {t('cawi.links.download')}
+        </Button>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-slate-600">
+            <th scope="col" className="pr-4">
+              {t('cawi.links.case')}
+            </th>
+            <th scope="col">{t('cawi.links.url')}</th>
+            <th scope="col">{t('cawi.links.status')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(links.data ?? []).slice(0, 200).map((l) => (
+            <tr key={l.externalId} data-link={l.externalId}>
+              <td className="pr-4 font-mono">{l.externalId}</td>
+              <td className="break-all font-mono text-xs">{withParams(l.url)}</td>
+              <td>{t(`cawi.links.statuses.${l.status}`)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(links.data?.length ?? 0) > 200 ? (
+        <p className="text-xs text-slate-600">
+          {t('cawi.links.more', { count: (links.data?.length ?? 0) - 200 })}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

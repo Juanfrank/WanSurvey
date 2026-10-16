@@ -70,6 +70,19 @@ export class CawiController {
     );
   }
 
+  /** The personal links of a "links only" wave (W7). */
+  @Get('waves/:waveId/links')
+  @RequirePermission('cawi.waves', PERM)
+  links(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('waveId', ParseUUIDPipe) waveId: string,
+  ) {
+    return this.database.withTenant(ctx.tenantId, (tx) =>
+      this.cawi.waveLinks(tx, projectId, waveId),
+    );
+  }
+
   @Get('suppressions')
   @RequirePermission('cawi.waves', PERM)
   suppressions(@Auth() ctx: AuthContext) {

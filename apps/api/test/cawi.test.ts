@@ -346,4 +346,39 @@ describe('web surveys by e-mail', () => {
     await api().post(`/api/v1/public/o/${slug}/start`).expect(404);
     await api().get('/api/v1/public/s/not-a-real-token-at-all?device=anon-browser-1').expect(404);
   });
+
+  it('a links-only wave makes a personal link per case, e-mail or not, and sends nothing', async () => {
+    const ids = await addCases(3, 'LNK');
+    // One case without any e-mail still gets its link.
+    await t.admin`delete from contacts where case_id = ${ids[2]!}`;
+    const w = await post(`/projects/${project}/waves`, {
+      name: 'Enlaces',
+      questionnaireId: qid,
+      channel: 'links',
+    }).expect(201);
+    const sentBefore = t.mailer.sent.length;
+    const made = await post(`/projects/${project}/waves/${w.body.id}/send`).expect(200);
+    expect(made.body, JSON.stringify(made.body)).toMatchObject({ queued: 0 });
+    expect(made.body.links).toBeGreaterThanOrEqual(3);
+    await drain();
+    expect(t.mailer.sent.length).toBe(sentBefore);
+    const links = await pm.agent
+      .get(`/api/v1/projects/${project}/waves/${w.body.id}/links`)
+      .expect(200);
+    const mine = (links.body as { externalId: string; url: string; status: string }[]).filter((l) =>
+      l.externalId.startsWith('LNK'),
+    );
+    expect(mine).toHaveLength(3);
+    expect(mine[0]!.url).toMatch(/^http:\/\/survey\.test\/s\/[A-Za-z0-9_-]+$/);
+    // The link opens the survey for its own case.
+    const token = mine[2]!.url.split('/s/')[1]!;
+    const s = await api().get(`/api/v1/public/s/${token}?device=link-browser-1`).expect(200);
+    expect(s.body.context.case).toMatchObject({ first_name: 'Ana2' });
+    const again = await pm.agent.get(`/api/v1/projects/${project}/waves/${w.body.id}/links`);
+    expect(
+      (again.body as { externalId: string; status: string }[]).find(
+        (l) => l.externalId === 'LNK0002',
+      )?.status,
+    ).toBe('started');
+  });
 });

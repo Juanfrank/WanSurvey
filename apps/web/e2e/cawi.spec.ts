@@ -93,3 +93,26 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
   await shot(page, 'wave-funnel');
   await expectAccessible(page);
 });
+
+test('a links-only wave makes a personal link per case, ready to download', async ({ page }) => {
+  await openProject(page);
+  await questionnaireAction(page, 'Web survey');
+  await page.getByLabel('Name', { exact: true }).fill('Enlaces región 3');
+  await page.getByLabel('Only cases where (optional)').fill('case.region == 3 and case.age >= 45');
+  await page.getByRole('radio', { name: /Personal links only/ }).check();
+  await expect(page.getByLabel('Reminders after (days)')).toBeHidden();
+  await page.getByRole('button', { name: 'Create wave' }).click();
+  await page.getByRole('button', { name: 'Make the links of Enlaces región 3' }).click();
+  await expect(page.getByTestId('waves-message')).toContainText(/\d+ personal links? made/);
+  const links = page.getByTestId('wave-links');
+  await expect(links.locator('[data-link]').first()).toContainText(/\/s\/[A-Za-z0-9_-]+/);
+  // A parameter for every link, e.g. the branch.
+  await links.getByLabel('Add to every link (optional)').fill('sede=2');
+  await expect(links.locator('[data-link]').first()).toContainText('?sede=2');
+  const [file] = await Promise.all([
+    page.waitForEvent('download'),
+    links.getByRole('button', { name: 'Download (CSV)' }).click(),
+  ]);
+  expect(file.suggestedFilename()).toMatch(/^Enlaces.*\.csv$/);
+  await shot(page, 'cawi-personal-links');
+});
