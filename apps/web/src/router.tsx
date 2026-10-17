@@ -116,6 +116,11 @@ const adminTeamsRoute = createRoute({
   path: 'teams',
   component: lazyRouteComponent(() => import('./admin/TeamsPage.js'), 'TeamsPage'),
 });
+const adminRolesRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'roles',
+  component: lazyRouteComponent(() => import('./admin/RolesPage.js'), 'RolesPage'),
+});
 const adminOrganisationRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'organisation',
@@ -260,6 +265,7 @@ const routeTree = rootRoute.addChildren([
     adminRoute.addChildren([
       adminUsersRoute,
       adminTeamsRoute,
+      adminRolesRoute,
       adminOrganisationRoute,
       adminAuditRoute,
     ]),

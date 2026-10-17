@@ -385,7 +385,7 @@ describe('authentication', () => {
       expect(await projectsIn(switched)).not.toContain(pB);
       // Roles follow the organisation: project manager here, supervisor there.
       const me = await switched.agent.get('/api/v1/auth/me');
-      expect(me.body.memberships).toEqual([{ role: 'project_manager', projectId: null }]);
+      expect(me.body.memberships).toMatchObject([{ role: 'project_manager', projectId: null }]);
 
       const stranger = await createTenant(t.admin);
       const denied = await s.agent

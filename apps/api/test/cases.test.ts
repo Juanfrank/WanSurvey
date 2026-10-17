@@ -2,6 +2,7 @@ import { sampleTable, toCsv } from '@wansurvey/fixtures';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseSampleFile, sniffDelimiter } from '../src/cases/sample-file.js';
+import { distribute } from '../src/cases/distribute.js';
 import { ruleStrategy, STRATEGIES } from '../src/cases/strategies.js';
 import {
   normalisePhone,
@@ -136,6 +137,18 @@ describe('assignment strategies', () => {
     expect(held.get('u1')).toBe(3);
     expect(STRATEGIES.map((s) => s.kind)).toEqual(['rule']);
   });
+
+  it('hands cases out at random and evenly, counting what people hold when asked', () => {
+    const ids = Array.from({ length: 10 }, (_, i) => `c${i}`);
+    const even = distribute(ids, ['a', 'b', 'c']);
+    const sizes = [...even.values()].map((x) => x.length).sort();
+    expect(sizes).toEqual([3, 3, 4]);
+    expect([...even.values()].flat().sort()).toEqual([...ids].sort());
+    // b already holds 4: with the 10 new ones both end with 7.
+    const balanced = distribute(ids, ['a', 'b'], new Map([['b', 4]]));
+    expect(balanced.get('a')!.length).toBe(7);
+    expect(balanced.get('b')!.length).toBe(3);
+  });
 });
 
 describe('cases API', () => {
@@ -156,7 +169,7 @@ describe('cases API', () => {
     project = await createProject(t.admin, tenant.id);
     pm = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'project_manager' }]));
     supervisor = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'supervisor' }]));
-    const clerkUser = await createUser(t.admin, tenant.id, [{ role: 'data_entry' }]);
+    const clerkUser = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
     clerk = await login(t.app, clerkUser);
     interviewer = await createUser(t.admin, tenant.id, [
       { role: 'interviewer', projectId: project },
@@ -299,7 +312,7 @@ describe('cases API', () => {
       .rows[0].id;
     expect((await interviewerS.agent.get(`${base}/cases/${other}`)).status).toBe(404);
 
-    // The data entry clerk has no cases and no personal data.
+    // Another interviewer has no cases and sees none.
     const none = await clerk.agent.get(`${base}/cases`);
     expect(none.body.total).toBe(0);
 
@@ -494,6 +507,29 @@ describe('cases API', () => {
     const done = await post(pm, `${base}/imports/${id}/commit`);
     expect(done.body).toMatchObject({ created: 1, assigned: 0 });
     await patchProject(pm, { assignmentMode: 'assigned' });
+  });
+
+  it('distributes cases at random and evenly among the people chosen', async () => {
+    const ids = (await pm.agent.get(`${base}/cases`).query({ pageSize: 200 })).body.rows
+      .filter((r: { status: string }) => r.status === 'fresh' || r.status === 'assigned')
+      .map((r: { id: string }) => r.id);
+    expect(ids.length).toBeGreaterThan(2);
+    const res = await post(supervisor, `${base}/cases/distribute`, {
+      caseIds: ids,
+      userIds: [interviewer.id, interviewer2.id],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const counts = Object.values(res.body.perPerson as Record<string, number>);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(ids.length);
+    expect(Math.abs(counts[0]! - counts[1]!)).toBeLessThanOrEqual(1);
+    expect(
+      (
+        await post(interviewerS, `${base}/cases/distribute`, {
+          caseIds: ids,
+          userIds: [interviewer.id],
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it('keeps cases inside their tenant', async () => {

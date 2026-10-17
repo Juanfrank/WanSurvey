@@ -70,7 +70,6 @@ export const teamEn = {
     supervisor: 'Supervisor',
     reviewer: 'Reviewer',
     interviewer: 'Interviewer',
-    data_entry: 'Data entry',
     client_viewer: 'Client (read only)',
   },
   roleHints: {
@@ -80,8 +79,8 @@ export const teamEn = {
       'Creates projects, questionnaires, samples and assignments; results and exports.',
     supervisor: 'Follows fieldwork, assigns, reviews and approves interviews.',
     reviewer: 'Reviews and approves interviews.',
-    interviewer: 'Conducts the interviews of their cases (phone, face to face).',
-    data_entry: 'Keys paper forms.',
+    interviewer:
+      'Conducts the interviews of their cases (phone, face to face) and keys paper forms.',
     client_viewer: 'Sees dashboards and comments on questionnaires.',
   },
   errors: {
@@ -193,7 +192,6 @@ export const teamEs: typeof teamEn = {
     supervisor: 'Supervisor',
     reviewer: 'Revisor',
     interviewer: 'Entrevistador',
-    data_entry: 'Digitador',
     client_viewer: 'Cliente (solo lectura)',
   },
   roleHints: {
@@ -203,8 +201,8 @@ export const teamEs: typeof teamEn = {
       'Crea proyectos, cuestionarios, muestras y asignaciones; resultados y exportaciones.',
     supervisor: 'Sigue el campo, asigna, revisa y aprueba entrevistas.',
     reviewer: 'Revisa y aprueba entrevistas.',
-    interviewer: 'Hace las entrevistas de sus casos (teléfono, presencial).',
-    data_entry: 'Digita formularios en papel.',
+    interviewer:
+      'Hace las entrevistas de sus casos (teléfono, presencial) y digita formularios en papel.',
     client_viewer: 'Ve los tableros y comenta los cuestionarios.',
   },
   errors: {

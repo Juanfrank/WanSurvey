@@ -77,6 +77,11 @@ const ENDPOINTS: Endpoint[] = [
     permission: ['users.read', 'projects.update'],
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/people`),
   },
+  {
+    name: 'GET /tenant/roles',
+    permission: 'tenant.read',
+    call: (s) => s.agent.get('/api/v1/tenant/roles'),
+  },
   { name: 'GET /tenant', permission: 'tenant.read', call: (s) => s.agent.get('/api/v1/tenant') },
   {
     name: 'PATCH /tenant',

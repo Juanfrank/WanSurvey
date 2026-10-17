@@ -36,6 +36,7 @@ import { ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
 import { assignments, caseEvents, cases, contacts, sampleFields, users } from '../db/schema.js';
 import { compileRule, maskContact, maskSample, ruleError } from './case-logic.js';
+import { distribute } from './distribute.js';
 import { CasesService, ofQuestionnaire } from './cases.service.js';
 import { words } from './pii.js';
 
@@ -76,6 +77,15 @@ const AssignBody = z
     userId: z.uuid().nullable(),
   })
   .refine((b) => !!b.caseIds !== (b.filter !== undefined), 'Give either caseIds or filter');
+
+const DistributeBody = z.object({
+  /** Left out: every free case (of the questionnaire, when given). */
+  caseIds: z.array(z.uuid()).min(1).max(50_000).optional(),
+  questionnaireId: z.uuid().optional(),
+  userIds: z.array(z.uuid()).min(1).max(500),
+  /** Count the cases each person already holds, so the totals come out even. */
+  balance: z.boolean().default(false),
+});
 
 const RuleBody = z.object({
   userId: z.uuid(),
@@ -543,6 +553,92 @@ export class CasesController {
         }),
       );
       return { changed: n, skipped: (ids?.length ?? 0) - workable.size };
+    });
+  }
+
+  /**
+   * Hands cases out at random and evenly among some people. Cases being interviewed or
+   * finished stay where they are.
+   */
+  @Post('cases/distribute')
+  @HttpCode(200)
+  @RequirePermission('cases.assign', PERM)
+  @ApiBody({ schema: z.toJSONSchema(DistributeBody, { io: 'input' }) as object })
+  distribute(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body(new ZodPipe(DistributeBody)) body: z.infer<typeof DistributeBody>,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      await this.svc.project(tx, projectId);
+      const people = [...new Set(body.userIds)];
+      const caseIds =
+        body.caseIds ??
+        (
+          await tx
+            .select({ id: cases.id })
+            .from(cases)
+            .where(
+              and(
+                eq(cases.projectId, projectId),
+                eq(cases.status, 'fresh'),
+                isNull(cases.assignedTo),
+                ofQuestionnaire(body.questionnaireId),
+              ),
+            )
+        ).map((c) => c.id);
+      const movable: string[] = [];
+      // Who holds each movable case now: those do not count in their load.
+      const inHand = new Map<string, number>();
+      for (let i = 0; i < caseIds.length; i += 1000) {
+        const rows = await tx
+          .select({ id: cases.id, assignedTo: cases.assignedTo })
+          .from(cases)
+          .where(
+            and(
+              eq(cases.projectId, projectId),
+              inArray(cases.id, caseIds.slice(i, i + 1000)),
+              inArray(cases.status, ['fresh', 'assigned']),
+            ),
+          );
+        for (const r of rows) {
+          movable.push(r.id);
+          if (r.assignedTo) inHand.set(r.assignedTo, (inHand.get(r.assignedTo) ?? 0) + 1);
+        }
+      }
+      const held = new Map<string, number>();
+      if (body.balance) {
+        const rows = await tx
+          .select({ userId: cases.assignedTo, n: sql<number>`count(*)::int` })
+          .from(cases)
+          .where(
+            and(
+              eq(cases.projectId, projectId),
+              inArray(cases.assignedTo, people),
+              inArray(cases.status, ['assigned', 'in_progress']),
+            ),
+          )
+          .groupBy(cases.assignedTo);
+        rows.forEach((r) => held.set(r.userId!, r.n - (inHand.get(r.userId!) ?? 0)));
+      }
+      const hands = distribute(movable, people, held);
+      const perPerson: Record<string, number> = {};
+      let changed = 0;
+      for (const [userId, ids] of hands) {
+        perPerson[userId] = ids.length;
+        if (ids.length) changed += await this.svc.assign(tx, ctx, projectId, ids, userId, 'random');
+      }
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'cases.assigned',
+          targetType: 'project',
+          targetId: projectId,
+          details: { distributed: true, balance: body.balance, perPerson, count: changed },
+        }),
+      );
+      return { changed, perPerson, skipped: caseIds.length - movable.length };
     });
   }
 

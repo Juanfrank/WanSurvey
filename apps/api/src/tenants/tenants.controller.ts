@@ -1,6 +1,16 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Put } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { eq } from 'drizzle-orm';
+import {
+  CUSTOM_ROLES,
+  PERMISSIONS,
+  RESERVED_PERMISSIONS,
+  ROLE_PERMISSIONS,
+  ROLES,
+  roleMatrix,
+  RoleOverrides,
+  type Permission,
+} from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
@@ -34,6 +44,11 @@ const TenantPatch = z.object({
   settings: TenantSettings.optional(),
   branding: z.record(z.string(), z.unknown()).optional(),
 });
+
+const RolesBody = z.object({ overrides: RoleOverrides });
+
+const sameSet = (a: readonly Permission[], b: readonly Permission[]) =>
+  a.length === b.length && a.every((p) => b.includes(p));
 
 @ApiTags('tenant')
 @Controller('tenant')
@@ -86,5 +101,65 @@ export class TenantsController {
       );
       return tenant;
     });
+  }
+
+  /** What each role may do in this organisation, next to the defaults. */
+  @Get('roles')
+  @RequirePermission('tenant.read')
+  roles(@Auth() ctx: AuthContext) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const [tenant] = await tx
+        .select({ rolePermissions: tenants.rolePermissions })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId));
+      const matrix = roleMatrix(tenant?.rolePermissions);
+      return {
+        roles: ROLES.map((role) => ({
+          role,
+          permissions: matrix[role],
+          defaults: ROLE_PERMISSIONS[role],
+          editable: (CUSTOM_ROLES as readonly string[]).includes(role),
+          changed: !sameSet(matrix[role], ROLE_PERMISSIONS[role]),
+        })),
+        permissions: PERMISSIONS,
+        reserved: RESERVED_PERMISSIONS,
+      };
+    });
+  }
+
+  /** Replaces the organisation's changes; a role left out goes back to its defaults. */
+  @Put('roles')
+  @RequirePermission('tenant.manage')
+  @ApiBody({ schema: z.toJSONSchema(RolesBody, { io: 'input' }) as object })
+  async setRoles(
+    @Auth() ctx: AuthContext,
+    @Body(new ZodPipe(RolesBody)) body: z.infer<typeof RolesBody>,
+  ) {
+    // Only what differs from the defaults is kept, so later default changes still reach the rest.
+    const matrix = roleMatrix(body.overrides);
+    const kept = Object.fromEntries(
+      CUSTOM_ROLES.filter((r) => !sameSet(matrix[r], ROLE_PERMISSIONS[r])).map((r) => [
+        r,
+        matrix[r],
+      ]),
+    );
+    await this.database.withTenant(ctx.tenantId, async (tx) => {
+      const [current] = await tx
+        .select({ rolePermissions: tenants.rolePermissions })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId));
+      await tx.update(tenants).set({ rolePermissions: kept }).where(eq(tenants.id, ctx.tenantId));
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action: 'tenant.roles_updated',
+          targetType: 'tenant',
+          targetId: ctx.tenantId,
+          details: { before: current?.rolePermissions ?? {}, after: kept },
+        }),
+      );
+    });
+    return this.roles(ctx);
   }
 }

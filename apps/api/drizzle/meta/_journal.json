@@ -211,6 +211,20 @@
       "when": 1792500000000,
       "tag": "0029_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792600000000,
+      "tag": "0030_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0031_goal_frequency",
+      "breakpoints": true
     }
   ]
 }

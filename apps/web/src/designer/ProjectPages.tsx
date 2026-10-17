@@ -924,6 +924,8 @@ export function ProjectPage() {
   const canImport = useCan('cases.import', projectId);
   const canSettings = useCan('projects.update', projectId);
   const canPeople = useCan('users.read', projectId) || canSettings;
+  // Goals are set in the settings, also by supervisors who do not configure the project.
+  const canGoals = useCan('cases.assign', projectId);
   const canWeb =
     useCan('cawi.waves', projectId) &&
     (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CAWI'));
@@ -969,7 +971,7 @@ export function ProjectPage() {
     ...(resultsSubs.length ? (['results'] as const) : []),
     ...(canExport ? (['exports'] as const) : []),
     ...(canPeople ? (['people'] as const) : []),
-    ...(canSettings ? (['settings'] as const) : []),
+    ...(canSettings || canGoals ? (['settings'] as const) : []),
   ];
   const initial = search.tab ? FROM_SEARCH[search.tab] : undefined;
   const [tab, setTab] = useState<ProjectTab | null>(

@@ -11,20 +11,23 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { Auth, can, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CasesService } from '../cases/cases.service.js';
 import { Database, type Tx } from '../db/database.js';
 import { interviewerGoals, projects, users } from '../db/schema.js';
+import { daysBetween, FREQUENCIES, windowOf, windowsIn, type Frequency } from './goal-periods.js';
 
 const PERM = { projectParam: 'projectId' } as const;
 const Day = z.iso.date();
 
 export const GoalBody = z
   .object({
-    userId: z.uuid(),
+    /** Null: the whole team (every interviewer's completes count). */
+    userId: z.uuid().nullable(),
+    frequency: z.enum(FREQUENCIES).default('period'),
     /** Null: completes of any questionnaire of the project count. */
     questionnaireId: z.uuid().nullable().default(null),
     startsOn: Day,
@@ -33,19 +36,17 @@ export const GoalBody = z
   })
   .refine((g) => g.endsOn >= g.startsOn, { message: 'The period ends before it starts' });
 const GoalPatch = z.object({
+  frequency: z.enum(FREQUENCIES).optional(),
   startsOn: Day.optional(),
   endsOn: Day.optional(),
   target: z.number().int().min(1).max(1_000_000).optional(),
 });
 
-/** Days from one ISO date to another, both included. */
-const daysBetween = (a: string, b: string) =>
-  Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000) + 1;
-
 /**
- * Goals per interviewer and period: how many completes, between two dates, optionally for one
- * questionnaire. Progress counts the interviewer's complete interviews submitted in the period
- * (in the project's time zone), except rejected ones; the pace says how many were due by today.
+ * Goals per interviewer, or for the whole team, between two dates: completes to reach once for
+ * the period or each day, business day, week or month, optionally for one questionnaire.
+ * Progress counts complete interviews submitted (in the project's time zone), except rejected
+ * ones: in the current window, with the pace due by today, and over the whole period.
  */
 @ApiTags('metrics')
 @Controller('projects/:projectId/goals')
@@ -65,17 +66,21 @@ export class GoalsController {
           id: interviewerGoals.id,
           userId: interviewerGoals.userId,
           name: users.name,
+          frequency: interviewerGoals.frequency,
           questionnaireId: interviewerGoals.questionnaireId,
           startsOn: interviewerGoals.startsOn,
           endsOn: interviewerGoals.endsOn,
           target: interviewerGoals.target,
         })
         .from(interviewerGoals)
-        .innerJoin(users, eq(users.id, interviewerGoals.userId))
+        .leftJoin(users, eq(users.id, interviewerGoals.userId))
         .where(
           and(
             eq(interviewerGoals.projectId, projectId),
-            team ? undefined : eq(interviewerGoals.userId, ctx.userId),
+            // Without the team's metrics: one's own goals and the team's.
+            team
+              ? undefined
+              : or(eq(interviewerGoals.userId, ctx.userId), isNull(interviewerGoals.userId)),
           ),
         )
         .orderBy(asc(interviewerGoals.startsOn), asc(users.name));
@@ -91,25 +96,44 @@ export class GoalsController {
       )[0]!.d;
       return Promise.all(
         rows.map(async (g) => {
-          const done = await this.completes(tx, projectId, g, tz);
-          const total = daysBetween(g.startsOn, g.endsOn);
-          const elapsed = Math.max(0, Math.min(total, daysBetween(g.startsOn, today)));
+          const f = g.frequency as Frequency;
+          const periodTarget = g.target * windowsIn(f, g.startsOn, g.endsOn);
+          const periodCompletes = await this.completes(tx, projectId, g, g.startsOn, g.endsOn, tz);
+          // The window shown: today's, or the first or last one outside the dates.
+          const ref = today < g.startsOn ? g.startsOn : today > g.endsOn ? g.endsOn : today;
+          const win = windowOf(f, g.startsOn, g.endsOn, ref);
+          const done = win
+            ? f === 'period'
+              ? periodCompletes
+              : await this.completes(tx, projectId, g, win.from, win.to, tz)
+            : 0;
+          const total = win ? daysBetween(win.from, win.to) : 1;
+          const elapsed = win ? Math.max(0, Math.min(total, daysBetween(win.from, today))) : 0;
           const expected = Math.round((g.target * elapsed) / total);
           return {
             ...g,
+            name: g.name ?? null,
+            windowFrom: win?.from ?? null,
+            windowTo: win?.to ?? null,
             completes: done,
             percent: Math.round((100 * done) / g.target),
             expectedByToday: expected,
+            periodCompletes,
+            periodTarget,
             state:
               today < g.startsOn
                 ? 'upcoming'
-                : done >= g.target
-                  ? 'met'
-                  : today > g.endsOn
-                    ? 'missed'
-                    : done >= expected
-                      ? 'on_track'
-                      : 'behind',
+                : today > g.endsOn
+                  ? periodCompletes >= periodTarget
+                    ? 'met'
+                    : 'missed'
+                  : !win
+                    ? 'rest'
+                    : done >= g.target
+                      ? 'met'
+                      : done >= expected
+                        ? 'on_track'
+                        : 'behind',
           };
         }),
       );
@@ -119,7 +143,9 @@ export class GoalsController {
   private async completes(
     tx: Tx,
     projectId: string,
-    g: { userId: string; questionnaireId: string | null; startsOn: string; endsOn: string },
+    g: { userId: string | null; questionnaireId: string | null },
+    from: string,
+    to: string,
     tz: string,
   ) {
     const [r] = (await tx.execute(sql`
@@ -127,10 +153,10 @@ export class GoalsController {
       from interviews i
       join questionnaire_versions v on v.id = i.questionnaire_version_id
       where i.project_id = ${projectId}
-        and i.interviewer_id = ${g.userId}
+        ${g.userId ? sql`and i.interviewer_id = ${g.userId}` : sql``}
         and i.disposition = 'COMPLETE'
         and i.status in ('submitted', 'in_review', 'approved', 'returned')
-        and (i.submitted_at at time zone ${tz})::date between ${g.startsOn}::date and ${g.endsOn}::date
+        and (i.submitted_at at time zone ${tz})::date between ${from}::date and ${to}::date
         ${g.questionnaireId ? sql`and v.questionnaire_id = ${g.questionnaireId}` : sql``}
     `)) as unknown as { n: number }[];
     return r?.n ?? 0;
@@ -146,7 +172,7 @@ export class GoalsController {
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const people = await this.cases.assignees(tx, projectId);
-      if (!people.some((p) => p.userId === body.userId))
+      if (body.userId && !people.some((p) => p.userId === body.userId))
         throw new BadRequestException({
           code: 'NOT_ASSIGNEE',
           message: 'Goals are for people who work cases in this project',

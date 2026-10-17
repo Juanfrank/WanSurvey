@@ -5,6 +5,8 @@ import {
   ModeVariant,
   Questionnaire,
   ROLE_PERMISSIONS,
+  roleMatrix,
+  RoleOverrides,
   ROLES,
   roleHasPermission,
 } from '../src/index.js';
@@ -84,8 +86,22 @@ describe('rbac matrix', () => {
     expect(roleHasPermission('reviewer', 'cases.edit')).toBe(false);
     expect(roleHasPermission('interviewer', 'exports.run')).toBe(false);
     expect(roleHasPermission('interviewer', 'interviews.read_all')).toBe(false);
-    expect(roleHasPermission('data_entry', 'dashboards.read')).toBe(false);
+    expect(roleHasPermission('interviewer', 'dashboards.read')).toBe(false);
+    expect(roleHasPermission('interviewer', 'dataentry.key')).toBe(true);
     expect(roleHasPermission('client_viewer', 'pii.view')).toBe(false);
     for (const r of ROLES) expect(ROLE_PERMISSIONS[r].length).toBeGreaterThan(0);
+  });
+
+  it('lets an organisation change the permissions of its roles, but not the reserved ones', () => {
+    const m = roleMatrix({ reviewer: ['dashboards.read'], admin: [] });
+    expect(m.reviewer).toEqual(['tenant.read', 'dashboards.read']);
+    // Administrators and owners keep theirs; everything else stays the default.
+    expect(m.admin).toEqual(ROLE_PERMISSIONS.admin);
+    expect(m.interviewer).toEqual(ROLE_PERMISSIONS.interviewer);
+    expect(roleHasPermission('reviewer', 'dashboards.read', m)).toBe(true);
+    expect(RoleOverrides.safeParse({ supervisor: ['tenant.manage'] }).success).toBe(false);
+    expect(roleMatrix({ supervisor: ['tenant.manage'] }).supervisor).toEqual(
+      ROLE_PERMISSIONS.supervisor,
+    );
   });
 });

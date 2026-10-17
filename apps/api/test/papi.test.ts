@@ -62,11 +62,11 @@ describe('paper forms', () => {
     tenant = await createTenant(t.admin);
     project = await createProject(t.admin, tenant.id);
     qid = await createQuestionnaire(t.admin, tenant.id, project, { definition, publish: true });
-    clerk1 = await createUser(t.admin, tenant.id, [{ role: 'data_entry', projectId: project }]);
+    clerk1 = await createUser(t.admin, tenant.id, [{ role: 'interviewer', projectId: project }]);
     k1 = await login(t.app, clerk1);
     k2 = await login(
       t.app,
-      await createUser(t.admin, tenant.id, [{ role: 'data_entry', projectId: project }]),
+      await createUser(t.admin, tenant.id, [{ role: 'interviewer', projectId: project }]),
     );
     supervisor = await login(
       t.app,
@@ -157,15 +157,6 @@ describe('paper forms', () => {
     const caseId = await newCase(clerk1.id, 'P0100');
     const look = await k1.agent.get(`/api/v1/projects/${project}/papi/lookup?externalId=P0100`);
     expect(look.body).toEqual({ caseId, externalId: 'P0100', pass: 1, resume: null });
-    // Clerks cannot start other modes.
-    const capi = await post(k1, `/projects/${project}/interviews`, {
-      id: uuidv7(),
-      caseId,
-      questionnaireId: qid,
-      mode: 'CAPI',
-      deviceId: 'clerk-desk-0001',
-    });
-    expect(capi.status).toBe(404);
     const done = await key(k1, caseId, 33, 2, 'clerk-desk-0001');
     expect(done).toMatchObject({ pass: 1 });
     const [c] = await t.admin`select status, disposition from cases where id = ${caseId}`;

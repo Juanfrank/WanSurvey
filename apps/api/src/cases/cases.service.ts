@@ -8,6 +8,7 @@ import {
 import {
   projectSettings,
   roleHasPermission,
+  roleMatrix,
   type ProjectSettings,
   type Role,
 } from '@wansurvey/schema';
@@ -28,6 +29,7 @@ import {
   questionnaires,
   sampleFields,
   tenantMembers,
+  tenants,
   users,
 } from '../db/schema.js';
 import { PiiCipher } from './pii.js';
@@ -114,12 +116,16 @@ export class CasesService {
       .innerJoin(users, eq(users.id, memberships.userId))
       .where(or(isNull(memberships.projectId), eq(memberships.projectId, projectId)))
       .orderBy(asc(users.name));
+    // What each role may do in this organisation.
+    const [tenant] = await tx.select({ rolePermissions: tenants.rolePermissions }).from(tenants);
+    const matrix = roleMatrix(tenant?.rolePermissions);
     const byUser = new Map<string, Assignee>();
     for (const r of rows) {
       const role = r.role as Role;
       if (
-        !roleHasPermission(role, 'interviews.conduct') &&
-        !roleHasPermission(role, 'dataentry.key')
+        !(role in matrix) ||
+        (!roleHasPermission(role, 'interviews.conduct', matrix) &&
+          !roleHasPermission(role, 'dataentry.key', matrix))
       )
         continue;
       const a = byUser.get(r.userId) ?? {

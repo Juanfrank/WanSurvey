@@ -7,7 +7,7 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Permission, Role } from '@wansurvey/schema';
+import { roleMatrix, type Permission, type Role } from '@wansurvey/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
   ALLOW_PENDING_MFA,
@@ -22,7 +22,7 @@ import { CSRF_HEADER, SESSION_COOKIE } from '../common/cookies.js';
 import { safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isUuid } from '../db/database.js';
-import { memberships, sessions, tenantMembers, users } from '../db/schema.js';
+import { memberships, sessions, tenantMembers, tenants, users } from '../db/schema.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOUCH_INTERVAL_MS = 60_000;
@@ -136,12 +136,25 @@ export class AuthGuard implements CanActivate {
         .select({ role: memberships.role, projectId: memberships.projectId })
         .from(memberships)
         .where(eq(memberships.userId, user.id));
+      // What each role may do here, with the organisation's changes.
+      const [tenant] = await tx
+        .select({ rolePermissions: tenants.rolePermissions })
+        .from(tenants)
+        .where(eq(tenants.id, cookie.tenantId));
+      const matrix = roleMatrix(tenant?.rolePermissions);
       return {
         tenantId: cookie.tenantId,
         userId: user.id,
         sessionId: session.id,
         email: user.email,
-        memberships: grants.map((g) => ({ role: g.role as Role, projectId: g.projectId })),
+        memberships: grants
+          // A role this version no longer knows grants nothing.
+          .filter((g) => g.role in matrix)
+          .map((g) => ({
+            role: g.role as Role,
+            projectId: g.projectId,
+            permissions: matrix[g.role as Role],
+          })),
         mfaState: session.mfaState as AuthContext['mfaState'],
         authMethod: session.authMethod as AuthContext['authMethod'],
         idpTenant: session.idpTenant,

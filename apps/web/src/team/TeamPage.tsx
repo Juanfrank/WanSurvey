@@ -8,6 +8,7 @@ import { inputCls } from '../designer/fields.js';
 import { below, Menu, type MenuEntry } from '../designer/Menu.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import { RoleGuide } from './RoleGuide.js';
 
 interface Grant {
   role: Role;
@@ -374,6 +375,7 @@ function RolesEditor({
       <p id={`${id}-help`} className="text-sm text-slate-600">
         {t('team.roles.help')} {t('team.roles.rankNote')}
       </p>
+      <RoleGuide roles={grantable} />
       {value.map((g, i) => (
         <div key={i} className="flex flex-wrap items-start gap-2" data-testid="role-row">
           <label className="flex min-w-48 flex-1 flex-col gap-1 text-sm">

@@ -29,7 +29,7 @@ describe('comments, presence and the question library', () => {
     qid = await createQuestionnaire(t.admin, tenant.id, project);
     pm = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'project_manager' }]));
     client = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'client_viewer' }]));
-    clerk = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'data_entry' }]));
+    clerk = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]));
     base = `/api/v1/projects/${project}/questionnaires/${qid}`;
   });
   afterAll(() => t.close());

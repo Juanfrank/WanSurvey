@@ -79,7 +79,7 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     await sql`insert into users (id, email, name, first_name, status, password_hash)
       values (${id2}, ${CLERK2}, 'Second Clerk', 'Second', 'active', ${await hash(PASSWORD, { algorithm: 2 })})`;
     await sql`insert into tenant_members (id, tenant_id, user_id, status) values (${uuidv7()}, ${demo!.id}, ${id2}, 'active')`;
-    await sql`insert into memberships (id, tenant_id, user_id, role) values (${uuidv7()}, ${demo!.id}, ${id2}, 'data_entry')`;
+    await sql`insert into memberships (id, tenant_id, user_id, role) values (${uuidv7()}, ${demo!.id}, ${id2}, 'interviewer')`;
     await sql`update cases set assigned_to = ${clerk!.id}, status = 'assigned' where external_id = 'HH0005'`;
 
     // The project manager keys every form twice and prints forms.

@@ -62,13 +62,7 @@ describe('project people', () => {
 
   it("the project's manager gives roles from supervisor down, only in their project", async () => {
     const view = await manager.agent.get(`/api/v1/projects/${a}/people`).expect(200);
-    expect(view.body.grantable).toEqual([
-      'supervisor',
-      'reviewer',
-      'interviewer',
-      'data_entry',
-      'client_viewer',
-    ]);
+    expect(view.body.grantable).toEqual(['supervisor', 'reviewer', 'interviewer', 'client_viewer']);
     expect((await put(manager, a, ana.id, 'interviewer')).status).toBe(200);
     expect((await put(manager, a, ana.id, 'project_manager')).status).toBe(403);
     // Not in another project, not on someone above supervisor, not on themselves.

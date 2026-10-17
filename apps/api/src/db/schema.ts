@@ -37,6 +37,8 @@ export const tenants = pgTable(
     plan: text('plan').notNull().default('trial'),
     settings: jsonb('settings').notNull().default({}),
     branding: jsonb('branding').notNull().default({}),
+    /** Changes to what each role may do (`RoleOverrides`); empty: the defaults. */
+    rolePermissions: jsonb('role_permissions').notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('tenants_slug_uq').on(t.slug)],
@@ -1201,9 +1203,10 @@ export const interviewerGoals = pgTable(
       .references(() => projects.id),
     /** Null: completes of any questionnaire of the project count. */
     questionnaireId: uuid('questionnaire_id').references(() => questionnaires.id),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id),
+    /** Null: the whole team. */
+    userId: uuid('user_id').references(() => users.id),
+    /** `period` (once for the dates), `daily`, `business_days`, `weekly` or `monthly`. */
+    frequency: text('frequency').notNull().default('period'),
     startsOn: date('starts_on', { mode: 'string' }).notNull(),
     endsOn: date('ends_on', { mode: 'string' }).notNull(),
     target: integer('target').notNull(),

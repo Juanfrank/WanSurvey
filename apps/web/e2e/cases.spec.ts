@@ -106,7 +106,7 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
   await expect(page.getByText('Page 1 of 1 · 10 cases')).toBeVisible();
 });
 
-test('bulk-assign cases; the clerk sees only theirs, with personal data hidden', async ({
+test('bulk-assign cases; the clerk sees only theirs, with the personal data of their cases', async ({
   page,
   browser,
 }) => {
@@ -118,16 +118,31 @@ test('bulk-assign cases; the clerk sees only theirs, with personal data hidden',
   await page.getByLabel('Select case XHH0002').check();
   await page.getByLabel('Select case XHH0006', { exact: true }).click({ modifiers: ['Shift'] });
   await expect(page.getByText('4 selected')).toBeVisible();
-  await page.locator('#assign-to').selectOption({ label: 'Demo data_entry' });
+  await page.locator('#assign-to').selectOption({ label: 'Demo clerk' });
   await page.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(page.getByText('4 cases assigned.')).toBeVisible();
   const row = page.locator('tr[data-case="XHH0003"]');
-  await expect(row).toContainText('Demo data_entry');
+  await expect(row).toContainText('Demo clerk');
   // When it was assigned, and how long ago.
   await expect(row.locator('[data-col="since"]')).toHaveText('under 1 h');
   await expect(row).toContainText('•••');
   await shot(page, 'cases-list');
   await expectAccessible(page);
+
+  // Cases can also be shared out at random and evenly among several people.
+  await page
+    .getByRole('combobox', { name: 'How to assign' })
+    .selectOption({ label: 'At random, evenly' });
+  await page.getByRole('button', { name: 'Assign', exact: true }).click();
+  const share = page.getByRole('dialog', { name: 'Share out at random' });
+  await share.getByRole('checkbox', { name: 'Everyone' }).check();
+  await expect(share.getByRole('checkbox', { name: 'Demo clerk' })).toBeChecked();
+  await shot(page, 'cases-distribute');
+  await expectAccessible(page);
+  await share.getByRole('button', { name: 'Cancel' }).click();
+  await page
+    .getByRole('combobox', { name: 'How to assign' })
+    .selectOption({ label: 'To a person' });
 
   // The project manager may reveal personal data of a case; it is recorded.
   await page.getByRole('button', { name: 'Open case XHH0003' }).click();
@@ -149,8 +164,9 @@ test('bulk-assign cases; the clerk sees only theirs, with personal data hidden',
   await expect(table).not.toContainText('HH0001 ');
   await clerk.getByRole('button', { name: 'Open case XHH0004' }).click();
   const d = clerk.getByRole('dialog', { name: 'Case XHH0004' });
-  await expect(d.getByTestId('contacts')).toContainText('•••');
-  await expect(d.getByRole('button', { name: 'Show personal data' })).toHaveCount(0);
+  // Interviewers (who also key paper forms) see the personal data of the cases they hold.
+  await expect(d).toContainText('Shown because you hold this case');
+  await expect(d.getByTestId('contacts')).toContainText('@example.org');
 });
 
 test('an assignment rule gives matching unassigned cases to a person', async ({ page }) => {
@@ -160,7 +176,7 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   let rules = page.getByRole('dialog', { name: 'Assignment rules' });
   await expect(rules.getByTestId('rules')).toContainText('Region 1');
   await page.getByLabel('Rule name').fill('Region 3 to the clerk');
-  await page.getByLabel('Assign to').selectOption({ label: 'Demo data_entry' });
+  await page.getByLabel('Assign to').selectOption({ label: 'Demo clerk' });
   const when = page.getByRole('group', { name: 'Cases where' });
   await when.getByRole('button', { name: 'Add condition' }).click();
   await when.getByLabel('Condition 1: variable', { exact: true }).fill('case.region');

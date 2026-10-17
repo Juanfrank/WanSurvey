@@ -71,7 +71,8 @@ export interface Me {
   tenantId: string;
   tenants: TenantSummary[];
   mfaState: 'ok' | 'pending' | 'enroll';
-  memberships: { role: string; projectId: string | null }[];
+  /** Each role with what it allows in this organisation (its permissions may be customised). */
+  memberships: { role: string; projectId: string | null; permissions?: string[] }[];
   permissions: string[];
   access: { state: 'ok' | 'no_role'; message: string | null };
 }

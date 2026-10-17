@@ -123,4 +123,55 @@ describe('interviewer goals per period', () => {
       .expect(200);
     expect((await supervisor.agent.get(base)).body).toHaveLength(0);
   });
+
+  it('sets goals per day, business day, week or month, for a person or the whole team', async () => {
+    // Today's completes so far (from the test above): two.
+    const team = await post(supervisor, base, {
+      userId: null,
+      frequency: 'daily',
+      startsOn: day(-2),
+      endsOn: day(2),
+      target: 1,
+    });
+    expect(team.status, JSON.stringify(team.body)).toBe(201);
+    await post(supervisor, base, {
+      userId: ana.id,
+      frequency: 'monthly',
+      startsOn: day(0),
+      endsOn: day(0),
+      target: 5,
+    }).expect(201);
+    const list = (await supervisor.agent.get(base).expect(200)).body as {
+      name: string | null;
+      frequency: string;
+    }[];
+    const daily = list.find((g) => g.frequency === 'daily')!;
+    expect(daily).toMatchObject({
+      name: null,
+      windowFrom: day(0),
+      windowTo: day(0),
+      completes: 2,
+      state: 'met',
+      periodTarget: 5,
+      periodCompletes: 2,
+    });
+    expect(list.find((g) => g.frequency === 'monthly')).toMatchObject({
+      completes: 2,
+      target: 5,
+      state: 'behind',
+    });
+    // The interviewer sees their goals and the team's.
+    expect((await anaS.agent.get(base)).body).toHaveLength(2);
+    expect(
+      (
+        await post(supervisor, base, {
+          userId: null,
+          frequency: 'hourly',
+          startsOn: day(0),
+          endsOn: day(0),
+          target: 1,
+        })
+      ).status,
+    ).toBe(400);
+  });
 });

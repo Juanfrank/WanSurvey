@@ -6,6 +6,8 @@ export interface MembershipGrant {
   role: Role;
   /** null = tenant-wide. */
   projectId: string | null;
+  /** What the role allows in this organisation (its matrix); the default matrix when absent. */
+  permissions?: readonly Permission[];
 }
 
 export interface AuthContext {
@@ -36,7 +38,9 @@ export function can(
 ): boolean {
   return memberships.some(
     (m) =>
-      roleHasPermission(m.role, permission) &&
+      (m.permissions
+        ? m.permissions.includes(permission)
+        : roleHasPermission(m.role, permission)) &&
       (m.projectId === null ||
         projectId === 'any' ||
         (projectId != null && m.projectId === projectId)),

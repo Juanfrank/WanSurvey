@@ -65,6 +65,14 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
         }
         console.log(`  ${role.padEnd(16)} ${email}`);
       }
+      // A second interviewer who mostly keys paper forms (interviewers also key them).
+      const clerkId = uuidv7();
+      await tx`
+        insert into users (id, email, name, first_name, status, password_hash)
+        values (${clerkId}, 'data.entry@demo.wansurvey.test', 'Demo clerk', 'clerk', 'active', ${hash})`;
+      await tx`insert into tenant_members (id, tenant_id, user_id, status) values (${uuidv7()}, ${tenantId}, ${clerkId}, 'active')`;
+      await tx`insert into memberships (id, tenant_id, user_id, role) values (${uuidv7()}, ${tenantId}, ${clerkId}, 'interviewer')`;
+      console.log(`  ${'clerk'.padEnd(16)} data.entry@demo.wansurvey.test`);
       // Sample dictionary and cases.
       const fields: [string, string, boolean][] = [
         ['first_name', 'text', true],

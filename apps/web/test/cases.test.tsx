@@ -54,6 +54,7 @@ function mockFetch() {
           canReveal: true,
           rows,
         };
+      else if (path.endsWith('/goals') || path.endsWith('/questionnaires')) body = [];
       else if (path === '/projects/p/assignees')
         body = [{ userId: 'i1', name: 'Ines', email: 'i@x', roles: ['interviewer'], workload: {} }];
       return new Response(JSON.stringify(body), { status: 200 });
@@ -122,7 +123,9 @@ describe('project settings', () => {
         <SettingsTab project={project} />
       </QueryClientProvider>,
     );
-    const reveal = screen.getByRole('checkbox', { name: /Show interviewers the personal data/ });
+    const reveal = await screen.findByRole('checkbox', {
+      name: /Show interviewers the personal data/,
+    });
     expect(reveal).toHaveProperty('checked', true);
     await user.click(reveal);
     await user.click(screen.getByRole('radio', { name: /Open pool/ }));

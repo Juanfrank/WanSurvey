@@ -60,7 +60,9 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await page
     .getByLabel('Where 1', { exact: true })
     .selectOption({ label: 'Household Survey 2026' });
-  await expect(page.getByText('Conducts the interviews of their cases')).toBeVisible();
+  await expect(
+    page.getByTestId('role-row').getByText('Conducts the interviews of their cases'),
+  ).toBeVisible();
   await shot(page, 'team-invite');
   await expectAccessible(page);
   await page.getByRole('button', { name: 'Send invitation' }).click();
@@ -193,6 +195,36 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(page.locator('[data-team="Cuadrilla Norte"]')).toContainText('2 members');
   await shot(page, 'admin-teams');
   await expectAccessible(page);
+
+  // Roles and permissions: reviewers may also see the dashboard, then back to the defaults.
+  await nav.getByRole('link', { name: 'Roles and permissions' }).click();
+  const matrix = page.getByTestId('roles-matrix');
+  const allow = matrix.getByRole('checkbox', {
+    name: 'Reviewer: See the dashboard and results',
+  });
+  await expect(allow).not.toBeChecked();
+  await allow.check();
+  await page.getByRole('button', { name: 'Save permissions' }).click();
+  await expect(page.getByText('Permissions saved.')).toBeVisible();
+  await shot(page, 'admin-roles');
+  await expectAccessible(page);
+  await page.reload();
+  await expect(allow).toBeChecked();
+  await page.getByRole('button', { name: 'Defaults for Reviewer' }).click();
+  await page.getByRole('button', { name: 'Save permissions' }).click();
+  await expect(page.getByText('Permissions saved.')).toBeVisible();
+  await page.reload();
+  await expect(allow).not.toBeChecked();
+
+  // Where roles are given, a guide says what each one may do.
+  await nav.getByRole('link', { name: 'Users', exact: true }).click();
+  await page.getByRole('button', { name: 'Invite a person' }).click();
+  await page.getByTestId('role-guide').getByText('What can each role do?').click();
+  await expect(page.getByTestId('role-guide').locator('[data-role="interviewer"]')).toContainText(
+    'Key paper forms',
+  );
+  await shot(page, 'role-guide');
+  await page.getByRole('button', { name: 'Cancel' }).click();
 
   // The organisation: defaults for new projects.
   await nav.getByRole('link', { name: 'Organisation', exact: true }).click();

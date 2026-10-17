@@ -312,7 +312,8 @@ export class AuthService {
     );
     const permissions = new Set<Permission>();
     for (const m of ctx.memberships)
-      if (m.projectId === null) ROLE_PERMISSIONS[m.role].forEach((p) => permissions.add(p));
+      if (m.projectId === null)
+        (m.permissions ?? ROLE_PERMISSIONS[m.role]).forEach((p) => permissions.add(p));
     const tenants = await this.listTenants(ctx);
     const orgName = tenants.find((t) => t.id === ctx.tenantId)?.name ?? 'this organisation';
     return {

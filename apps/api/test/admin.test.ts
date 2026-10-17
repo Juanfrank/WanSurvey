@@ -19,6 +19,7 @@ describe('administration', () => {
   let ana: TestUser;
   let luis: TestUser;
   let outsider: TestUser;
+  let reviewer: Session;
 
   beforeAll(async () => {
     t = await bootstrap();
@@ -27,6 +28,7 @@ describe('administration', () => {
     pm = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'project_manager' }]));
     ana = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
     luis = await createUser(t.admin, tenant.id, [{ role: 'supervisor' }]);
+    reviewer = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'reviewer' }]));
     outsider = await createUser(t.admin, (await createTenant(t.admin)).id, [
       { role: 'interviewer' },
     ]);
@@ -90,5 +92,35 @@ describe('administration', () => {
     const p = await send(admin, 'post', '/projects', { name: 'Nuevo', code: unique('N') });
     expect(p.status, JSON.stringify(p.body)).toBe(201);
     expect(p.body).toMatchObject({ timezone: 'America/Lima', languages: ['es'] });
+  });
+
+  it('changes what a role may do in the whole organisation, at once and with a way back', async () => {
+    const put = (s: Session, overrides: object) =>
+      s.agent.put('/api/v1/tenant/roles').set('x-csrf-token', s.csrf).send({ overrides });
+    const view = await pm.agent.get('/api/v1/tenant/roles').expect(200);
+    const rev = view.body.roles.find((r: { role: string }) => r.role === 'reviewer');
+    expect(rev).toMatchObject({ editable: true, changed: false });
+    expect(view.body.roles.find((r: { role: string }) => r.role === 'admin').editable).toBe(false);
+    expect(view.body.roles.map((r: { role: string }) => r.role)).not.toContain('data_entry');
+
+    // Only those who run the organisation change it; running it is never given away.
+    expect((await put(pm, { reviewer: ['users.read'] })).status).toBe(403);
+    expect((await put(admin, { reviewer: ['tenant.manage'] })).status).toBe(400);
+
+    await reviewer.agent.get('/api/v1/users').expect(403);
+    const saved = await put(admin, { reviewer: [...rev.permissions, 'users.read'] });
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    expect(saved.body.roles.find((r: { role: string }) => r.role === 'reviewer').changed).toBe(
+      true,
+    );
+    // Takes effect on the next request of every session.
+    await reviewer.agent.get('/api/v1/users').expect(200);
+    expect((await reviewer.agent.get('/api/v1/auth/me')).body.permissions).toContain('users.read');
+
+    await put(admin, {}).expect(200);
+    await reviewer.agent.get('/api/v1/users').expect(403);
+    const audit =
+      await t.admin`select count(*)::int as n from audit_log where tenant_id = ${tenant.id} and action = 'tenant.roles_updated'`;
+    expect(audit[0]!.n).toBe(2);
   });
 });

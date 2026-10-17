@@ -167,7 +167,7 @@ describe('Microsoft Entra ID sign-in', () => {
     expect(callback.status).toBe(302);
     const me = await agent.get('/api/v1/auth/me');
     expect(me.body.user.id).toBe(user.id);
-    expect(me.body.memberships).toEqual([{ role: 'supervisor', projectId: null }]);
+    expect(me.body.memberships).toMatchObject([{ role: 'supervisor', projectId: null }]);
     const [m] =
       await t.admin`select status from tenant_members where user_id = ${user.id} and tenant_id = ${org.id}`;
     expect(m!.status).toBe('active');

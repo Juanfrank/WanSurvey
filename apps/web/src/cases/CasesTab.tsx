@@ -19,6 +19,7 @@ import { useMe } from '../routes/AppLayout.js';
 import { qs, STATUSES, useAssignees, type CaseList, type CaseRow } from './hooks.js';
 import { dateTime } from '../format.js';
 import { AssignmentsTab } from './AssignmentsTab.js';
+import { DistributeDialog } from './DistributeDialog.js';
 import { useQuestionnaireScope } from './scope.js';
 
 const MAX_FIELD_COLUMNS = 4;
@@ -60,7 +61,8 @@ export function CasesTab({ projectId }: { projectId: string }) {
   const [assignee, setAssignee] = useState('');
   const [message, setMessage] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
-  const [how, setHow] = useState<'person' | 'rules'>('person');
+  const [how, setHow] = useState<'person' | 'rules' | 'random'>('person');
+  const [distributing, setDistributing] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const questionnaire = useQuestionnaireScope();
   const openCase = useCallback((id: string) => setOpen(id), []);
@@ -307,9 +309,11 @@ export function CasesTab({ projectId }: { projectId: string }) {
               ? t('cases.list.selected', { count: selected.size })
               : how === 'rules'
                 ? t('cases.list.byRulesAll')
-                : filter
-                  ? t('cases.list.assignMatching')
-                  : t('cases.list.assignSelected')}
+                : how === 'random'
+                  ? t('cases.list.randomAll')
+                  : filter
+                    ? t('cases.list.assignMatching')
+                    : t('cases.list.assignSelected')}
           </span>
           <label className="sr-only" htmlFor="assign-how">
             {t('cases.list.assignHow')}
@@ -318,10 +322,11 @@ export function CasesTab({ projectId }: { projectId: string }) {
             id="assign-how"
             className={`${controlCls} h-8 w-auto py-0`}
             value={how}
-            onChange={(e) => setHow(e.target.value as 'person' | 'rules')}
+            onChange={(e) => setHow(e.target.value as 'person' | 'rules' | 'random')}
           >
             <option value="person">{t('cases.list.toPerson')}</option>
             <option value="rules">{t('cases.list.byRules')}</option>
+            <option value="random">{t('cases.list.random')}</option>
           </select>
           {how === 'person' ? (
             <>
@@ -348,18 +353,22 @@ export function CasesTab({ projectId }: { projectId: string }) {
             size="sm"
             className="h-8 whitespace-nowrap"
             disabled={
-              how === 'rules'
-                ? byRules.isPending
-                : !assignee || (!selected.size && !filter) || assign.isPending
+              how === 'random'
+                ? false
+                : how === 'rules'
+                  ? byRules.isPending
+                  : !assignee || (!selected.size && !filter) || assign.isPending
             }
             onClick={() =>
-              how === 'rules'
-                ? byRules.mutate()
-                : assign.mutate(
-                    selected.size
-                      ? { caseIds: [...selected], userId: assignee }
-                      : { filter, userId: assignee },
-                  )
+              how === 'random'
+                ? setDistributing(true)
+                : how === 'rules'
+                  ? byRules.mutate()
+                  : assign.mutate(
+                      selected.size
+                        ? { caseIds: [...selected], userId: assignee }
+                        : { filter, userId: assignee },
+                    )
             }
           >
             {t('cases.list.assign')}
@@ -384,6 +393,20 @@ export function CasesTab({ projectId }: { projectId: string }) {
         </div>
       ) : null}
 
+      {distributing ? (
+        <DistributeDialog
+          projectId={projectId}
+          questionnaireId={questionnaire ?? null}
+          caseIds={[...selected]}
+          people={people.data ?? []}
+          onClose={() => setDistributing(false)}
+          onDone={(m) => {
+            setDistributing(false);
+            setSelected(new Set());
+            setMessage(m);
+          }}
+        />
+      ) : null}
       {rulesOpen ? (
         <Dialog title={t('cases.list.rules')} onClose={() => setRulesOpen(false)} wide>
           <AssignmentsTab projectId={projectId} />

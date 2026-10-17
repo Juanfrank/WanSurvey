@@ -12,6 +12,7 @@ import { SubTabBar } from '../routes/tabs.js';
 import { CawiProjectSettings } from '../cawi/CawiTab.js';
 import { BrandingSettings } from './BrandingSettings.js';
 import { useCan } from '../designer/hooks.js';
+import { GoalsSection } from '../analysis/GoalsSection.js';
 
 /** Per-project switches: automatic personal data for interviewers, and the assignment mode. */
 export function SettingsTab({ project }: { project: Project }) {
@@ -34,20 +35,25 @@ export function SettingsTab({ project }: { project: Project }) {
   const canWeb =
     useCan('cawi.waves', project.id) &&
     (!project.modesEnabled.length || project.modesEnabled.includes('CAWI'));
-  const subs = [
-    'assignment',
-    'phone',
-    'field',
-    ...(canWeb ? ['web'] : []),
-    'paper',
-    'review',
-    'fieldwork',
-    'shortcuts',
-    'privacy',
-    'look',
-  ];
-  const [sub, setSub] = useState('assignment');
-  const current = subs.includes(sub) ? sub : 'assignment';
+  // Supervisors who set goals but do not configure the project see only the goals.
+  const canUpdate = useCan('projects.update', project.id);
+  const subs = canUpdate
+    ? [
+        'assignment',
+        'phone',
+        'field',
+        ...(canWeb ? ['web'] : []),
+        'paper',
+        'review',
+        'fieldwork',
+        'shortcuts',
+        'privacy',
+        'look',
+      ]
+    : ['fieldwork'];
+  // No choice yet: the first topic (permissions may still be loading).
+  const [sub, setSub] = useState<string | null>(null);
+  const current = sub && subs.includes(sub) ? sub : subs[0]!;
   // Each topic saves the whole settings with the same request.
   const section = (children: ReactNode) => (
     <form
@@ -333,33 +339,35 @@ export function SettingsTab({ project }: { project: Project }) {
             </>,
           )}
         </Tabs.Content>
-        <Tabs.Content value="fieldwork">
-          {section(
-            <>
-              <fieldset className="flex flex-col gap-2" data-testid="fieldwork-settings">
-                <legend className="mb-1 font-medium">{t('analysis.settings.title')}</legend>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    className={`${controlCls} w-28`}
-                    value={form.fieldwork.targetCompletes ?? ''}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        fieldwork: {
-                          ...form.fieldwork,
-                          targetCompletes:
-                            e.target.value === '' ? null : Math.max(0, Number(e.target.value)),
-                        },
-                      })
-                    }
-                  />
-                  {t('analysis.settings.target')}
-                </label>
-              </fieldset>
-            </>,
-          )}
+        <Tabs.Content value="fieldwork" className="flex flex-col gap-8">
+          {canUpdate &&
+            section(
+              <>
+                <fieldset className="flex flex-col gap-2" data-testid="fieldwork-settings">
+                  <legend className="mb-1 font-medium">{t('analysis.settings.title')}</legend>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      className={`${controlCls} w-28`}
+                      value={form.fieldwork.targetCompletes ?? ''}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          fieldwork: {
+                            ...form.fieldwork,
+                            targetCompletes:
+                              e.target.value === '' ? null : Math.max(0, Number(e.target.value)),
+                          },
+                        })
+                      }
+                    />
+                    {t('analysis.settings.target')}
+                  </label>
+                </fieldset>
+              </>,
+            )}
+          <GoalsSection projectId={project.id} manage />
         </Tabs.Content>
         <Tabs.Content value="shortcuts">
           {section(

@@ -10,7 +10,9 @@ export function useCan(permission: Permission, projectId: string | null): boolea
   const me = useMe();
   return !!me.data?.memberships.some(
     (m) =>
-      roleHasPermission(m.role as Role, permission) &&
+      (m.permissions
+        ? m.permissions.includes(permission)
+        : roleHasPermission(m.role as Role, permission)) &&
       (m.projectId === null || m.projectId === projectId),
   );
 }

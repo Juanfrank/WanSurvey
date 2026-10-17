@@ -8,6 +8,7 @@ import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText } from '../routes/ui.js';
+import { RoleGuide } from './RoleGuide.js';
 
 interface People {
   members: {
@@ -83,6 +84,7 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
         {t('team.projectPeople.intro')}{' '}
         {data && !data.canManage ? t('team.projectPeople.readOnly') : ''}
       </p>
+      <RoleGuide />
       {notice ? (
         <p
           role="status"
@@ -287,6 +289,7 @@ function PersonDialog({
             </label>
           ))}
         </fieldset>
+        <RoleGuide roles={people.grantable} />
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>

@@ -7,7 +7,6 @@ export const ROLES = [
   'supervisor',
   'reviewer',
   'interviewer',
-  'data_entry',
   'client_viewer',
 ] as const;
 export const Role = z.enum(ROLES);
@@ -108,6 +107,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'interviews.review',
     'interviews.approve',
   ],
+  // Interviewers also key paper forms (there is no separate data-entry role).
   interviewer: [
     'tenant.read',
     'projects.read',
@@ -115,15 +115,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'cases.read_assigned',
     'interviews.conduct',
     'interviews.read_own',
+    'dataentry.key',
     'metrics.own',
     'pii.view',
-  ],
-  data_entry: [
-    'tenant.read',
-    'projects.read',
-    'questionnaires.read',
-    'cases.read_assigned',
-    'dataentry.key',
   ],
   client_viewer: [
     'tenant.read',
@@ -138,8 +132,55 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 /** Roles that must enrol TOTP before using the app. */
 export const ROLES_REQUIRING_2FA: readonly Role[] = ['owner', 'admin'];
 
-export function roleHasPermission(role: Role, permission: Permission): boolean {
-  return ROLE_PERMISSIONS[role].includes(permission);
+export function roleHasPermission(
+  role: Role,
+  permission: Permission,
+  matrix: RoleMatrix = ROLE_PERMISSIONS,
+): boolean {
+  return matrix[role].includes(permission);
+}
+
+/** What each role may do in one organisation. */
+export type RoleMatrix = Record<Role, readonly Permission[]>;
+
+/** Roles whose permissions an organisation may change; owners and administrators keep theirs. */
+export const CUSTOM_ROLES = [
+  'project_manager',
+  'supervisor',
+  'reviewer',
+  'interviewer',
+  'client_viewer',
+] as const satisfies readonly Role[];
+export type CustomRole = (typeof CUSTOM_ROLES)[number];
+
+/** Never given to a customised role: running the organisation stays with its administrators. */
+export const RESERVED_PERMISSIONS: readonly Permission[] = [
+  'tenant.manage',
+  'tenant.billing',
+  'tenant.delete',
+];
+
+/** An organisation's changes to the default matrix: the full list of each changed role. */
+const RolePermissionList = z
+  .array(Permission)
+  .max(PERMISSIONS.length)
+  .refine((ps) => !ps.some((p) => RESERVED_PERMISSIONS.includes(p)), 'Reserved permission');
+export const RoleOverrides = z.partialRecord(z.enum(CUSTOM_ROLES), RolePermissionList).default({});
+export type RoleOverrides = z.infer<typeof RoleOverrides>;
+
+/** The defaults with an organisation's changes on top (unknown or reserved entries ignored). */
+export function roleMatrix(overrides?: unknown): RoleMatrix {
+  const changes = (overrides && typeof overrides === 'object' ? overrides : {}) as Record<
+    string,
+    unknown
+  >;
+  const matrix = { ...ROLE_PERMISSIONS };
+  for (const role of CUSTOM_ROLES) {
+    const list = RolePermissionList.safeParse(changes[role]);
+    // Every role keeps seeing the organisation it belongs to.
+    if (list.success) matrix[role] = [...new Set<Permission>(['tenant.read', ...list.data])];
+  }
+  return matrix;
 }
 
 /** Roles an actor may grant: never above their own rank; only owners create owners. */
@@ -150,6 +191,5 @@ export const ROLE_RANK: Record<Role, number> = {
   supervisor: 60,
   reviewer: 50,
   interviewer: 40,
-  data_entry: 40,
   client_viewer: 10,
 };
