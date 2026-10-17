@@ -239,6 +239,13 @@
       "when": 1792900000000,
       "tag": "0033_papi_scans",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793000000000,
+      "tag": "0034_bi_model",
+      "breakpoints": true
     }
   ]
 }

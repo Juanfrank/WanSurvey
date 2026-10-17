@@ -97,6 +97,8 @@ const Env = z.object({
    */
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(4),
   HEAVY_JOB_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),
+  /** When the worker refreshes the analysis model (schema bi), as cron in UTC; 'off' never. */
+  BI_REFRESH_CRON: z.string().trim().min(1).default('20 * * * *'),
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),

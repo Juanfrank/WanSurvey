@@ -48,6 +48,7 @@ API and worker read the same environment (validated at start; see `apps/api/.env
 | `exports.build`     | on request                                               | Builds an export file (up to 100 MB)                                                            |
 | `pii.encrypt`       | at worker start, then hourly                             | Seals personal sample fields still in plain text (for example after a field is marked personal) |
 | `privacy.retention` | 02:30 UTC                                                | Removes personal data from cases past their project's retention period                          |
+| `bi.refresh`        | `BI_REFRESH_CRON` (hourly at :20 UTC)                    | Refreshes the analysis model, schema `bi` ([bi.md](bi.md))                                      |
 
 Failed jobs retry three times with backoff; the last 100 failures are kept in Redis for inspection. Without the worker, e-mail stops, dashboards stop updating and exports stay queued; the API keeps working.
 

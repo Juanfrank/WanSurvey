@@ -610,7 +610,9 @@ describe('cases API', () => {
     const people = [interviewer.id, interviewer2.id];
     const preview = (body: object) =>
       post(pm, `${base}/cases/distribute/preview`, { caseIds: ids, userIds: people, ...body });
-    const by = (rows: { userId: string }[]) => Object.fromEntries(rows.map((r) => [r.userId, r]));
+    type Row = { userId: string; receive: number; limit: number | null };
+    const by = (rows: Row[]): Record<string, Row> =>
+      Object.fromEntries(rows.map((r) => [r.userId, r]));
 
     // Manual weights 3 to 1.
     const manual = await preview({
@@ -619,9 +621,9 @@ describe('cases API', () => {
     });
     expect(manual.status, JSON.stringify(manual.body)).toBe(200);
     const m = by(manual.body.rows);
-    expect(m[people[0]!].receive + m[people[1]!].receive).toBe(ids.length);
-    expect(m[people[0]!].receive).toBe(Math.round((ids.length * 3) / 4));
-    expect(m[people[0]!]).toMatchObject({ source: 'manual', share: 0.75 });
+    expect(m[people[0]!]!.receive + m[people[1]!]!.receive).toBe(ids.length);
+    expect(m[people[0]!]!.receive).toBe(Math.round((ids.length * 3) / 4));
+    expect(m[people[0]!]!).toMatchObject({ source: 'manual', share: 0.75 });
 
     // From goals: one person has a goal of their own, the other shares the team's.
     const day = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
@@ -636,8 +638,8 @@ describe('cases API', () => {
     const g1 = await goal(people[0]!, 6);
     const g2 = await goal(null, 4);
     const goals = by((await preview({ method: 'capacity' })).body.rows);
-    expect(goals[people[0]!]).toMatchObject({ source: 'goal', weight: 6 });
-    expect(goals[people[1]!]).toMatchObject({ source: 'team_goal', weight: 2 });
+    expect(goals[people[0]!]!).toMatchObject({ source: 'goal', weight: 6 });
+    expect(goals[people[1]!]!).toMatchObject({ source: 'team_goal', weight: 2 });
     for (const g of [g1, g2])
       await pm.agent
         .delete(`/api/v1/projects/${project}/goals/${g.body.id}`)
@@ -646,14 +648,14 @@ describe('cases API', () => {
 
     // No interviews yet: productivity weighs everyone the same.
     const perf = by((await preview({ method: 'performance', days: 30 })).body.rows);
-    expect(perf[people[0]!]).toMatchObject({ source: 'output', weight: 1 });
-    expect(Math.abs(perf[people[0]!].receive - perf[people[1]!].receive)).toBeLessThanOrEqual(1);
+    expect(perf[people[0]!]!).toMatchObject({ source: 'output', weight: 1 });
+    expect(Math.abs(perf[people[0]!]!.receive - perf[people[1]!]!.receive)).toBeLessThanOrEqual(1);
 
     // The fair method with a cap of 1 open case: the rest stays free.
     const fair = await preview({ method: 'fair', cap: 1 });
     const f = by(fair.body.rows);
-    expect(f[people[0]!].limit).toBeLessThanOrEqual(1);
-    expect(fair.body.free).toBe(ids.length - f[people[0]!].receive - f[people[1]!].receive);
+    expect(f[people[0]!]!.limit).toBeLessThanOrEqual(1);
+    expect(fair.body.free).toBe(ids.length - f[people[0]!]!.receive - f[people[1]!]!.receive);
 
     // A preview assigns nothing; the share-out does, and says what stayed free.
     const done = await post(pm, `${base}/cases/distribute`, {
@@ -663,7 +665,7 @@ describe('cases API', () => {
       weights: { [people[0]!]: 3, [people[1]!]: 1 },
     });
     expect(done.status, JSON.stringify(done.body)).toBe(200);
-    expect(done.body.perPerson[people[0]!]).toBe(m[people[0]!].receive);
+    expect(done.body.perPerson[people[0]!]).toBe(m[people[0]!]!.receive);
     expect(done.body.free).toBe(0);
     expect(
       (await post(interviewerS, `${base}/cases/distribute/preview`, { userIds: people })).status,
