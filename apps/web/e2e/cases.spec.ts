@@ -137,6 +137,17 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
   const share = page.getByRole('dialog', { name: 'Share out at random' });
   await share.getByRole('checkbox', { name: 'Everyone' }).check();
   await expect(share.getByRole('checkbox', { name: 'Demo clerk' })).toBeChecked();
+  // The fair method: a preview of what each person would get, within its limit.
+  await share
+    .getByRole('combobox', { name: 'Method' })
+    .selectOption({ label: 'Fair with a ceiling' });
+  await share.getByRole('textbox', { name: 'At most open cases per person' }).fill('3');
+  const preview = share.getByTestId('distribute-preview');
+  await expect(preview.getByRole('row', { name: /Demo clerk/ })).toBeVisible();
+  await expect(preview.getByRole('columnheader', { name: 'Limit' })).toBeVisible();
+  await share.getByRole('combobox', { name: 'Method' }).selectOption({ label: 'By capacity' });
+  await share.getByRole('checkbox', { name: 'Write the weights by hand' }).check();
+  await expect(preview.getByRole('spinbutton', { name: 'Weight of Demo clerk' })).toBeVisible();
   await shot(page, 'cases-distribute');
   await expectAccessible(page);
   await share.getByRole('button', { name: 'Cancel' }).click();

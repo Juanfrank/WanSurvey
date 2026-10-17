@@ -2,7 +2,7 @@ import { sampleTable, toCsv } from '@wansurvey/fixtures';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseSampleFile, sniffDelimiter } from '../src/cases/sample-file.js';
-import { distribute } from '../src/cases/distribute.js';
+import { deal, distribute, fairWeights, productivity, quotas } from '../src/cases/distribute.js';
 import { ruleStrategy, STRATEGIES } from '../src/cases/strategies.js';
 import {
   normalisePhone,
@@ -148,6 +148,99 @@ describe('assignment strategies', () => {
     const balanced = distribute(ids, ['a', 'b'], new Map([['b', 4]]));
     expect(balanced.get('a')!.length).toBe(7);
     expect(balanced.get('b')!.length).toBe(3);
+  });
+
+  it('shares in proportion to weights, by largest remainder', () => {
+    const w = new Map([
+      ['a', 2],
+      ['b', 1],
+      ['c', 1],
+    ]);
+    expect(Object.fromEntries(quotas(['a', 'b', 'c'], w, 10))).toEqual(
+      expect.objectContaining({ a: 5 }),
+    );
+    const q = quotas(['a', 'b', 'c'], w, 10);
+    expect(q.get('b')! + q.get('c')!).toBe(5);
+    expect(Math.abs(q.get('b')! - q.get('c')!)).toBeLessThanOrEqual(1);
+    // Evening out: a already holds 12 of a total of 22, past its half, so gets none.
+    const even = quotas(['a', 'b', 'c'], w, 10, new Map([['a', 12]]));
+    expect(even.get('a')).toBe(0);
+    expect(even.get('b')).toBe(5);
+    expect(even.get('c')).toBe(5);
+    // Every case is given, whatever the weights.
+    for (let n = 0; n < 40; n++) {
+      const r = quotas(
+        ['a', 'b', 'c'],
+        new Map([
+          ['a', 3.3],
+          ['b', 1.1],
+          ['c', 0.7],
+        ]),
+        n,
+      );
+      expect([...r.values()].reduce((s, v) => s + v, 0)).toBe(n);
+    }
+  });
+
+  it('stops at each person’s limit, shares the rest, and leaves what no one has room for', () => {
+    const w = new Map([
+      ['a', 1],
+      ['b', 1],
+    ]);
+    const capped = quotas(['a', 'b'], w, 10, new Map(), new Map([['a', 2]]));
+    expect(Object.fromEntries(capped)).toEqual({ a: 2, b: 8 });
+    const full = quotas(
+      ['a', 'b'],
+      w,
+      10,
+      new Map(),
+      new Map([
+        ['a', 2],
+        ['b', 3],
+      ]),
+    );
+    expect(Object.fromEntries(full)).toEqual({ a: 2, b: 3 });
+    const hands = deal(
+      Array.from({ length: 6 }, (_, i) => `c${i}`),
+      new Map([
+        ['a', 2],
+        ['b', 3],
+      ]),
+    );
+    expect(hands.get('a')).toHaveLength(2);
+    expect(hands.get('b')).toHaveLength(3);
+    expect(new Set([...hands.values()].flat()).size).toBe(5);
+  });
+
+  it('weighs productivity, pulled towards the team’s for people with little history', () => {
+    const p = productivity(
+      ['fast', 'slow', 'new'],
+      new Map([
+        ['fast', { completes: 60, days: 10 }],
+        ['slow', { completes: 20, days: 10 }],
+      ]),
+    );
+    // The team does 4 a day: the newcomer starts there.
+    expect(p.get('new')).toBeCloseTo(4);
+    expect(p.get('fast')!).toBeGreaterThan(5);
+    expect(p.get('fast')!).toBeLessThan(6);
+    expect(p.get('slow')!).toBeGreaterThan(2);
+    // No history at all: everyone the same.
+    expect([...productivity(['a', 'b'], new Map()).values()]).toEqual([1, 1]);
+  });
+
+  it('keeps the fair weights within 20% of the mean, softened by the square root', () => {
+    const f = fairWeights(
+      new Map([
+        ['star', 16],
+        ['mid', 4],
+        ['low', 1],
+      ]),
+    );
+    expect(f.get('star')).toBeCloseTo(1.2);
+    expect(f.get('low')).toBeCloseTo(0.8);
+    expect(f.get('mid')!).toBeGreaterThan(0.8);
+    expect(f.get('mid')!).toBeLessThan(1.2);
   });
 });
 
@@ -507,6 +600,74 @@ describe('cases API', () => {
     const done = await post(pm, `${base}/imports/${id}/commit`);
     expect(done.body).toMatchObject({ created: 1, assigned: 0 });
     await patchProject(pm, { assignmentMode: 'assigned' });
+  });
+
+  it('previews and shares out by capacity, productivity and the fair method', async () => {
+    const ids = (await pm.agent.get(`${base}/cases`).query({ pageSize: 200 })).body.rows
+      .filter((r: { status: string }) => r.status === 'fresh' || r.status === 'assigned')
+      .map((r: { id: string }) => r.id);
+    expect(ids.length).toBeGreaterThan(2);
+    const people = [interviewer.id, interviewer2.id];
+    const preview = (body: object) =>
+      post(pm, `${base}/cases/distribute/preview`, { caseIds: ids, userIds: people, ...body });
+    const by = (rows: { userId: string }[]) => Object.fromEntries(rows.map((r) => [r.userId, r]));
+
+    // Manual weights 3 to 1.
+    const manual = await preview({
+      method: 'capacity',
+      weights: { [people[0]!]: 3, [people[1]!]: 1 },
+    });
+    expect(manual.status, JSON.stringify(manual.body)).toBe(200);
+    const m = by(manual.body.rows);
+    expect(m[people[0]!].receive + m[people[1]!].receive).toBe(ids.length);
+    expect(m[people[0]!].receive).toBe(Math.round((ids.length * 3) / 4));
+    expect(m[people[0]!]).toMatchObject({ source: 'manual', share: 0.75 });
+
+    // From goals: one person has a goal of their own, the other shares the team's.
+    const day = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+    const goal = (userId: string | null, target: number) =>
+      post(pm, `/api/v1/projects/${project}/goals`, {
+        userId,
+        frequency: 'daily',
+        startsOn: day(-2),
+        endsOn: day(2),
+        target,
+      }).expect(201);
+    const g1 = await goal(people[0]!, 6);
+    const g2 = await goal(null, 4);
+    const goals = by((await preview({ method: 'capacity' })).body.rows);
+    expect(goals[people[0]!]).toMatchObject({ source: 'goal', weight: 6 });
+    expect(goals[people[1]!]).toMatchObject({ source: 'team_goal', weight: 2 });
+    for (const g of [g1, g2])
+      await pm.agent
+        .delete(`/api/v1/projects/${project}/goals/${g.body.id}`)
+        .set('x-csrf-token', pm.csrf)
+        .expect(200);
+
+    // No interviews yet: productivity weighs everyone the same.
+    const perf = by((await preview({ method: 'performance', days: 30 })).body.rows);
+    expect(perf[people[0]!]).toMatchObject({ source: 'output', weight: 1 });
+    expect(Math.abs(perf[people[0]!].receive - perf[people[1]!].receive)).toBeLessThanOrEqual(1);
+
+    // The fair method with a cap of 1 open case: the rest stays free.
+    const fair = await preview({ method: 'fair', cap: 1 });
+    const f = by(fair.body.rows);
+    expect(f[people[0]!].limit).toBeLessThanOrEqual(1);
+    expect(fair.body.free).toBe(ids.length - f[people[0]!].receive - f[people[1]!].receive);
+
+    // A preview assigns nothing; the share-out does, and says what stayed free.
+    const done = await post(pm, `${base}/cases/distribute`, {
+      caseIds: ids,
+      userIds: people,
+      method: 'capacity',
+      weights: { [people[0]!]: 3, [people[1]!]: 1 },
+    });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    expect(done.body.perPerson[people[0]!]).toBe(m[people[0]!].receive);
+    expect(done.body.free).toBe(0);
+    expect(
+      (await post(interviewerS, `${base}/cases/distribute/preview`, { userIds: people })).status,
+    ).toBe(403);
   });
 
   it('distributes cases at random and evenly among the people chosen', async () => {

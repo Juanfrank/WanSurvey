@@ -21,10 +21,12 @@ import {
   asc,
   desc,
   eq,
+  gte,
   ilike,
   inArray,
   isNotNull,
   isNull,
+  lte,
   or,
   sql,
   type SQL,
@@ -34,12 +36,23 @@ import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
-import { assignments, caseEvents, cases, contacts, sampleFields, users } from '../db/schema.js';
+import {
+  assignments,
+  caseEvents,
+  cases,
+  contacts,
+  interviewerGoals,
+  projects,
+  sampleFields,
+  users,
+} from '../db/schema.js';
 import { compileRule, maskContact, maskSample, ruleError } from './case-logic.js';
-import { distribute } from './distribute.js';
+import { deal, fairWeights, productivity, quotas, type Output } from './distribute.js';
+import { daysBetween, windowsIn, type Frequency } from '../metrics/goal-periods.js';
 import { CasesService, ofQuestionnaire } from './cases.service.js';
 import { words } from './pii.js';
 
+const round = (x: number) => Math.round(x * 1000) / 1000;
 const PERM = { projectParam: 'projectId' } as const;
 const READ = ['cases.read_all', 'cases.read_assigned'] as const;
 const STATUSES = ['fresh', 'assigned', 'in_progress', 'finalised', 'withdrawn'] as const;
@@ -85,7 +98,33 @@ const DistributeBody = z.object({
   userIds: z.array(z.uuid()).min(1).max(500),
   /** Count the cases each person already holds, so the totals come out even. */
   balance: z.boolean().default(false),
+  /**
+   * even: the same to each; capacity: in proportion to `weights` or, without them, to each
+   * person's goal; performance: to recent productivity; fair: even, moved at most 20% by
+   * productivity (softened).
+   */
+  method: z.enum(['even', 'capacity', 'performance', 'fair']).default('even'),
+  weights: z.record(z.uuid(), z.number().min(0).max(1_000_000)).optional(),
+  /** The window productivity is measured over, in days. */
+  days: z.number().int().min(7).max(90).default(14),
+  /** At most this many open cases per person after the share-out. */
+  cap: z.number().int().min(1).max(100_000).optional(),
 });
+
+/** How a share-out plan treats one person. */
+interface ShareRow {
+  userId: string;
+  weight: number;
+  /** Their part of what is shared (0 to 1). */
+  share: number;
+  /** Where the weight comes from. */
+  source: 'even' | 'manual' | 'goal' | 'team_goal' | 'no_goal' | 'output';
+  /** Open cases now (the ones being shared out aside). */
+  held: number;
+  receive: number;
+  /** The most they may receive, when something limits it. */
+  limit: number | null;
+}
 
 const RuleBody = z.object({
   userId: z.uuid(),
@@ -556,9 +595,25 @@ export class CasesController {
     });
   }
 
+  /** What a share-out would do, without doing it. */
+  @Post('cases/distribute/preview')
+  @HttpCode(200)
+  @RequirePermission('cases.assign', PERM)
+  @ApiBody({ schema: z.toJSONSchema(DistributeBody, { io: 'input' }) as object })
+  distributePreview(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body(new ZodPipe(DistributeBody)) body: z.infer<typeof DistributeBody>,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const { rows, free, skipped, movable } = await this.sharePlan(tx, projectId, body);
+      return { rows, free, skipped, count: movable.length };
+    });
+  }
+
   /**
-   * Hands cases out at random and evenly among some people. Cases being interviewed or
-   * finished stay where they are.
+   * Hands cases out at random among some people: evenly, or in proportion to capacity or
+   * productivity. Cases being interviewed or finished stay where they are.
    */
   @Post('cases/distribute')
   @HttpCode(200)
@@ -570,58 +625,8 @@ export class CasesController {
     @Body(new ZodPipe(DistributeBody)) body: z.infer<typeof DistributeBody>,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
-      const people = [...new Set(body.userIds)];
-      const caseIds =
-        body.caseIds ??
-        (
-          await tx
-            .select({ id: cases.id })
-            .from(cases)
-            .where(
-              and(
-                eq(cases.projectId, projectId),
-                eq(cases.status, 'fresh'),
-                isNull(cases.assignedTo),
-                ofQuestionnaire(body.questionnaireId),
-              ),
-            )
-        ).map((c) => c.id);
-      const movable: string[] = [];
-      // Who holds each movable case now: those do not count in their load.
-      const inHand = new Map<string, number>();
-      for (let i = 0; i < caseIds.length; i += 1000) {
-        const rows = await tx
-          .select({ id: cases.id, assignedTo: cases.assignedTo })
-          .from(cases)
-          .where(
-            and(
-              eq(cases.projectId, projectId),
-              inArray(cases.id, caseIds.slice(i, i + 1000)),
-              inArray(cases.status, ['fresh', 'assigned']),
-            ),
-          );
-        for (const r of rows) {
-          movable.push(r.id);
-          if (r.assignedTo) inHand.set(r.assignedTo, (inHand.get(r.assignedTo) ?? 0) + 1);
-        }
-      }
-      const held = new Map<string, number>();
-      if (body.balance) {
-        const rows = await tx
-          .select({ userId: cases.assignedTo, n: sql<number>`count(*)::int` })
-          .from(cases)
-          .where(
-            and(
-              eq(cases.projectId, projectId),
-              inArray(cases.assignedTo, people),
-              inArray(cases.status, ['assigned', 'in_progress']),
-            ),
-          )
-          .groupBy(cases.assignedTo);
-        rows.forEach((r) => held.set(r.userId!, r.n - (inHand.get(r.userId!) ?? 0)));
-      }
-      const hands = distribute(movable, people, held);
+      const { movable, rows, free, skipped } = await this.sharePlan(tx, projectId, body);
+      const hands = deal(movable, new Map(rows.map((r) => [r.userId, r.receive])));
       const perPerson: Record<string, number> = {};
       let changed = 0;
       for (const [userId, ids] of hands) {
@@ -635,11 +640,220 @@ export class CasesController {
           action: 'cases.assigned',
           targetType: 'project',
           targetId: projectId,
-          details: { distributed: true, balance: body.balance, perPerson, count: changed },
+          details: {
+            distributed: true,
+            method: body.method,
+            balance: body.balance,
+            ...(body.cap ? { cap: body.cap } : {}),
+            weights: Object.fromEntries(rows.map((r) => [r.userId, round(r.weight)])),
+            perPerson,
+            count: changed,
+          },
         }),
       );
-      return { changed, perPerson, skipped: caseIds.length - movable.length };
+      return { changed, perPerson, free, skipped };
     });
+  }
+
+  /** The cases a share-out moves and how many each person gets. */
+  private async sharePlan(tx: Tx, projectId: string, body: z.infer<typeof DistributeBody>) {
+    await this.svc.project(tx, projectId);
+    const people = [...new Set(body.userIds)];
+    const caseIds =
+      body.caseIds ??
+      (
+        await tx
+          .select({ id: cases.id })
+          .from(cases)
+          .where(
+            and(
+              eq(cases.projectId, projectId),
+              eq(cases.status, 'fresh'),
+              isNull(cases.assignedTo),
+              ofQuestionnaire(body.questionnaireId),
+            ),
+          )
+      ).map((c) => c.id);
+    const movable: string[] = [];
+    // Who holds each movable case now: those do not count in their load.
+    const inHand = new Map<string, number>();
+    for (let i = 0; i < caseIds.length; i += 1000) {
+      const rows = await tx
+        .select({ id: cases.id, assignedTo: cases.assignedTo })
+        .from(cases)
+        .where(
+          and(
+            eq(cases.projectId, projectId),
+            inArray(cases.id, caseIds.slice(i, i + 1000)),
+            inArray(cases.status, ['fresh', 'assigned']),
+          ),
+        );
+      for (const r of rows) {
+        movable.push(r.id);
+        if (r.assignedTo) inHand.set(r.assignedTo, (inHand.get(r.assignedTo) ?? 0) + 1);
+      }
+    }
+    const held = new Map(people.map((p) => [p, 0]));
+    const open = await tx
+      .select({ userId: cases.assignedTo, n: sql<number>`count(*)::int` })
+      .from(cases)
+      .where(
+        and(
+          eq(cases.projectId, projectId),
+          inArray(cases.assignedTo, people),
+          inArray(cases.status, ['assigned', 'in_progress']),
+        ),
+      )
+      .groupBy(cases.assignedTo);
+    open.forEach((r) => held.set(r.userId!, r.n - (inHand.get(r.userId!) ?? 0)));
+    const base = body.balance ? held : new Map<string, number>();
+
+    // The weights.
+    let weights = new Map(people.map((p) => [p, 1]));
+    const source = new Map<string, ShareRow['source']>(people.map((p) => [p, 'even']));
+    if (body.method === 'capacity' && body.weights) {
+      weights = new Map(people.map((p) => [p, body.weights![p] ?? 0]));
+      people.forEach((p) => source.set(p, 'manual'));
+    } else if (body.method === 'capacity') {
+      const goals = await this.goalRates(tx, projectId, people, body.questionnaireId);
+      weights = goals.weights;
+      goals.source.forEach((v, k) => source.set(k, v));
+    } else if (body.method === 'performance' || body.method === 'fair') {
+      const pace = productivity(
+        people,
+        await this.output(tx, projectId, people, body.days, body.questionnaireId),
+      );
+      weights = body.method === 'fair' ? fairWeights(pace) : pace;
+      people.forEach((p) => source.set(p, 'output'));
+    }
+
+    // The limits: the open-case cap, and for the fair share at most 20% over the even share.
+    const room = new Map<string, number>();
+    const total = movable.length + people.reduce((s, p) => s + (base.get(p) ?? 0), 0);
+    for (const p of people) {
+      let r = Infinity;
+      if (body.cap) r = Math.max(0, body.cap - held.get(p)!);
+      if (body.method === 'fair')
+        r = Math.min(r, Math.max(0, Math.ceil((1.2 * total) / people.length) - (base.get(p) ?? 0)));
+      if (r !== Infinity) room.set(p, r);
+    }
+    const amounts = quotas(people, weights, movable.length, base, room);
+    const W = [...weights.values()].reduce((s, v) => s + v, 0) || 1;
+    const rows: ShareRow[] = people.map((p) => ({
+      userId: p,
+      weight: weights.get(p)!,
+      share: weights.get(p)! / W,
+      source: source.get(p)!,
+      held: held.get(p)!,
+      receive: amounts.get(p)!,
+      limit: room.get(p) ?? null,
+    }));
+    const given = rows.reduce((s, r) => s + r.receive, 0);
+    return {
+      movable,
+      rows,
+      free: movable.length - given,
+      skipped: caseIds.length - movable.length,
+    };
+  }
+
+  /**
+   * Each person's goal pace (completes a day) from the goals in force today. People without
+   * a goal of their own get the team goal's pace split among those chosen; with no goals at
+   * all, everyone weighs the same.
+   */
+  private async goalRates(
+    tx: Tx,
+    projectId: string,
+    people: string[],
+    questionnaireId: string | undefined,
+  ) {
+    const [p] = await tx
+      .select({ timezone: projects.timezone })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    const today = (
+      (await tx.execute(
+        sql`select (now() at time zone ${p?.timezone ?? 'UTC'})::date::text as d`,
+      )) as unknown as { d: string }[]
+    )[0]!.d;
+    const goals = await tx
+      .select({
+        userId: interviewerGoals.userId,
+        frequency: interviewerGoals.frequency,
+        startsOn: interviewerGoals.startsOn,
+        endsOn: interviewerGoals.endsOn,
+        target: interviewerGoals.target,
+      })
+      .from(interviewerGoals)
+      .where(
+        and(
+          eq(interviewerGoals.projectId, projectId),
+          lte(interviewerGoals.startsOn, today),
+          gte(interviewerGoals.endsOn, today),
+          questionnaireId
+            ? or(
+                isNull(interviewerGoals.questionnaireId),
+                eq(interviewerGoals.questionnaireId, questionnaireId),
+              )
+            : undefined,
+        ),
+      );
+    const pace = (g: (typeof goals)[number]) =>
+      (g.target * windowsIn(g.frequency as Frequency, g.startsOn, g.endsOn)) /
+      daysBetween(g.startsOn, g.endsOn);
+    const own = new Map<string, number>();
+    let team = 0;
+    for (const g of goals) {
+      if (g.userId) own.set(g.userId, (own.get(g.userId) ?? 0) + pace(g));
+      else team += pace(g);
+    }
+    const weights = new Map<string, number>();
+    const source = new Map<string, ShareRow['source']>();
+    const ownValues = people.filter((x) => own.has(x)).map((x) => own.get(x)!);
+    const fallback = team
+      ? team / people.length
+      : ownValues.length
+        ? ownValues.reduce((s, v) => s + v, 0) / ownValues.length
+        : 1;
+    for (const x of people) {
+      if (own.has(x)) {
+        weights.set(x, own.get(x)!);
+        source.set(x, 'goal');
+      } else {
+        weights.set(x, fallback);
+        source.set(x, team ? 'team_goal' : 'no_goal');
+      }
+    }
+    return { weights, source };
+  }
+
+  /** Completes and days worked by each person over the last `days` days. */
+  private async output(
+    tx: Tx,
+    projectId: string,
+    people: string[],
+    days: number,
+    questionnaireId: string | undefined,
+  ): Promise<Map<string, Output>> {
+    const rows = (await tx.execute(sql`
+      select i.interviewer_id::text as "userId",
+        count(*) filter (where i.disposition = 'COMPLETE'
+          and i.status in ('submitted', 'in_review', 'approved', 'returned'))::int as completes,
+        count(distinct (i.submitted_at at time zone coalesce(p.timezone, 'UTC'))::date)::int as days
+      from interviews i
+      join projects p on p.id = i.project_id
+      join questionnaire_versions v on v.id = i.questionnaire_version_id
+      where i.project_id = ${projectId}
+        and i.interviewer_id in (${sql.join(
+          people.map((x) => sql`${x}::uuid`),
+          sql`, `,
+        )})
+        and i.submitted_at >= now() - make_interval(days => ${days})
+        ${questionnaireId ? sql`and v.questionnaire_id = ${questionnaireId}` : sql``}
+      group by i.interviewer_id
+    `)) as unknown as ({ userId: string } & Output)[];
+    return new Map(rows.map((r) => [r.userId, { completes: r.completes, days: r.days }]));
   }
 
   /** People cases can be assigned to, with their workload. */
