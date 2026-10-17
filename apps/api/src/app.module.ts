@@ -28,6 +28,7 @@ import { PapiService } from './papi/papi.service.js';
 import { AnalysisController, PublicShareController } from './analysis/analysis.controller.js';
 import { GoalsController } from './metrics/goals.controller.js';
 import { TeamsController } from './teams/teams.controller.js';
+import { ProjectPeopleController } from './projects/project-people.controller.js';
 import { AnalysisService } from './analysis/analysis.service.js';
 import { DatasetService } from './analysis/dataset.service.js';
 import { ShareService } from './analysis/share.service.js';
@@ -147,6 +148,7 @@ export class AppModule {
         AnalysisController,
         GoalsController,
         TeamsController,
+        ProjectPeopleController,
         PublicShareController,
         PrivacyController,
         CasesController,

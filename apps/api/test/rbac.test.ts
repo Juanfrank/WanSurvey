@@ -72,6 +72,11 @@ const ENDPOINTS: Endpoint[] = [
     call: (s, ids) =>
       s.agent.post(`/api/v1/users/${ids.target}/force-logout`).set('x-csrf-token', s.csrf),
   },
+  {
+    name: 'GET /projects/:id/people',
+    permission: ['users.read', 'projects.update'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/people`),
+  },
   { name: 'GET /tenant', permission: 'tenant.read', call: (s) => s.agent.get('/api/v1/tenant') },
   {
     name: 'PATCH /tenant',

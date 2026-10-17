@@ -23,6 +23,7 @@ import {
 } from '../feedback/FeedbackParts.js';
 import { FeedbackDesigner } from '../feedback/FeedbackDesigner.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
+import { ProjectPeople } from '../team/ProjectPeople.js';
 import { CallsTab } from '../cati/CallsTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
 import { ReviewTab } from '../review/ReviewTab.js';
@@ -864,7 +865,15 @@ export function ModeChips({ modes }: { modes: readonly string[] }) {
 }
 
 type ProjectTab =
-  'cases' | 'questionnaires' | 'calls' | 'paper' | 'review' | 'results' | 'exports' | 'settings';
+  | 'cases'
+  | 'questionnaires'
+  | 'calls'
+  | 'paper'
+  | 'review'
+  | 'results'
+  | 'exports'
+  | 'people'
+  | 'settings';
 type ResultsSub = 'topline' | 'dashboard' | 'metrics';
 
 /** Old `?tab=` values still land in the right place: web and paper forms, dashboard, import… */
@@ -887,6 +896,7 @@ const FROM_SEARCH: Record<
   dashboard: { tab: 'results', results: 'dashboard' },
   metrics: { tab: 'results', results: 'metrics' },
   exports: { tab: 'exports' },
+  people: { tab: 'people' },
   settings: { tab: 'settings' },
 };
 
@@ -913,6 +923,7 @@ export function ProjectPage() {
   const canCasesOwn = useCan('cases.read_assigned', projectId);
   const canImport = useCan('cases.import', projectId);
   const canSettings = useCan('projects.update', projectId);
+  const canPeople = useCan('users.read', projectId) || canSettings;
   const canWeb =
     useCan('cawi.waves', projectId) &&
     (!project.data?.modesEnabled.length || project.data.modesEnabled.includes('CAWI'));
@@ -957,6 +968,7 @@ export function ProjectPage() {
     ...(canReview || canApprove ? (['review'] as const) : []),
     ...(resultsSubs.length ? (['results'] as const) : []),
     ...(canExport ? (['exports'] as const) : []),
+    ...(canPeople ? (['people'] as const) : []),
     ...(canSettings ? (['settings'] as const) : []),
   ];
   const initial = search.tab ? FROM_SEARCH[search.tab] : undefined;
@@ -1133,6 +1145,9 @@ export function ProjectPage() {
           </Tabs.Content>
           <Tabs.Content value="exports">
             <ExportsTab projectId={projectId} />
+          </Tabs.Content>
+          <Tabs.Content value="people">
+            <ProjectPeople projectId={projectId} />
           </Tabs.Content>
           <Tabs.Content value="settings">
             {project.data ? <SettingsTab project={project.data} /> : null}
