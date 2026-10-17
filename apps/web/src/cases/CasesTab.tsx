@@ -443,6 +443,8 @@ export function CasesTab({ projectId }: { projectId: string }) {
                     type="checkbox"
                     aria-label={t('cases.list.selectPage')}
                     checked={allOnPage}
+                    // Not while the previous list is shown during a reload.
+                    disabled={list.isPlaceholderData}
                     onChange={() => {
                       const next = new Set(selected);
                       rows.forEach((r) => (allOnPage ? next.delete(r.id) : next.add(r.id)));

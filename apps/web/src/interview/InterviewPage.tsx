@@ -1,3 +1,4 @@
+import { ScanPanel } from '../papi/ScanPanel.js';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { own, type InterviewSession } from '@wansurvey/logic';
 import { InterviewRunner, ScriptBox } from '@wansurvey/renderer';
@@ -256,6 +257,9 @@ export function InterviewPage() {
           second={payload.interview.entryPass === 2}
           onSave={(meta) => iv.paperMeta(meta)}
         />
+      ) : null}
+      {payload.interview.mode === 'PAPI' ? (
+        <ScanPanel interviewId={interviewId} currentKey={session.currentKey()} />
       ) : null}
       {iv.problem ? (
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-ink-900">

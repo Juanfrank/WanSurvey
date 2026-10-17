@@ -16,6 +16,10 @@ RUN pnpm --filter @wansurvey/api... build \
 
 FROM node:22-slim
 ENV NODE_ENV=production
+# pdftoppm, to read scanned paper forms (the worker uses it).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends poppler-utils \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /out ./
 USER node

@@ -8,6 +8,7 @@ import { useCan } from '../designer/hooks.js';
 import { localiseError } from '../i18n-messages.js';
 import { startInterview } from '../interview/useInterview.js';
 import { Button } from '../routes/ui.js';
+import { ScanForms } from './ScanForms.js';
 
 interface Mismatch {
   id: string;
@@ -35,11 +36,15 @@ export function PaperTab({
   const canConduct = useCan('interviews.conduct', projectId);
   const canKey = canClerk || canConduct;
   const canReview = useCan('interviews.review', projectId);
+  // Scans are uploaded by clerks and by whoever runs the fieldwork.
+  const canAll = useCan('cases.read_all', projectId);
+  const canScan = canKey || canAll;
   return (
     <div className="flex flex-col gap-8 text-sm">
       {canKey ? (
         <KeyForm projectId={projectId} notice={notice} questionnaireId={questionnaireId} />
       ) : null}
+      {canScan ? <ScanForms projectId={projectId} canComplete={canClerk} /> : null}
       {canReview ? <Mismatches projectId={projectId} /> : null}
       <PrintForms projectId={projectId} questionnaireId={questionnaireId} />
     </div>
@@ -189,7 +194,20 @@ function PrintForms({
           />
         </label>
         <Button type="submit">{t('papi.print.open')}</Button>
+        <a
+          className={`${smallBtn} inline-flex h-9 items-center`}
+          href={`/api/v1/projects/${projectId}/papi/scan-forms.pdf?${new URLSearchParams({
+            ...(filter.trim() ? { filter: filter.trim() } : {}),
+            limit: String(limit),
+            ...(questionnaireId ? { questionnaireId } : {}),
+          }).toString()}`}
+          download
+          data-testid="scan-forms-pdf"
+        >
+          {t('papi.scans.download')}
+        </a>
       </div>
+      <p className="text-xs text-slate-600">{t('papi.scans.downloadHelp')}</p>
     </form>
   );
 }

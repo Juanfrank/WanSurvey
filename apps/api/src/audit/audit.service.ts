@@ -61,6 +61,7 @@ export type AuditAction =
   | 'cases.geocoded'
   | 'interview.submitted'
   | 'entry.resolved'
+  | 'papi.scans_uploaded'
   | 'interview.reviewed'
   | 'interview.approved'
   | 'interview.returned'

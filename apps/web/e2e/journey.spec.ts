@@ -161,6 +161,7 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
 
   // 4. All eight to the interviewer; one attempt per case, so a no-answer closes it.
   await page.getByRole('tab', { name: 'Lista de casos' }).click();
+  await expect(page.getByTestId('cases-table').locator('tbody tr')).toHaveCount(8);
   await page.getByLabel('Seleccionar todos los casos de esta página').check();
   await page.getByLabel('Asignar seleccionados a').selectOption({ label: 'Demo interviewer' });
   await page.getByRole('button', { name: 'Asignar', exact: true }).click();

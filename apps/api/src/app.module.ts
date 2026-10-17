@@ -25,6 +25,8 @@ import { WaveDispatcher } from './cawi/dispatcher.js';
 import { PublicSurveyController } from './cawi/public.controller.js';
 import { PapiController } from './papi/papi.controller.js';
 import { PapiService } from './papi/papi.service.js';
+import { ScansController } from './papi/scans.controller.js';
+import { ScansService } from './papi/scans.service.js';
 import { AnalysisController, PublicShareController } from './analysis/analysis.controller.js';
 import { GoalsController } from './metrics/goals.controller.js';
 import { TeamsController } from './teams/teams.controller.js';
@@ -144,6 +146,7 @@ export class AppModule {
         CawiController,
         PublicSurveyController,
         PapiController,
+        ScansController,
         ReviewController,
         AnalysisController,
         GoalsController,
@@ -185,6 +188,7 @@ export class AppModule {
         CawiService,
         WaveDispatcher,
         PapiService,
+        ScansService,
         ReviewService,
         { provide: PROCESS_ROLE, useValue: opts.role ?? 'api' },
         {

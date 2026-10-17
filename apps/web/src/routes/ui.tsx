@@ -92,9 +92,12 @@ export function FileInput({
   inputRef,
   onChange,
   labelClassName = 'font-medium',
+  multiple,
 }: {
   label: string;
   accept: string;
+  /** Several files at once; their names are listed. */
+  multiple?: boolean;
   inputRef?: Ref<HTMLInputElement>;
   onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
   labelClassName?: string;
@@ -114,10 +117,12 @@ export function FileInput({
             id={id}
             type="file"
             accept={accept}
+            multiple={multiple}
             aria-labelledby={`${id}-label`}
             className="sr-only"
             onChange={(e) => {
-              setName(e.target.files?.[0]?.name ?? null);
+              const picked = [...(e.target.files ?? [])].map((f) => f.name);
+              setName(picked.length ? picked.join(', ') : null);
               onChange?.(e);
             }}
           />

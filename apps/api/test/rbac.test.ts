@@ -82,6 +82,11 @@ const ENDPOINTS: Endpoint[] = [
     permission: 'tenant.read',
     call: (s) => s.agent.get('/api/v1/tenant/roles'),
   },
+  {
+    name: 'GET papi scans',
+    permission: ['dataentry.key', 'cases.read_all'],
+    call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/papi/scans`),
+  },
   { name: 'GET /tenant', permission: 'tenant.read', call: (s) => s.agent.get('/api/v1/tenant') },
   {
     name: 'PATCH /tenant',

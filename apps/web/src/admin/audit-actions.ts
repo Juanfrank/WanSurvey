@@ -56,6 +56,7 @@ export const AUDIT_ACTIONS = [
   'cases.geocoded',
   'interview.submitted',
   'entry.resolved',
+  'papi.scans_uploaded',
   'interview.reviewed',
   'interview.approved',
   'interview.returned',

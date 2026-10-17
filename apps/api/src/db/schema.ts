@@ -1256,3 +1256,87 @@ export const frameUnits = pgTable(
     index('frame_units_role_idx').on(t.tenantId, t.projectId, t.role),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Scanned paper forms (machine-readable PAPI)
+// ---------------------------------------------------------------------------
+
+/** One uploaded PDF of scanned forms; read in the background. */
+export const papiScanBatches = pgTable(
+  'papi_scan_batches',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    uploadedBy: uuid('uploaded_by').references(() => users.id),
+    fileName: text('file_name').notNull(),
+    /** Kept until it is read. */
+    pdf: bytea('pdf'),
+    /** queued, running, done, failed */
+    status: text('status').notNull().default('queued'),
+    pages: integer('pages').notNull().default(0),
+    error: text('error'),
+    createdAt: createdAt(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [index('papi_scan_batches_project_idx').on(t.tenantId, t.projectId, t.createdAt)],
+);
+
+/** A form found in a batch: one case's pages, read into an interview. */
+export const papiScanForms = pgTable(
+  'papi_scan_forms',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    batchId: uuid('batch_id')
+      .notNull()
+      .references(() => papiScanBatches.id, { onDelete: 'cascade' }),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id),
+    questionnaireVersionId: uuid('questionnaire_version_id')
+      .notNull()
+      .references(() => questionnaireVersions.id),
+    lang: text('lang').notNull(),
+    interviewId: uuid('interview_id').references(() => interviews.id),
+    /** review (second round pending), done (submitted), duplicate, failed */
+    status: text('status').notNull(),
+    pagesExpected: integer('pages_expected').notNull(),
+    pagesFound: integer('pages_found').array().notNull().default([]),
+    /** What the second round must see: `{ name, kind, detail? }`. */
+    issues: jsonb('issues').notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('papi_scan_forms_batch_idx').on(t.batchId),
+    index('papi_scan_forms_interview_idx').on(t.interviewId),
+  ],
+);
+
+/** A scanned page as an image, with where the form sits on it. */
+export const papiScanPages = pgTable(
+  'papi_scan_pages',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    batchId: uuid('batch_id')
+      .notNull()
+      .references(() => papiScanBatches.id, { onDelete: 'cascade' }),
+    formId: uuid('form_id').references(() => papiScanForms.id, { onDelete: 'set null' }),
+    pageNo: integer('page_no').notNull(),
+    formPage: integer('form_page'),
+    /** no_code (unreadable or not one of ours), unknown_case, other_project, unaligned */
+    problem: text('problem'),
+    transform: jsonb('transform'),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    image: bytea('image').notNull(),
+  },
+  (t) => [index('papi_scan_pages_batch_idx').on(t.batchId, t.pageNo)],
+);
