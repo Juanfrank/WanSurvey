@@ -28,9 +28,9 @@ test('download cases, interview offline after a reload, and everything arrives o
     await pickOrganisation(page, 'Demo Research');
     await page
       .getByRole('navigation', { name: 'Main' })
-      .getByRole('link', { name: 'Projects' })
+      .getByRole('link', { name: 'Projects', exact: true })
       .click();
-    await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+    await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
     await page.getByRole('link', { name: 'My device (offline)' }).click();
     await expect(page.getByRole('heading', { name: 'My device' })).toBeVisible();
 

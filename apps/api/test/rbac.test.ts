@@ -80,7 +80,7 @@ const ENDPOINTS: Endpoint[] = [
       s.agent
         .patch('/api/v1/tenant')
         .set('x-csrf-token', s.csrf)
-        .send({ settings: { touched: true } }),
+        .send({ settings: { defaultLanguage: 'es' } }),
   },
   {
     name: 'GET /tenant/sso',

@@ -39,7 +39,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
-import { projectLogos, projects } from '../db/schema.js';
+import { projectLogos, projects, tenants } from '../db/schema.js';
 
 const LOGO_MAX = 512 * 1024;
 
@@ -61,10 +61,11 @@ const ProjectFields = z.object({
   timezone: z.string().min(1).max(64),
   languages: z.array(z.string().min(2).max(16)).min(1),
 });
+// Time zone and languages left out come from the organisation's defaults.
 const ProjectBody = ProjectFields.extend({
   modesEnabled: ProjectFields.shape.modesEnabled.default([]),
-  timezone: ProjectFields.shape.timezone.default('UTC'),
-  languages: ProjectFields.shape.languages.default(['es']),
+  timezone: ProjectFields.shape.timezone.optional(),
+  languages: ProjectFields.shape.languages.optional(),
 });
 // No defaults here: fields left out of a PATCH keep their value.
 const ProjectPatch = ProjectFields.partial().extend({
@@ -133,9 +134,22 @@ export class ProjectsController {
         .from(projects)
         .where(eq(projects.code, body.code));
       if (dup) throw new ConflictException('A project with this code already exists');
+      const [org] = await tx
+        .select({ settings: tenants.settings })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId));
+      const defaults = (org?.settings ?? {}) as {
+        defaultLanguage?: string;
+        defaultTimezone?: string;
+      };
       const [project] = await tx
         .insert(projects)
-        .values({ tenantId: ctx.tenantId, ...body })
+        .values({
+          tenantId: ctx.tenantId,
+          ...body,
+          timezone: body.timezone ?? defaults.defaultTimezone ?? 'UTC',
+          languages: body.languages ?? [defaults.defaultLanguage ?? 'es'],
+        })
         .returning();
       await this.audit.record(
         tx,

@@ -40,8 +40,11 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
 }) => {
   test.setTimeout(120_000);
   await signInAdmin(page);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Team' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Team' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Users', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Users' })).toBeVisible();
   const team = page.getByTestId('team');
   await expect(team.locator(`[data-member="${ADMIN}"]`)).toContainText('(you)');
   // Nobody manages their own roles.
@@ -98,7 +101,9 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(inesBrowser.page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
   // An interviewer does not see the team.
   await expect(
-    inesBrowser.page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Team' }),
+    inesBrowser.page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('link', { name: 'Administration' }),
   ).toHaveCount(0);
 
   // The admin sees her active, then makes her a supervisor of the whole organisation.
@@ -165,12 +170,46 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(pm.page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
   await pm.page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Team' })
+    .getByRole('link', { name: 'Administration' })
     .click();
   await expect(
-    pm.page.getByText('You can see the team; an administrator changes it.'),
+    pm.page.getByText('You can see the users; an administrator changes them.'),
   ).toBeVisible();
   await expect(pm.page.getByRole('button', { name: 'Invite a person' })).toHaveCount(0);
   await expect(pm.page.getByRole('button', { name: /^Actions for/ })).toHaveCount(0);
   await pm.ctx.close();
+
+  // Teams: a field crew led by the supervisor, with Inés in it.
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await nav.getByRole('link', { name: 'Teams', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Teams' })).toBeVisible();
+  await page.getByRole('button', { name: 'New team' }).click();
+  const crew = page.getByRole('dialog', { name: 'New team' });
+  await crew.getByLabel('Name').fill('Cuadrilla Norte');
+  await crew.getByRole('combobox', { name: 'Leader' }).selectOption({ label: 'Demo supervisor' });
+  await crew.getByRole('checkbox', { name: /Inés Invitada/ }).check();
+  await crew.getByRole('button', { name: 'Create team' }).click();
+  await expect(page.getByText('Team Cuadrilla Norte created.')).toBeVisible();
+  await expect(page.locator('[data-team="Cuadrilla Norte"]')).toContainText('2 members');
+  await shot(page, 'admin-teams');
+  await expectAccessible(page);
+
+  // The organisation: defaults for new projects.
+  await nav.getByRole('link', { name: 'Organisation', exact: true }).click();
+  await page
+    .getByRole('combobox', { name: 'Time zone of new projects' })
+    .selectOption('America/Lima');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Organisation saved.')).toBeVisible();
+  await shot(page, 'admin-organisation');
+  await expectAccessible(page);
+
+  // The activity log has it all.
+  await nav.getByRole('link', { name: 'Activity log' }).click();
+  await page.getByRole('combobox', { name: 'Action' }).selectOption('team.created');
+  await expect(page.locator('tr[data-action="team.created"]')).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Action' }).selectOption('');
+  await expect(page.locator('tr[data-action="user.invited"]').first()).toBeVisible();
+  await shot(page, 'admin-audit', { fullPage: false });
+  await expectAccessible(page);
 });

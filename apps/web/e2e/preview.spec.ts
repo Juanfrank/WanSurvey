@@ -3,7 +3,7 @@ import { expectAccessible, login, shot } from './helpers.js';
 
 async function openPreview(page: Page) {
   await login(page);
-  await page.getByRole('link', { name: 'Questionnaire preview' }).click();
+  await page.getByRole('link', { name: 'Open the preview' }).click();
   await expect(page.getByRole('heading', { name: 'Questionnaire preview' })).toBeVisible();
   await expect(page.locator('[data-qkey="A0_CONSENT_TEXT"]')).toBeFocused();
 }

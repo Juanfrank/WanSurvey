@@ -26,9 +26,9 @@ async function newQuestionnaire(page: Page, name: string, untick: string[] = [])
   await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Projects' })
+    .getByRole('link', { name: 'Projects', exact: true })
     .click();
-  await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Household questionnaire' })).toBeVisible();
   await page.getByLabel('Questionnaire name').fill(name);
@@ -479,9 +479,9 @@ test('the routing map, outline arcs and nested condition builder on the househol
   await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Projects' })
+    .getByRole('link', { name: 'Projects', exact: true })
     .click();
-  await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await page.getByRole('link', { name: 'Household questionnaire' }).click();
   await expect(page.getByRole('tree', { name: 'Outline' })).toBeVisible();

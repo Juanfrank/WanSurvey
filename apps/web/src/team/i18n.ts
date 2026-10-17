@@ -1,9 +1,9 @@
 /** The team page (users and roles) and the password pages (key `team` and `password`). */
 export const teamEn = {
-  title: 'Team',
+  title: 'Users',
   intro:
     'The people of the organisation and what each one may do. A role applies to the whole organisation or to one project.',
-  readOnly: 'You can see the team; an administrator changes it.',
+  readOnly: 'You can see the users; an administrator changes them.',
   search: 'Search name or e-mail',
   statusFilter: 'Status',
   allStatuses: 'Any status',
@@ -92,10 +92,10 @@ export const teamEn = {
 };
 
 export const teamEs: typeof teamEn = {
-  title: 'Equipo',
+  title: 'Usuarios',
   intro:
     'Las personas de la organización y lo que cada una puede hacer. Un rol vale para toda la organización o para un proyecto.',
-  readOnly: 'Puede ver el equipo; un administrador lo modifica.',
+  readOnly: 'Puede ver los usuarios; un administrador los modifica.',
   search: 'Buscar nombre o correo',
   statusFilter: 'Estado',
   allStatuses: 'Cualquier estado',

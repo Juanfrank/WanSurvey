@@ -10,9 +10,9 @@ async function openProject(page: Page, email?: string) {
   await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Projects' })
+    .getByRole('link', { name: 'Projects', exact: true })
     .click();
-  await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await expect(page.getByRole('tablist', { name: 'Project sections' })).toBeVisible();
   // Questionnaires come first; the case work is in the Cases tab.
   const cases = page.getByRole('tab', { name: 'Cases', exact: true });

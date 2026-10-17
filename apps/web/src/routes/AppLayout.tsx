@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, type Me } from '../api.js';
 import { AccountMenu } from './AccountMenu.js';
-import { EyeIcon, FolderIcon, HomeIcon, MenuIcon, UsersIcon } from './icons.js';
+import { adminSectionsFor } from '../admin/sections.js';
+import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
 
 const ME_KEY = 'wansurvey.me';
@@ -124,7 +125,13 @@ const COMPACT_UP_TO = '(max-width: 1180px)';
 function SidePanel({ waiting }: { waiting: boolean }) {
   const { t } = useTranslation();
   const me = useMe();
-  const canSeeTeam = !!me.data?.permissions.includes('users.read');
+  const admin = adminSectionsFor(me.data?.permissions);
+  const { pathname } = useLocation();
+  const projects = useQuery({
+    queryKey: ['projects', me.data?.tenantId],
+    queryFn: () => api<{ id: string; name: string; status: string }[]>('/projects'),
+    enabled: !!me.data && !waiting,
+  });
   const wide = useMedia('(min-width: 900px)');
   const small = useMedia(COMPACT_UP_TO);
   const [compact, setCompact] = useStoredFlag('ws.sidebar.compact', small);
@@ -140,19 +147,31 @@ function SidePanel({ waiting }: { waiting: boolean }) {
     );
   }, [wide, isCompact]);
 
-  const link = (to: string, label: string, icon: ReactNode, exact = false) => (
-    <Link
-      to={to}
-      activeOptions={exact ? { exact: true } : undefined}
-      title={rail ? label : undefined}
-      className={`flex flex-none items-center gap-3 rounded-full border border-on-fill/20 px-3.5 py-1.5 text-sm font-medium text-sidebar hover:bg-on-fill/10 hover:text-on-fill min-[900px]:rounded-lg min-[900px]:border-0 min-[900px]:py-2.5 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-on-fill ${
-        rail ? 'min-[900px]:h-10 min-[900px]:w-10 min-[900px]:justify-center min-[900px]:px-0' : ''
-      }`}
-    >
-      <span className="hidden min-[900px]:inline">{icon}</span>
-      <span className={rail ? 'sr-only' : 'truncate'}>{label}</span>
-    </Link>
-  );
+  // With the panel open, a section's pages are listed under it: the section itself is marked
+  // only on its own page, and in a lighter way while one of its pages is open.
+  const nested = wide && !rail;
+  const link = (to: string, label: string, icon: ReactNode, exact = false) => {
+    const within = to !== '/' && pathname.startsWith(to) && pathname !== to;
+    return (
+      <Link
+        to={to}
+        activeOptions={exact || (nested && to !== '/') ? { exact: true } : undefined}
+        title={rail ? label : undefined}
+        className={`flex flex-none items-center gap-3 rounded-full border border-on-fill/20 px-3.5 py-1.5 text-sm font-medium text-sidebar hover:bg-on-fill/10 hover:text-on-fill min-[900px]:rounded-lg min-[900px]:border-0 min-[900px]:py-2.5 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-on-fill ${
+          rail
+            ? 'min-[900px]:h-10 min-[900px]:w-10 min-[900px]:justify-center min-[900px]:px-0'
+            : ''
+        } ${nested && within ? 'font-semibold text-on-fill' : ''}`}
+      >
+        <span className="hidden min-[900px]:inline">{icon}</span>
+        <span className={rail ? 'sr-only' : 'truncate'}>{label}</span>
+      </Link>
+    );
+  };
+  const subCls =
+    'block truncate rounded-md px-2.5 py-1.5 text-sm text-sidebar hover:bg-on-fill/10 hover:text-on-fill [&.active]:bg-on-fill/15 [&.active]:font-semibold [&.active]:text-on-fill';
+  const shownProjects = (projects.data ?? []).filter((p) => p.status !== 'archived');
+  const MAX_PROJECTS = 8;
 
   return (
     <header
@@ -207,8 +226,46 @@ function SidePanel({ waiting }: { waiting: boolean }) {
           >
             {link('/', t('app.home'), <HomeIcon />, true)}
             {link('/projects', t('app.projects'), <FolderIcon />)}
-            {link('/preview', t('app.preview'), <EyeIcon />)}
-            {canSeeTeam ? link('/team', t('app.team'), <UsersIcon />) : null}
+            {nested && shownProjects.length ? (
+              <ul
+                aria-label={t('app.projects')}
+                className="mb-1 ml-[1.375rem] flex flex-col gap-0.5 border-l border-on-fill/15 pl-3"
+              >
+                {shownProjects.slice(0, MAX_PROJECTS).map((p) => (
+                  <li key={p.id}>
+                    <Link to="/projects/$projectId" params={{ projectId: p.id }} className={subCls}>
+                      {p.name}
+                    </Link>
+                  </li>
+                ))}
+                {shownProjects.length > MAX_PROJECTS ? (
+                  <li>
+                    <Link
+                      to="/projects"
+                      activeOptions={{ exact: true }}
+                      className={`${subCls} italic`}
+                    >
+                      {t('app.allProjects')}
+                    </Link>
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
+            {admin.length ? link('/admin', t('app.admin'), <CogIcon />) : null}
+            {nested && admin.length ? (
+              <ul
+                aria-label={t('app.admin')}
+                className="ml-[1.375rem] flex flex-col gap-0.5 border-l border-on-fill/15 pl-3"
+              >
+                {admin.map((a) => (
+                  <li key={a.to}>
+                    <Link to={a.to} className={subCls}>
+                      {t(`admin.${a.key}`)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </nav>
         ) : null}
       </div>

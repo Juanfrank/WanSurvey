@@ -15,9 +15,9 @@ test('a project logo, and the web survey in the project colours with it', async 
   await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Projects' })
+    .getByRole('link', { name: 'Projects', exact: true })
     .click();
-  await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await page.getByRole('tab', { name: 'Settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Logo and style', exact: true }).click();
 

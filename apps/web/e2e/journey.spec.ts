@@ -177,7 +177,10 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   // 5. The interviewer, in their own browser, lands on their cases and calls.
   const { ctx: ivCtx, page: iv } = await newBrowser(browser);
   await signIn(iv, INTERVIEWER);
-  await iv.getByRole('link', { name: `Encuesta de satisfacción vecinal ${CODE}` }).click();
+  await iv
+    .getByRole('main')
+    .getByRole('link', { name: `Encuesta de satisfacción vecinal ${CODE}` })
+    .click();
   // A caller lands on the call screen, with their callbacks beside it.
   await expect(iv.getByRole('tab', { name: 'Llamadas' })).toHaveAttribute('aria-selected', 'true');
   await expect(iv.getByRole('complementary', { name: 'Mis rellamadas' })).toBeVisible();

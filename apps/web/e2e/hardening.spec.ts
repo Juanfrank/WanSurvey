@@ -14,9 +14,9 @@ async function openProject(page: Page) {
   await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Projects' })
+    .getByRole('link', { name: 'Projects', exact: true })
     .click();
-  await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await expect(page.getByRole('tablist', { name: 'Project sections' })).toBeVisible();
 }
 
@@ -59,10 +59,7 @@ test('the app is served with a strict Content-Security-Policy and breaks none of
   await page.getByRole('tab', { name: 'Questionnaires' }).click();
   await page.getByRole('link', { name: 'Household questionnaire' }).click();
   await expect(page.getByRole('tree').first()).toBeVisible();
-  await page
-    .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Questionnaire preview' })
-    .click();
+  await page.goto('/preview');
   await expect(page.locator('[data-qkey="A0_CONSENT_TEXT"]')).toBeVisible();
   expect(await violations()).toEqual([]);
 });
@@ -72,7 +69,7 @@ test('a web respondent on a phone: keyboard only, 44 px targets, nothing sideway
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
-  await page.getByRole('link', { name: 'Questionnaire preview' }).click();
+  await page.getByRole('link', { name: 'Open the preview' }).click();
   await page.getByTestId('mode').selectOption('CAWI');
   const q = page.locator('[data-qkey]');
   await expect(q).toContainText('estamos realizando una encuesta');

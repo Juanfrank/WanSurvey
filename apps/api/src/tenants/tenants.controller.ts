@@ -8,9 +8,30 @@ import { ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
 import { tenants } from '../db/schema.js';
 
+/** Organisation-wide defaults; keys left out of a PATCH keep their value. */
+export const TenantSettings = z
+  .object({
+    /** Language of new projects (BCP 47, e.g. es, en, es-PE). */
+    defaultLanguage: z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/),
+    /** Time zone of new projects (IANA, e.g. America/Lima). */
+    defaultTimezone: z
+      .string()
+      .max(64)
+      .refine((tz) => {
+        try {
+          new Intl.DateTimeFormat('en', { timeZone: tz });
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'Unknown time zone'),
+  })
+  .partial()
+  .strict();
+
 const TenantPatch = z.object({
-  name: z.string().min(1).max(200).optional(),
-  settings: z.record(z.string(), z.unknown()).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  settings: TenantSettings.optional(),
   branding: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -39,9 +60,18 @@ export class TenantsController {
     @Body(new ZodPipe(TenantPatch)) body: z.infer<typeof TenantPatch>,
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const [current] = await tx
+        .select({ settings: tenants.settings })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId));
       const [tenant] = await tx
         .update(tenants)
-        .set(body)
+        .set({
+          ...body,
+          ...(body.settings
+            ? { settings: { ...((current?.settings as object) ?? {}), ...body.settings } }
+            : {}),
+        })
         .where(eq(tenants.id, ctx.tenantId))
         .returning();
       await this.audit.record(

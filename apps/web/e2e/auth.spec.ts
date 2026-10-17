@@ -7,10 +7,10 @@ test('sign in, switch organisation, sign out', async ({ page }) => {
   await shot(page, 'login');
   await login(page);
   await expect(page.getByRole('heading', { name: /Welcome, project_manager/ })).toBeVisible();
-  await expect(page.getByText('Household Survey 2026')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Household Survey 2026')).toBeVisible();
   await pickOrganisation(page, 'Second Agency');
-  await expect(page.getByText('Business Panel')).toBeVisible();
-  await expect(page.getByText('Household Survey 2026')).toHaveCount(0);
+  await expect(page.getByRole('main').getByText('Business Panel')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Household Survey 2026')).toHaveCount(0);
   await openAccount(page);
   await page.getByRole('combobox', { name: 'Language' }).selectOption('es');
   await expect(page.getByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
@@ -33,7 +33,7 @@ test('the side panel compacts to a rail of icons, opens over the page on hover, 
   await page.mouse.move(800, 400);
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(80);
   // The links keep their names for screen readers.
-  await expect(nav.getByRole('link', { name: 'Projects' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Projects', exact: true })).toBeVisible();
   await shot(page, 'side-panel-compact');
   await expectAccessible(page);
   await page.reload();

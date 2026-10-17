@@ -170,21 +170,27 @@ export function CheckField({
   checked,
   onChange,
   hint,
+  disabled,
 }: {
   label: ReactNode;
   checked: boolean;
   onChange(v: boolean): void;
   hint?: ReactNode;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
     <div className="flex flex-col gap-0.5">
-      <label className="flex items-center gap-2 text-sm" htmlFor={id}>
+      <label
+        className={`flex items-center gap-2 text-sm ${disabled ? 'text-slate-500' : ''}`}
+        htmlFor={id}
+      >
         <input
           id={id}
           type="checkbox"
           className="h-4 w-4"
           checked={checked}
+          disabled={disabled}
           aria-describedby={hint ? `${id}-hint` : undefined}
           onChange={(e) => onChange(e.target.checked)}
         />

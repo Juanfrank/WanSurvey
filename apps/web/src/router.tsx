@@ -3,6 +3,7 @@ import {
   createRoute,
   createRouter,
   lazyRouteComponent,
+  redirect,
   Outlet,
 } from '@tanstack/react-router';
 import { isRespondentPath, loadCatalogue } from './i18n.js';
@@ -99,11 +100,39 @@ const waitingRoute = createRoute({
   path: '/waiting',
   component: WaitingPage,
 });
-// The organisation's people and their roles.
+// Administration: people and roles, teams, the organisation, the activity log.
+const adminRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/admin',
+  component: lazyRouteComponent(() => import('./admin/AdminLayout.js'), 'AdminLayout'),
+});
+const adminUsersRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'users',
+  component: lazyRouteComponent(() => import('./team/TeamPage.js'), 'TeamPage'),
+});
+const adminTeamsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'teams',
+  component: lazyRouteComponent(() => import('./admin/TeamsPage.js'), 'TeamsPage'),
+});
+const adminOrganisationRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'organisation',
+  component: lazyRouteComponent(() => import('./admin/OrganisationPage.js'), 'OrganisationPage'),
+});
+const adminAuditRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'audit',
+  component: lazyRouteComponent(() => import('./admin/AuditPage.js'), 'AuditPage'),
+});
+// The old address of the people page.
 const teamRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/team',
-  component: lazyRouteComponent(() => import('./team/TeamPage.js'), 'TeamPage'),
+  beforeLoad: () => {
+    throw redirect({ to: '/admin/users' });
+  },
 });
 // The preview (logic engine, renderer, samples) loads only when opened.
 const previewRoute = createRoute({
@@ -228,6 +257,12 @@ const routeTree = rootRoute.addChildren([
     waitingRoute,
     previewRoute,
     teamRoute,
+    adminRoute.addChildren([
+      adminUsersRoute,
+      adminTeamsRoute,
+      adminOrganisationRoute,
+      adminAuditRoute,
+    ]),
     projectsRoute,
     projectRoute,
     designerRoute,

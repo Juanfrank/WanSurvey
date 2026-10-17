@@ -121,6 +121,33 @@ export const projects = pgTable(
   (t) => [uniqueIndex('projects_tenant_code_uq').on(t.tenantId, t.code)],
 );
 
+/** A team of people of the organisation (a field crew, a call-centre shift) with a leader. */
+export const teams = pgTable(
+  'teams',
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    name: text('name').notNull(),
+    leaderUserId: uuid('leader_user_id').references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('teams_name_uq').on(t.tenantId, t.name)],
+);
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    tenantId: tenantId().references(() => tenants.id),
+  },
+  (t) => [primaryKey({ name: 'team_members_pk', columns: [t.teamId, t.userId] })],
+);
+
 /** A project's logo (PNG, JPEG, WebP or GIF; small), shown in the app and on web surveys. */
 export const projectLogos = pgTable('project_logos', {
   projectId: uuid('project_id')

@@ -2,6 +2,7 @@
  * The staff interface's words, loaded apart: a web respondent's first download does without
  * them (H6). `i18n.ts` adds them before any staff page shows.
  */
+import { adminEn, adminEs } from './admin/i18n.js';
 import { casesEn, casesEs } from './cases/i18n.js';
 import { catiEn, catiEs } from './cati/i18n.js';
 import { cawiEn, cawiEs } from './cawi/i18n.js';
@@ -22,8 +23,8 @@ const en = {
     signOut: 'Sign out',
     organisation: 'Organisation',
     home: 'Home',
-    preview: 'Questionnaire preview',
-    team: 'Team',
+    admin: 'Administration',
+    allProjects: 'All projects',
     projects: 'Projects',
     skip: 'Skip to content',
     mainNav: 'Main',
@@ -187,6 +188,7 @@ const en = {
   analysis: analysisEn,
   device: deviceEn,
   team: teamEn,
+  admin: adminEn,
   password: passwordEn,
   ...messagesEn,
 };
@@ -200,8 +202,8 @@ const es: Catalogue = {
     signOut: 'Cerrar sesión',
     organisation: 'Organización',
     home: 'Inicio',
-    preview: 'Vista previa del cuestionario',
-    team: 'Equipo',
+    admin: 'Administración',
+    allProjects: 'Todos los proyectos',
     projects: 'Proyectos',
     skip: 'Ir al contenido',
     mainNav: 'Principal',
@@ -375,6 +377,7 @@ const es: Catalogue = {
   analysis: analysisEs,
   device: deviceEs,
   team: teamEs,
+  admin: adminEs,
   password: passwordEs,
   ...messagesEs,
 };

@@ -9,9 +9,9 @@ test('a face link records the answer; slips print; results count every channel',
   await pickOrganisation(page, 'Demo Research');
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Projects' })
+    .getByRole('link', { name: 'Projects', exact: true })
     .click();
-  await page.getByRole('link', { name: 'Household Survey 2026' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
 
   // A Likert is created like any questionnaire, as another format.
