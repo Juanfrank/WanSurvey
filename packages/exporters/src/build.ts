@@ -1,6 +1,6 @@
 import { questionOptions, type CompiledQuestionnaire } from '@wansurvey/logic';
 import type { LocalizedText, Question } from '@wansurvey/schema';
-import type { Cell, Column, Table } from './table.js';
+import type { Cell, Column, ColumnSource, Table } from './table.js';
 
 /** One interview as the export reads it. */
 export interface ExportInterview {
@@ -70,6 +70,12 @@ interface Field {
 
 const numericCodes = (codes: (string | number)[]) => codes.every((c) => typeof c === 'number');
 
+const answer = (
+  variable: string,
+  read: Extract<ColumnSource, { kind: 'answer' }>['read'],
+  more: Partial<Extract<ColumnSource, { kind: 'answer' }>> = {},
+): ColumnSource => ({ kind: 'answer', variable, read, ...more });
+
 function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boolean): Field[] {
   const q = compiled.questionnaire;
   const special = q.settings.specialCodes;
@@ -91,7 +97,14 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
       fields.push({
         source: name,
         chain,
-        columns: [{ name, label: name, type: numeric ? 'numeric' : 'string' }],
+        columns: [
+          {
+            name,
+            label: name,
+            type: numeric ? 'numeric' : 'string',
+            source: { kind: 'answer', variable: name, read: 'computed', numeric },
+          },
+        ],
         cells: (v) => [
           v === null || v === undefined ? null : numeric ? Number(v) : JSON.stringify(v),
         ],
@@ -126,8 +139,9 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
                   valueLabels: optLabels,
                   missing,
                   measure: 'nominal',
+                  source: answer(name, 'code'),
                 }
-              : { name, label, type: 'string' },
+              : { name, label, type: 'string', source: answer(name, 'text') },
           ],
           cells: (v) => [
             numeric
@@ -154,6 +168,7 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
             missing,
             measure: 'nominal' as const,
             group: { name, label },
+            source: answer(name, 'dummy', { code: String(o.code) }),
           })),
           cells: (v) =>
             opts.map((o) => {
@@ -175,6 +190,7 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
             valueLabels: optLabels,
             missing,
             measure: 'nominal' as const,
+            source: answer(name, 'rank', { position: i + 1 }),
           })),
           cells: (v) =>
             opts.map((_, i) =>
@@ -195,6 +211,7 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
             valueLabels: optLabels,
             missing,
             measure: 'ordinal' as const,
+            source: answer(name, 'grid', { row: String(r.code) }),
           })),
           cells: (v) =>
             rows.map((r) =>
@@ -230,7 +247,15 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
             source: name,
             chain,
             columns: [
-              { name, label, type: 'numeric', valueLabels: labels, missing, measure: 'ordinal' },
+              {
+                name,
+                label,
+                type: 'numeric',
+                valueLabels: labels,
+                missing,
+                measure: 'ordinal',
+                source: answer(name, 'code'),
+              },
             ],
             cells: (v) => [code(v)],
           });
@@ -243,7 +268,15 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
           source: name,
           chain,
           columns: [
-            { name, label, type: 'numeric', valueLabels: specialLabels, missing, measure: 'scale' },
+            {
+              name,
+              label,
+              type: 'numeric',
+              valueLabels: specialLabels,
+              missing,
+              measure: 'scale',
+              source: answer(name, 'code'),
+            },
           ],
           cells: (v) => [code(v)],
         });
@@ -254,8 +287,8 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
           chain,
           columns: [
             def.type === 'text'
-              ? { name, label, type: 'string', open: true, missing }
-              : { name, label, type: 'string' },
+              ? { name, label, type: 'string', open: true, missing, source: answer(name, 'text') }
+              : { name, label, type: 'string', source: answer(name, 'text') },
           ],
           cells: (v) => [
             v === null || v === undefined
@@ -273,7 +306,15 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
       fields.push({
         source: `${name}_OTHER`,
         chain,
-        columns: [{ name: `${name}_OTHER`, label: `${label} (otro)`, type: 'string', open: true }],
+        columns: [
+          {
+            name: `${name}_OTHER`,
+            label: `${label} (otro)`,
+            type: 'string',
+            open: true,
+            source: answer(`${name}_OTHER`, 'other'),
+          },
+        ],
         cells: (v) => [typeof v === 'string' && v.trim() ? v : null],
       });
     }
@@ -284,34 +325,122 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
 const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
 
 const META: Column[] = [
-  { name: 'interview_id', label: 'Interview id', type: 'string' },
-  { name: 'case_id', label: 'Case id', type: 'string' },
-  { name: 'case_code', label: 'Case code (from the sample)', type: 'string' },
-  { name: 'mode', label: 'Mode', type: 'string' },
-  { name: 'status', label: 'Status', type: 'string' },
-  { name: 'disposition', label: 'Disposition', type: 'string' },
-  { name: 'interviewer', label: 'Interviewer', type: 'string' },
-  { name: 'started_at', label: 'Start (UTC)', type: 'string' },
-  { name: 'submitted_at', label: 'Submitted (UTC)', type: 'string' },
-  { name: 'active_seconds', label: 'Active time (seconds)', type: 'numeric', measure: 'scale' },
-  { name: 'version', label: 'Questionnaire version', type: 'numeric', measure: 'ordinal' },
-  { name: 'language', label: 'Language', type: 'string' },
-  { name: 'selection_role', label: 'Selection role', type: 'string' },
-  { name: 'stratum', label: 'Stratum', type: 'string' },
-  { name: 'inclusion_prob', label: 'Probability of inclusion', type: 'numeric', measure: 'scale' },
-  { name: 'base_weight', label: 'Base weight (1/π)', type: 'numeric', measure: 'scale' },
+  {
+    name: 'interview_id',
+    source: { kind: 'meta', field: 'interview_id' },
+    label: 'Interview id',
+    type: 'string',
+  },
+  { name: 'case_id', source: { kind: 'meta', field: 'case_id' }, label: 'Case id', type: 'string' },
+  {
+    name: 'case_code',
+    source: { kind: 'meta', field: 'case_code' },
+    label: 'Case code (from the sample)',
+    type: 'string',
+  },
+  { name: 'mode', source: { kind: 'meta', field: 'mode' }, label: 'Mode', type: 'string' },
+  { name: 'status', source: { kind: 'meta', field: 'status' }, label: 'Status', type: 'string' },
+  {
+    name: 'disposition',
+    source: { kind: 'meta', field: 'disposition' },
+    label: 'Disposition',
+    type: 'string',
+  },
+  {
+    name: 'interviewer',
+    source: { kind: 'meta', field: 'interviewer' },
+    label: 'Interviewer',
+    type: 'string',
+  },
+  {
+    name: 'started_at',
+    source: { kind: 'meta', field: 'started_at' },
+    label: 'Start (UTC)',
+    type: 'string',
+  },
+  {
+    name: 'submitted_at',
+    source: { kind: 'meta', field: 'submitted_at' },
+    label: 'Submitted (UTC)',
+    type: 'string',
+  },
+  {
+    name: 'active_seconds',
+    source: { kind: 'meta', field: 'active_seconds' },
+    label: 'Active time (seconds)',
+    type: 'numeric',
+    measure: 'scale',
+  },
+  {
+    name: 'version',
+    source: { kind: 'meta', field: 'version' },
+    label: 'Questionnaire version',
+    type: 'numeric',
+    measure: 'ordinal',
+  },
+  {
+    name: 'language',
+    source: { kind: 'meta', field: 'language' },
+    label: 'Language',
+    type: 'string',
+  },
+  {
+    name: 'selection_role',
+    source: { kind: 'meta', field: 'selection_role' },
+    label: 'Selection role',
+    type: 'string',
+  },
+  { name: 'stratum', source: { kind: 'meta', field: 'stratum' }, label: 'Stratum', type: 'string' },
+  {
+    name: 'inclusion_prob',
+    source: { kind: 'meta', field: 'inclusion_prob' },
+    label: 'Probability of inclusion',
+    type: 'numeric',
+    measure: 'scale',
+  },
+  {
+    name: 'base_weight',
+    source: { kind: 'meta', field: 'base_weight' },
+    label: 'Base weight (1/π)',
+    type: 'numeric',
+    measure: 'scale',
+  },
 ];
 const PARADATA: Column[] = [
-  { name: 'back_moves', label: 'Back moves', type: 'numeric', measure: 'scale' },
-  { name: 'notes', label: 'Notes added', type: 'numeric', measure: 'scale' },
-  { name: 'pauses', label: 'Pauses', type: 'numeric', measure: 'scale' },
+  {
+    name: 'back_moves',
+    source: { kind: 'paradata', field: 'back_moves' },
+    label: 'Back moves',
+    type: 'numeric',
+    measure: 'scale',
+  },
+  {
+    name: 'notes',
+    source: { kind: 'paradata', field: 'notes' },
+    label: 'Notes added',
+    type: 'numeric',
+    measure: 'scale',
+  },
+  {
+    name: 'pauses',
+    source: { kind: 'paradata', field: 'pauses' },
+    label: 'Pauses',
+    type: 'numeric',
+    measure: 'scale',
+  },
   {
     name: 'warnings_confirmed',
+    source: { kind: 'paradata', field: 'warnings_confirmed' },
     label: 'Soft warnings confirmed',
     type: 'numeric',
     measure: 'scale',
   },
-  { name: 'flags', label: 'Review flags', type: 'string' },
+  {
+    name: 'flags',
+    source: { kind: 'paradata', field: 'flags' },
+    label: 'Review flags',
+    type: 'string',
+  },
 ];
 
 function meta(i: ExportInterview): Cell[] {
@@ -383,6 +512,7 @@ export function buildTables(
       label: `${c.replace(/_CODE$/, '')} (codificado)`,
       type: 'numeric',
       measure: 'nominal',
+      source: answer(c, 'coded'),
     });
 
   // Wide rosters: numbered copies of each roster column, as many as the data needs.
@@ -409,6 +539,7 @@ export function buildTables(
               ...c,
               name: `${c.name}_${idx.join('_')}`,
               label: `${c.label} [${idx.join('.')}]`,
+              ...(c.source?.kind === 'answer' ? { source: { ...c.source, path: idx } } : {}),
             });
         }
     }
@@ -447,9 +578,14 @@ export function buildTables(
     for (const [k, fs] of chains) {
       const chain = fs[0]!.chain;
       const cols: Column[] = [
-        { name: 'interview_id', label: 'Interview id', type: 'string' },
-        { name: 'case_id', label: 'Case id', type: 'string' },
-        ...chain.map((r) => ({ name: `${r}_row`, label: `${r} row`, type: 'numeric' as const })),
+        META[0]!,
+        META[1]!,
+        ...chain.map((r, level) => ({
+          name: `${r}_row`,
+          label: `${r} row`,
+          type: 'numeric' as const,
+          source: { kind: 'roster_row' as const, level: level + 1 },
+        })),
         ...fs.flatMap((f) => f.columns),
       ];
       const rrows: Cell[][] = [];

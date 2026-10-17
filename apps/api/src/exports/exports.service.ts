@@ -17,9 +17,10 @@ import { Database, type Tx } from '../db/database.js';
 import { exports } from '../db/schema.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 import { JobsService } from '../jobs/jobs.service.js';
-import { DataFilter, DatasetService } from '../analysis/dataset.service.js';
+import { DataFilter, DatasetService, type Dataset } from '../analysis/dataset.service.js';
+import { sqlExport } from './sql-export.js';
 
-export const EXPORT_FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook'] as const;
+export const EXPORT_FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 
 export const ExportBody = DataFilter.extend({
   format: z.enum(EXPORT_FORMATS),
@@ -44,6 +45,7 @@ const CONTENT_TYPES = {
   sav: 'application/x-spss-sav',
   dta: 'application/x-stata-dta',
   zip: 'application/zip',
+  sql: 'application/sql; charset=utf-8',
 } as const;
 
 const safeName = (s: string) =>
@@ -213,7 +215,7 @@ export class ExportsService implements OnModuleInit {
           personal,
           ...(opts.language ? { language: opts.language } : {}),
         });
-        return { data, built, ...(await this.render(data.name, built, opts)) };
+        return { data, built, ...(await this.render(data, job.projectId, built, opts)) };
       });
       if (result.bytes.length > MAX_BYTES)
         throw new Error('The file is larger than 100 MB; filter the data or split the export');
@@ -248,13 +250,32 @@ export class ExportsService implements OnModuleInit {
   }
 
   private async render(
-    name: string,
+    data: Dataset,
+    projectId: string,
     built: { main: Table; rosters: Table[] },
     opts: ExportBody,
   ): Promise<{ fileName: string; contentType: string; bytes: Uint8Array }> {
+    const name = data.name;
     const stamp = new Date().toISOString().slice(0, 10);
     const base = `${safeName(name)}_${stamp}`;
     const labels = opts.labels === 'labels';
+    if (opts.format === 'sql') {
+      const text = sqlExport({
+        name,
+        projectId,
+        questionnaireId: data.questionnaireId,
+        versionId: data.versionId,
+        language: opts.language ?? data.compiled.questionnaire.defaultLanguage,
+        opts,
+        main: built.main,
+        rosters: built.rosters,
+      });
+      return {
+        fileName: `${base}.sql`,
+        contentType: CONTENT_TYPES.sql,
+        bytes: new TextEncoder().encode(text),
+      };
+    }
     if (opts.format === 'xlsx' || opts.format === 'codebook') {
       const wb =
         opts.format === 'xlsx'

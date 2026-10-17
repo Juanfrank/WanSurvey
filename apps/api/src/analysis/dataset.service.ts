@@ -20,6 +20,8 @@ export type DataFilter = z.infer<typeof DataFilter>;
 
 export interface Dataset {
   questionnaireId: string;
+  /** The latest version, whose variables and labels the data is read against. */
+  versionId: string;
   name: string;
   compiled: CompiledQuestionnaire;
   interviews: ExportInterview[];
@@ -49,8 +51,13 @@ export class DatasetService {
   ): Promise<Dataset> {
     const qid = f.questionnaireId ?? (await this.questionnaires(tx, projectId))[0]?.id;
     if (!qid) throw new NotFoundException({ code: 'NO_DATA', message: 'Nothing published yet' });
-    const [v] = await tx.execute<{ name: string; compiled: CompiledQuestionnaire; tz: string }>(sql`
-      select q.name, v.compiled, p.timezone as tz
+    const [v] = await tx.execute<{
+      id: string;
+      name: string;
+      compiled: CompiledQuestionnaire;
+      tz: string;
+    }>(sql`
+      select v.id, q.name, v.compiled, p.timezone as tz
       from questionnaire_versions v join questionnaires q on q.id = v.questionnaire_id
       join projects p on p.id = q.project_id
       where q.id = ${qid} and q.project_id = ${projectId}
@@ -115,6 +122,7 @@ export class DatasetService {
       order by i.submitted_at, i.id`);
     return {
       questionnaireId: qid,
+      versionId: v.id,
       name: v.name,
       compiled: v.compiled,
       interviews: rows.map(({ role, stratum, prob, weight, ...r }) => ({

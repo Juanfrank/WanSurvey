@@ -32,7 +32,19 @@ describe('analysis model', () => {
     await t.admin`insert into interviews (id, tenant_id, project_id, case_id, questionnaire_version_id,
         mode, status, disposition, language, device_id, answers, submitted_at)
       values (${interview}, ${tenant.id}, ${project}, ${caseId}, ${v!.id}, 'CAPI', 'submitted',
-        'COMPLETE', 'es', 'd1', ${t.admin.json({ A1_CONSENT: 1, A2_AGE: -8, A3_SEX: 2 })}, now())`;
+        'COMPLETE', 'es', 'd1', ${t.admin.json({
+          A1_CONSENT: 1,
+          A2_AGE: { $special: 'DK' },
+          A3_SEX: 2,
+          HH: [{ M_AGE: 40 }, { M_AGE: 12 }],
+        })}, now())`;
+    for (const [seq, type, payload] of [
+      [1, 'leave_question', { key: 'HH[2].M_AGE', ms: 4200 }],
+      [2, 'navigate_back', { from: 'HH[2].M_AGE', to: 'HH[1].M_AGE' }],
+      [3, 'gps', { when: 'end', lat: -12.05, lng: -77.04, accuracy: 15 }],
+    ] as const)
+      await t.admin`insert into interview_paradata (id, tenant_id, interview_id, device_id, seq, type, at, payload)
+        values (${uuidv7()}, ${tenant.id}, ${interview}, 'd1', ${seq}, ${type}, now(), ${t.admin.json(payload)})`;
     const point = uuidv7();
     await t.admin`insert into feedback_points (id, tenant_id, project_id, name, question, faces, slug, items)
       values (${point}, ${tenant.id}, ${project}, 'Mostrador', ${t.admin.json({ es: '¿Cómo lo atendimos?' })},
@@ -54,7 +66,7 @@ describe('analysis model', () => {
     await t.app.get(JobsService).run('bi.refresh', {});
     await t.app.get(JobsService).run('bi.refresh', {});
     const rows = await t.admin`
-      select envio_id::text, instrumento_tipo, canal, variable, codigo, respuesta,
+      select envio_id::text, instrumento_tipo, canal, variable, codigo, respuesta, ruta, retrocesos,
              respuesta_especial, valor_numero::float as valor_numero, caso_codigo, completa
       from bi.plano_respuestas where envio_id in (${interview}, ${response})`;
     const by = (v: string) => rows.find((r) => r.variable === v)!;
@@ -66,6 +78,8 @@ describe('analysis model', () => {
       valor_numero: null,
     });
     expect(by('A3_SEX')).toMatchObject({ respuesta: 'Mujer', caso_codigo: 'BI001', completa: 1 });
+    const members = rows.filter((r) => r.variable === 'M_AGE');
+    expect(members.map((r) => r.codigo).sort()).toEqual(['12', '40']);
     expect(by('_CARA')).toMatchObject({ respuesta: 'Bien', valor_numero: 4, canal: 'link' });
     expect(by('SEDE')).toMatchObject({ respuesta: 'Centro', instrumento_tipo: 'valoracion' });
     expect(by('_COMENTARIO')).toMatchObject({ respuesta: 'Rápido' });
@@ -82,6 +96,21 @@ describe('analysis model', () => {
       join bi.dim_organizacion o using (organizacion_id)
       where o.organizacion_id = ${tenant.id}`;
     expect(envios!.n).toBe(2);
+
+    // Paradata joins the submission, the question and the roster member.
+    const events = await t.admin`
+      select d.tipo, d.variable, d.ruta, d.segundos::float as segundos, d.latitud::float as latitud,
+             p.pregunta, e.retrocesos
+      from bi.fact_paradato d
+      join bi.fact_envio e using (envio_id)
+      left join bi.dim_pregunta p using (pregunta_id)
+      where d.envio_id = ${interview} order by d.secuencia`;
+    expect(events).toMatchObject([
+      { tipo: 'leave_question', variable: 'M_AGE', ruta: '2', segundos: 4.2, retrocesos: 1 },
+      { tipo: 'navigate_back', variable: 'M_AGE', ruta: '2' },
+      { tipo: 'gps', variable: null, latitud: -12.05 },
+    ]);
+    expect(events[0]!.pregunta).toBeTruthy();
   });
 
   it('spans every organisation, so the application role may refresh it but not read it', async () => {

@@ -9,7 +9,7 @@ import { Button, Card, ErrorText } from '../routes/ui.js';
 import { FilterBar, type DataFilters } from './ResultsTab.js';
 import { fileSize } from '../format.js';
 
-const FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook'] as const;
+const FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 
 interface ExportRow {
   id: string;
@@ -123,7 +123,10 @@ export function ExportsTab({ projectId }: { projectId: string }) {
               ))}
             </select>
           </label>
-          {format === 'csv' || format === 'xlsx' ? (
+          {format === 'sql' ? (
+            <p className="max-w-3xl text-slate-600">{t('analysis.exports.sqlHint')}</p>
+          ) : null}
+          {format === 'csv' || format === 'xlsx' || format === 'sql' ? (
             <fieldset className="flex flex-col gap-1">
               <legend className="mb-1">{t('analysis.exports.labels')}</legend>
               {radio('labels', labels, setLabels, ['codes', 'labels'] as const, (v) =>

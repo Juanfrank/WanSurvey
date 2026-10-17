@@ -180,4 +180,19 @@ test('exports are built by the worker and download with the expected header', as
   expect(header).toContain('A3_SEX');
   // The 60 demo completes, plus any interview submitted by earlier tests.
   expect(text.trim().split('\r\n').length).toBeGreaterThanOrEqual(61);
+
+  // The same table as a query over the analysis model.
+  await page.getByLabel('Format').selectOption('sql');
+  await expect(page.getByText(/one query per sheet of the Excel export/)).toBeVisible();
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(list.locator('tr[data-status="done"]')).toHaveCount(3, { timeout: 30_000 });
+  const sqlDownload = page.waitForEvent('download');
+  await list
+    .locator('tr', { hasText: 'SQL query' })
+    .getByRole('link', { name: /Download/ })
+    .click();
+  const sql = readFileSync(await (await sqlDownload).path(), 'utf8');
+  expect(sql).toMatch(/^-- WanSurvey/);
+  expect(sql).toContain('from bi.fact_respuesta r');
+  expect(sql).toContain('as "A3_SEX"');
 });

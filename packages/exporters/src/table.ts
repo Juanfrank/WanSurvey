@@ -17,7 +17,30 @@ export interface Column {
   variable?: boolean;
   /** Free text written by the respondent (an open answer, or "other, specify"). */
   open?: boolean;
+  /** Where the cells come from, for exports that rebuild the table elsewhere (SQL). */
+  source?: ColumnSource;
 }
+
+/**
+ * How a column's cells are read. Answers: `read` says how the value of `variable` becomes a
+ * cell (its code, its text, a 0/1 per option, a ranked position, a grid row…), `path` the
+ * roster row of a wide column (1-based, outermost first).
+ */
+export type ColumnSource =
+  | { kind: 'meta'; field: string }
+  | { kind: 'paradata'; field: string }
+  | { kind: 'roster_row'; level: number }
+  | {
+      kind: 'answer';
+      variable: string;
+      read: 'code' | 'text' | 'dummy' | 'rank' | 'grid' | 'computed' | 'other' | 'coded';
+      code?: string;
+      position?: number;
+      row?: string;
+      /** Computed variables: a number, or any other value written as JSON. */
+      numeric?: boolean;
+      path?: number[];
+    };
 
 export type Cell = number | string | null;
 
