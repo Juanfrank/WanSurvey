@@ -19,7 +19,7 @@ import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { analyze } from '@wansurvey/logic';
 import { Mode, Questionnaire, Scenario, VersionMapping } from '@wansurvey/schema';
-import { and, desc, eq, gte, inArray, max, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, max, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
@@ -27,6 +27,8 @@ import { ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
 import {
   auditLog,
+  caseEvents,
+  cases,
   invitations,
   openLinks,
   projects,
@@ -39,6 +41,7 @@ import {
   waves,
 } from '../db/schema.js';
 import { checkDraft, type PreviousVersion } from './publish-checks.js';
+import { QUESTIONNAIRE_STATES } from './state.js';
 
 const Definition = z.record(z.string(), z.unknown());
 
@@ -77,6 +80,11 @@ const CheckBody = PublishBody.partial();
 
 const ScenarioBody = z.object({ scenario: Scenario });
 const RenameBody = z.object({ name: z.string().trim().min(1).max(200) });
+const StateBody = z.object({
+  state: z.enum(QUESTIONNAIRE_STATES),
+  /** With `completed`: the questionnaire its web links continue in. */
+  successorId: z.uuid().nullable().default(null),
+});
 
 /** Draft saves are audited at most once per editor and questionnaire in this window. */
 const DRAFT_AUDIT_WINDOW_MS = 5 * 60_000;
@@ -104,6 +112,9 @@ export class QuestionnairesController {
           draftRevision: questionnaires.draftRevision,
           updatedAt: questionnaires.updatedAt,
           createdAt: questionnaires.createdAt,
+          state: questionnaires.state,
+          stateChangedAt: questionnaires.stateChangedAt,
+          successorId: questionnaires.successorId,
           modes: sql<string[] | null>`${questionnaires.draft} -> 'modes'`,
         })
         .from(questionnaires)
@@ -549,6 +560,98 @@ export class QuestionnairesController {
         }),
       );
       return row;
+    });
+  }
+
+  /**
+   * Disables a questionnaire (no new fills in any mode; what was started can still be sent),
+   * enables it again, or completes it: no new fills, its pending cases close as
+   * FIELDWORK_CLOSED, and its web links may continue in another questionnaire.
+   */
+  @Post(':qid/state')
+  @HttpCode(200)
+  @RequirePermission('questionnaires.publish', PERM)
+  @ApiBody({ schema: z.toJSONSchema(StateBody, { io: 'input' }) as object })
+  setState(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('qid', ParseUUIDPipe) qid: string,
+    @Body(new ZodPipe(StateBody)) body: z.infer<typeof StateBody>,
+  ) {
+    return this.database.withTenant(ctx.tenantId, async (tx) => {
+      const before = await this.questionnaire(tx, projectId, qid);
+      const successorId = body.state === 'completed' ? body.successorId : null;
+      if (successorId) {
+        const [next] = await tx
+          .select({ id: questionnaires.id, state: questionnaires.state })
+          .from(questionnaires)
+          .where(and(eq(questionnaires.id, successorId), eq(questionnaires.projectId, projectId)));
+        if (!next || next.id === qid || next.state !== 'active')
+          throw new BadRequestException({
+            code: 'BAD_SUCCESSOR',
+            message: 'The continuation must be another active questionnaire of the project',
+          });
+      }
+      const now = new Date();
+      const [row] = await tx
+        .update(questionnaires)
+        .set({ state: body.state, successorId, stateChangedAt: now })
+        .where(eq(questionnaires.id, qid))
+        .returning({
+          id: questionnaires.id,
+          state: questionnaires.state,
+          successorId: questionnaires.successorId,
+          stateChangedAt: questionnaires.stateChangedAt,
+        });
+      // Completing closes what is still pending; what is being interviewed is left to finish.
+      let closed = 0;
+      if (body.state === 'completed') {
+        const done = await tx
+          .update(cases)
+          .set({
+            status: 'finalised',
+            disposition: 'FIELDWORK_CLOSED',
+            nextContactAt: null,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(cases.questionnaireId, qid),
+              inArray(cases.status, ['fresh', 'assigned']),
+              isNull(cases.checkedOutDevice),
+              sql`not exists (select 1 from interviews iv where iv.case_id = ${cases.id}
+                    and iv.status = 'in_progress')`,
+            ),
+          )
+          .returning({ id: cases.id });
+        closed = done.length;
+        if (done.length)
+          await tx.insert(caseEvents).values(
+            done.map((c) => ({
+              tenantId: ctx.tenantId,
+              caseId: c.id,
+              actorUserId: ctx.userId,
+              type: 'closed',
+              details: { questionnaireId: qid, reason: 'questionnaire_completed' },
+            })),
+          );
+      }
+      await this.audit.record(
+        tx,
+        ctx.tenantId,
+        this.audit.fromContext(ctx, {
+          action:
+            body.state === 'disabled'
+              ? 'questionnaire.disabled'
+              : body.state === 'completed'
+                ? 'questionnaire.completed'
+                : 'questionnaire.enabled',
+          targetType: 'questionnaire',
+          targetId: qid,
+          details: { from: before.state, successorId, casesClosed: closed },
+        }),
+      );
+      return { ...row!, casesClosed: closed };
     });
   }
 

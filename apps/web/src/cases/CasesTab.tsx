@@ -983,7 +983,8 @@ function CaseDrawer({
               >
                 {t('cases.detail.save')}
               </button>
-              {c.status === 'finalised' && c.disposition === 'EXPIRED' ? (
+              {c.status === 'finalised' &&
+              (c.disposition === 'EXPIRED' || c.disposition === 'FIELDWORK_CLOSED') ? (
                 <button
                   type="button"
                   className={smallBtn}

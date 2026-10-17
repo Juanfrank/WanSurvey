@@ -290,6 +290,11 @@ export const questionnaires = pgTable(
     name: text('name').notNull(),
     draft: jsonb('draft').notNull(),
     draftRevision: integer('draft_revision').notNull().default(1),
+    /** `active`, `disabled` (no new fills in any mode) or `completed` (closed for good). */
+    state: text('state').notNull().default('active'),
+    stateChangedAt: timestamp('state_changed_at', { withTimezone: true }),
+    /** A completed questionnaire's continuation: its web links send respondents there. */
+    successorId: uuid('successor_id'),
     updatedBy: uuid('updated_by'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),

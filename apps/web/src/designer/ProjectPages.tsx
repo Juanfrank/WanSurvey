@@ -32,6 +32,7 @@ import { ExportsTab } from '../analysis/ExportsTab.js';
 import { MetricsTab } from '../analysis/MetricsTab.js';
 import { ResultsTab } from '../analysis/ResultsTab.js';
 import { inputCls } from './fields.js';
+import { Dialog } from './Dialog.js';
 import { below, Menu, type MenuEntry } from './Menu.js';
 import { useCan } from './hooks.js';
 import { dateTime } from '../format.js';
@@ -57,6 +58,9 @@ interface QuestionnaireRow {
   updatedAt: string;
   latestVersion: { version: number; status: string; publishedAt: string } | null;
   publishedVersions: number;
+  /** `disabled`: no new fills; `completed`: closed, maybe continued in `successorId`. */
+  state: 'active' | 'disabled' | 'completed';
+  successorId: string | null;
 }
 
 export function ProjectsPage() {
@@ -257,6 +261,8 @@ function QuestionnairesSection({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const canEdit = useCan('questionnaires.edit', projectId);
+  const canPublish = useCan('questionnaires.publish', projectId);
+  const [completing, setCompleting] = useState<QuestionnaireRow | null>(null);
   const [status, setStatus] = useState('');
   const [menuFor, setMenuFor] = useState<{
     q: QuestionnaireRow;
@@ -278,6 +284,32 @@ function QuestionnairesSection({
     onSuccess: async (r) => {
       setStatus(t('designer.qActions.renamed', { name: r.name }));
       await qc.invalidateQueries({ queryKey: ['questionnaires', projectId] });
+    },
+    onError: (e) => setStatus(localiseError(t, e)),
+  });
+  const changeState = useMutation({
+    mutationFn: (v: {
+      q: QuestionnaireRow;
+      state: QuestionnaireRow['state'];
+      successorId?: string | null;
+    }) =>
+      api<{ casesClosed: number }>(`/projects/${projectId}/questionnaires/${v.q.id}/state`, {
+        method: 'POST',
+        body: { state: v.state, successorId: v.successorId ?? null },
+      }),
+    onSuccess: async (r, v) => {
+      setCompleting(null);
+      setStatus(
+        v.state === 'disabled'
+          ? t('designer.qActions.disabled', { name: v.q.name })
+          : v.state === 'completed'
+            ? t('designer.qActions.completed', { name: v.q.name, count: r.casesClosed })
+            : v.q.state === 'completed'
+              ? t('designer.qActions.reopened', { name: v.q.name })
+              : t('designer.qActions.enabled', { name: v.q.name }),
+      );
+      await qc.invalidateQueries({ queryKey: ['questionnaires', projectId] });
+      await qc.invalidateQueries({ queryKey: ['cases', projectId] });
     },
     onError: (e) => setStatus(localiseError(t, e)),
   });
@@ -440,6 +472,40 @@ function QuestionnairesSection({
             disabled: !q.modes.includes('PAPI'),
             onSelect: () => openDistribution(q.id, 'paper'),
           },
+        ]
+      : []),
+    ...(canPublish
+      ? [
+          { type: 'separator' as const },
+          q.state === 'active'
+            ? {
+                type: 'item' as const,
+                id: 'disable',
+                label: t('designer.qActions.disable'),
+                onSelect: () => {
+                  if (window.confirm(t('designer.qActions.confirmDisable', { name: q.name })))
+                    changeState.mutate({ q, state: 'disabled' });
+                },
+              }
+            : {
+                type: 'item' as const,
+                id: q.state === 'completed' ? 'reopen' : 'enable',
+                label:
+                  q.state === 'completed'
+                    ? t('designer.qActions.reopen')
+                    : t('designer.qActions.enable'),
+                onSelect: () => changeState.mutate({ q, state: 'active' }),
+              },
+          ...(q.state !== 'completed'
+            ? [
+                {
+                  type: 'item' as const,
+                  id: 'complete',
+                  label: t('designer.qActions.complete'),
+                  onSelect: () => setCompleting(q),
+                },
+              ]
+            : []),
         ]
       : []),
     ...(canEdit
@@ -617,16 +683,35 @@ function QuestionnairesSection({
                   <td className="font-mono">
                     {q.latestVersion ? `v${q.latestVersion.version}` : '—'}
                   </td>
-                  <td>
+                  <td data-testid="q-state">
+                    {q.state !== 'active' ? (
+                      <span
+                        className={`mr-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          q.state === 'completed'
+                            ? 'bg-emerald-100 text-emerald-ink-900'
+                            : 'bg-slate-200 text-slate-800'
+                        }`}
+                      >
+                        {t(`designer.qActions.states.${q.state}`)}
+                      </span>
+                    ) : null}
                     {q.latestVersion
                       ? t(`designer.versions.${q.latestVersion.status}`)
                       : t('designer.unpublished')}
+                    {q.state === 'completed' && q.successorId ? (
+                      <span className="block text-xs text-slate-600">
+                        →{' '}
+                        {t('designer.qActions.continuesIn', {
+                          name: list.data?.find((x) => x.id === q.successorId)?.name ?? '…',
+                        })}
+                      </span>
+                    ) : null}
                   </td>
                   <td>{dateTime(q.updatedAt)}</td>
                   <td className="text-right">
                     <button
                       type="button"
-                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm hover:bg-slate-50"
+                      className="rounded-md border border-slate-300 bg-white whitespace-nowrap px-2.5 py-1 text-sm hover:bg-slate-50"
                       aria-haspopup="menu"
                       aria-expanded={menuFor?.q.id === q.id}
                       aria-label={t('designer.qActions.menu', { name: q.name })}
@@ -681,6 +766,17 @@ function QuestionnairesSection({
         ) : (
           <p className="text-slate-600">{list.isLoading ? '…' : t('designer.noQuestionnaires')}</p>
         )}
+        {completing ? (
+          <CompleteDialog
+            q={completing}
+            others={(list.data ?? []).filter((x) => x.id !== completing.id && x.state === 'active')}
+            pending={changeState.isPending}
+            onClose={() => setCompleting(null)}
+            onConfirm={(successorId) =>
+              changeState.mutate({ q: completing, state: 'completed', successorId })
+            }
+          />
+        ) : null}
         {menuFor ? (
           <Menu
             label={t('designer.qActions.menu', { name: menuFor.q.name })}
@@ -1157,5 +1253,65 @@ export function ProjectPage() {
         </Tabs.Root>
       ) : null}
     </div>
+  );
+}
+
+/** Completing a questionnaire: what closes, and where its web links continue. */
+function CompleteDialog({
+  q,
+  others,
+  pending,
+  onClose,
+  onConfirm,
+}: {
+  q: QuestionnaireRow;
+  others: QuestionnaireRow[];
+  pending: boolean;
+  onClose(): void;
+  onConfirm(successorId: string | null): void;
+}) {
+  const { t } = useTranslation();
+  const [successor, setSuccessor] = useState('');
+  return (
+    <Dialog title={t('designer.qActions.completeTitle', { name: q.name })} onClose={onClose}>
+      <form
+        className="flex flex-col gap-4 text-sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onConfirm(successor || null);
+        }}
+      >
+        <p className="text-slate-700">{t('designer.qActions.completeHelp')}</p>
+        <label className="flex flex-col gap-1">
+          <span className="font-medium">{t('designer.qActions.successor')}</span>
+          <select
+            className={inputCls}
+            value={successor}
+            onChange={(e) => setSuccessor(e.target.value)}
+            aria-describedby="successor-help"
+          >
+            <option value="">{t('designer.qActions.noSuccessor')}</option>
+            {others
+              .filter((o) => o.latestVersion?.status === 'published')
+              .map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+          </select>
+          <span id="successor-help" className="text-xs text-slate-600">
+            {t('designer.qActions.successorHelp')}
+          </span>
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('designer.qActions.cancel')}
+          </Button>
+          <Button type="submit" disabled={pending}>
+            {t('designer.qActions.completeConfirm')}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

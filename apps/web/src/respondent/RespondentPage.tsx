@@ -41,11 +41,25 @@ const hasState = (s: unknown): s is Partial<InterviewState> =>
  * one question per page on phones; every change is kept on the device and sent at once, so a
  * respondent can stop and come back with the same link, on any device.
  */
+export type ClosedReason = 'notFound' | 'closed' | 'unavailable' | 'ended' | 'failed';
+
+/** Why a survey cannot be opened, in the respondent's words. */
+export function closedReason(e: unknown): ClosedReason {
+  if (!(e instanceof ApiError)) return 'failed';
+  if (e.status === 404) return 'notFound';
+  if (e.status !== 410) return 'failed';
+  return e.code === 'QUESTIONNAIRE_DISABLED'
+    ? 'unavailable'
+    : e.code === 'QUESTIONNAIRE_COMPLETED'
+      ? 'ended'
+      : 'closed';
+}
+
 export function RespondentPage() {
   const { token } = useParams({ strict: false }) as { token: string };
   const [payload, setPayload] = useState<RespondentPayload | null>(null);
   const [session, setSession] = useState<InterviewSession | null>(null);
-  const [error, setError] = useState<'notFound' | 'closed' | 'failed' | null>(null);
+  const [error, setError] = useState<ClosedReason | null>(null);
   const [save, setSave] = useState<'saved' | 'saving' | 'offline'>('saved');
   const [phase, setPhase] = useState<'answering' | 'sending' | 'done' | 'already'>('answering');
   const [problem, setProblem] = useState('');
@@ -123,13 +137,13 @@ export function RespondentPage() {
         setSession(s);
       } catch (e) {
         if (cancelled) return;
-        setError(
-          e instanceof ApiError && e.status === 404
-            ? 'notFound'
-            : e instanceof ApiError && e.status === 410
-              ? 'closed'
-              : 'failed',
-        );
+        // A completed questionnaire may continue in another one: go there.
+        const next = e instanceof ApiError ? e.body?.next : null;
+        if (typeof next === 'string' && next.startsWith('/o/')) {
+          window.location.replace(next);
+          return;
+        }
+        setError(closedReason(e));
       }
     })();
     return () => {

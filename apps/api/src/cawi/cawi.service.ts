@@ -34,6 +34,7 @@ import {
   waves,
 } from '../db/schema.js';
 import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
+import { closedCode } from '../questionnaires/state.js';
 import { DeviceId, SubmitBody, SyncItem } from '../interviews/schemas.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import {
@@ -581,6 +582,9 @@ export class CawiService implements OnModuleInit {
         and(
           eq(invitations.status, 'queued'),
           sql`(${waves.sendAt} is null or ${waves.sendAt} <= ${now.toISOString()}::timestamptz)`,
+          // A disabled or completed questionnaire sends nothing; queued mail waits.
+          sql`exists (select 1 from questionnaires qq where qq.id = ${invitations.questionnaireId}
+                and qq.state = 'active')`,
         ),
       )
       .orderBy(asc(invitations.queuedAt))
@@ -597,6 +601,8 @@ export class CawiService implements OnModuleInit {
         and(
           eq(invitations.status, 'sent'),
           isNull(invitations.completedAt),
+          sql`exists (select 1 from questionnaires qq where qq.id = ${invitations.questionnaireId}
+                and qq.state = 'active')`,
           sql`${invitations.remindersSent} < cardinality(${waves.reminderDays})`,
           sql`${invitations.sentAt} + (${waves.reminderDays}[${invitations.remindersSent} + 1] * interval '1 day') <= ${now.toISOString()}::timestamptz`,
         ),
@@ -841,6 +847,15 @@ export class CawiService implements OnModuleInit {
           if (c?.status === 'finalised' || c?.status === 'withdrawn')
             throw new GoneException({ code: 'CASE_CLOSED', message: 'This survey is closed' });
         }
+        const target = await this.respondentTarget(tx, inv.questionnaireId, inv.projectId);
+        // A completed questionnaire's respondents who had not started go to its continuation.
+        if (target !== inv.questionnaireId) {
+          await tx
+            .update(invitations)
+            .set({ questionnaireId: target })
+            .where(eq(invitations.id, inv.id));
+          inv = { ...inv, questionnaireId: target };
+        }
         row = await this.createInterview(tx, inv, deviceId);
       } else if (row.status === 'in_progress' && row.deviceId !== deviceId) {
         [row] = (await tx
@@ -1017,6 +1032,35 @@ export class CawiService implements OnModuleInit {
     });
   }
 
+  /**
+   * The questionnaire a respondent starts: this one, or for a completed one the questionnaire
+   * it continues in. A disabled one, or a completed one without continuation, answers 410 with
+   * the reason and, when the project's open link leads somewhere open, where to go on (`next`).
+   */
+  private async respondentTarget(tx: Tx, questionnaireId: string, projectId: string) {
+    const state = async (id: string) =>
+      (
+        await tx
+          .select({ state: questionnaires.state, successorId: questionnaires.successorId })
+          .from(questionnaires)
+          .where(eq(questionnaires.id, id))
+      )[0];
+    const q = await state(questionnaireId);
+    const code = closedCode(q?.state);
+    if (!code) return questionnaireId;
+    if (code === 'QUESTIONNAIRE_COMPLETED' && q!.successorId) {
+      const next = await state(q!.successorId);
+      if (next?.state === 'active') return q!.successorId;
+    }
+    let next: string | null = null;
+    const link = await this.openLink(tx, projectId);
+    if (link?.active && link.questionnaireId !== questionnaireId) {
+      const l = await state(link.questionnaireId);
+      if (l?.state === 'active') next = `/o/${link.slug}`;
+    }
+    throw new GoneException({ code, message: 'This survey is closed', next });
+  }
+
   /** Starts an anonymous interview from an open link; the browser keeps the token (W6). */
   async openLinkStart(slug: string) {
     if (!/^[A-Za-z0-9_-]{6,32}$/.test(slug)) throw new NotFoundException('Link not found');
@@ -1024,12 +1068,14 @@ export class CawiService implements OnModuleInit {
     if (!found) throw new NotFoundException('Link not found');
     return this.database.withTenant(found.tenantId, async (tx) => {
       const [l] = await tx.select().from(openLinks).where(eq(openLinks.id, found.id));
-      const v = await this.runtime.latestVersion(tx, l!.projectId, l!.questionnaireId, 'CAWI');
+      // A completed questionnaire's link goes on with its continuation.
+      const questionnaireId = await this.respondentTarget(tx, l!.questionnaireId, l!.projectId);
+      const v = await this.runtime.latestVersion(tx, l!.projectId, questionnaireId, 'CAWI');
       const { token, tokenHash, tokenEnc } = this.newToken();
       await tx.insert(invitations).values({
         tenantId: found.tenantId,
         projectId: l!.projectId,
-        questionnaireId: l!.questionnaireId,
+        questionnaireId,
         tokenHash,
         tokenEnc,
         language: (v.compiled as CompiledQuestionnaire).questionnaire.defaultLanguage,

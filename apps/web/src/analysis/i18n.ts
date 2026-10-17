@@ -21,6 +21,7 @@ export const analysisEn = {
     SCREENED_OUT: 'Screened out',
     QUOTA_FULL: 'Quota full',
     EXPIRED: 'Expired',
+    FIELDWORK_CLOSED: 'Fieldwork closed',
   },
   modes: { CATI: 'Phone', CAPI: 'Face to face', CAWI: 'Web', PAPI: 'Paper' },
   live: {
@@ -257,6 +258,7 @@ export const analysisEs: typeof analysisEn = {
     SCREENED_OUT: 'Fuera de filtro',
     QUOTA_FULL: 'Cuota llena',
     EXPIRED: 'Vencido',
+    FIELDWORK_CLOSED: 'Trabajo de campo cerrado',
   },
   modes: { CATI: 'Teléfono', CAPI: 'Presencial', CAWI: 'Web', PAPI: 'Papel' },
   live: {

@@ -210,6 +210,15 @@ const ENDPOINTS: Endpoint[] = [
         .set('x-csrf-token', s.csrf),
   },
   {
+    name: 'POST questionnaire state',
+    permission: 'questionnaires.publish',
+    call: async (s, ids) =>
+      s.agent
+        .post(`/api/v1/projects/${ids.project}/questionnaires/${await ids.fresh()}/state`)
+        .set('x-csrf-token', s.csrf)
+        .send({ state: 'disabled' }),
+  },
+  {
     name: 'GET scenarios',
     permission: 'questionnaires.read',
     call: (s, ids) =>

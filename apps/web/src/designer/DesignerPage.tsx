@@ -51,6 +51,12 @@ export function DesignerPage() {
   const { projectId, qid } = useParams({ strict: false }) as { projectId: string; qid: string };
   const { t } = useTranslation();
   const d = useDraft(projectId, qid);
+  // Disabled or completed: said at the top (it can still be edited and published).
+  const qList = useQuery({
+    queryKey: ['questionnaires', projectId],
+    queryFn: () => api<{ id: string; state: string }[]>(`/projects/${projectId}/questionnaires`),
+  });
+  const qState = qList.data?.find((x) => x.id === qid)?.state;
   const canEdit = useCan('questionnaires.edit', projectId);
   const canPublish = useCan('questionnaires.publish', projectId);
   const search = useSearch({ strict: false }) as { tab?: string; sub?: string; notice?: string };
@@ -208,6 +214,15 @@ export function DesignerPage() {
                 {project.data?.name ?? t('designer.project')}
               </Link>
             </nav>
+            {qState && qState !== 'active' ? (
+              <p
+                role="status"
+                data-testid="q-state-banner"
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
+              >
+                {t(`designer.qActions.banner.${qState}`)}
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="sr-only">{d.name}</h1>
               <label className="flex min-w-[16rem] flex-1 items-center gap-2">

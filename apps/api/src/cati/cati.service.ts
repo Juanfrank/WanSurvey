@@ -209,6 +209,9 @@ export class CatiService implements OnModuleInit {
           ),
           sql`exists (select 1 from contacts ct where ct.case_id = ${cases.id}
                 and ct.type = 'phone' and ct.valid)`,
+          // Nor the cases of a disabled or completed questionnaire.
+          sql`not exists (select 1 from questionnaires qq where qq.id = ${cases.questionnaireId}
+                and qq.state <> 'active')`,
           // A case downloaded to a device, or being interviewed face to face, is not called.
           isNull(cases.checkedOutDevice),
           sql`not exists (select 1 from interviews iv where iv.case_id = ${cases.id}
@@ -353,7 +356,11 @@ export class CatiService implements OnModuleInit {
         eq(questionnaireVersions.questionnaireId, questionnaires.id),
       )
       .where(
-        and(eq(questionnaires.projectId, projectId), eq(questionnaireVersions.status, 'published')),
+        and(
+          eq(questionnaires.projectId, projectId),
+          eq(questionnaireVersions.status, 'published'),
+          eq(questionnaires.state, 'active'),
+        ),
       )
       .orderBy(asc(questionnaires.name));
   }
@@ -462,7 +469,9 @@ export class CatiService implements OnModuleInit {
     questionnaireId: string,
     sample: Record<string, unknown>,
   ) {
-    const v = await this.runtime.latestVersion(tx, projectId, questionnaireId);
+    const v = await this.runtime.latestVersion(tx, projectId, questionnaireId, undefined, {
+      readOnly: true,
+    });
     const compiled = v.compiled as CompiledQuestionnaire;
     const s = createInterview(compiled, {
       mode: 'CATI',

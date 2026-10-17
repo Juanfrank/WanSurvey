@@ -18,6 +18,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
+import { closedCode } from '../questionnaires/state.js';
 import type { Tx } from '../db/database.js';
 import {
   cases,
@@ -419,15 +420,23 @@ export class InterviewsService {
   }
 
   /**
-   * The version in use of a questionnaire; with `mode`, refused unless the questionnaire is
-   * fielded in that mode (Q1).
+   * The version in use of a questionnaire, for a new fill; with `mode`, refused unless the
+   * questionnaire is fielded in that mode (Q1). A disabled or completed questionnaire takes no
+   * new fills, unless `readOnly` (to show what an existing fill uses).
    */
-  async latestVersion(tx: Tx, projectId: string, qid: string, mode?: Mode) {
+  async latestVersion(
+    tx: Tx,
+    projectId: string,
+    qid: string,
+    mode?: Mode,
+    opts: { readOnly?: boolean } = {},
+  ) {
     const [v] = await tx
       .select({
         id: questionnaireVersions.id,
         version: questionnaireVersions.version,
         compiled: questionnaireVersions.compiled,
+        state: questionnaires.state,
       })
       .from(questionnaireVersions)
       .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
@@ -451,6 +460,15 @@ export class InterviewsService {
         message: `This questionnaire is not fielded in ${mode}`,
         mode,
       });
+    const closed = opts.readOnly ? null : closedCode(v.state);
+    if (closed)
+      throw new ConflictException({
+        code: closed,
+        message:
+          closed === 'QUESTIONNAIRE_DISABLED'
+            ? 'This questionnaire is disabled'
+            : 'This questionnaire is completed',
+      });
     return v;
   }
 
@@ -470,7 +488,12 @@ export class InterviewsService {
         eq(questionnaireVersions.questionnaireId, questionnaires.id),
       )
       .where(
-        and(eq(questionnaires.projectId, projectId), eq(questionnaireVersions.status, 'published')),
+        and(
+          eq(questionnaires.projectId, projectId),
+          eq(questionnaireVersions.status, 'published'),
+          // Disabled and completed questionnaires take no new fills.
+          eq(questionnaires.state, 'active'),
+        ),
       )
       .orderBy(questionnaires.id, desc(questionnaireVersions.version));
     return rows

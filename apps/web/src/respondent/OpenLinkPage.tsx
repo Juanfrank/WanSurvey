@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import { api, ApiError } from '../api.js';
-import { Shell } from './RespondentPage.js';
+import { api } from '../api.js';
+import { closedReason, Shell, type ClosedReason } from './RespondentPage.js';
 import { respondentLang, respondentText } from './text.js';
 
 const key = (slug: string) => `wansurvey.open.${slug}`;
@@ -13,7 +13,7 @@ const key = (slug: string) => `wansurvey.open.${slug}`;
 export function OpenLinkPage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
   const navigate = useNavigate();
-  const [failed, setFailed] = useState<'notFound' | 'failed' | null>(null);
+  const [failed, setFailed] = useState<ClosedReason | null>(null);
   // The browser's language when the catalogue has it; the page says which one it uses.
   const lang = respondentLang(navigator.language);
   const t = respondentText(lang);
@@ -42,7 +42,7 @@ export function OpenLinkPage() {
         // The open link's parameters (?sede=2) go on to the survey, which keeps them.
         await navigate({ href: `/s/${token}${window.location.search}`, replace: true });
       } catch (e) {
-        setFailed(e instanceof ApiError && e.status === 404 ? 'notFound' : 'failed');
+        setFailed(closedReason(e));
       }
     })();
   }, [slug, navigate]);

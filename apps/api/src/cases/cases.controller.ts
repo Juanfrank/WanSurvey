@@ -366,11 +366,11 @@ export class CasesController {
   ) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const before = await this.loadCase(tx, ctx, projectId, caseId);
-      // An expired case is reopened as a fresh one, without its deadline holder.
+      // An expired case, or one closed with its questionnaire, is reopened as a fresh one.
       const reopen =
         body.status === 'fresh' &&
         before.status === 'finalised' &&
-        before.disposition === 'EXPIRED';
+        (before.disposition === 'EXPIRED' || before.disposition === 'FIELDWORK_CLOSED');
       if (
         body.status &&
         !reopen &&

@@ -59,6 +59,8 @@ export const deviceEn = {
     ON_THE_PHONE: 'being called now',
     IN_PROGRESS_OTHER_MODE: 'interview in progress in another mode',
     NO_PUBLISHED_VERSION: 'no questionnaire in use',
+    QUESTIONNAIRE_DISABLED: 'questionnaire disabled',
+    QUESTIONNAIRE_COMPLETED: 'questionnaire completed',
   },
 };
 
@@ -124,5 +126,7 @@ export const deviceEs: DeviceCatalogue = {
     ON_THE_PHONE: 'se está llamando ahora',
     IN_PROGRESS_OTHER_MODE: 'entrevista en curso en otro modo',
     NO_PUBLISHED_VERSION: 'no hay cuestionario en uso',
+    QUESTIONNAIRE_DISABLED: 'cuestionario deshabilitado',
+    QUESTIONNAIRE_COMPLETED: 'cuestionario completado',
   },
 };
