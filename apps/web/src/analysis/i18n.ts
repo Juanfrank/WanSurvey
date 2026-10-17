@@ -214,7 +214,7 @@ export const analysisEn = {
       sav: 'SPSS (.sav)',
       dta: 'Stata (.dta)',
       codebook: 'Codebook (Excel)',
-      sql: 'SQL query (like the Excel, from the bi schema)',
+      sql: 'SQL query',
     },
     sqlHint:
       'A .sql file with one query per sheet of the Excel export: run on the analysis model (schema bi), it gives the same columns and cells for these options and filters. The model is refreshed every hour.',
@@ -454,7 +454,7 @@ export const analysisEs: typeof analysisEn = {
       sav: 'SPSS (.sav)',
       dta: 'Stata (.dta)',
       codebook: 'Libro de códigos (Excel)',
-      sql: 'Consulta SQL (como el Excel, desde el esquema bi)',
+      sql: 'Consulta SQL',
     },
     sqlHint:
       'Un archivo .sql con una consulta por hoja de la exportación a Excel: ejecutada sobre el modelo de análisis (esquema bi), da las mismas columnas y celdas con estas opciones y filtros. El modelo se actualiza cada hora.',
