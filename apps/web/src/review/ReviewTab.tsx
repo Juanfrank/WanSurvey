@@ -387,7 +387,7 @@ function Coding({ projectId }: { projectId: string }) {
                   </Button>
                 </div>
               </fieldset>
-              <table className="w-full max-w-2xl">
+              <table className="w-full">
                 <thead className="text-left text-slate-600">
                   <tr>
                     <th scope="col">

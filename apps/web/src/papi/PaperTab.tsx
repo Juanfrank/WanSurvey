@@ -227,7 +227,7 @@ function Mismatches({ projectId }: { projectId: string }) {
         {message}
       </p>
       {list.data?.length ? (
-        <table className="w-full max-w-3xl" data-testid="mismatches">
+        <table className="w-full" data-testid="mismatches">
           <thead className="text-left text-slate-600">
             <tr>
               <th scope="col">{t('papi.mismatches.case')}</th>

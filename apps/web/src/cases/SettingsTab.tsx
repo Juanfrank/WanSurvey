@@ -51,7 +51,8 @@ export function SettingsTab({ project }: { project: Project }) {
   // Each topic saves the whole settings with the same request.
   const section = (children: ReactNode) => (
     <form
-      className="flex flex-col gap-5"
+      // Two columns on wide screens; the save row runs across.
+      className="grid items-start gap-x-10 gap-y-5 xl:grid-cols-2"
       aria-labelledby="settings-title"
       onSubmit={(e) => {
         e.preventDefault();
@@ -60,7 +61,7 @@ export function SettingsTab({ project }: { project: Project }) {
       }}
     >
       {children}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 xl:col-span-2">
         <Button type="submit" disabled={save.isPending}>
           {t('cases.settings.save')}
         </Button>
@@ -72,7 +73,7 @@ export function SettingsTab({ project }: { project: Project }) {
   );
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4 text-sm">
+    <div className="flex flex-col gap-4 text-sm">
       {/* The tab already says where we are; the heading stays for screen readers. */}
       <h2 id="settings-title" className="sr-only">
         {t('cases.settings.title')}
@@ -96,7 +97,7 @@ export function SettingsTab({ project }: { project: Project }) {
                   />
                   {t('cases.settings.reveal')}
                 </label>
-                <p id="settings-reveal-help" className="ml-6 text-slate-600">
+                <p id="settings-reveal-help" className="ml-6 max-w-prose text-slate-600">
                   {t('cases.settings.revealHelp')}
                 </p>
               </div>
@@ -115,7 +116,7 @@ export function SettingsTab({ project }: { project: Project }) {
                     {t(`cases.settings.${m}`)}
                   </label>
                 ))}
-                <p id="settings-mode-help" className="ml-6 text-slate-600">
+                <p id="settings-mode-help" className="ml-6 max-w-prose text-slate-600">
                   {t('cases.settings.poolHelp')}
                 </p>
               </fieldset>
@@ -141,7 +142,7 @@ export function SettingsTab({ project }: { project: Project }) {
                   />
                   {t('cases.settings.expiry')}
                 </label>
-                <p id="settings-expiry-help" className="text-slate-600">
+                <p id="settings-expiry-help" className="max-w-prose text-slate-600">
                   {t('cases.settings.expiryHelp')}
                 </p>
               </div>
@@ -193,7 +194,7 @@ export function SettingsTab({ project }: { project: Project }) {
                     />
                   </label>
                 </div>
-                <p id="settings-hours-help" className="text-slate-600">
+                <p id="settings-hours-help" className="max-w-prose text-slate-600">
                   {t('cati.settings.hoursHelp')}
                 </p>
                 <fieldset className="flex flex-wrap gap-4">
@@ -442,7 +443,7 @@ export function SettingsTab({ project }: { project: Project }) {
                   />
                   {t('cases.privacy.retentionDays')}
                 </label>
-                <p className="text-slate-600">{t('cases.privacy.retentionHelp')}</p>
+                <p className="max-w-prose text-slate-600">{t('cases.privacy.retentionHelp')}</p>
               </fieldset>
             </>,
           )}

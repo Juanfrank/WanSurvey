@@ -701,7 +701,7 @@ function QuestionnairesSection({
         <Card>
           <h2 className="mb-3 text-lg font-semibold">{t('designer.create.title')}</h2>
           <form
-            className="flex max-w-xl flex-col gap-4"
+            className="flex max-w-4xl flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
               setError(null);
