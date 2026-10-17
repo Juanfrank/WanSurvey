@@ -7,6 +7,7 @@ const PUBLIC = [
   '/icon.svg',
   '/icon-192.png',
   '/icon-512.png',
+  '/icon-maskable.png',
   '/theme.js',
 ];
 

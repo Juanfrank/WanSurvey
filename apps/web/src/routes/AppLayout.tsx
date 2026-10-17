@@ -6,6 +6,7 @@ import { api, ApiError, nextRouteFor, type Me } from '../api.js';
 import { AccountMenu } from './AccountMenu.js';
 import { adminSectionsFor } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
+import { LogoMark, LogoName } from './Logo.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
 
 const ME_KEY = 'wansurvey.me';
@@ -193,11 +194,16 @@ function SidePanel({ waiting }: { waiting: boolean }) {
         <div className={`flex items-center gap-2 ${rail ? 'min-[900px]:flex-col' : ''}`}>
           <Link
             to="/"
-            className={`flex-1 truncate px-1 text-lg font-bold uppercase tracking-wide text-on-fill min-[900px]:px-3 min-[900px]:text-xl ${
-              rail ? 'min-[900px]:sr-only' : ''
+            aria-label={t('app.name')}
+            className={`flex min-w-0 flex-1 items-center gap-2.5 px-1 min-[900px]:px-3 ${
+              rail ? 'min-[900px]:flex-none min-[900px]:px-0' : ''
             }`}
           >
-            {t('app.name')}
+            <LogoMark onFill className="h-8 w-8 flex-none min-[900px]:h-9 min-[900px]:w-9" />
+            <LogoName
+              onFill
+              className={`truncate text-lg min-[900px]:text-xl ${rail ? 'min-[900px]:sr-only' : ''}`}
+            />
           </Link>
           {wide ? (
             <button
