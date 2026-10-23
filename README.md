@@ -31,7 +31,7 @@ Background reading:
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
 - [`docs/operations.md`](docs/operations.md): running it in production (processes, configuration, jobs, backups, retention)
 - [`docs/bi.md`](docs/bi.md): the analysis model (schema `bi`) for BI tools and SQL: snowflake and flat table, refreshed by the worker
-- [`docs/azure.md`](docs/azure.md): running on Azure App Service (S1) with PostgreSQL Flexible Server and Azure Cache for Redis, and what moving to SQL Server involves
+- [`docs/azure.md`](docs/azure.md): running on one Azure App Service (Premium v3 P0v3, web, API and worker as sidecars, `infra/azure/main.bicep`) with PostgreSQL Flexible Server and Azure Cache for Redis, and what moving to SQL Server involves
 - [`docs/security.md`](docs/security.md): the OWASP ASVS level 2 checklist and personal data handling
 - [`docs/accessibility.md`](docs/accessibility.md): WCAG 2.2 AA audit results and the keyboard map
 - [`docs/acceptance.md`](docs/acceptance.md): the MVP acceptance criteria and the tests that prove them

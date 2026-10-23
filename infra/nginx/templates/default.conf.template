@@ -2,7 +2,8 @@
 # apps/web/security-headers.ts, and /api proxied to the API on the same origin, so the
 # session cookie stays first-party. TLS terminates in front of this (load balancer or ingress).
 # The nginx image fills ${API_UPSTREAM} from the environment when it starts: http://api:3000
-# in docker compose, or the API app's own address on Azure App Service
+# in docker compose, http://localhost:3000 when the API is a sidecar of the same App Service
+# (docs/azure.md), or the API app's own address when it is a separate app
 # (https://<api-app>.azurewebsites.net). nginx's own $variables are left alone.
 server {
   listen 8080;
@@ -11,6 +12,14 @@ server {
 
   # add_header in a location replaces the server's, so the headers sit where documents are
   # served (the app shell); the API sends its own.
+
+  # The host's health check reaches the API (and through it the database) via this container.
+  location = /health {
+    proxy_pass ${API_UPSTREAM}/health;
+    proxy_set_header Host $proxy_host;
+    proxy_ssl_server_name on;
+    proxy_read_timeout 10s;
+  }
 
   location /api/ {
     proxy_pass ${API_UPSTREAM};
