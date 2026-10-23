@@ -8,11 +8,12 @@ import {
   writeZip,
   type Table,
 } from '@wansurvey/exporters';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
+import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isTransient, type Tx } from '../db/database.js';
 import { claimable, MAX_JOB_ATTEMPTS } from '../jobs/claims.js';
 import { exports } from '../db/schema.js';
@@ -103,12 +104,39 @@ export class ExportsService implements OnModuleInit {
     private readonly jobs: JobsService,
     private readonly audit: AuditService,
     @Inject(BUS) private readonly bus: Bus,
+    @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
   onModuleInit() {
     this.jobs.register('exports.build', (d) =>
       this.build(d.tenantId as string, d.exportId as string),
     );
+    this.jobs.register('exports.retention', () => this.expireOld());
+    if (this.config.EXPORT_RETENTION_DAYS)
+      this.jobs.schedule('exports.retention', { cron: '10 3 * * *' });
+  }
+
+  /**
+   * Files of exports older than EXPORT_RETENTION_DAYS are deleted (the request stays, as
+   * expired): they hold personal data and fill the database and its backups. Returns how many.
+   */
+  async expireOld(now = new Date()): Promise<number> {
+    const days = this.config.EXPORT_RETENTION_DAYS;
+    if (!days) return 0;
+    const before = new Date(now.getTime() - days * 86_400_000);
+    let n = 0;
+    for (const tenantId of await this.database.allTenantIds()) {
+      const rows = await this.database.withTenant(tenantId, (tx) =>
+        tx
+          .update(exports)
+          .set({ status: 'expired', file: null })
+          .where(and(eq(exports.status, 'done'), lt(exports.finishedAt, before)))
+          .returning({ id: exports.id }),
+      );
+      n += rows.length;
+    }
+    if (n) this.logger.log(`Deleted the files of ${n} old exports`);
+    return n;
   }
 
   async request(tx: Tx, ctx: AuthContext, projectId: string, body: ExportBody) {
@@ -211,18 +239,18 @@ export class ExportsService implements OnModuleInit {
     try {
       const opts = ExportBody.parse(job.options);
       const personal = (job.options as { personal?: boolean }).personal === true;
-      const result = await this.database.withTenant(tenantId, async (tx) => {
-        const data = await this.datasets.load(tx, job.projectId, opts, {
-          paradata: opts.paradata,
-        });
-        const built = buildTables(data.compiled, data.interviews, {
-          rosters: opts.rosters,
-          paradata: opts.paradata,
-          personal,
-          ...(opts.language ? { language: opts.language } : {}),
-        });
-        return { data, built, ...(await this.render(data, job.projectId, built, opts)) };
+      // Read in a short transaction; build and write the file outside any, so the connection
+      // and its snapshot are not held while the CPU works.
+      const data = await this.database.withTenant(tenantId, (tx) =>
+        this.datasets.load(tx, job.projectId, opts, { paradata: opts.paradata }),
+      );
+      const built = buildTables(data.compiled, data.interviews, {
+        rosters: opts.rosters,
+        paradata: opts.paradata,
+        personal,
+        ...(opts.language ? { language: opts.language } : {}),
       });
+      const result = { data, built, ...(await this.render(data, job.projectId, built, opts)) };
       if (result.bytes.length > MAX_BYTES)
         throw new Error('The file is larger than 100 MB; filter the data or split the export');
       await this.database.withTenant(tenantId, (tx) =>

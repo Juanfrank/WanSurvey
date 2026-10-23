@@ -32,10 +32,13 @@ if (config.WORKER_HEALTH_PORT) {
       res.writeHead(404).end();
       return;
     }
-    database.client`select 1`.then(
-      () => res.writeHead(200, { 'content-type': 'application/json' }).end('{"status":"ok"}'),
-      () => res.writeHead(503, { 'content-type': 'application/json' }).end('{"status":"db"}'),
-    );
+    void database
+      .probe()
+      .then((ok) =>
+        ok
+          ? res.writeHead(200, { 'content-type': 'application/json' }).end('{"status":"ok"}')
+          : res.writeHead(503, { 'content-type': 'application/json' }).end('{"status":"db"}'),
+      );
   });
   server.listen(config.WORKER_HEALTH_PORT);
   process.once('SIGTERM', () => server.close());

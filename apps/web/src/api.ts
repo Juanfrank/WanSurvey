@@ -3,6 +3,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly body: { code?: string; message?: string; ssoStartUrl?: string; [k: string]: unknown },
+    /** Seconds the server asked to wait (Retry-After), when it said. */
+    readonly retryAfter?: number,
   ) {
     super(body?.message ?? `HTTP ${status}`);
     this.name = 'ApiError';
@@ -52,7 +54,8 @@ export async function apiFull<T = unknown>(
   }
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, body ?? {});
+  if (!res.ok)
+    throw new ApiError(res.status, body ?? {}, Number(res.headers.get('retry-after')) || undefined);
   return { status: res.status, headers: res.headers, body: body as T | null };
 }
 
@@ -113,6 +116,7 @@ export async function upload<T = unknown>(
   });
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, body ?? {});
+  if (!res.ok)
+    throw new ApiError(res.status, body ?? {}, Number(res.headers.get('retry-after')) || undefined);
   return body as T;
 }

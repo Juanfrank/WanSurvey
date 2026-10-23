@@ -27,7 +27,7 @@ import { FormsQuery } from './papi.service.js';
 import { ScansService } from './scans.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
-/** Each PDF up to 60 MB, up to 20 at once. */
+/** Each PDF up to 60 MB, up to 10 at once (nginx lets 100 MB per upload through). */
 const SCAN_MAX = 60 * 1024 * 1024;
 const KEYERS = ['dataentry.key', 'cases.read_all'] as const;
 
@@ -67,7 +67,7 @@ export class ScansController {
   @HttpCode(202)
   @RequirePermission([...KEYERS], PERM)
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('files', 20, { limits: { fileSize: SCAN_MAX } }))
+  @UseInterceptors(FilesInterceptor('files', 10, { limits: { fileSize: SCAN_MAX } }))
   upload(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,

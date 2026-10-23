@@ -11,11 +11,8 @@ export class HealthController {
   @Public()
   @Get()
   async health() {
-    try {
-      await this.database.client`select 1`;
-    } catch {
+    if (!(await this.database.probe()))
       throw new ServiceUnavailableException({ status: 'error', db: false });
-    }
     return { status: 'ok', db: true };
   }
 }

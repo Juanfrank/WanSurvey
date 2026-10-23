@@ -8,6 +8,19 @@ import { JobsService } from '../jobs/jobs.service.js';
  * materialised views on `BI_REFRESH_CRON`. The app may only run `bi.refrescar()`, a security
  * definer function; it can read nothing in `bi`, which spans every organisation.
  */
+/** The model's materialised views, in the order they depend on each other. */
+const VIEWS = [
+  'dim_pregunta',
+  'dim_opcion',
+  'dim_fila',
+  'fact_envio',
+  'fact_respuesta',
+  'fact_paradato',
+  'plano_respuestas',
+] as const;
+/** Longest refresh of one view. */
+const VIEW_TIMEOUT_MS = 15 * 60_000;
+
 @Injectable()
 export class BiService implements OnModuleInit {
   private readonly logger = new Logger('BI');
@@ -19,14 +32,30 @@ export class BiService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.jobs.register('bi.refresh', () => this.refresh());
+    this.jobs.register('bi.refresh', (d) => this.refresh(d.force === true));
     if (this.config.BI_REFRESH_CRON !== 'off')
       this.jobs.schedule('bi.refresh', { cron: this.config.BI_REFRESH_CRON });
   }
 
-  async refresh(): Promise<void> {
+  /**
+   * Refreshes the model when anything it reads changed since the last time (`force` regardless),
+   * one view per transaction with its own time limit, so readers wait for one view at most and
+   * a slow refresh never holds the others. Returns whether it ran.
+   */
+  async refresh(force = false): Promise<boolean> {
     const started = Date.now();
-    await this.database.client`select bi.refrescar()`;
+    const sql = this.database.client;
+    const [state] = await sql<{ now: string; last: string | null }[]>`
+      select bi.huella() as now, bi.ultima_huella() as last`;
+    const now = state!.now;
+    if (!force && now === state!.last) return false;
+    for (const view of VIEWS)
+      await sql.begin(async (tx) => {
+        await tx`select set_config('statement_timeout', ${String(VIEW_TIMEOUT_MS)}, true)`;
+        await tx`select bi.refrescar_vista(${view})`;
+      });
+    await sql`select bi.marcar_huella(${now})`;
     this.logger.log(`Analysis model refreshed in ${Date.now() - started} ms`);
+    return true;
   }
 }

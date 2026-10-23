@@ -156,7 +156,8 @@ export class GoalsController {
         ${g.userId ? sql`and i.interviewer_id = ${g.userId}` : sql``}
         and i.disposition = 'COMPLETE'
         and i.status in ('submitted', 'in_review', 'approved', 'returned')
-        and (i.submitted_at at time zone ${tz})::date between ${from}::date and ${to}::date
+        and i.submitted_at >= (${from}::date)::timestamp at time zone ${tz}
+        and i.submitted_at < (${to}::date + 1)::timestamp at time zone ${tz}
         ${g.questionnaireId ? sql`and v.questionnaire_id = ${g.questionnaireId}` : sql``}
     `)) as unknown as { n: number }[];
     return r?.n ?? 0;

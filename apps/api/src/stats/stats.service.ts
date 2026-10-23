@@ -92,7 +92,13 @@ export class StatsService implements OnModuleInit {
         from interviews i
         where i.project_id = ${projectId} and i.submitted_at is not null and i.entry_pass = 1
           and i.status in ('submitted', 'in_review', 'approved', 'rejected', 'returned')
-          ${day ? sql`and ${localDate} = ${day}::date` : sql``}
+          ${
+            // A range on the column itself, so the (project_id, submitted_at) index serves it.
+            day
+              ? sql`and i.submitted_at >= (${day}::date)::timestamp at time zone ${p.tz}
+                    and i.submitted_at < (${day}::date + 1)::timestamp at time zone ${p.tz}`
+              : sql``
+          }
         group by 3, 4, 5`);
     });
     await this.bus.publish(projectChannel(projectId), { type: 'stats', day });

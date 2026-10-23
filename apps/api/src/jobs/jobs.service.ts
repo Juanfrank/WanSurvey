@@ -22,7 +22,7 @@ const QUEUE = 'wansurvey';
  * export never delays e-mail sending or the live figures queued behind it.
  */
 const HEAVY_QUEUE = 'wansurvey-heavy';
-const HEAVY = new Set(['exports.build', 'papi.scan']);
+const HEAVY = new Set(['exports.build', 'papi.scan', 'bi.refresh']);
 /** Failed jobs are kept a week (at most 500) to look into, then dropped. */
 const KEEP_FAILED = { count: 500, age: 7 * 24 * 3600 };
 /** Longest wait for Redis to take a job. */

@@ -2,6 +2,7 @@ import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AppConfig } from '../src/config.js';
 import { RedisBus } from '../src/jobs/bus.js';
+import { ExportsService } from '../src/exports/exports.service.js';
 import { JobsService } from '../src/jobs/jobs.service.js';
 import { SweeperService } from '../src/jobs/sweeper.service.js';
 import {
@@ -61,6 +62,22 @@ describe('resilience', () => {
     // Just asked for: left to its own job.
     expect(by[fresh]!.status).toBe('queued');
   }, 60_000);
+
+  it('deletes the files of old exports and keeps the request', async () => {
+    const old = new Date(Date.now() - 8 * 86_400_000);
+    const stale = await exportRow({ status: 'done', finished_at: old, file: Buffer.from('x') });
+    const recent = await exportRow({
+      status: 'done',
+      finished_at: new Date(),
+      file: Buffer.from('y'),
+    });
+    expect(await t.app.get(ExportsService).expireOld()).toBeGreaterThanOrEqual(1);
+    const rows =
+      await t.admin`select id, status, file is null as gone from exports where id in (${stale}, ${recent})`;
+    const by = Object.fromEntries(rows.map((x) => [x.id, x]));
+    expect(by[stale]).toMatchObject({ status: 'expired', gone: true });
+    expect(by[recent]).toMatchObject({ status: 'done', gone: false });
+  });
 
   it('never waits on an unreachable Redis to queue a job or publish a notice', async () => {
     const config = { REDIS_URL: 'redis://127.0.0.1:1', NODE_ENV: 'test' } as unknown as AppConfig;

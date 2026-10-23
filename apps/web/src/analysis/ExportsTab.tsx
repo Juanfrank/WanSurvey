@@ -14,7 +14,7 @@ const FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 interface ExportRow {
   id: string;
   options: { format: (typeof FORMATS)[number] };
-  status: 'queued' | 'running' | 'done' | 'failed';
+  status: 'queued' | 'running' | 'done' | 'failed' | 'expired';
   fileName: string | null;
   size: number | null;
   rows: number | null;

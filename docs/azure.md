@@ -66,11 +66,11 @@ API_PORT=3000                      # the api container's PORT
 WORKER_HEALTH_PORT=3001
 API_NODE_OPTIONS=--max-old-space-size=1024      # the api container's NODE_OPTIONS
 WORKER_NODE_OPTIONS=--max-old-space-size=1280   # the worker container's NODE_OPTIONS
-DB_POOL_MAX=10
+DB_POOL_MAX=9
 DB_WORKER_POOL_MAX=5
 JOB_CONCURRENCY=4
 HEAVY_JOB_CONCURRENCY=1
-MAX_CONCURRENT_REQUESTS=200
+MAX_CONCURRENT_REQUESTS=50
 WEBSITE_HEALTHCHECK_MAXPINGFAILURES=5
 ```
 
@@ -97,9 +97,9 @@ What changed from S1 (1 core, 1.75 GB, three apps) to P0v3 (1 vCPU on newer hard
 | Memory per instance                | 1.75 GB shared by three apps    | 4 GB shared by three containers                                                                         | Plan size                                                                                                                                                                                          |
 | Node heap (`--max-old-space-size`) | 512 MB each                     | API 1024 MB, worker 1280 MB                                                                             | About 2.3 GB of heap at most, ~3 GB with Node's memory outside the heap; the rest (≈1 GB) for the platform, nginx and `pdftoppm` while scans are read. At rest the three use about 350 MB together |
 | Exports                            | Large ones could exhaust 512 MB | Up to the 100 MB file limit in the worker                                                               | Exports are built in memory, several times the file's size while they are written                                                                                                                  |
-| DB connections per instance        | 15 (10 API + 5 worker)          | 15 (10 API + 5 worker)                                                                                  | One vCPU gains nothing from more; Burstable B1ms gives 35 user connections, so 2 instances fit, 3 or more need B2s or the built-in PgBouncer                                                       |
+| DB connections per instance        | 15 (10 API + 5 worker)          | 16 (9 API + 5 worker + 1 health probe each)                                                             | One vCPU gains nothing from more; Burstable B1ms gives 35 user connections, so 2 instances (32) fit, 3 or more need B2s or the built-in PgBouncer                                                  |
 | Jobs at once                       | 4 light + 1 heavy               | 4 light + 1 heavy                                                                                       | Light jobs wait on the database and e-mail, not the CPU; one heavy job (export, scan reading) at a time keeps the API responsive on the one vCPU                                                   |
-| Requests at once (load shedding)   | 200 per API                     | 200 per API                                                                                             | A safety valve well above normal use                                                                                                                                                               |
+| Requests at once (load shedding)   | 200 per API                     | 50 per API                                                                                              | About 5 waiting per pooled connection; beyond that a fast 503 with Retry-After beats waiting into the front end's 230 s timeout                                                                    |
 | Health check                       | Each app on its own `/health`   | One `/health` through nginx → API → database; out of rotation after 5 failed pings                      | App Service pings once a minute and, after an hour unhealthy, replaces the instance                                                                                                                |
 | Scale-out                          | Manual or autoscale per app     | Autoscale on the plan: +1 above 70 % CPU for 10 min, −1 below 30 % for 20 min, up to `maxInstances` (2) | Each instance runs all three containers; the extra workers share the BullMQ queues and the schedules stay single (they are upserted by name)                                                       |
 | Deployment slots                   | 5                               | 20                                                                                                      | Plan tier                                                                                                                                                                                          |

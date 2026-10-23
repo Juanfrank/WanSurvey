@@ -23,14 +23,35 @@ export interface PageImage {
   png: Buffer;
 }
 
+/** The most pages read from one PDF: each is kept in memory while the batch is read. */
+export const MAX_SCAN_PAGES = 300;
+
 /** The pages of a PDF as grey images (poppler's pdftoppm). */
 export async function rasterize(pdf: Buffer, dpi = DPI): Promise<PageImage[]> {
   const dir = await mkdtemp(join(tmpdir(), 'ws-scan-'));
   try {
     await writeFile(join(dir, 'in.pdf'), pdf);
+    // Refuse before rendering: a small file can hold thousands of pages or huge ones.
+    const { stdout } = await run('pdfinfo', [join(dir, 'in.pdf')], { timeout: 60_000 });
+    const pages = Number(/^Pages:\s+(\d+)/m.exec(stdout)?.[1] ?? 0);
+    if (pages > MAX_SCAN_PAGES)
+      throw new Error(`The PDF has ${pages} pages; upload at most ${MAX_SCAN_PAGES} per file`);
+    const size = /^Page size:\s+([\d.]+) x ([\d.]+) pts/m.exec(stdout);
+    // Larger than A3 at the most: anything bigger is not a scanned form.
+    if (size && (Number(size[1]) > 1200 || Number(size[2]) > 1200))
+      throw new Error('The PDF pages are larger than A3; scan the forms at their own size');
     await run(
       'pdftoppm',
-      ['-r', String(dpi), '-gray', '-png', join(dir, 'in.pdf'), join(dir, 'p')],
+      [
+        '-r',
+        String(dpi),
+        '-gray',
+        '-png',
+        '-l',
+        String(MAX_SCAN_PAGES),
+        join(dir, 'in.pdf'),
+        join(dir, 'p'),
+      ],
       {
         timeout: 10 * 60_000,
         maxBuffer: 1 << 20,

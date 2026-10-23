@@ -98,6 +98,11 @@ export function isUuid(v: unknown): v is string {
 export class Database implements OnModuleDestroy {
   readonly client: postgres.Sql;
   readonly db: Db;
+  /**
+   * One connection of its own for health checks, so a probe never queues behind a busy pool
+   * and an instance is not taken out of rotation only because it is serving requests.
+   */
+  private readonly probeClient: postgres.Sql;
 
   /** Per transaction: statement and lock time limits ('0' = none), as strings for set_config. */
   private readonly statementTimeout: string;
@@ -111,6 +116,13 @@ export class Database implements OnModuleDestroy {
     const worker = role === 'worker';
     // A bounded pool per process. Idle connections are released and old ones renewed, so a
     // pooler or a failover never leaves the app holding dead connections.
+    this.probeClient = postgres(config.DATABASE_URL, {
+      max: 1,
+      idle_timeout: 60,
+      connect_timeout: 5,
+      prepare: false,
+      onnotice: () => {},
+    });
     this.client = postgres(config.DATABASE_URL, {
       max: worker ? config.DB_WORKER_POOL_MAX : config.DB_POOL_MAX,
       idle_timeout: config.DB_IDLE_TIMEOUT_S,
@@ -280,7 +292,21 @@ export class Database implements OnModuleDestroy {
     return r ? { id: r.id, tenantId: r.tenant_id } : null;
   }
 
+  /** Whether the database answers, within five seconds, on the probe's own connection. */
+  async probe(): Promise<boolean> {
+    try {
+      await Promise.race([
+        this.probeClient`select 1`,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000).unref()),
+      ]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async onModuleDestroy() {
     await this.client.end({ timeout: 5 });
+    await this.probeClient.end({ timeout: 1 });
   }
 }

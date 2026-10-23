@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { crosstab, crosstabVariables, filterRows, topline } from '@wansurvey/exporters';
+import { crosstab, crosstabVariables, filterRows, topline, type Table } from '@wansurvey/exporters';
 import { projectSettings } from '@wansurvey/schema';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -26,12 +26,43 @@ export const CrosstabQuery = AnalysisQuery.extend({
   col: z.string().regex(/^\w+$/).max(100),
 });
 
+/** Built tables kept per project and query while the project's data stays the same. */
+const CACHE_SIZE = 50;
+
 /** Toplines, crosstabs and the printable summary (S1–S3). */
 @Injectable()
 export class AnalysisService {
+  private readonly cache = new Map<string, { data: Dataset; table: Table }>();
+
   constructor(private readonly datasets: DatasetService) {}
 
+  /**
+   * The table of a query. Every analysis page, and each viewer of a shared link, would read
+   * and rebuild all the interviews; instead the result is kept until the project's interviews
+   * or published versions change (a cheap check on indexed columns).
+   */
   private async table(tx: Tx, projectId: string, q: AnalysisQuery) {
+    const [stamp] = await tx.execute<{ s: string }>(sql`
+      select concat_ws('|',
+        (select count(*) || ':' || coalesce(max(updated_at)::text, '') from interviews
+         where project_id = ${projectId}),
+        (select coalesce(max(v.published_at)::text, '') from questionnaire_versions v
+         join questionnaires qq on qq.id = v.questionnaire_id where qq.project_id = ${projectId})
+      ) as s`);
+    const key = `${projectId}|${stamp?.s}|${JSON.stringify(q)}`;
+    const hit = this.cache.get(key);
+    if (hit) {
+      this.cache.delete(key);
+      this.cache.set(key, hit);
+      return hit;
+    }
+    const built = await this.build(tx, projectId, q);
+    this.cache.set(key, built);
+    while (this.cache.size > CACHE_SIZE) this.cache.delete(this.cache.keys().next().value!);
+    return built;
+  }
+
+  private async build(tx: Tx, projectId: string, q: AnalysisQuery) {
     const data = await this.datasets.load(tx, projectId, q, { completesOnly: true });
     let table = this.datasets.table(data, q.lang);
     if (q.where) {

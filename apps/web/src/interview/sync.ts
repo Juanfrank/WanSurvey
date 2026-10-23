@@ -1,4 +1,4 @@
-import { api } from '../api.js';
+import { api, ApiError } from '../api.js';
 import type { InterviewStore, LocalInterview } from './store.js';
 
 const BATCH = 500;
@@ -99,7 +99,12 @@ export class Syncer {
       return res;
     } catch (e) {
       this.failures++;
-      this.nextTry = this.now() + Math.min(MAX_BACKOFF_MS, 1000 * 2 ** (this.failures - 1));
+      // Twice as long each time, at least what a busy server asked for, a little uneven so
+      // devices that failed together do not all come back at once.
+      const backoff = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** (this.failures - 1));
+      const asked = e instanceof ApiError && e.retryAfter ? e.retryAfter * 1000 : 0;
+      this.nextTry =
+        this.now() + Math.round(Math.max(backoff, asked) * (0.8 + Math.random() * 0.4));
       throw e;
     }
   }

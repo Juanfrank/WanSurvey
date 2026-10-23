@@ -56,7 +56,7 @@ Exports offer a **SQL query** format: a `.sql` file with one query per sheet of 
 
 ## Refresh
 
-The question, option and row dimensions, the facts and the flat table are materialised views with indexes, so reading them is fast; they show the data as of the last refresh. The worker refreshes them on `BI_REFRESH_CRON` (UTC, default `20 * * * *`, hourly; `off` never) through `bi.refrescar()`. Once filled, a refresh does not block readers (except the flat table, for the moment it is swapped). They are created empty: the first scheduled run fills them, or run it by hand:
+The question, option and row dimensions, the facts and the flat table are materialised views with indexes, so reading them is fast; they show the data as of the last refresh. The worker refreshes them on `BI_REFRESH_CRON` (UTC, default `40 */6 * * *`, every 6 hours; `off` never), on the heavy queue, and only when something they read changed (`bi.huella()`, a fingerprint of the source tables). Each view is refreshed in its own transaction with a 15-minute limit (`bi.refrescar_vista`), so readers wait for one view at most. Once filled, a refresh does not block readers (except the flat table, for the moment it is swapped). They are created empty: the first scheduled run fills them, or run it by hand:
 
 ```sql
 select bi.refrescar();

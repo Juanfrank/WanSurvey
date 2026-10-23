@@ -1,4 +1,4 @@
-import { Inject, Injectable, type MessageEvent } from '@nestjs/common';
+import { Inject, Injectable, Logger, type MessageEvent } from '@nestjs/common';
 import {
   evaluate,
   truthy,
@@ -20,7 +20,8 @@ const REFRESH_MS = 60_000;
 /** Bursts of changes produce one snapshot. */
 /** How long a computed snapshot is served to other viewers of the same project. */
 const SHARE_MS = 1_000;
-const DEBOUNCE_MS = 300;
+/** Bursts of changes (a wave of submissions) produce one snapshot per this window. */
+const DEBOUNCE_MS = 1_000;
 
 /** Variables from saved answers, enough to tell which quota cell an interview is in. */
 function answersScope(answers: Record<string, unknown>, mode: string): Scope {
@@ -73,6 +74,8 @@ export interface LiveSnapshot {
  */
 @Injectable()
 export class LiveService {
+  private readonly logger = new Logger('Live');
+
   constructor(
     private readonly database: Database,
     @Inject(BUS) private readonly bus: Bus,
@@ -215,7 +218,9 @@ export class LiveService {
           const snap = await this.shared(tenantId, projectId);
           if (!closed) sub.next({ type: 'snapshot', data: snap });
         } catch (e) {
-          if (!closed) sub.next({ type: 'error', data: { message: (e as Error).message } });
+          // The details go to the log; the dashboard only learns that this update failed.
+          this.logger.warn(`Live snapshot failed for ${projectId}: ${(e as Error).message}`);
+          if (!closed) sub.next({ type: 'error', data: { code: 'SNAPSHOT_FAILED' } });
         }
       };
       const soon = () => {

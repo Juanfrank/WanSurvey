@@ -18,7 +18,7 @@ param location string = resourceGroup().location
 @allowed(['P0v3', 'P1v3', 'P1mv3', 'P2v3'])
 param sku string = 'P0v3'
 
-@description('Instances autoscale may reach on CPU (each one runs all three containers). Keep instances × (DB_POOL_MAX + DB_WORKER_POOL_MAX) under the database\'s user connections: 2 fits a Burstable B1ms (35).')
+@description('Instances autoscale may reach on CPU (each one runs all three containers). Keep instances × (DB_POOL_MAX + DB_WORKER_POOL_MAX + 2 health probes) under the database\'s user connections: 2 fits a Burstable B1ms (35).')
 @minValue(1)
 @maxValue(10)
 param maxInstances int = 2
@@ -105,11 +105,13 @@ var settings = union(
     // pdftoppm and Node's memory outside the heap.
     API_NODE_OPTIONS: '--max-old-space-size=1024'
     WORKER_NODE_OPTIONS: '--max-old-space-size=1280'
-    DB_POOL_MAX: '10'
+    DB_POOL_MAX: '9'
     DB_WORKER_POOL_MAX: '5'
     JOB_CONCURRENCY: '4'
     HEAVY_JOB_CONCURRENCY: '1'
-    MAX_CONCURRENT_REQUESTS: '200'
+    // About 5 requests waiting per pooled connection, then 503 with Retry-After: past that,
+    // waiting only ends in the front end's 230 s timeout.
+    MAX_CONCURRENT_REQUESTS: '50'
     WEBSITES_ENABLE_APP_SERVICE_STORAGE: 'false'
     // Health check: an instance is taken out of rotation after 5 failed pings (one a minute).
     WEBSITE_HEALTHCHECK_MAXPINGFAILURES: '5'

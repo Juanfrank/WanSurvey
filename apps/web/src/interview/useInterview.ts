@@ -63,7 +63,15 @@ export interface InterviewPayload {
  */
 export type SaveState = 'saved' | 'saving' | 'local' | 'error';
 
-const SYNC_EVERY_MS = 3000;
+/**
+ * Changes are sent a moment after the last one (answers given in a row go together), and
+ * whatever is still pending every few seconds; with hundreds of devices in the field this sets
+ * the server's load. Each device's period varies a little, so devices that came back online
+ * together do not keep syncing in step.
+ */
+const SYNC_AFTER_CHANGE_MS = 2000;
+const SYNC_EVERY_MS = 10_000;
+const jitter = (ms: number) => Math.round(ms * (0.8 + Math.random() * 0.4));
 
 /** Keeps a copy on this device of an interview the server has just started or resumed. */
 export async function keepOnDevice(p: InterviewPayload, store?: InterviewStore) {
@@ -194,6 +202,8 @@ export function useInterview(id: string) {
     session: InterviewSession;
     lastKey: string | null;
     writes: Promise<unknown>;
+    /** A send planned for shortly after the last change. */
+    syncSoon?: ReturnType<typeof setTimeout>;
   } | null>(null);
 
   const refreshSave = useCallback(async () => {
@@ -242,7 +252,10 @@ export function useInterview(id: string) {
         .then(
           () => {
             setSave((st) => (st === 'error' ? st : 'local'));
-            void sync();
+            r.syncSoon ??= setTimeout(() => {
+              r.syncSoon = undefined;
+              void sync();
+            }, SYNC_AFTER_CHANGE_MS);
           },
           () => setSave('error'),
         );
@@ -376,8 +389,9 @@ export function useInterview(id: string) {
   // Send every few seconds, when back online, and when the page is hidden or closed.
   useEffect(() => {
     if (!session) return;
-    const timer = setInterval(() => void sync(), SYNC_EVERY_MS);
-    const online = () => void sync({ force: true });
+    const timer = setInterval(() => void sync(), jitter(SYNC_EVERY_MS));
+    // Back online: soon, but not at the same instant as every other device in the area.
+    const online = () => setTimeout(() => void sync({ force: true }), Math.random() * 3000);
     const offline = () => setSave((s) => (s === 'saved' ? s : 'local'));
     const visibility = () => {
       const r = ref.current;
@@ -398,6 +412,7 @@ export function useInterview(id: string) {
     window.addEventListener('pagehide', leave);
     return () => {
       clearInterval(timer);
+      if (ref.current?.syncSoon) clearTimeout(ref.current.syncSoon);
       window.removeEventListener('online', online);
       window.removeEventListener('offline', offline);
       document.removeEventListener('visibilitychange', visibility);

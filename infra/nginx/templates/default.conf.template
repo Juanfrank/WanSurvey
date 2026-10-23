@@ -10,6 +10,16 @@ server {
   root /usr/share/nginx/html;
   server_tokens off;
 
+  # Text, scripts, styles and API answers compressed (the live stream is left alone: it is
+  # text/event-stream, not listed). Saves most of the transfer of the app and of each sync.
+  gzip on;
+  gzip_comp_level 5;
+  gzip_min_length 1024;
+  gzip_proxied any;
+  gzip_vary on;
+  gzip_types text/plain text/css text/csv application/javascript application/json
+             application/manifest+json image/svg+xml application/sql;
+
   # add_header in a location replaces the server's, so the headers sit where documents are
   # served (the app shell); the API sends its own.
 
@@ -21,6 +31,31 @@ server {
     proxy_read_timeout 10s;
   }
 
+  # Live dashboards (Server-Sent Events): not buffered, kept open.
+  location ~ ^/api/v1/projects/[^/]+/live$ {
+    proxy_pass ${API_UPSTREAM};
+    proxy_set_header Host $proxy_host;
+    proxy_ssl_server_name on;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+  }
+
+  # Scanned paper forms: several PDFs in one upload.
+  location ~ ^/api/v1/projects/[^/]+/papi/scans$ {
+    proxy_pass ${API_UPSTREAM};
+    proxy_set_header Host $proxy_host;
+    proxy_ssl_server_name on;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_request_buffering off;
+    proxy_read_timeout 5m;
+    client_max_body_size 100m;
+  }
+
   location /api/ {
     proxy_pass ${API_UPSTREAM};
     # The API's host name (App Service routes by it); the browser's host goes in X-Forwarded-Host.
@@ -29,9 +64,10 @@ server {
     proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    # Live dashboards (Server-Sent Events) must not be buffered.
-    proxy_buffering off;
-    proxy_read_timeout 1h;
+    # Answers are buffered here, so a slow connection (a large export to a phone) holds nginx,
+    # not the API's memory and connections.
+    # Within App Service's own 230-second limit.
+    proxy_read_timeout 4m;
     client_max_body_size 25m;
   }
 
