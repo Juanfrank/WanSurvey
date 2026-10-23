@@ -37,7 +37,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
-import { ZodPipe } from '../common/zod.js';
+import { DisplayName, ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
 import { projectLogos, projects, tenants } from '../db/schema.js';
 
@@ -55,7 +55,7 @@ export function imageType(b: Buffer): string | null {
 }
 
 const ProjectFields = z.object({
-  name: z.string().min(1).max(200),
+  name: DisplayName,
   code: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/),
   modesEnabled: z.array(Mode),
   timezone: z.string().min(1).max(64),

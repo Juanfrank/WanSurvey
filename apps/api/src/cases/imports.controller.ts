@@ -19,6 +19,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { safeCell } from '@wansurvey/exporters';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
@@ -452,7 +453,7 @@ export class ImportsController {
         mapping,
         Infinity,
       );
-      const q = (s: string | number) => `"${String(s).replace(/"/g, '""')}"`;
+      const q = (s: string | number) => `"${safeCell(String(s)).replace(/"/g, '""')}"`;
       const lines = ['row,issue,column,value'];
       for (const i of report.issues)
         for (const e of i.examples) lines.push([e.row, i.code, q(e.column), q(e.value)].join(','));

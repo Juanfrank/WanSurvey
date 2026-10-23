@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Body,
   Controller,
   Get,
@@ -16,7 +17,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, Public, RequirePermission, type AuthContext } from '../common/auth-context.js';
-import { setSessionCookies } from '../common/cookies.js';
+import { SESSION_COOKIE, setSessionCookies } from '../common/cookies.js';
 import { encryptField } from '../common/crypto.js';
 import { ZodPipe } from '../common/zod.js';
 import { CONFIG, loadConfig, type AppConfig } from '../config.js';
@@ -120,7 +121,12 @@ export class SsoController {
       tenantId = st.tenantId;
       if (q.error || !q.code)
         throw new SsoError(q.error ? 'microsoft_error' : 'missing_code', st.tenantId);
-      const result = await this.sso.callback(st, q.code, client(req));
+      const result = await this.sso.callback(
+        st,
+        q.code,
+        client(req),
+        await this.sso.signedInUser(req.cookies?.[SESSION_COOKIE]),
+      );
       res.clearCookie(SSO_STATE_COOKIE, { path: SSO_COOKIE_PATH });
       setSessionCookies(res, this.config, result.cookie, result.csrfToken);
       res.redirect(302, `${this.config.PUBLIC_WEB_URL}${result.returnTo}`);
@@ -155,7 +161,22 @@ export class SsoSettingsController {
   @Put()
   @RequirePermission('tenant.manage')
   @ApiBody({ schema: z.toJSONSchema(SsoSettings, { io: 'input' }) as object })
-  put(@Auth() ctx: AuthContext, @Body(new ZodPipe(SsoSettings)) body: z.infer<typeof SsoSettings>) {
+  async put(
+    @Auth() ctx: AuthContext,
+    @Body(new ZodPipe(SsoSettings)) body: z.infer<typeof SsoSettings>,
+  ) {
+    // A domain belongs to one organisation: two would make e-mail sign-in ambiguous, and one
+    // could claim another's addresses.
+    for (const domain of new Set(body.allowedDomains.map((d) => d.toLowerCase()))) {
+      const taken = (await this.database.ssoTenantsForDomain(domain)).some(
+        (t) => t.tenantId !== ctx.tenantId,
+      );
+      if (taken)
+        throw new ConflictException({
+          code: 'DOMAIN_TAKEN',
+          message: `The domain ${domain} is already used by another organisation`,
+        });
+    }
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const [current] = await tx
         .select()

@@ -124,6 +124,27 @@ describe('SQL export, the counterpart of Excel', () => {
     },
   ] as const;
 
+  it('keeps a questionnaire name on its comment line, and refuses such names', async () => {
+    const qid = questionnaires.household!;
+    // A name stored before names were checked: its line break must not become a statement.
+    await t.admin`update questionnaires set name = ${'Hogares\nupdate users set name = 1;--'} where id = ${qid}`;
+    const e = await pm.agent
+      .post(`/api/v1/projects/${project}/exports`)
+      .set('x-csrf-token', pm.csrf)
+      .send({ questionnaireId: qid, format: 'sql' })
+      .expect(201);
+    await t.app.get(JobsService).drain();
+    const text = (await download(e.body.id)).toString('utf8');
+    expect(text.split('\n').some((l) => /^\s*update users/i.test(l))).toBe(false);
+    expect(text).toContain('-- WanSurvey · Hogares update users');
+    const renamed = await pm.agent
+      .patch(`/api/v1/projects/${project}/questionnaires/${qid}`)
+      .set('x-csrf-token', pm.csrf)
+      .send({ name: 'Uno\ndos' });
+    expect(renamed.status).toBe(400);
+    await t.admin`update questionnaires set name = 'Hogares' where id = ${qid}`;
+  });
+
   it.each(cases)(
     'gives the same sheets as Excel: $fixture $options',
     async ({ fixture, options }) => {

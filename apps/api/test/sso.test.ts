@@ -56,8 +56,8 @@ describe('Microsoft Entra ID sign-in', () => {
     org: string,
     claims: Record<string, unknown>,
     tamper: Partial<IssuedCode> & { state?: string; returnTo?: string; dropNonce?: boolean } = {},
+    agent = request.agent(t.app.getHttpServer()),
   ) {
-    const agent = request.agent(t.app.getHttpServer());
     const start = await agent
       .get('/api/v1/auth/sso/start')
       .query({ org, ...(tamper.returnTo ? { returnTo: tamper.returnTo } : {}) });
@@ -171,6 +171,42 @@ describe('Microsoft Entra ID sign-in', () => {
     const [m] =
       await t.admin`select status from tenant_members where user_id = ${user.id} and tenant_id = ${org.id}`;
     expect(m!.status).toBe('active');
+  });
+
+  it('never takes over an account of another organisation by its e-mail alone', async () => {
+    // The victim works in another organisation; the attacker runs an organisation whose
+    // directory can put any address in a token.
+    const victimOrg = await createTenant(t.admin);
+    const victim = await createUser(t.admin, victimOrg.id, [{ role: 'admin' }], {
+      email: `boss-${uuidv7()}@agency.org`,
+    });
+    const attacker = await ssoTenant();
+    const { agent, callback } = await signIn(
+      attacker.slug,
+      person(victim.email, { amr: ['pwd', 'mfa'] }),
+    );
+    expect(callback.headers.location).toBe(`${WEB}/login?sso_error=link_required`);
+    expect((await agent.get('/api/v1/auth/me')).status).toBe(401);
+    expect(await t.admin`select 1 from user_identities where user_id = ${victim.id}`).toHaveLength(
+      0,
+    );
+    expect(
+      await t.admin`select 1 from tenant_members where user_id = ${victim.id} and tenant_id = ${attacker.id}`,
+    ).toHaveLength(0);
+  });
+
+  it('links an account of several organisations when its owner is signed in with it', async () => {
+    const home = await createTenant(t.admin);
+    const org = await ssoTenant();
+    const user = await createUser(t.admin, home.id, [{ role: 'supervisor' }], {
+      email: `two-${uuidv7()}@agency.org`,
+    });
+    await t.admin`insert into tenant_members (id, tenant_id, user_id, status) values (${uuidv7()}, ${org.id}, ${user.id}, 'invited')`;
+    const signedIn = await login(t.app, user, home.slug);
+    const { agent, callback } = await signIn(org.slug, person(user.email), {}, signedIn.agent);
+    expect(callback.headers.location).not.toContain('sso_error');
+    expect((await agent.get('/api/v1/auth/me')).body.user.id).toBe(user.id);
+    expect(await t.admin`select 1 from user_identities where user_id = ${user.id}`).toHaveLength(1);
   });
 
   it('refuses deactivated members, foreign domains and unknown organisations', async () => {
@@ -305,7 +341,7 @@ describe('Microsoft Entra ID sign-in', () => {
         entraTenantId: randomUUID(),
         clientId: CLIENT_ID,
         enabled: true,
-        allowedDomains: ['Agency.org'],
+        allowedDomains: [`Settings-${org.slug}.org`],
       };
       expect((await put(base)).status).toBe(400); // no secret yet
       expect((await put({ ...base, clientSecret: 'x', allowedDomains: [] })).status).toBe(400);
@@ -317,9 +353,13 @@ describe('Microsoft Entra ID sign-in', () => {
       expect(saved.body).toMatchObject({
         configured: true,
         hasClientSecret: true,
-        allowedDomains: ['agency.org'],
+        allowedDomains: [`settings-${org.slug}.org`],
       });
       expect(JSON.stringify(saved.body)).not.toContain('super-secret-value');
+      // A domain another organisation uses is refused.
+      const taken = await put({ ...base, allowedDomains: ['agency.org'] });
+      expect(taken.status).toBe(409);
+      expect(taken.body.code).toBe('DOMAIN_TAKEN');
       const [row] =
         await t.admin`select client_secret_enc from tenant_sso where tenant_id = ${org.id}`;
       expect(row!.client_secret_enc).toMatch(/^v1\./);

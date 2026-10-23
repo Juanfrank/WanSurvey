@@ -39,7 +39,7 @@ export const CawiSettings = z.object({
   /** Shown when a respondent finishes; a default message when empty. */
   completionMessage: z.string().max(2000).default(''),
   /** Where respondents go after finishing (optional). */
-  redirectUrl: z.union([z.literal(''), z.url()]).default(''),
+  redirectUrl: z.union([z.literal(''), z.url({ protocol: /^https?$/ })]).default(''),
   theme: CawiTheme.default(CawiTheme.parse({})),
 });
 export type CawiSettings = z.infer<typeof CawiSettings>;

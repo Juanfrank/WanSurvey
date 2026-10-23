@@ -92,6 +92,24 @@ describe('export writers', () => {
     expect(writeCsv(table, { labels: true })).toContain('a2,Mujer,,980');
   });
 
+  it('keeps answers that look like formulas as text in CSV', () => {
+    const t = {
+      name: 't',
+      columns: [
+        { name: 'id', label: 'id', type: 'string' as const },
+        { name: 'n', label: 'n', type: 'numeric' as const },
+      ],
+      rows: [
+        ['=HYPERLINK("http://x","y")', -8],
+        ['@SUM(A1)', 2],
+        ['+1', 3],
+        ['ok', 4],
+      ],
+    };
+    const lines = writeCsv(t).trim().split('\r\n').slice(1);
+    expect(lines).toEqual([`"'=HYPERLINK(""http://x"",""y"")",-8`, "'@SUM(A1),2", "'+1,3", 'ok,4']);
+  });
+
   it('writes a valid ZIP (stored files, CRC-32)', () => {
     expect(crc32(new TextEncoder().encode('123456789'))).toBe(0xcbf43926);
     const zip = writeZip([{ name: 'a.csv', data: new TextEncoder().encode('x') }]);

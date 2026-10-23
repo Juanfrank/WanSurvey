@@ -18,6 +18,8 @@ export interface SqlExportInput {
 
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const ident = (s: string) => `"${s.replace(/"/g, '""')}"`;
+/** Text for a `--` comment: one line, so nothing after it can become a statement. */
+const comment = (s: string) => s.replace(/[\p{Cc}\u2028\u2029]+/gu, ' ');
 
 const META: Record<string, string> = {
   interview_id: 'e.envio_id::text',
@@ -205,7 +207,7 @@ order by e.enviado_en, e.envio_id, string_to_array(a.ruta, '.')::int[];`;
     opts.approvedOnly && 'solo aprobadas',
   ].filter(Boolean);
   const header = [
-    `-- WanSurvey · ${input.name}`,
+    `-- WanSurvey · ${comment(input.name)}`,
     `-- La misma tabla que la exportación a Excel, leída del modelo de análisis (esquema bi).`,
     `-- Cuestionario ${input.questionnaireId}, variables y etiquetas de la versión ${input.versionId}.`,
     `-- Opciones: ${labels ? 'etiquetas' : 'códigos'}, listas ${opts.rosters === 'wide' ? 'en columnas' : 'en tablas aparte'}, ${opts.paradata ? 'con' : 'sin'} paradatos, idioma ${input.language}.`,
@@ -217,7 +219,7 @@ order by e.enviado_en, e.envio_id, string_to_array(a.ruta, '.')::int[];`;
   const parts = [`${header}\n\n-- Hoja «data»\n${sheet(input.main, null)}`];
   for (const t of input.rosters) {
     const depth = t.columns.filter((c) => c.source?.kind === 'roster_row').length;
-    parts.push(`-- Hoja «${t.name}»\n${sheet(t, depth)}`);
+    parts.push(`-- Hoja «${comment(t.name)}»\n${sheet(t, depth)}`);
   }
   return parts.join('\n\n') + '\n';
 }

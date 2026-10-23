@@ -186,8 +186,11 @@ export class AuthService {
     );
     const session = await this.openSession(target.id, ctx.userId, {
       totpEnabled,
-      // The code was already entered in this browser; switching does not ask again.
-      mfaAlreadyVerified: ctx.mfaState === 'ok',
+      // A code entered in this browser counts in every organisation; Microsoft's own MFA only
+      // in the organisation whose directory performed it.
+      mfaAlreadyVerified:
+        ctx.mfaState === 'ok' &&
+        (ctx.authMethod === 'password' || (!!enforced && ctx.idpTenant === enforced.entraTenantId)),
       authMethod: ctx.authMethod,
       idpTenant: ctx.idpTenant,
       action: 'auth.login',

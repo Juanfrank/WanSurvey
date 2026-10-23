@@ -17,7 +17,7 @@ import { and, arrayContains, asc, eq, ilike, or, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
-import { ZodPipe } from '../common/zod.js';
+import { DisplayName, ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
 import { libraryItems, users } from '../db/schema.js';
 
@@ -29,7 +29,7 @@ const Content = z.object({
   answerSets: z.record(z.string(), z.array(AnswerOption)).default({}),
 });
 const ItemBody = z.object({
-  name: z.string().trim().min(1).max(200),
+  name: DisplayName,
   description: z.string().max(2000).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   languages: z.array(LanguageCode).min(1),

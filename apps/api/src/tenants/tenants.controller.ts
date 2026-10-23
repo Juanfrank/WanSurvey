@@ -14,7 +14,7 @@ import {
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
-import { ZodPipe } from '../common/zod.js';
+import { DisplayName, ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
 import { tenants } from '../db/schema.js';
 
@@ -40,7 +40,7 @@ export const TenantSettings = z
   .strict();
 
 const TenantPatch = z.object({
-  name: z.string().trim().min(1).max(200).optional(),
+  name: DisplayName.optional(),
   settings: TenantSettings.optional(),
   branding: z.record(z.string(), z.unknown()).optional(),
 });

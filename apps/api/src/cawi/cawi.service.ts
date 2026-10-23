@@ -12,6 +12,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import type { CawiTheme } from '@wansurvey/schema';
 import { z } from 'zod';
+import { DisplayName } from '../common/zod.js';
 import { AuditService } from '../audit/audit.service.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
 import { CasesService, ofQuestionnaire } from '../cases/cases.service.js';
@@ -53,7 +54,7 @@ export const TemplateBody = z.strictObject({
 });
 
 export const WaveBody = z.strictObject({
-  name: z.string().min(1).max(200),
+  name: DisplayName,
   questionnaireId: z.uuid(),
   filter: z.string().max(2000).optional(),
   reminderDays: z.array(z.number().int().min(1).max(90)).max(5).default([]),
@@ -971,8 +972,11 @@ export class CawiService implements OnModuleInit {
         .select({ sample: cases.sample, samplePii: cases.samplePii, externalId: cases.externalId })
         .from(cases)
         .where(eq(cases.id, inv.caseId));
-      // The respondent's own record, for piping (W1).
-      sample = c ? this.cases.pii.read(c) : {};
+      // The respondent's own record, for piping (W1): only the fields the questionnaire uses,
+      // so a forwarded link shows nothing else of the case.
+      sample = c
+        ? caseFieldsFor(version.compiled as CompiledQuestionnaire, this.cases.pii.read(c))
+        : {};
     }
     const [row] = (await tx
       .insert(interviews)
@@ -1102,4 +1106,16 @@ function maskEmail(e: string | null) {
   if (!e) return null;
   const [user, domain] = e.split('@');
   return `${user!.slice(0, 2)}•••@${domain}`;
+}
+
+/** Case fields a questionnaire reads (`case.<field>`, and the name fields `respondent.*` uses). */
+export function caseFieldsFor(
+  compiled: CompiledQuestionnaire,
+  sample: Record<string, unknown>,
+): Record<string, unknown> {
+  const text = JSON.stringify(compiled.questionnaire);
+  const used = new Set([...text.matchAll(/\bcase\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]!));
+  if (/\brespondent\./.test(text))
+    for (const f of ['first_name', 'last_name', 'nombre', 'apellido']) used.add(f);
+  return Object.fromEntries(Object.entries(sample).filter(([k]) => used.has(k)));
 }

@@ -14,13 +14,14 @@ import {
 } from '@wansurvey/schema/feedback';
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { DisplayName } from '../common/zod.js';
 import { randomToken, safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, type Tx } from '../db/database.js';
 import { feedbackPoints, feedbackResponses } from '../db/schema.js';
 
 export const PointBody = z.object({
-  name: z.string().trim().min(1).max(200),
+  name: DisplayName,
   question: LocalizedText,
   faces: z.union([z.literal(3), z.literal(5)]).default(3),
   /** Older clients: a comment box becomes the first follow-up question. */
@@ -29,7 +30,7 @@ export const PointBody = z.object({
 });
 // No defaults here: a patch changes only what it names.
 export const PointPatch = z.object({
-  name: z.string().trim().min(1).max(200).optional(),
+  name: DisplayName.optional(),
   question: LocalizedText.optional(),
   faces: z.union([z.literal(3), z.literal(5)]).optional(),
   items: FeedbackItems.optional(),

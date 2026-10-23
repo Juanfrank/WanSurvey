@@ -76,6 +76,7 @@ import { QuestionnairesController } from './questionnaires/questionnaires.contro
 import { TenantsController } from './tenants/tenants.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
+import { maskTokens } from './common/mask.js';
 import { sessionOrIp, throttleStorage } from './common/throttle.js';
 
 export interface AppModuleOptions {
@@ -117,6 +118,10 @@ export class AppModule {
               'req.headers["x-csrf-token"]',
               'res.headers["set-cookie"]',
             ],
+            // Respondent, unsubscribe, tracking and share links carry tokens in their path.
+            serializers: {
+              req: (req: { url?: string }) => ({ ...req, url: maskTokens(req.url) }),
+            },
           },
         }),
         // Per session (or IP on public routes) with the route's own limits, and an overall
@@ -174,7 +179,7 @@ export class AppModule {
                 ? new FileMailer(config.MAIL_OUTBOX_DIR!)
                 : config.MAILER === 'smtp'
                   ? new SmtpMailer(config.SMTP_URL!, config.MAIL_FROM)
-                  : new ConsoleMailer()),
+                  : new ConsoleMailer(config.NODE_ENV !== 'production')),
         },
         Database,
         AuditService,

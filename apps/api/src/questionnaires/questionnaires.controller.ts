@@ -23,7 +23,7 @@ import { and, desc, eq, gte, inArray, isNull, max, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
-import { ZodPipe } from '../common/zod.js';
+import { DisplayName, ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
 import {
   auditLog,
@@ -46,7 +46,7 @@ import { QUESTIONNAIRE_STATES } from './state.js';
 const Definition = z.record(z.string(), z.unknown());
 
 const CreateBody = z.object({
-  name: z.string().min(1).max(200),
+  name: DisplayName,
   /** The modes it is fielded in, chosen at creation (Q1); within the project's modes. */
   modes: z
     .array(Mode)
@@ -69,7 +69,7 @@ const CreateBody = z.object({
 const DraftBody = z.object({
   definition: Definition,
   baseRevision: z.number().int().positive(),
-  name: z.string().min(1).max(200).optional(),
+  name: DisplayName.optional(),
 });
 
 const PublishBody = z.object({
@@ -79,7 +79,7 @@ const PublishBody = z.object({
 const CheckBody = PublishBody.partial();
 
 const ScenarioBody = z.object({ scenario: Scenario });
-const RenameBody = z.object({ name: z.string().trim().min(1).max(200) });
+const RenameBody = z.object({ name: DisplayName });
 const StateBody = z.object({
   state: z.enum(QUESTIONNAIRE_STATES),
   /** With `completed`: the questionnaire its web links continue in. */

@@ -63,6 +63,8 @@ const en = {
       token_exchange_failed: 'We could not confirm the sign-in with Microsoft. Please try again.',
       invalid_token: 'The sign-in from Microsoft could not be verified.',
       domain_not_allowed: 'Your e-mail domain is not allowed for this organisation.',
+      link_required:
+        'This e-mail already has a WanSurvey account in another organisation. Sign in with its password, then sign in with Microsoft to link them.',
       account_disabled: 'This account is disabled.',
       membership_deactivated: 'Your access to this organisation has been removed.',
       generic: 'Microsoft sign-in failed.',
@@ -247,6 +249,8 @@ const es: Catalogue = {
       token_exchange_failed: 'No pudimos confirmar el ingreso con Microsoft. Intente de nuevo.',
       invalid_token: 'No se pudo verificar el ingreso de Microsoft.',
       domain_not_allowed: 'El dominio de su correo no está permitido en esta organización.',
+      link_required:
+        'Este correo ya tiene una cuenta de WanSurvey en otra organización. Ingrese con su contraseña y luego con Microsoft para vincularlas.',
       account_disabled: 'Esta cuenta está deshabilitada.',
       membership_deactivated: 'Se retiró su acceso a esta organización.',
       generic: 'Falló el ingreso con Microsoft.',

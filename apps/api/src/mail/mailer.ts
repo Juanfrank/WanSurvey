@@ -27,10 +27,19 @@ export interface Mailer {
 
 export const MAILER = Symbol('MAILER');
 
+/**
+ * Logs each message. Messages carry sign-in, reset and respondent links, which are bearer
+ * tokens, so their text is logged only outside production.
+ */
 export class ConsoleMailer implements Mailer {
   private readonly logger = new Logger('Mailer');
+  constructor(private readonly withText = true) {}
   async send(message: MailMessage): Promise<void> {
-    this.logger.log(`To: ${message.to} | ${message.subject}\n${message.text}`);
+    this.logger.log(
+      this.withText
+        ? `To: ${message.to} | ${message.subject}\n${message.text}`
+        : `To: ${message.to} | ${message.subject} (not sent: set MAILER=smtp)`,
+    );
   }
 }
 

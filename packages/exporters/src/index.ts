@@ -1,5 +1,5 @@
 export * from './table.js';
-export { writeCsv } from './csv.js';
+export { safeCell, writeCsv } from './csv.js';
 export { writeSav, shortNames, SAV_MAX_STRING } from './sav.js';
 export { writeDta, stataNames, DTA_MAX_STRING } from './dta.js';
 export { writeZip, crc32 } from './zip.js';

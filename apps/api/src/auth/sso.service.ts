@@ -1,14 +1,22 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
-import { decryptField, encryptField, randomToken } from '../common/crypto.js';
+import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isUuid } from '../db/database.js';
-import { memberships, tenantMembers, tenantSso, userIdentities, users } from '../db/schema.js';
+import {
+  memberships,
+  sessions,
+  tenantMembers,
+  tenantSso,
+  userIdentities,
+  users,
+} from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
+import { parseSessionCookie } from './auth.guard.js';
 import { AuthService, type ClientInfo, type LoginResult } from './auth.service.js';
 
 const STATE_TTL_MS = 10 * 60_000;
@@ -136,11 +144,36 @@ export class SsoService {
     return st;
   }
 
+  /**
+   * The account signed in in this browser with its password and second factor, if any: the
+   * only proof that lets a Microsoft identity join an account of several organisations.
+   */
+  async signedInUser(cookie: unknown): Promise<string | null> {
+    const parsed = parseSessionCookie(cookie);
+    if (!parsed) return null;
+    return this.database.withTenant(parsed.tenantId, async (tx) => {
+      const [row] = await tx
+        .select({ userId: sessions.userId })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.tokenHash, sha256Hex(parsed.token)),
+            isNull(sessions.revokedAt),
+            eq(sessions.mfaState, 'ok'),
+            eq(sessions.authMethod, 'password'),
+            gt(sessions.expiresAt, new Date()),
+          ),
+        );
+      return row?.userId ?? null;
+    });
+  }
+
   /** Completes the sign-in: code exchange, token checks, account resolution, session. */
   async callback(
     st: SsoState,
     code: string,
     client: ClientInfo,
+    signedInUserId: string | null = null,
   ): Promise<LoginResult & { returnTo: string }> {
     const fail = (c: string) => new SsoError(c, st.tenantId);
     const config = await this.database.withTenant(st.tenantId, async (tx) => {
@@ -173,6 +206,17 @@ export class SsoService {
       .where(and(eq(userIdentities.issuer, issuer), eq(userIdentities.subject, subject)));
     if (!identity && !config.allowedDomains.includes(domain)) throw fail('domain_not_allowed');
     const existingId = identity?.userId ?? (await this.database.userIdByEmail(email));
+    // An e-mail address in a token proves nothing about an account elsewhere: whoever runs
+    // this organisation's directory can put any address there. A Microsoft identity is linked
+    // to an existing account by e-mail only when that account belongs to this organisation
+    // alone, or when its owner is signed in with it in this browser (password and second
+    // factor); otherwise they sign in with their password first.
+    if (!identity && existingId && signedInUserId !== existingId) {
+      const elsewhere = (await this.database.userTenants(existingId, true)).filter(
+        (t) => t.id !== st.tenantId,
+      );
+      if (elsewhere.length) throw fail('link_required');
+    }
     const userId = existingId ?? uuidv7();
 
     const outcome = await this.database.withTenant(
