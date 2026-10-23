@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 /** Input look without a width, for inline controls. */
 export const controlCls =
-  'min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 aria-[invalid=true]:border-red-600';
+  'min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-[invalid=true]:border-red-600';
 export const inputCls = `w-full ${controlCls}`;
 /** A compact secondary button: the same family as `Button` (border, weight, disabled look). */
 export const smallBtn =

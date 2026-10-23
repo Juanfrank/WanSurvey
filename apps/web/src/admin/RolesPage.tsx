@@ -184,11 +184,9 @@ export function RolesPage() {
         >
           {t('admin.rolesPage.reset')}
         </button>
-        {saved ? (
-          <p role="status" className="text-sm text-emerald-ink-800">
-            {t('admin.rolesPage.saved')}
-          </p>
-        ) : null}
+        <p role="status" className="text-sm text-emerald-ink-800 empty:hidden">
+          {saved ? t('admin.rolesPage.saved') : null}
+        </p>
       </div>
     </div>
   );

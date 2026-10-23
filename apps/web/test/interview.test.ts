@@ -59,7 +59,8 @@ describe('sync loop', () => {
     await expect(syncer.flush(['i1'])).rejects.toThrow('offline');
     expect(syncer.backingOff).toBe(true);
     expect(await syncer.flush(['i1'])).toBeNull();
-    clock += 1000;
+    // The first wait is 1 s, give or take 20 % so devices that failed together spread out.
+    clock += 1200;
     fail = false;
     const r = await syncer.flush(['i1']);
     expect(r?.acks).toEqual({ i1: 2 });

@@ -165,7 +165,7 @@ export function FeedbackPage() {
             type="button"
             aria-pressed={chosen === score}
             disabled={!!answer}
-            className="flex flex-col items-center gap-1 rounded-xl border-2 border-transparent p-2 transition hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 aria-pressed:border-indigo-600 aria-pressed:bg-indigo-50 disabled:cursor-default disabled:hover:scale-100 [&:disabled:not([aria-pressed=true])]:opacity-40"
+            className="flex flex-col items-center gap-1 rounded-xl border-2 border-transparent p-2 transition hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-pressed:border-indigo-600 aria-pressed:bg-indigo-50 disabled:cursor-default disabled:hover:scale-100 [&:disabled:not([aria-pressed=true])]:opacity-40"
             onClick={() => void record(score, search.embed ? 'widget' : 'link')}
           >
             <Face score={score} faces={point.faces} size={search.embed ? 44 : 60} />
@@ -198,7 +198,20 @@ export function FeedbackPage() {
                     missing[it.id] = 'required';
                 }
                 setProblems(missing);
-                if (Object.keys(missing).length) return;
+                const form = e.currentTarget;
+                // The first question to fix gets the focus, so its message is read out.
+                const focusFirst = (bad: Record<string, string>) => {
+                  const first = followUps.find((it) => bad[it.id]);
+                  if (!first) return;
+                  requestAnimationFrame(() =>
+                    form
+                      .querySelector<HTMLElement>(
+                        `[data-followup="${CSS.escape(first.id)}"] :is(input, textarea, select, button)`,
+                      )
+                      ?.focus(),
+                  );
+                };
+                if (Object.keys(missing).length) return focusFirst(missing);
                 void api(`/public/f/${slug}/answers`, {
                   method: 'POST',
                   body: { id: answer.id, key: answer.key, answers: values },
@@ -209,8 +222,10 @@ export function FeedbackPage() {
                       (err instanceof ApiError
                         ? (err.body as { problems?: Record<string, string> }).problems
                         : undefined) ?? {};
-                    if (Object.keys(pr).length) setProblems(pr);
-                    else setProblem('failed');
+                    if (Object.keys(pr).length) {
+                      setProblems(pr);
+                      focusFirst(pr);
+                    } else setProblem('failed');
                   },
                 );
               }}

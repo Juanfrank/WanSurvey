@@ -344,13 +344,18 @@ export function Shell({
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <span className="flex min-w-0 items-center gap-3">
             {logoAt === 'left' ? logo : null}
-            <Heading className="text-base font-semibold text-indigo-ink-800">{title}</Heading>
+            {/* Pages that name themselves (the feedback question) pass no title: no empty h1. */}
+            {title ? (
+              <Heading className="text-base font-semibold text-indigo-ink-800">{title}</Heading>
+            ) : null}
           </span>
-          {status ? (
-            <p className="text-xs text-slate-600" role="status" data-testid="respondent-save">
-              {status}
-            </p>
-          ) : null}
+          <p
+            className="text-xs text-slate-600 empty:hidden"
+            role="status"
+            data-testid="respondent-save"
+          >
+            {status || null}
+          </p>
         </div>
       </header>
       <Body {...(embedded ? {} : { id: 'main' })} className="mx-auto max-w-3xl px-4 py-6">

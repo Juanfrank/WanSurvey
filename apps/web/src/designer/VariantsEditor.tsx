@@ -79,7 +79,7 @@ export function VariantsEditor({
         {shown.map((m) => (
           <label
             key={m}
-            className={`cursor-pointer rounded-md border px-3 py-1 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${mode === m ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-ink-800' : 'border-slate-300'}`}
+            className={`cursor-pointer rounded-md border px-3 py-1 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${mode === m ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-ink-800' : 'border-slate-300'}`}
           >
             <input
               type="radio"

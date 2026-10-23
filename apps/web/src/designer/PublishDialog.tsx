@@ -302,48 +302,50 @@ function MappingRow({
         </label>
       ) : null}
       {action?.action === 'recode' ? (
-        <table className="w-auto text-sm">
-          <thead>
-            <tr className="text-left text-xs text-slate-600">
-              <th scope="col" className="pr-4 font-medium">
-                {t('designer.publish.oldCode')}
-              </th>
-              <th scope="col" className="font-medium">
-                {t('designer.publish.newCode')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {(change.removedCodes ?? []).map((c) => (
-              <tr key={String(c)}>
-                <td className="pr-4 font-mono">{String(c)}</td>
-                <td>
-                  <select
-                    className={`${controlCls} w-auto`}
-                    aria-label={t('designer.publish.newCodeFor', { code: String(c) })}
-                    value={action.map[String(c)] === null ? '' : String(action.map[String(c)])}
-                    onChange={(e) =>
-                      onChange({
-                        action: 'recode',
-                        map: {
-                          ...action.map,
-                          [String(c)]: e.target.value === '' ? null : toLiteral(e.target.value),
-                        },
-                      })
-                    }
-                  >
-                    <option value="">{t('designer.publish.discard')}</option>
-                    {(current?.codes ?? []).map((nc) => (
-                      <option key={String(nc.code)} value={String(nc.code)}>
-                        {nc.code} · {nc.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-auto text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-600">
+                <th scope="col" className="pr-4 font-medium">
+                  {t('designer.publish.oldCode')}
+                </th>
+                <th scope="col" className="font-medium">
+                  {t('designer.publish.newCode')}
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(change.removedCodes ?? []).map((c) => (
+                <tr key={String(c)}>
+                  <td className="pr-4 font-mono">{String(c)}</td>
+                  <td>
+                    <select
+                      className={`${controlCls} w-auto`}
+                      aria-label={t('designer.publish.newCodeFor', { code: String(c) })}
+                      value={action.map[String(c)] === null ? '' : String(action.map[String(c)])}
+                      onChange={(e) =>
+                        onChange({
+                          action: 'recode',
+                          map: {
+                            ...action.map,
+                            [String(c)]: e.target.value === '' ? null : toLiteral(e.target.value),
+                          },
+                        })
+                      }
+                    >
+                      <option value="">{t('designer.publish.discard')}</option>
+                      {(current?.codes ?? []).map((nc) => (
+                        <option key={String(nc.code)} value={String(nc.code)}>
+                          {nc.code} · {nc.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
       {problems.length ? (
         <ul className="text-xs text-red-ink-800">

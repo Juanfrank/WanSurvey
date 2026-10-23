@@ -208,35 +208,37 @@ export function InterviewHistory({ projectId, caseId }: { projectId: string; cas
                   <summary className="cursor-pointer text-sm">
                     {t('interview.change')} ({r.events.length})
                   </summary>
-                  <table className="mt-1 w-full text-xs" data-testid="answer-history">
-                    <thead className="text-left text-slate-600">
-                      <tr>
-                        <th scope="col">{t('interview.variable')}</th>
-                        <th scope="col">{t('interview.from')}</th>
-                        <th scope="col">{t('interview.to')}</th>
-                        <th scope="col">{t('interview.when')}</th>
-                        <th scope="col">{t('interview.who')}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {r.events.map((e, i) => (
-                        <tr key={i} data-reason={e.reason ?? undefined}>
-                          <td className="font-mono">{e.variable}</td>
-                          <td>{show(e.oldValue)}</td>
-                          <td>
-                            {show(e.newValue)}
-                            {e.reason ? (
-                              <span className="ml-1 text-slate-600">
-                                ({t(`interview.reason.${e.reason}`, { defaultValue: e.reason })})
-                              </span>
-                            ) : null}
-                          </td>
-                          <td>{timeOnly(e.at)}</td>
-                          <td>{e.by ?? e.source}</td>
+                  <div className="overflow-x-auto">
+                    <table className="mt-1 w-full text-xs" data-testid="answer-history">
+                      <thead className="text-left text-slate-600">
+                        <tr>
+                          <th scope="col">{t('interview.variable')}</th>
+                          <th scope="col">{t('interview.from')}</th>
+                          <th scope="col">{t('interview.to')}</th>
+                          <th scope="col">{t('interview.when')}</th>
+                          <th scope="col">{t('interview.who')}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {r.events.map((e, i) => (
+                          <tr key={i} data-reason={e.reason ?? undefined}>
+                            <td className="font-mono">{e.variable}</td>
+                            <td>{show(e.oldValue)}</td>
+                            <td>
+                              {show(e.newValue)}
+                              {e.reason ? (
+                                <span className="ml-1 text-slate-600">
+                                  ({t(`interview.reason.${e.reason}`, { defaultValue: e.reason })})
+                                </span>
+                              ) : null}
+                            </td>
+                            <td>{timeOnly(e.at)}</td>
+                            <td>{e.by ?? e.source}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </details>
               ) : null}
             </li>

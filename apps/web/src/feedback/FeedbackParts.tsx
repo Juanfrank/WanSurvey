@@ -160,12 +160,12 @@ export function FeedbackLinks({ point }: { point: FeedbackPoint }) {
   const scores = Array.from({ length: point.faces }, (_, i) => i + 1);
   const labels = t(`feedback.labels${point.faces}`, { returnObjects: true }) as string[];
   const html = [
-    '<table role="presentation" cellpadding="6"><tr>',
+    '<div className="overflow-x-auto"><table role="presentation" cellpadding="6"><tr>',
     ...scores.map(
       (s) =>
         `  <td align="center"><a href="${point.url}?r=${s}" style="font-size:36px;text-decoration:none" title="${labels[s - 1]}">${EMOJI[point.faces][s - 1]}</a><br><span style="font:12px sans-serif">${labels[s - 1]}</span></td>`,
     ),
-    '</tr></table>',
+    '</tr></table></div>',
   ].join('\n');
   const iframe = `<iframe src="${point.url}?embed=1" title="${point.name}" width="380" height="${point.askComment ? 320 : 190}" style="border:0"></iframe>`;
   return (
@@ -226,39 +226,41 @@ export function FeedbackResults({ projectId, point }: { projectId: string; point
       data-testid="feedback-results"
     >
       <div className="flex flex-col gap-2">
-        <table className="w-full text-sm">
-          <caption className="mb-1 text-left font-medium">
-            {t('feedback.answers', { count: total })}
-          </caption>
-          <tbody>
-            {Array.from({ length: point.faces }, (_, i) => point.faces - i).map((s) => {
-              const n = data?.counts[s] ?? 0;
-              return (
-                <tr key={s}>
-                  <th
-                    scope="row"
-                    className="flex items-center gap-2 py-0.5 pr-2 text-left font-normal"
-                  >
-                    <Face score={s} faces={point.faces} size={20} />
-                    {labels[s - 1]}
-                  </th>
-                  <td className="w-full py-0.5">
-                    <div className="h-3 rounded-sm bg-slate-200">
-                      <div
-                        aria-hidden
-                        className="h-3 rounded-sm bg-indigo-600"
-                        style={{ width: `${total ? (100 * n) / total : 0}%` }}
-                      />
-                    </div>
-                  </td>
-                  <td className="pl-2 text-right tabular-nums" data-count={s}>
-                    {n}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <caption className="mb-1 text-left font-medium">
+              {t('feedback.answers', { count: total })}
+            </caption>
+            <tbody>
+              {Array.from({ length: point.faces }, (_, i) => point.faces - i).map((s) => {
+                const n = data?.counts[s] ?? 0;
+                return (
+                  <tr key={s}>
+                    <th
+                      scope="row"
+                      className="flex items-center gap-2 py-0.5 pr-2 text-left font-normal"
+                    >
+                      <Face score={s} faces={point.faces} size={20} />
+                      {labels[s - 1]}
+                    </th>
+                    <td className="w-full py-0.5">
+                      <div className="h-3 rounded-sm bg-slate-200">
+                        <div
+                          aria-hidden
+                          className="h-3 rounded-sm bg-indigo-600"
+                          style={{ width: `${total ? (100 * n) / total : 0}%` }}
+                        />
+                      </div>
+                    </td>
+                    <td className="pl-2 text-right tabular-nums" data-count={s}>
+                      {n}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {data ? (
           <p className="text-xs text-slate-600">
             {t('feedback.byChannel')}:{' '}

@@ -34,11 +34,12 @@ const zones = (): string[] => {
 /** A confirmation, by key so it follows a change of language. */
 function Saved({ text }: { text: string | null }) {
   const { t } = useTranslation();
-  return text ? (
-    <p role="status" className="text-sm text-emerald-ink-800">
-      {t(text)}
+  // Always in the page, so screen readers announce the text when it appears.
+  return (
+    <p role="status" className="text-sm text-emerald-ink-800 empty:hidden">
+      {text ? t(text) : null}
     </p>
-  ) : null;
+  );
 }
 
 /** The organisation: its name, defaults of new projects, and Microsoft sign-in. */

@@ -40,38 +40,40 @@ export function BarTable({
 }) {
   const top = max ?? Math.max(1, ...rows.map((r) => r.value));
   return (
-    <table className="w-full border-collapse text-sm">
-      {caption ? <caption className="mb-1 text-left font-medium">{caption}</caption> : null}
-      {headers ? (
-        <thead className="sr-only">
-          <tr>
-            <th scope="col">{headers[0]}</th>
-            <th scope="col">{headers[1]}</th>
-          </tr>
-        </thead>
-      ) : null}
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.key} className={r.muted ? 'text-slate-500' : ''}>
-            <th scope="row" className="w-2/5 py-0.5 pr-3 text-left font-normal">
-              {r.label}
-            </th>
-            <td className="py-0.5">
-              <div className="flex items-center gap-2">
-                <div className="h-3 flex-1 rounded-sm bg-slate-100 print:border print:border-slate-300">
-                  <div
-                    aria-hidden="true"
-                    className={`h-3 rounded-sm ${r.muted ? 'bg-slate-400' : 'bg-indigo-600'} print:bg-slate-700`}
-                    style={{ width: `${Math.min(100, (100 * r.value) / top)}%` }}
-                  />
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-sm">
+        {caption ? <caption className="mb-1 text-left font-medium">{caption}</caption> : null}
+        {headers ? (
+          <thead className="sr-only">
+            <tr>
+              <th scope="col">{headers[0]}</th>
+              <th scope="col">{headers[1]}</th>
+            </tr>
+          </thead>
+        ) : null}
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} className={r.muted ? 'text-slate-500' : ''}>
+              <th scope="row" className="w-2/5 py-0.5 pr-3 text-left font-normal">
+                {r.label}
+              </th>
+              <td className="py-0.5">
+                <div className="flex items-center gap-2">
+                  <div className="h-3 flex-1 rounded-sm bg-slate-100 print:border print:border-slate-300">
+                    <div
+                      aria-hidden="true"
+                      className={`h-3 rounded-sm ${r.muted ? 'bg-slate-400' : 'bg-indigo-600'} print:bg-slate-700`}
+                      style={{ width: `${Math.min(100, (100 * r.value) / top)}%` }}
+                    />
+                  </div>
+                  <span className="w-24 shrink-0 text-right tabular-nums">{r.display}</span>
                 </div>
-                <span className="w-24 shrink-0 text-right tabular-nums">{r.display}</span>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -158,26 +160,28 @@ export function DayColumns({ days: given }: { days: { day: string; completes: nu
       </div>
       <details className="mt-1 text-sm">
         <summary className="cursor-pointer text-indigo-ink-700">{t('analysis.live.table')}</summary>
-        <table className="mt-1 text-sm">
-          <thead>
-            <tr>
-              <th scope="col" className="pr-4 text-left">
-                {t('analysis.live.day')}
-              </th>
-              <th scope="col" className="text-right">
-                {t('analysis.live.completes')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {days.map((d) => (
-              <tr key={d.day}>
-                <td className="pr-4">{short(d.day)}</td>
-                <td className="text-right tabular-nums">{d.completes}</td>
+        <div className="overflow-x-auto">
+          <table className="mt-1 text-sm">
+            <thead>
+              <tr>
+                <th scope="col" className="pr-4 text-left">
+                  {t('analysis.live.day')}
+                </th>
+                <th scope="col" className="text-right">
+                  {t('analysis.live.completes')}
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {days.map((d) => (
+                <tr key={d.day}>
+                  <td className="pr-4">{short(d.day)}</td>
+                  <td className="text-right tabular-nums">{d.completes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </details>
     </div>
   );

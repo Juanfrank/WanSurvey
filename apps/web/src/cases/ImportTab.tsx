@@ -414,32 +414,34 @@ export function ImportTab({
             ))}
           </dl>
           {report.issues.length ? (
-            <table className="w-full text-sm" data-testid="import-issues">
-              <thead className="text-left text-xs text-slate-600">
-                <tr>
-                  <th scope="col" className="py-1">
-                    {t('cases.import.report.issue')}
-                  </th>
-                  <th scope="col">{t('cases.import.report.count')}</th>
-                  <th scope="col">{t('cases.import.report.example')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {report.issues.map((i) => (
-                  <tr key={i.code} data-issue={i.code}>
-                    <td className={`py-1.5 ${i.blocking ? 'text-red-ink-800' : ''}`}>
-                      {t(`cases.import.issue.${i.code}`)}
-                    </td>
-                    <td>{i.count}</td>
-                    <td className="text-slate-600">
-                      {i.code === 'duplicate_elsewhere'
-                        ? i.examples.map((e) => `${e.row}: ${e.column}`).join(' · ')
-                        : i.examples.map((e) => `${e.row}: ${e.value || '∅'}`).join(' · ')}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="import-issues">
+                <thead className="text-left text-xs text-slate-600">
+                  <tr>
+                    <th scope="col" className="py-1">
+                      {t('cases.import.report.issue')}
+                    </th>
+                    <th scope="col">{t('cases.import.report.count')}</th>
+                    <th scope="col">{t('cases.import.report.example')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {report.issues.map((i) => (
+                    <tr key={i.code} data-issue={i.code}>
+                      <td className={`py-1.5 ${i.blocking ? 'text-red-ink-800' : ''}`}>
+                        {t(`cases.import.issue.${i.code}`)}
+                      </td>
+                      <td>{i.count}</td>
+                      <td className="text-slate-600">
+                        {i.code === 'duplicate_elsewhere'
+                          ? i.examples.map((e) => `${e.row}: ${e.column}`).join(' · ')
+                          : i.examples.map((e) => `${e.row}: ${e.value || '∅'}`).join(' · ')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="text-sm">{t('cases.import.report.noIssues')}</p>
           )}

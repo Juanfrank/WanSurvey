@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
@@ -152,9 +151,6 @@ export function SharePage() {
     queryFn: () => api<Summary>(`/public/share/${encodeURIComponent(token)}`),
     retry: false,
   });
-  useEffect(() => {
-    if (s.data) document.title = `${s.data.project.name} · WanSurvey`;
-  }, [s.data]);
   return (
     <main className="min-h-screen bg-white px-4 py-8">
       {s.data ? (

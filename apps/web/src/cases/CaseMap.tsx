@@ -174,34 +174,36 @@ export function CaseMap({
             <summary className="cursor-pointer text-sm font-medium">
               {t('cases.map.asTable', { count: data.length })}
             </summary>
-            <table className="mt-2 w-full text-sm" data-testid="map-points">
-              <thead className="text-left text-xs text-slate-600">
-                <tr>
-                  <th scope="col">{t('cases.list.col.externalId')}</th>
-                  <th scope="col">{t('cases.list.col.status')}</th>
-                  <th scope="col">{t('cases.map.coordinates')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.map((p) => (
-                  <tr key={`${p.caseId}:${p.lat}:${p.lng}`}>
-                    <td className="py-1">
-                      <button
-                        type="button"
-                        className="font-mono text-indigo-ink-700 underline-offset-2 hover:underline"
-                        onClick={() => onOpen(p.caseId)}
-                      >
-                        {p.externalId}
-                      </button>
-                    </td>
-                    <td>{t(`cases.status.${p.status}`)}</td>
-                    <td className="font-mono text-xs">
-                      {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="mt-2 w-full text-sm" data-testid="map-points">
+                <thead className="text-left text-xs text-slate-600">
+                  <tr>
+                    <th scope="col">{t('cases.list.col.externalId')}</th>
+                    <th scope="col">{t('cases.list.col.status')}</th>
+                    <th scope="col">{t('cases.map.coordinates')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.map((p) => (
+                    <tr key={`${p.caseId}:${p.lat}:${p.lng}`}>
+                      <td className="py-1">
+                        <button
+                          type="button"
+                          className="font-mono text-indigo-ink-700 underline-offset-2 hover:underline"
+                          onClick={() => onOpen(p.caseId)}
+                        >
+                          {p.externalId}
+                        </button>
+                      </td>
+                      <td>{t(`cases.status.${p.status}`)}</td>
+                      <td className="font-mono text-xs">
+                        {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </details>
         </>
       ) : (

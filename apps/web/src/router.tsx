@@ -7,6 +7,7 @@ import {
   Outlet,
 } from '@tanstack/react-router';
 import { isRespondentPath, loadCatalogue } from './i18n.js';
+import { usePageTitle } from './routes/pageTitle.js';
 
 // Every page loads when opened: a web respondent downloads none of the staff application (H6).
 const AppLayout = lazyRouteComponent(() => import('./routes/AppLayout.js'), 'AppLayout');
@@ -24,8 +25,13 @@ const WaitingPage = lazyRouteComponent(() => import('./routes/WaitingPage.js'), 
 const passwordPage = (name: 'AcceptInvitationPage' | 'ResetPasswordPage' | 'ForgotPasswordPage') =>
   lazyRouteComponent(() => import('./routes/PasswordPages.js'), name);
 
+function Root() {
+  usePageTitle();
+  return <Outlet />;
+}
+
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: Root,
   // Staff pages need the interface's words, also when coming from a respondent's page.
   beforeLoad: ({ location }) => (isRespondentPath(location.pathname) ? undefined : loadCatalogue()),
 });

@@ -167,83 +167,85 @@ function Queue({ projectId }: { projectId: string }) {
         </span>
       </div>
       {rows.length ? (
-        <table className="w-full" data-testid="review-queue">
-          <thead className="text-left text-slate-600">
-            <tr>
-              <th scope="col">{t('review.queue.case')}</th>
-              <th scope="col">{t('review.queue.interviewer')}</th>
-              <th scope="col">{t('review.queue.mode')}</th>
-              <th scope="col">{t('review.queue.status')}</th>
-              <th scope="col">{t('review.queue.submitted')}</th>
-              <th scope="col">{t('review.queue.length')}</th>
-              <th scope="col">{t('review.queue.flags')}</th>
-            </tr>
-          </thead>
-          <tbody
-            ref={table}
-            className="divide-y divide-slate-100"
-            onKeyDown={(e) => {
-              if ((e.target as HTMLElement).closest('input, select, textarea')) return;
-              if (e.key === 'j' || e.key === 'ArrowDown') {
-                e.preventDefault();
-                setActive((a) => Math.min(rows.length - 1, a + 1));
-              } else if (e.key === 'k' || e.key === 'ArrowUp') {
-                e.preventDefault();
-                setActive((a) => Math.max(0, a - 1));
-              }
-            }}
-          >
-            {rows.map((r, i) => (
-              <tr
-                key={r.id}
-                data-row={i}
-                data-interview={r.id}
-                data-case={r.externalId ?? ''}
-                className={i === active ? 'bg-indigo-50' : ''}
-              >
-                <td className="py-1.5">
-                  <button
-                    type="button"
-                    className="font-medium text-indigo-ink-700 underline"
-                    onFocus={() => setActive(i)}
-                    onClick={() => void open(r.id)}
-                    aria-label={t('review.queue.open', { id: r.externalId ?? r.id.slice(0, 8) })}
-                  >
-                    {r.externalId ?? r.id.slice(0, 8)}
-                  </button>
-                  {r.sampled ? (
-                    <span className="ml-1 rounded bg-sky-100 px-1 text-xs text-sky-ink-900">
-                      {t('review.queue.sampleBadge')}
-                    </span>
-                  ) : null}
-                  {r.submissions > 1 ? (
-                    <span className="ml-1 text-xs text-slate-600">
-                      {t('review.queue.round', { n: r.submissions })}
-                    </span>
-                  ) : null}
-                </td>
-                <td>{r.interviewer ?? '—'}</td>
-                <td>{modeLabel(t, r.mode)}</td>
-                <td>
-                  {t(`interview.status.${r.status}`, { defaultValue: r.status })}
-                  {r.disposition ? ` · ${dispositionLabel(t, r.disposition)}` : ''}
-                </td>
-                <td>
-                  {r.submittedAt
-                    ? new Date(r.submittedAt).toLocaleString(i18n.language, {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })
-                    : '—'}
-                </td>
-                <td className="tabular-nums">{minutes(r.activeMs)}</td>
-                <td>
-                  <FlagChips flags={r.flags} />
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full" data-testid="review-queue">
+            <thead className="text-left text-slate-600">
+              <tr>
+                <th scope="col">{t('review.queue.case')}</th>
+                <th scope="col">{t('review.queue.interviewer')}</th>
+                <th scope="col">{t('review.queue.mode')}</th>
+                <th scope="col">{t('review.queue.status')}</th>
+                <th scope="col">{t('review.queue.submitted')}</th>
+                <th scope="col">{t('review.queue.length')}</th>
+                <th scope="col">{t('review.queue.flags')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody
+              ref={table}
+              className="divide-y divide-slate-100"
+              onKeyDown={(e) => {
+                if ((e.target as HTMLElement).closest('input, select, textarea')) return;
+                if (e.key === 'j' || e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setActive((a) => Math.min(rows.length - 1, a + 1));
+                } else if (e.key === 'k' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setActive((a) => Math.max(0, a - 1));
+                }
+              }}
+            >
+              {rows.map((r, i) => (
+                <tr
+                  key={r.id}
+                  data-row={i}
+                  data-interview={r.id}
+                  data-case={r.externalId ?? ''}
+                  className={i === active ? 'bg-indigo-50' : ''}
+                >
+                  <td className="py-1.5">
+                    <button
+                      type="button"
+                      className="font-medium text-indigo-ink-700 underline"
+                      onFocus={() => setActive(i)}
+                      onClick={() => void open(r.id)}
+                      aria-label={t('review.queue.open', { id: r.externalId ?? r.id.slice(0, 8) })}
+                    >
+                      {r.externalId ?? r.id.slice(0, 8)}
+                    </button>
+                    {r.sampled ? (
+                      <span className="ml-1 rounded bg-sky-100 px-1 text-xs text-sky-ink-900">
+                        {t('review.queue.sampleBadge')}
+                      </span>
+                    ) : null}
+                    {r.submissions > 1 ? (
+                      <span className="ml-1 text-xs text-slate-600">
+                        {t('review.queue.round', { n: r.submissions })}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td>{r.interviewer ?? '—'}</td>
+                  <td>{modeLabel(t, r.mode)}</td>
+                  <td>
+                    {t(`interview.status.${r.status}`, { defaultValue: r.status })}
+                    {r.disposition ? ` · ${dispositionLabel(t, r.disposition)}` : ''}
+                  </td>
+                  <td>
+                    {r.submittedAt
+                      ? new Date(r.submittedAt).toLocaleString(i18n.language, {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })
+                      : '—'}
+                  </td>
+                  <td className="tabular-nums">{minutes(r.activeMs)}</td>
+                  <td>
+                    <FlagChips flags={r.flags} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p className="text-slate-600">{t('review.queue.none')}</p>
       )}
@@ -387,44 +389,46 @@ function Coding({ projectId }: { projectId: string }) {
                   </Button>
                 </div>
               </fieldset>
-              <table className="w-full">
-                <thead className="text-left text-slate-600">
-                  <tr>
-                    <th scope="col">
-                      <span className="sr-only">{t('review.coding.select', { text: '' })}</span>
-                    </th>
-                    <th scope="col">{t('review.coding.texts')}</th>
-                    <th scope="col">{t('review.coding.count')}</th>
-                    <th scope="col">{t('review.coding.code')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {detail.data.texts.map((x) => (
-                    <tr key={x.key} data-text={x.key}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          aria-label={t('review.coding.select', { text: x.text })}
-                          checked={picked.has(x.key)}
-                          onChange={(e) => {
-                            const next = new Set(picked);
-                            if (e.target.checked) next.add(x.key);
-                            else next.delete(x.key);
-                            setPicked(next);
-                          }}
-                        />
-                      </td>
-                      <td className="py-1">{x.text}</td>
-                      <td className="tabular-nums">{x.count}</td>
-                      <td>
-                        {x.code === null
-                          ? '—'
-                          : `${x.code} ${detail.data!.codes.find((c) => c.code === x.code)?.label ?? ''}`}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="text-left text-slate-600">
+                    <tr>
+                      <th scope="col">
+                        <span className="sr-only">{t('review.coding.select', { text: '' })}</span>
+                      </th>
+                      <th scope="col">{t('review.coding.texts')}</th>
+                      <th scope="col">{t('review.coding.count')}</th>
+                      <th scope="col">{t('review.coding.code')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {detail.data.texts.map((x) => (
+                      <tr key={x.key} data-text={x.key}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            aria-label={t('review.coding.select', { text: x.text })}
+                            checked={picked.has(x.key)}
+                            onChange={(e) => {
+                              const next = new Set(picked);
+                              if (e.target.checked) next.add(x.key);
+                              else next.delete(x.key);
+                              setPicked(next);
+                            }}
+                          />
+                        </td>
+                        <td className="py-1">{x.text}</td>
+                        <td className="tabular-nums">{x.count}</td>
+                        <td>
+                          {x.code === null
+                            ? '—'
+                            : `${x.code} ${detail.data!.codes.find((c) => c.code === x.code)?.label ?? ''}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1">
                   <span>{t('review.coding.assign')}</span>

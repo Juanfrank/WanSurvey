@@ -212,7 +212,10 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
                     type="button"
                     className={smallBtn}
                     aria-label={t('cases.rules.remove', { name: label })}
-                    onClick={() => remove.mutate(r.id)}
+                    onClick={() => {
+                      if (window.confirm(t('cases.rules.confirmRemove', { name: label })))
+                        remove.mutate(r.id);
+                    }}
                   >
                     ✕
                   </button>

@@ -217,7 +217,7 @@ function SuffixInput({
   return (
     <input
       id={id}
-      className="min-w-0 flex-1 rounded-r-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 aria-[invalid=true]:border-red-600"
+      className="min-w-0 flex-1 rounded-r-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-[invalid=true]:border-red-600"
       value={local}
       aria-invalid={invalid || undefined}
       aria-describedby={describedBy}
@@ -252,7 +252,7 @@ function TypePicker({ value, onChange }: { value: QuestionType; onChange(t: Ques
         aria-haspopup="menu"
         aria-expanded={open}
         aria-labelledby={`${id} ${id}-v`}
-        className="flex w-full items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-left text-sm hover:border-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60"
+        className="flex w-full items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-left text-sm hover:border-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-60"
         onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

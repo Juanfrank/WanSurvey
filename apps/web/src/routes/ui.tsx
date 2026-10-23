@@ -8,6 +8,7 @@ import {
   type Ref,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { localiseError } from '../i18n-messages.js';
 import { LogoMark, LogoName } from './Logo.js';
 
 /** Small shared building blocks so screens stay consistent. */
@@ -53,7 +54,7 @@ export function Field({
       </label>
       <input
         id={id}
-        className="rounded-md border border-slate-300 bg-white px-3 py-2 focus:border-indigo-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        className="rounded-md border border-slate-300 bg-white px-3 py-2 focus:border-indigo-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         {...rest}
       />
     </div>
@@ -67,6 +68,42 @@ export function ErrorText({ children }: { children: ReactNode }) {
       {children}
     </p>
   );
+}
+
+/**
+ * What a list shows before and instead of its data: "Loading…" (announced), the error with a
+ * button to try again, or the empty message. With data, the children.
+ */
+export function QueryState({
+  query,
+  empty,
+  isEmpty,
+  children,
+}: {
+  query: { isPending: boolean; error: unknown; refetch(): unknown };
+  /** Shown when the data came back empty. */
+  empty?: ReactNode;
+  isEmpty?: boolean;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  if (query.error)
+    return (
+      <div className="flex flex-wrap items-center gap-3" data-testid="query-error">
+        <ErrorText>{localiseError(t, query.error)}</ErrorText>
+        <Button variant="secondary" size="sm" onClick={() => void query.refetch()}>
+          {t('app.retry')}
+        </Button>
+      </div>
+    );
+  if (query.isPending)
+    return (
+      <p role="status" aria-busy="true" className="text-slate-600">
+        {t('app.loading')}
+      </p>
+    );
+  if (isEmpty && empty) return <p className="text-slate-600">{empty}</p>;
+  return <>{children}</>;
 }
 
 export function AuthShell({ title, children }: { title: string; children: ReactNode }) {

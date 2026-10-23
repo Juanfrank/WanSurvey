@@ -162,6 +162,10 @@
   --color-on-fill: #ffffff;
   --color-navy-fill: #0a2e7a;
 
+  /* Focus outline: at least 3:1 on the page and on cards in each theme (white on the navy
+     side panel, below). */
+  --color-focus: #0050dd;
+
   /* Coloured text ("ink"): the same as the shade in the light theme, lighter in the dark one,
      so the shades themselves stay fills (buttons) in both. */
   --color-indigo-ink-600: #0050dd;
@@ -208,6 +212,7 @@
     --color-ground: #0b1220;
     --color-navy: #bbd3ff;
     --color-navy-2: #9cbcf5;
+    --color-focus: #8db6ff;
 
     --color-slate-50: #0f1626;
     --color-slate-100: #1a2338;
@@ -291,8 +296,11 @@
     font-variant-numeric: tabular-nums;
   }
   :focus-visible {
-    outline: 2px solid var(--color-indigo-600);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
+  }
+  .bg-navy-fill :focus-visible {
+    outline-color: #ffffff;
   }
 }
 

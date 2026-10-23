@@ -112,36 +112,38 @@ export function DashboardTab({ projectId }: { projectId: string }) {
           {snap.quotas.length ? (
             <Card className="flex flex-col gap-2">
               <h3 className="font-medium">{t('analysis.live.quotas')}</h3>
-              <table className="w-full text-sm" data-testid="quotas">
-                <thead>
-                  <tr className="text-left text-slate-600">
-                    <th scope="col">{t('analysis.live.quotaCell')}</th>
-                    <th scope="col" className="pl-3 text-right">
-                      {t('analysis.live.quotaCount')}
-                    </th>
-                    <th scope="col" className="pl-3 text-right">
-                      {t('analysis.live.quotaMax')}
-                    </th>
-                    <th scope="col" className="w-1/3">
-                      <span className="sr-only">%</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snap.quotas.map((q) => (
-                    <tr key={q.id}>
-                      <th scope="row" className="py-1 text-left font-normal">
-                        {q.name}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="quotas">
+                  <thead>
+                    <tr className="text-left text-slate-600">
+                      <th scope="col">{t('analysis.live.quotaCell')}</th>
+                      <th scope="col" className="pl-3 text-right">
+                        {t('analysis.live.quotaCount')}
                       </th>
-                      <td className="pl-3 text-right tabular-nums">{q.count}</td>
-                      <td className="pl-3 text-right tabular-nums">{q.max}</td>
-                      <td className="pl-3">
-                        <Progress value={q.count} max={q.max} label={q.name} />
-                      </td>
+                      <th scope="col" className="pl-3 text-right">
+                        {t('analysis.live.quotaMax')}
+                      </th>
+                      <th scope="col" className="w-1/3">
+                        <span className="sr-only">%</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {snap.quotas.map((q) => (
+                      <tr key={q.id}>
+                        <th scope="row" className="py-1 text-left font-normal">
+                          {q.name}
+                        </th>
+                        <td className="pl-3 text-right tabular-nums">{q.count}</td>
+                        <td className="pl-3 text-right tabular-nums">{q.max}</td>
+                        <td className="pl-3">
+                          <Progress value={q.count} max={q.max} label={q.name} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           ) : null}
           <Card className="flex flex-col gap-3">

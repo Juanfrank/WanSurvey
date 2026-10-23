@@ -245,55 +245,57 @@ function Mismatches({ projectId }: { projectId: string }) {
         {message}
       </p>
       {list.data?.length ? (
-        <table className="w-full" data-testid="mismatches">
-          <thead className="text-left text-slate-600">
-            <tr>
-              <th scope="col">{t('papi.mismatches.case')}</th>
-              <th scope="col">{t('papi.mismatches.question')}</th>
-              <th scope="col">{t('papi.mismatches.first')}</th>
-              <th scope="col">{t('papi.mismatches.second')}</th>
-              <th scope="col">
-                <span className="sr-only">{t('cases.list.columns')}</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {list.data.map((m) => (
-              <tr key={m.id} data-mismatch={`${m.externalId}:${m.variable}`}>
-                <td className="py-1.5 font-medium">{m.externalId}</td>
-                <td className="font-mono">{m.variable}</td>
-                <td className="font-mono">{show(m.firstValue)}</td>
-                <td className="font-mono">{show(m.secondValue)}</td>
-                <td className="flex flex-wrap gap-2 py-1">
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    disabled={resolve.isPending}
-                    onClick={() => resolve.mutate({ m, choice: 'first' })}
-                  >
-                    {t('papi.mismatches.keepFirst')}
-                    <span className="sr-only">
-                      {' '}
-                      {m.externalId} {m.variable}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    disabled={resolve.isPending}
-                    onClick={() => resolve.mutate({ m, choice: 'second' })}
-                  >
-                    {t('papi.mismatches.useSecond')}
-                    <span className="sr-only">
-                      {' '}
-                      {m.externalId} {m.variable}
-                    </span>
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full" data-testid="mismatches">
+            <thead className="text-left text-slate-600">
+              <tr>
+                <th scope="col">{t('papi.mismatches.case')}</th>
+                <th scope="col">{t('papi.mismatches.question')}</th>
+                <th scope="col">{t('papi.mismatches.first')}</th>
+                <th scope="col">{t('papi.mismatches.second')}</th>
+                <th scope="col">
+                  <span className="sr-only">{t('cases.list.columns')}</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {list.data.map((m) => (
+                <tr key={m.id} data-mismatch={`${m.externalId}:${m.variable}`}>
+                  <td className="py-1.5 font-medium">{m.externalId}</td>
+                  <td className="font-mono">{m.variable}</td>
+                  <td className="font-mono">{show(m.firstValue)}</td>
+                  <td className="font-mono">{show(m.secondValue)}</td>
+                  <td className="flex flex-wrap gap-2 py-1">
+                    <button
+                      type="button"
+                      className={smallBtn}
+                      disabled={resolve.isPending}
+                      onClick={() => resolve.mutate({ m, choice: 'first' })}
+                    >
+                      {t('papi.mismatches.keepFirst')}
+                      <span className="sr-only">
+                        {' '}
+                        {m.externalId} {m.variable}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={smallBtn}
+                      disabled={resolve.isPending}
+                      onClick={() => resolve.mutate({ m, choice: 'second' })}
+                    >
+                      {t('papi.mismatches.useSecond')}
+                      <span className="sr-only">
+                        {' '}
+                        {m.externalId} {m.variable}
+                      </span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p className="text-slate-600">{t('papi.mismatches.none')}</p>
       )}

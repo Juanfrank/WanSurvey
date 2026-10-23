@@ -152,7 +152,10 @@ export function CommentsPanel({
                     <button
                       type="button"
                       className={smallBtn}
-                      onClick={() => act.mutate({ method: 'DELETE', path: `/${c.id}` })}
+                      onClick={() => {
+                        if (window.confirm(t('designer.comments.confirmDelete')))
+                          act.mutate({ method: 'DELETE', path: `/${c.id}` });
+                      }}
                     >
                       {t('designer.comments.delete')}
                     </button>

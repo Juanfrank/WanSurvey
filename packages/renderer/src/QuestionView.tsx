@@ -66,8 +66,9 @@ export function QuestionView(p: QuestionViewProps) {
     return (
       <section
         data-qkey={entry.key}
+        lang={p.lang}
         tabIndex={-1}
-        className="flex flex-col gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        className="flex flex-col gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         aria-labelledby={`${domId}-text`}
       >
         <p id={`${domId}-text`} className={def.role === 'consent' ? 'text-lg' : 'text-base'}>
@@ -153,6 +154,7 @@ export function QuestionView(p: QuestionViewProps) {
     onChange: (v) => p.onAnswer(entry.key, v),
     heading,
     ...(describedBy ? { describedBy } : {}),
+    invalid: errors.length > 0 || !!localError,
     showCodes: interviewer,
     touch: !!p.touch,
     ...(variant?.displayAs ? { displayAs: variant.displayAs } : {}),
@@ -200,6 +202,7 @@ export function QuestionView(p: QuestionViewProps) {
   return (
     <section
       data-qkey={entry.key}
+      lang={p.lang}
       tabIndex={-1}
       className="flex flex-col gap-3 focus:outline-none"
       aria-labelledby={`${domId}-text`}
@@ -221,7 +224,8 @@ export function QuestionView(p: QuestionViewProps) {
         <label className="flex flex-col gap-1 sm:max-w-md">
           <span className="text-sm font-medium">{t('question.otherSpecify')}</span>
           <input
-            className="rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            lang={p.lang}
+            className="rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             value={typeof otherValue === 'string' ? otherValue : ''}
             onChange={(e) => p.onAnswer(otherKey, e.target.value)}
           />

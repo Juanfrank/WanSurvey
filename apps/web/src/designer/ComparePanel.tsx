@@ -75,33 +75,35 @@ export function ComparePanel({
   };
   const fieldName = (c: FieldChange) => (c.kind === 'text' ? `${c.field} (${c.lang})` : c.field);
   const table = (changes: FieldChange[], caption: string) => (
-    <table className="w-full table-fixed text-xs">
-      <caption className="sr-only">{caption}</caption>
-      <thead className="text-left text-slate-600">
-        <tr>
-          <th scope="col" className="w-1/4 px-2 py-1">
-            {t('designer.compare.field')}
-          </th>
-          <th scope="col" className="px-2 py-1">
-            {label(from)}
-          </th>
-          <th scope="col" className="px-2 py-1">
-            {label(to)}
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-slate-100 align-top">
-        {changes.map((c) => (
-          <tr key={fieldName(c)}>
-            <th scope="row" className="px-2 py-1 text-left font-mono font-normal">
-              {fieldName(c)}
+    <div className="overflow-x-auto">
+      <table className="w-full table-fixed text-xs">
+        <caption className="sr-only">{caption}</caption>
+        <thead className="text-left text-slate-600">
+          <tr>
+            <th scope="col" className="w-1/4 px-2 py-1">
+              {t('designer.compare.field')}
             </th>
-            <td className="break-words px-2 py-1 text-slate-700">{cell(c, 'before')}</td>
-            <td className="break-words px-2 py-1">{cell(c, 'after')}</td>
+            <th scope="col" className="px-2 py-1">
+              {label(from)}
+            </th>
+            <th scope="col" className="px-2 py-1">
+              {label(to)}
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className="divide-y divide-slate-100 align-top">
+          {changes.map((c) => (
+            <tr key={fieldName(c)}>
+              <th scope="row" className="px-2 py-1 text-left font-mono font-normal">
+                {fieldName(c)}
+              </th>
+              <td className="break-words px-2 py-1 text-slate-700">{cell(c, 'before')}</td>
+              <td className="break-words px-2 py-1">{cell(c, 'after')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 
   return (

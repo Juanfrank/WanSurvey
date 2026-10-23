@@ -16,6 +16,8 @@ export interface ControlProps {
   heading: ReactNode;
   /** id of the element describing errors/help, for aria-describedby. */
   describedBy?: string;
+  /** The answer has an error (not just a warning): fields carry aria-invalid. */
+  invalid?: boolean;
   /** Interviewer modes show option codes (they can be typed). */
   showCodes: boolean;
   /** Respondent mode on touch devices: larger targets. */
@@ -60,14 +62,15 @@ const isSpecialValue = (v: AnswerValue) =>
 
 const optionBox = (touch: boolean) =>
   [
-    'flex items-center gap-3 rounded-lg border border-slate-300 bg-white px-3 text-left',
-    'has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500',
+    // relative: a visually hidden input (buttons, scale points) stays inside its own box.
+    'relative flex items-center gap-3 rounded-lg border border-slate-300 bg-white px-3 text-left',
+    'has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus',
     touch ? 'min-h-12 py-2 text-base' : 'min-h-10 py-1.5',
     'cursor-pointer hover:border-slate-400',
   ].join(' ');
 
 const inputCls =
-  'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 aria-[invalid=true]:border-red-600';
+  'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-[invalid=true]:border-red-600';
 
 function Code({ code, show }: { code: string | number; show: boolean }) {
   if (!show) return null;
@@ -183,6 +186,7 @@ function SearchableSelect(p: ControlProps & { selected: string | number | null }
           aria-autocomplete="list"
           aria-activedescendant={open && list[active] ? `${listId}-${active}` : undefined}
           aria-describedby={p.describedBy}
+          aria-invalid={p.invalid || undefined}
           className={inputCls}
           autoComplete="off"
           placeholder={
@@ -191,7 +195,9 @@ function SearchableSelect(p: ControlProps & { selected: string | number | null }
               : t('question.selectPlaceholder')
           }
           value={text}
-          onFocus={() => setOpen(true)}
+          // Opens on a click, typing or the arrows, not on focus: the runner focuses the first
+          // answer of a page, and a list opened then would cover the buttons below it.
+          onClick={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           onChange={(e) => {
             setText(e.target.value);
@@ -338,6 +344,7 @@ export function MultiChoice(p: ControlProps) {
               type="checkbox"
               className="size-4 accent-indigo-600"
               checked={has(o.code)}
+              aria-invalid={p.invalid || undefined}
               onChange={() => toggle(o)}
               data-code={String(o.code)}
             />
@@ -369,6 +376,7 @@ export function NumericInput(p: ControlProps & { onInvalid(msg: string | null): 
           inputMode={p.question.decimals ? 'decimal' : 'numeric'}
           autoComplete="off"
           aria-describedby={p.describedBy}
+          aria-invalid={p.invalid || undefined}
           value={text}
           onChange={(e) => {
             const raw = e.target.value;
@@ -399,6 +407,7 @@ export function TextInput(p: ControlProps) {
     id,
     className: inputCls,
     'aria-describedby': p.describedBy,
+    'aria-invalid': p.invalid || undefined,
     maxLength: p.question.maxLength,
     value,
     // Enter stays in the text; the runner moves on with Ctrl+Enter.
@@ -441,6 +450,7 @@ export function DateTimeInput(p: ControlProps) {
         type={type}
         className={`${inputCls} max-w-xs`}
         aria-describedby={p.describedBy}
+        aria-invalid={p.invalid || undefined}
         value={value}
         onChange={(e) => p.onChange(e.target.value === '' ? null : e.target.value)}
       />
@@ -484,6 +494,7 @@ function ApproximateDate(p: ControlProps) {
         autoComplete="off"
         value={value}
         aria-describedby={`${id}-hint${p.describedBy ? ` ${p.describedBy}` : ''}`}
+        aria-invalid={p.invalid || undefined}
         onChange={(e) => {
           const v = e.target.value.replace(/\D/g, '').slice(0, max);
           set(v);
@@ -537,6 +548,7 @@ export function Scale(p: ControlProps) {
             value={value ?? scale.min}
             aria-valuetext={value === null ? t('question.notSet') : String(value)}
             aria-describedby={p.describedBy}
+            aria-invalid={p.invalid || undefined}
             onChange={(e) => p.onChange(Number(e.target.value))}
           />
           <span className="shrink-0 text-sm tabular-nums text-slate-600" aria-hidden="true">
@@ -563,6 +575,7 @@ export function Scale(p: ControlProps) {
             autoComplete="off"
             value={typed}
             aria-describedby={p.describedBy}
+            aria-invalid={p.invalid || undefined}
             onChange={(e) => {
               setTyped(e.target.value);
               const n = Number(e.target.value.trim().replace(',', '.'));
@@ -595,14 +608,20 @@ export function Scale(p: ControlProps) {
           return (
             <label
               key={n}
-              className={`flex ${p.touch ? 'h-12' : 'h-10'} min-w-0 cursor-pointer items-center justify-center rounded-md border font-medium tabular-nums has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${
+              className={`relative flex ${p.touch ? 'h-12' : 'h-10'} min-w-0 cursor-pointer items-center justify-center rounded-md border font-medium tabular-nums has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${
                 c
                   ? on
-                    ? 'text-white ring-2 ring-offset-1 ring-slate-900'
+                    ? 'ring-2 ring-offset-1 ring-slate-900'
                     : ''
                   : 'border-slate-300 bg-white has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-on-fill'
               }`}
-              style={c ? { background: on ? c.fill : c.tint, borderColor: c.border } : undefined}
+              style={
+                c
+                  ? on
+                    ? { background: c.fill, borderColor: c.border, color: c.ink }
+                    : { background: c.tint, borderColor: c.border }
+                  : undefined
+              }
             >
               <input
                 type="radio"
@@ -724,6 +743,10 @@ export function Ranking(p: ControlProps) {
   const { t } = useTranslation(RENDERER_NS);
   const listRef = useRef<HTMLOListElement>(null);
   const positions = useRef(new Map<string, number>());
+  // The button pressed last: after the move it is focused again on the row's new place (or its
+  // other arrow, at an end), so the keyboard user keeps their spot; the new rank is announced.
+  const pressed = useRef<{ code: string; dir: 'up' | 'down' } | null>(null);
+  const [announce, setAnnounce] = useState('');
   const answered = Array.isArray(p.value) ? (p.value as (string | number)[]) : null;
   const order = answered
     ? answered
@@ -735,11 +758,26 @@ export function Ranking(p: ControlProps) {
     const j = i + d;
     if (j < 0 || j >= next.length) return;
     [next[i], next[j]] = [next[j]!, next[i]!];
+    const o = order[i]!;
+    pressed.current = { code: String(o.code), dir: d < 0 ? 'up' : 'down' };
+    setAnnounce(t('question.moved', { label: o.label, n: j + 1, total: next.length }));
     p.onChange(next);
   };
   // FLIP: each row slides from where it was to its new place, so a change of rank is seen.
   const orderKey = order.map((o) => String(o.code)).join('|');
   useLayoutEffect(() => {
+    const target = pressed.current;
+    pressed.current = null;
+    if (target) {
+      const row = listRef.current?.querySelector<HTMLElement>(
+        `[data-rank-code="${CSS.escape(target.code)}"]`,
+      );
+      const same = row?.querySelector<HTMLButtonElement>(`[data-move="${target.dir}"]`);
+      const other = row?.querySelector<HTMLButtonElement>(
+        `[data-move="${target.dir === 'up' ? 'down' : 'up'}"]`,
+      );
+      (same && !same.disabled ? same : other)?.focus();
+    }
     const items = listRef.current?.querySelectorAll<HTMLElement>('[data-rank-code]') ?? [];
     const reduce =
       typeof window !== 'undefined' &&
@@ -775,6 +813,7 @@ export function Ranking(p: ControlProps) {
               type="button"
               className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40"
               aria-label={t('question.moveUp', { label: o.label })}
+              data-move="up"
               disabled={i === 0}
               onClick={() => move(i, -1)}
             >
@@ -784,6 +823,7 @@ export function Ranking(p: ControlProps) {
               type="button"
               className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40"
               aria-label={t('question.moveDown', { label: o.label })}
+              data-move="down"
               disabled={i === order.length - 1}
               onClick={() => move(i, 1)}
             >
@@ -793,6 +833,9 @@ export function Ranking(p: ControlProps) {
         ))}
       </ol>
       {p.showCodes ? <p className="mt-2 text-xs text-slate-600">{t('question.rankKeys')}</p> : null}
+      <p className="sr-only" aria-live="polite" data-testid="rank-announce">
+        {announce}
+      </p>
       {!answered ? (
         <button
           type="button"

@@ -255,54 +255,56 @@ export function DevicePage() {
           {t('device.onDevice')}
         </h2>
         {state?.cases.length ? (
-          <table className="w-full text-sm" data-testid="device-cases">
-            <thead className="text-left text-slate-600">
-              <tr>
-                <th scope="col">{t('device.case')}</th>
-                <th scope="col">{t('device.place')}</th>
-                <th scope="col">{t('device.state')}</th>
-                <th scope="col">{t('device.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {state.cases.map((c) => (
-                <tr key={c.caseId} data-case={c.externalId} data-status={c.status}>
-                  <td className="py-1.5 font-medium">{c.externalId}</td>
-                  <td>{place(c)}</td>
-                  <td>
-                    {t(`device.status.${c.status}`)}
-                    {c.disposition && c.status !== 'started'
-                      ? ` · ${dispositionLabel(t, c.disposition)}`
-                      : ''}
-                    {c.problem ? (
-                      <span className="block text-red-ink-800">
-                        {t(`device.problems.${c.problem}`, { defaultValue: c.problem })}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="flex flex-wrap gap-2 py-1">
-                    {c.status === 'ready' || c.status === 'started' ? (
-                      <button type="button" className={smallBtn} onClick={() => void open(c)}>
-                        {c.status === 'ready' ? t('device.start') : t('device.continue')}
-                        <span className="sr-only"> {c.externalId}</span>
-                      </button>
-                    ) : null}
-                    {c.status === 'ready' && online ? (
-                      <button
-                        type="button"
-                        className={smallBtn}
-                        disabled={busy}
-                        onClick={() => void giveBack(c)}
-                      >
-                        {t('device.return')}
-                        <span className="sr-only"> {c.externalId}</span>
-                      </button>
-                    ) : null}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="device-cases">
+              <thead className="text-left text-slate-600">
+                <tr>
+                  <th scope="col">{t('device.case')}</th>
+                  <th scope="col">{t('device.place')}</th>
+                  <th scope="col">{t('device.state')}</th>
+                  <th scope="col">{t('device.actions')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {state.cases.map((c) => (
+                  <tr key={c.caseId} data-case={c.externalId} data-status={c.status}>
+                    <td className="py-1.5 font-medium">{c.externalId}</td>
+                    <td>{place(c)}</td>
+                    <td>
+                      {t(`device.status.${c.status}`)}
+                      {c.disposition && c.status !== 'started'
+                        ? ` · ${dispositionLabel(t, c.disposition)}`
+                        : ''}
+                      {c.problem ? (
+                        <span className="block text-red-ink-800">
+                          {t(`device.problems.${c.problem}`, { defaultValue: c.problem })}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="flex flex-wrap gap-2 py-1">
+                      {c.status === 'ready' || c.status === 'started' ? (
+                        <button type="button" className={smallBtn} onClick={() => void open(c)}>
+                          {c.status === 'ready' ? t('device.start') : t('device.continue')}
+                          <span className="sr-only"> {c.externalId}</span>
+                        </button>
+                      ) : null}
+                      {c.status === 'ready' && online ? (
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          disabled={busy}
+                          onClick={() => void giveBack(c)}
+                        >
+                          {t('device.return')}
+                          <span className="sr-only"> {c.externalId}</span>
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="text-slate-600">{t('device.empty')}</p>
         )}

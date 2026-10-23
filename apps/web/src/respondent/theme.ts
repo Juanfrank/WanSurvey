@@ -75,6 +75,9 @@ export function themeStyle(theme: CawiThemeView | undefined, dark: boolean): CSS
       '--color-indigo-ink-900': mix(p, 'black', 48),
       '--color-indigo-ink-950': mix(p, 'black', 35),
       backgroundColor: theme.background,
+      // The focus outline follows the brand unless it fades into the page (under 3:1).
+      '--color-focus':
+        contrast(p, theme.background) >= 3 && contrast(p, '#ffffff') >= 3 ? p : '#0b1530',
     });
   }
   const r = RADII[theme.corners];

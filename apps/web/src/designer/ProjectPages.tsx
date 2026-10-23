@@ -10,7 +10,7 @@ import { subTabCls, tabCls } from '../routes/tabs.js';
 import { api, ApiError } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field, FileInput } from '../routes/ui.js';
+import { Button, Card, ErrorText, Field, FileInput, QueryState } from '../routes/ui.js';
 import { ProjectCases, type CasesSub } from '../cases/ProjectCases.js';
 import {
   FeedbackFields,
@@ -84,9 +84,9 @@ export function ProjectsPage() {
       </div>
       {creating && <NewProjectForm onCancel={() => setCreating(false)} />}
       <Card>
-        {projects.data?.length ? (
+        <QueryState query={projects} isEmpty={!projects.data?.length} empty={t('home.noProjects')}>
           <ul className="divide-y divide-slate-100" data-testid="projects">
-            {projects.data.map((p) => (
+            {(projects.data ?? []).map((p) => (
               <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span className="flex items-center gap-3">
                   <ProjectLogo project={p} className="h-7 w-auto max-w-[6rem]" />
@@ -104,9 +104,7 @@ export function ProjectsPage() {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-slate-600">{projects.isLoading ? '…' : t('home.noProjects')}</p>
-        )}
+        </QueryState>
       </Card>
     </div>
   );
@@ -650,119 +648,123 @@ function QuestionnairesSection({
           {status}
         </p>
         {list.data?.length || feedback.data?.length ? (
-          <table className="w-full text-sm" data-testid="questionnaires">
-            <thead>
-              <tr className="text-left text-xs text-slate-600">
-                <th scope="col" className="py-1">
-                  {t('designer.name')}
-                </th>
-                <th scope="col">{t('designer.modes')}</th>
-                <th scope="col">{t('designer.latestVersion')}</th>
-                <th scope="col">{t('designer.statusCol')}</th>
-                <th scope="col">{t('designer.lastEdited')}</th>
-                <th scope="col">
-                  <span className="sr-only">{t('designer.qActions.label')}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(list.data ?? []).map((q) => (
-                <tr key={q.id}>
-                  <td className="py-2">
-                    <Link
-                      to="/projects/$projectId/questionnaires/$qid"
-                      params={{ projectId, qid: q.id }}
-                      className="font-medium text-indigo-ink-700 hover:underline"
-                    >
-                      {q.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <ModeChips modes={q.modes} />
-                  </td>
-                  <td className="font-mono">
-                    {q.latestVersion ? `v${q.latestVersion.version}` : '—'}
-                  </td>
-                  <td data-testid="q-state">
-                    {q.state !== 'active' ? (
-                      <span
-                        className={`mr-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          q.state === 'completed'
-                            ? 'bg-emerald-100 text-emerald-ink-900'
-                            : 'bg-slate-200 text-slate-800'
-                        }`}
-                      >
-                        {t(`designer.qActions.states.${q.state}`)}
-                      </span>
-                    ) : null}
-                    {q.latestVersion
-                      ? t(`designer.versions.${q.latestVersion.status}`)
-                      : t('designer.unpublished')}
-                    {q.state === 'completed' && q.successorId ? (
-                      <span className="block text-xs text-slate-600">
-                        →{' '}
-                        {t('designer.qActions.continuesIn', {
-                          name: list.data?.find((x) => x.id === q.successorId)?.name ?? '…',
-                        })}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td>{dateTime(q.updatedAt)}</td>
-                  <td className="text-right">
-                    <button
-                      type="button"
-                      className="rounded-md border border-slate-300 bg-white whitespace-nowrap px-2.5 py-1 text-sm hover:bg-slate-50"
-                      aria-haspopup="menu"
-                      aria-expanded={menuFor?.q.id === q.id}
-                      aria-label={t('designer.qActions.menu', { name: q.name })}
-                      onClick={(e) => setMenuFor({ q, at: below(e.currentTarget) })}
-                      data-testid="q-actions"
-                    >
-                      {t('designer.qActions.label')} ▾
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="questionnaires">
+              <thead>
+                <tr className="text-left text-xs text-slate-600">
+                  <th scope="col" className="py-1">
+                    {t('designer.name')}
+                  </th>
+                  <th scope="col">{t('designer.modes')}</th>
+                  <th scope="col">{t('designer.latestVersion')}</th>
+                  <th scope="col">{t('designer.statusCol')}</th>
+                  <th scope="col">{t('designer.lastEdited')}</th>
+                  <th scope="col">
+                    <span className="sr-only">{t('designer.qActions.label')}</span>
+                  </th>
                 </tr>
-              ))}
-              {(feedback.data ?? []).map((p) => {
-                const total = Object.values(p.counts).reduce((a, b) => a + b, 0);
-                return (
-                  <tr key={p.id} data-feedback={p.name}>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(list.data ?? []).map((q) => (
+                  <tr key={q.id}>
                     <td className="py-2">
-                      <button
-                        type="button"
-                        className="text-left font-medium text-indigo-ink-700 hover:underline"
-                        onClick={() => onPanel({ kind: 'feedbackDesign', name: p.name, point: p })}
+                      <Link
+                        to="/projects/$projectId/questionnaires/$qid"
+                        params={{ projectId, qid: q.id }}
+                        className="font-medium text-indigo-ink-700 hover:underline"
                       >
-                        {p.name}
-                      </button>
+                        {q.name}
+                      </Link>
                     </td>
                     <td>
-                      <ModeChips modes={['LIKERT']} />
+                      <ModeChips modes={q.modes} />
                     </td>
-                    <td className="font-mono">v{p.version}</td>
-                    <td>
-                      {p.active ? t('feedback.active') : t('feedback.inactive')} ·{' '}
-                      {t('feedback.answers', { count: total })}
-                      {total ? ` · ${t('feedback.satisfied', { pct: pct(satisfied(p)) })}` : ''}
+                    <td className="font-mono">
+                      {q.latestVersion ? `v${q.latestVersion.version}` : '—'}
                     </td>
-                    <td>{dateTime(p.updatedAt ?? p.createdAt ?? '')}</td>
+                    <td data-testid="q-state">
+                      {q.state !== 'active' ? (
+                        <span
+                          className={`mr-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            q.state === 'completed'
+                              ? 'bg-emerald-100 text-emerald-ink-900'
+                              : 'bg-slate-200 text-slate-800'
+                          }`}
+                        >
+                          {t(`designer.qActions.states.${q.state}`)}
+                        </span>
+                      ) : null}
+                      {q.latestVersion
+                        ? t(`designer.versions.${q.latestVersion.status}`)
+                        : t('designer.unpublished')}
+                      {q.state === 'completed' && q.successorId ? (
+                        <span className="block text-xs text-slate-600">
+                          →{' '}
+                          {t('designer.qActions.continuesIn', {
+                            name: list.data?.find((x) => x.id === q.successorId)?.name ?? '…',
+                          })}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td>{dateTime(q.updatedAt)}</td>
                     <td className="text-right">
                       <button
                         type="button"
-                        className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm hover:bg-slate-50"
+                        className="rounded-md border border-slate-300 bg-white whitespace-nowrap px-2.5 py-1 text-sm hover:bg-slate-50"
                         aria-haspopup="menu"
-                        aria-expanded={fbMenu?.p.id === p.id}
-                        aria-label={t('designer.qActions.menu', { name: p.name })}
-                        onClick={(e) => setFbMenu({ p, at: below(e.currentTarget) })}
+                        aria-expanded={menuFor?.q.id === q.id}
+                        aria-label={t('designer.qActions.menu', { name: q.name })}
+                        onClick={(e) => setMenuFor({ q, at: below(e.currentTarget) })}
+                        data-testid="q-actions"
                       >
                         {t('designer.qActions.label')} ▾
                       </button>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ))}
+                {(feedback.data ?? []).map((p) => {
+                  const total = Object.values(p.counts).reduce((a, b) => a + b, 0);
+                  return (
+                    <tr key={p.id} data-feedback={p.name}>
+                      <td className="py-2">
+                        <button
+                          type="button"
+                          className="text-left font-medium text-indigo-ink-700 hover:underline"
+                          onClick={() =>
+                            onPanel({ kind: 'feedbackDesign', name: p.name, point: p })
+                          }
+                        >
+                          {p.name}
+                        </button>
+                      </td>
+                      <td>
+                        <ModeChips modes={['LIKERT']} />
+                      </td>
+                      <td className="font-mono">v{p.version}</td>
+                      <td>
+                        {p.active ? t('feedback.active') : t('feedback.inactive')} ·{' '}
+                        {t('feedback.answers', { count: total })}
+                        {total ? ` · ${t('feedback.satisfied', { pct: pct(satisfied(p)) })}` : ''}
+                      </td>
+                      <td>{dateTime(p.updatedAt ?? p.createdAt ?? '')}</td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm hover:bg-slate-50"
+                          aria-haspopup="menu"
+                          aria-expanded={fbMenu?.p.id === p.id}
+                          aria-label={t('designer.qActions.menu', { name: p.name })}
+                          onClick={(e) => setFbMenu({ p, at: below(e.currentTarget) })}
+                        >
+                          {t('designer.qActions.label')} ▾
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="text-slate-600">{list.isLoading ? '…' : t('designer.noQuestionnaires')}</p>
         )}

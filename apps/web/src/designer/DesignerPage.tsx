@@ -225,10 +225,10 @@ export function DesignerPage() {
             ) : null}
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="sr-only">{d.name}</h1>
-              <label className="flex min-w-[16rem] flex-1 items-center gap-2">
+              <label className="flex min-w-0 sm:min-w-[16rem] flex-1 items-center gap-2">
                 <span className="sr-only">{t('designer.name')}</span>
                 <input
-                  className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                   value={d.name}
                   readOnly={!canEdit}
                   onChange={(e) => d.rename(e.target.value)}
@@ -901,54 +901,58 @@ function VersionsPanel({
   if (!versions.data?.length) return <Card>{t('designer.versions.none')}</Card>;
   return (
     <Card>
-      <table className="w-full text-sm" data-testid="versions">
-        <caption className="mb-2 text-left font-semibold">{t('designer.versions.title')}</caption>
-        <thead>
-          <tr className="text-left text-xs text-slate-600">
-            <th scope="col" className="py-1">
-              {t('designer.versions.version')}
-            </th>
-            <th scope="col">{t('designer.versions.status')}</th>
-            <th scope="col">{t('designer.versions.publishedAt')}</th>
-            <th scope="col">{t('designer.versions.mapping')}</th>
-            <th scope="col">
-              <span className="sr-only">{t('designer.opt.actions')}</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {versions.data.map((v) => (
-            <tr key={v.version} data-version={v.version}>
-              <td className="py-2 font-mono">v{v.version}</td>
-              <td>{t(`designer.versions.${v.status}`)}</td>
-              <td>
-                {dateTime(v.publishedAt)}
-                {v.publishedBy ? ` · ${v.publishedBy}` : ''}
-              </td>
-              <td>{v.hasMapping ? t('designer.versions.yes') : '—'}</td>
-              <td className="whitespace-nowrap text-right">
-                <button type="button" className={smallBtn} onClick={() => setViewing(v.version)}>
-                  {t('designer.versions.download')}
-                </button>{' '}
-                {canPublish && v.status === 'published' ? (
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    onClick={() => {
-                      if (
-                        window.confirm(t('designer.versions.confirmRetire', { version: v.version }))
-                      )
-                        retire.mutate(v.version);
-                    }}
-                  >
-                    {t('designer.versions.retire')}
-                  </button>
-                ) : null}
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" data-testid="versions">
+          <caption className="mb-2 text-left font-semibold">{t('designer.versions.title')}</caption>
+          <thead>
+            <tr className="text-left text-xs text-slate-600">
+              <th scope="col" className="py-1">
+                {t('designer.versions.version')}
+              </th>
+              <th scope="col">{t('designer.versions.status')}</th>
+              <th scope="col">{t('designer.versions.publishedAt')}</th>
+              <th scope="col">{t('designer.versions.mapping')}</th>
+              <th scope="col">
+                <span className="sr-only">{t('designer.opt.actions')}</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {versions.data.map((v) => (
+              <tr key={v.version} data-version={v.version}>
+                <td className="py-2 font-mono">v{v.version}</td>
+                <td>{t(`designer.versions.${v.status}`)}</td>
+                <td>
+                  {dateTime(v.publishedAt)}
+                  {v.publishedBy ? ` · ${v.publishedBy}` : ''}
+                </td>
+                <td>{v.hasMapping ? t('designer.versions.yes') : '—'}</td>
+                <td className="whitespace-nowrap text-right">
+                  <button type="button" className={smallBtn} onClick={() => setViewing(v.version)}>
+                    {t('designer.versions.download')}
+                  </button>{' '}
+                  {canPublish && v.status === 'published' ? (
+                    <button
+                      type="button"
+                      className={smallBtn}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            t('designer.versions.confirmRetire', { version: v.version }),
+                          )
+                        )
+                          retire.mutate(v.version);
+                      }}
+                    >
+                      {t('designer.versions.retire')}
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className="mt-6 border-t border-slate-200 pt-4">
         <ComparePanel projectId={projectId} qid={qid} versions={versions.data} draft={draft} />
       </div>

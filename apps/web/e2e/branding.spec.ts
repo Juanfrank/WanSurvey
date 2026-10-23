@@ -75,6 +75,7 @@ test('a project logo, and the web survey in the project colours with it', async 
   await page.getByRole('button', { name: 'Back to the default style' }).click();
   await page.getByRole('button', { name: 'Save style' }).click();
   await expect(page.getByText('Style saved.')).toBeVisible();
+  page.once('dialog', (d) => void d.accept());
   await page.getByRole('button', { name: 'Remove logo' }).click();
   await expect(page.getByText('Logo removed.')).toBeVisible();
 });

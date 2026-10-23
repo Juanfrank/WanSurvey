@@ -125,6 +125,29 @@ describe('answer controls', () => {
     expect(session.getAnswer('Q_RANK')).toEqual([1, 3, 2]);
   });
 
+  it('ranking keeps the focus on the moved option and announces its new rank', async () => {
+    const { user, q } = setup('CAWI');
+    const up = () => q('Q_RANK').getByRole('button', { name: 'Move Empleo up' });
+    await user.click(up());
+    expect(document.activeElement).toBe(up());
+    expect(q('Q_RANK').getByTestId('rank-announce').textContent).toMatch(/Empleo.*2.*3/);
+    // At the top its up arrow is disabled, so the focus moves to its down arrow.
+    await user.click(up());
+    expect(document.activeElement).toBe(
+      q('Q_RANK').getByRole('button', { name: 'Move Empleo down' }),
+    );
+    expect(q('Q_RANK').getByTestId('rank-announce').textContent).toMatch(/Empleo.*1.*3/);
+  });
+
+  it('fields with an error carry aria-invalid, warnings do not', async () => {
+    const { user, q } = setup('CAWI');
+    const age = q('Q_NUMBER').getByRole('textbox');
+    await user.type(age, 'abc');
+    expect(age.getAttribute('aria-invalid')).toBe('true');
+    await user.clear(age);
+    expect(age.getAttribute('aria-invalid')).toBeNull();
+  });
+
   it('special codes are offered to interviewers only', () => {
     expect(
       setup('CATI')

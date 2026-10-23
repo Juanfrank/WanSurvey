@@ -595,26 +595,28 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
           {t('cawi.links.download')}
         </Button>
       </div>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs text-slate-600">
-            <th scope="col" className="pr-4">
-              {t('cawi.links.case')}
-            </th>
-            <th scope="col">{t('cawi.links.url')}</th>
-            <th scope="col">{t('cawi.links.status')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(links.data ?? []).slice(0, 200).map((l) => (
-            <tr key={l.externalId} data-link={l.externalId}>
-              <td className="pr-4 font-mono">{l.externalId}</td>
-              <td className="break-all font-mono text-xs">{withParams(l.url)}</td>
-              <td>{t(`cawi.links.statuses.${l.status}`)}</td>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-600">
+              <th scope="col" className="pr-4">
+                {t('cawi.links.case')}
+              </th>
+              <th scope="col">{t('cawi.links.url')}</th>
+              <th scope="col">{t('cawi.links.status')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {(links.data ?? []).slice(0, 200).map((l) => (
+              <tr key={l.externalId} data-link={l.externalId}>
+                <td className="pr-4 font-mono">{l.externalId}</td>
+                <td className="break-all font-mono text-xs">{withParams(l.url)}</td>
+                <td>{t(`cawi.links.statuses.${l.status}`)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {(links.data?.length ?? 0) > 200 ? (
         <p className="text-xs text-slate-600">
           {t('cawi.links.more', { count: (links.data?.length ?? 0) - 200 })}

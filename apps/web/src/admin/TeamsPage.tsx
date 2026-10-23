@@ -5,7 +5,7 @@ import { api, ApiError } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import { Button, Card, ErrorText, Field, QueryState } from '../routes/ui.js';
 
 interface Team {
   id: string;
@@ -61,15 +61,14 @@ export function TeamsPage() {
       <p className="-mt-3 max-w-3xl text-slate-600">
         {t('admin.teamsPage.intro')} {canManage ? '' : t('admin.teamsPage.readOnly')}
       </p>
-      {notice ? (
-        <p
-          role="status"
-          className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-ink-800"
-        >
-          {t(notice.key, { name: notice.name })}
-        </p>
-      ) : null}
+      <p
+        role="status"
+        className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-ink-800 empty:hidden"
+      >
+        {notice ? t(notice.key, { name: notice.name }) : null}
+      </p>
       {remove.isError ? <ErrorText>{t('admin.teamsPage.errors.generic')}</ErrorText> : null}
+      <QueryState query={teams}>{null}</QueryState>
       {teams.data && teams.data.length === 0 ? (
         <Card>
           <p className="text-slate-600">{t('admin.teamsPage.none')}</p>

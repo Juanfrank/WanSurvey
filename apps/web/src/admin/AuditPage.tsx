@@ -65,7 +65,7 @@ export function AuditPage() {
       <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.log.intro')}</p>
       <Card className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-[14rem] flex-col gap-1 text-sm font-medium text-slate-700">
+          <label className="flex min-w-0 sm:min-w-[14rem] flex-col gap-1 text-sm font-medium text-slate-700">
             {t('admin.log.action')}
             <select className={inputCls} value={action} onChange={(e) => setAction(e.target.value)}>
               <option value="">{t('admin.log.anyAction')}</option>
@@ -81,7 +81,7 @@ export function AuditPage() {
             </select>
           </label>
           {people.data ? (
-            <label className="flex min-w-[12rem] flex-col gap-1 text-sm font-medium text-slate-700">
+            <label className="flex min-w-0 sm:min-w-[12rem] flex-col gap-1 text-sm font-medium text-slate-700">
               {t('admin.log.who')}
               <select className={inputCls} value={actor} onChange={(e) => setActor(e.target.value)}>
                 <option value="">{t('admin.log.anyone')}</option>

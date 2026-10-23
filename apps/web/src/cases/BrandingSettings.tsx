@@ -107,7 +107,9 @@ export function BrandingSettings({ project }: { project: Project }) {
               type="button"
               className={smallBtn}
               disabled={removeLogo.isPending}
-              onClick={() => removeLogo.mutate()}
+              onClick={() => {
+                if (window.confirm(t('cases.look.confirmRemove'))) removeLogo.mutate();
+              }}
             >
               {t('cases.look.remove')}
             </button>

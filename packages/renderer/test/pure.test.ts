@@ -3,6 +3,7 @@ import { parse } from '@wansurvey/logic';
 import { describeCondition, printExpr, type DescribeContext } from '../src/describe.js';
 import { matchTypedCode } from '../src/keyboard.js';
 import { paperText } from '../src/PaperForm.js';
+import { scaleColor } from '../src/scaleColors.js';
 
 describe('typed codes', () => {
   it('selects at once when no longer code could follow, waits otherwise', () => {
@@ -62,5 +63,31 @@ describe('paper conditions', () => {
       'Name of [your wife / your husband]',
     );
     expect(paperText('{{roster.HH[i].NAME}} {{Q7 | label}}')).toBe('________ ________');
+  });
+});
+
+describe('scale colours', () => {
+  const lum = (hsl: string) => {
+    const [h, sat, l] = hsl.match(/[\d.]+/g)!.map(Number) as [number, number, number];
+    const a = (sat / 100) * Math.min(l / 100, 1 - l / 100);
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      const c = l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(0) + 0.7152 * f(8) + 0.0722 * f(4);
+  };
+  const hex = (x: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(x.slice(i, i + 2), 16) / 255);
+    const f = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * f(r!) + 0.7152 * f(g!) + 0.0722 * f(b!);
+  };
+  it('writes the chosen point in a colour that reads on its fill (4.5:1)', () => {
+    for (const palette of ['nps', 'diverging', 'sequential'] as const)
+      for (let n = 0; n <= 10; n++) {
+        const c = scaleColor(palette, n, 0, 10)!;
+        const [x, y] = [lum(c.fill), hex(c.ink)].sort((p, q) => q - p);
+        expect((x! + 0.05) / (y! + 0.05), `${palette} ${n}`).toBeGreaterThanOrEqual(4.5);
+      }
   });
 });

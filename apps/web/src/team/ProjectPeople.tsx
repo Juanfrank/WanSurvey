@@ -98,73 +98,75 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
         {data && !data.members.length ? (
           <p className="text-slate-600">{t('team.projectPeople.none')}</p>
         ) : (
-          <table className="w-full text-left text-sm" aria-busy={people.isLoading}>
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="py-2 pr-4 font-semibold">{t('team.projectPeople.person')}</th>
-                <th className="py-2 pr-4 font-semibold">{t('team.projectPeople.role')}</th>
-                <th className="py-2 pr-4 font-semibold">{t('team.projectPeople.orgRole')}</th>
-                {data?.canManage ? (
-                  <th className="py-2 font-semibold">
-                    <span className="sr-only">{t('team.projectPeople.actions')}</span>
-                  </th>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.members ?? []).map((m) => {
-                const mine = data!.grantable.includes(m.role) && m.userId !== me.data?.user.id;
-                return (
-                  <tr key={m.userId} data-person={m.email} className="border-b border-slate-100">
-                    <td className="py-2 pr-4">
-                      <div className="font-medium">{m.name}</div>
-                      <div className="text-xs text-slate-500">{m.email}</div>
-                    </td>
-                    <td className="py-2 pr-4">
-                      <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-ink-700">
-                        {roleName(m.role)}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 text-xs text-slate-600">
-                      {m.orgRole ? roleName(m.orgRole) : '—'}
-                    </td>
-                    {data?.canManage ? (
-                      <td className="py-2">
-                        {mine ? (
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              className={smallBtn}
-                              aria-label={t('team.projectPeople.change', { name: m.name })}
-                              onClick={() => setEditing({ userId: m.userId, role: m.role })}
-                            >
-                              {t('team.projectPeople.changeShort')}
-                            </button>
-                            <button
-                              type="button"
-                              className={smallBtn}
-                              aria-label={t('team.projectPeople.remove', { name: m.name })}
-                              disabled={save.isPending}
-                              onClick={() => {
-                                if (
-                                  window.confirm(
-                                    t('team.projectPeople.confirmRemove', { name: m.name }),
-                                  )
-                                )
-                                  save.mutate({ userId: m.userId, role: null });
-                              }}
-                            >
-                              {t('team.projectPeople.removeShort')}
-                            </button>
-                          </div>
-                        ) : null}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm" aria-busy={people.isLoading}>
+              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4 font-semibold">{t('team.projectPeople.person')}</th>
+                  <th className="py-2 pr-4 font-semibold">{t('team.projectPeople.role')}</th>
+                  <th className="py-2 pr-4 font-semibold">{t('team.projectPeople.orgRole')}</th>
+                  {data?.canManage ? (
+                    <th className="py-2 font-semibold">
+                      <span className="sr-only">{t('team.projectPeople.actions')}</span>
+                    </th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {(data?.members ?? []).map((m) => {
+                  const mine = data!.grantable.includes(m.role) && m.userId !== me.data?.user.id;
+                  return (
+                    <tr key={m.userId} data-person={m.email} className="border-b border-slate-100">
+                      <td className="py-2 pr-4">
+                        <div className="font-medium">{m.name}</div>
+                        <div className="text-xs text-slate-500">{m.email}</div>
                       </td>
-                    ) : null}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td className="py-2 pr-4">
+                        <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-ink-700">
+                          {roleName(m.role)}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4 text-xs text-slate-600">
+                        {m.orgRole ? roleName(m.orgRole) : '—'}
+                      </td>
+                      {data?.canManage ? (
+                        <td className="py-2">
+                          {mine ? (
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                className={smallBtn}
+                                aria-label={t('team.projectPeople.change', { name: m.name })}
+                                onClick={() => setEditing({ userId: m.userId, role: m.role })}
+                              >
+                                {t('team.projectPeople.changeShort')}
+                              </button>
+                              <button
+                                type="button"
+                                className={smallBtn}
+                                aria-label={t('team.projectPeople.remove', { name: m.name })}
+                                disabled={save.isPending}
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      t('team.projectPeople.confirmRemove', { name: m.name }),
+                                    )
+                                  )
+                                    save.mutate({ userId: m.userId, role: null });
+                                }}
+                              >
+                                {t('team.projectPeople.removeShort')}
+                              </button>
+                            </div>
+                          ) : null}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
       {editing && data ? (

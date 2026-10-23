@@ -535,7 +535,7 @@ export function Outline({
                 }
                 data-id={node.id}
                 data-testid="outline-item"
-                className={`flex cursor-pointer items-center gap-1.5 py-1 pr-2 aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 data-[drop=after]:shadow-[inset_0_-2px_0_0_#4338ca] data-[drop=before]:shadow-[inset_0_2px_0_0_#4338ca] data-[drop=inside]:bg-indigo-50 data-[drop=inside]:ring-2 data-[drop=inside]:ring-inset data-[drop=inside]:ring-indigo-400 ${dragId === node.id ? 'opacity-50' : ''}`}
+                className={`flex cursor-pointer items-center gap-1.5 py-1 pr-2 aria-selected:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus data-[drop=after]:shadow-[inset_0_-2px_0_0_#4338ca] data-[drop=before]:shadow-[inset_0_2px_0_0_#4338ca] data-[drop=inside]:bg-indigo-50 data-[drop=inside]:ring-2 data-[drop=inside]:ring-inset data-[drop=inside]:ring-indigo-400 ${dragId === node.id ? 'opacity-50' : ''}`}
                 style={{ paddingLeft: `${0.5 + depth * 1.1}rem` }}
                 onClick={() => go(node.id)}
                 onFocus={() => selected !== node.id && onSelect(node.id)}
