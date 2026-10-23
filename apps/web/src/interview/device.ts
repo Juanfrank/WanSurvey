@@ -1,5 +1,5 @@
 import { api, ApiError } from '../api.js';
-import { InterviewStore, type DeviceCase, DeviceError } from './store.js';
+import { InterviewStore, type DeviceCase, DeviceError, keepStorage } from './store.js';
 import { Syncer } from './sync.js';
 
 interface CheckoutResponse {
@@ -45,6 +45,8 @@ async function withStore<T>(fn: (store: InterviewStore) => Promise<T>): Promise<
  */
 export function downloadCases(projectId: string, caseIds: string[]) {
   return withStore(async (store) => {
+    // Cases on the device must not be evicted before they are interviewed and synced.
+    await keepStorage();
     const deviceId = await store.deviceId();
     const r = await api<CheckoutResponse>(`/projects/${projectId}/capi/checkout`, {
       method: 'POST',

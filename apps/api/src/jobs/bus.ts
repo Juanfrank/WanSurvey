@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { Logger } from '@nestjs/common';
 import { Redis } from 'ioredis';
 
 /**
@@ -39,17 +40,32 @@ export class RedisBus implements Bus {
   private readonly local = new LocalBus();
   private readonly counts = new Map<string, number>();
 
+  private readonly logger = new Logger('Bus');
+
   constructor(private readonly url: string) {
-    this.pub = new Redis(url, { lazyConnect: true });
+    // Notifications are best effort (dashboards also refresh on their own): publishing never
+    // waits for an unreachable Redis, and its errors are logged, never thrown.
+    this.pub = new Redis(url, {
+      lazyConnect: true,
+      enableOfflineQueue: false,
+      maxRetriesPerRequest: 1,
+    });
+    this.pub.on('error', (e: Error) => this.logger.warn(`Redis (publish): ${e.message}`));
   }
 
   async publish(channel: string, message: Record<string, unknown>) {
-    await this.pub.publish(channel, JSON.stringify(message));
+    try {
+      if (this.pub.status === 'wait') await this.pub.connect();
+      await this.pub.publish(channel, JSON.stringify(message));
+    } catch (e) {
+      this.logger.warn(`Not published on ${channel}: ${(e as Error).message}`);
+    }
   }
 
   subscribe(channel: string, fn: (message: Record<string, unknown>) => void) {
     if (!this.sub) {
       this.sub = new Redis(this.url);
+      this.sub.on('error', (e: Error) => this.logger.warn(`Redis (subscribe): ${e.message}`));
       this.sub.on('message', (ch: string, raw: string) => {
         try {
           void this.local.publish(ch, JSON.parse(raw) as Record<string, unknown>);
@@ -59,7 +75,7 @@ export class RedisBus implements Bus {
       });
     }
     const n = this.counts.get(channel) ?? 0;
-    if (n === 0) void this.sub.subscribe(channel);
+    if (n === 0) this.sub.subscribe(channel).catch((e: Error) => this.fail('subscribe', e));
     this.counts.set(channel, n + 1);
     const off = this.local.subscribe(channel, fn);
     return () => {
@@ -68,9 +84,13 @@ export class RedisBus implements Bus {
       this.counts.set(channel, left);
       if (left === 0) {
         this.counts.delete(channel);
-        void this.sub?.unsubscribe(channel);
+        this.sub?.unsubscribe(channel).catch((e: Error) => this.fail('unsubscribe', e));
       }
     };
+  }
+
+  private fail(what: string, e: Error) {
+    this.logger.warn(`Redis ${what} failed: ${e.message}`);
   }
 
   async close() {

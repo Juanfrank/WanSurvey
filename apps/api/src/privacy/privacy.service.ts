@@ -82,7 +82,7 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
     // Plain personal fields (written before encryption, or by a field newly marked personal)
     // are sealed when the worker starts, then every hour.
     if (this.role === 'worker' && !this.jobs.inline)
-      await this.jobs.enqueue('pii.encrypt', {}, { jobId: 'startup', delayMs: 5000 });
+      await this.jobs.offer('pii.encrypt', {}, { delayMs: 5000 });
   }
 
   /** Seals the personal fields still held in plain text in one project. */

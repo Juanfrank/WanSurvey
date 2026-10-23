@@ -100,19 +100,39 @@ export interface LocalInterview {
 const DB = 'wansurvey';
 const VERSION = 2;
 
+/** A full device reads as such (nothing was written), anything else as it is. */
+const storageError = (e: DOMException | null, fallback: string): Error =>
+  e?.name === 'QuotaExceededError'
+    ? new DeviceError('STORAGE_FULL', 'This device has no space left for offline data')
+    : (e ?? new Error(fallback));
+
 function req<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error ?? new Error('IndexedDB request failed'));
+    r.onerror = () => reject(storageError(r.error, 'IndexedDB request failed'));
   });
 }
 
 function done(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
-    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    tx.onerror = () => reject(storageError(tx.error, 'IndexedDB transaction failed'));
+    tx.onabort = () => reject(storageError(tx.error, 'IndexedDB transaction aborted'));
   });
+}
+
+/**
+ * Asks the browser to keep this site's data under storage pressure (and past Safari's seven
+ * days without a visit), so interviews not yet synced are never evicted. Returns whether it
+ * agreed; browsers that cannot say answer false.
+ */
+export async function keepStorage(): Promise<boolean> {
+  try {
+    if (await navigator.storage?.persisted?.()) return true;
+    return (await navigator.storage?.persist?.()) ?? false;
+  } catch {
+    return false;
+  }
 }
 
 /** A problem on this device, with a code the interface translates (`apiError.<code>`). */
@@ -145,7 +165,21 @@ export class InterviewStore {
         db.createObjectStore('cases', { keyPath: 'caseId' }).createIndex('project', 'projectId');
       }
     };
-    return new InterviewStore(await req(open));
+    // Another tab holding the old version blocks an upgrade: say so instead of waiting.
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(storageError(open.error, 'IndexedDB open failed'));
+      open.onblocked = () =>
+        reject(
+          new DeviceError(
+            'STORAGE_BLOCKED',
+            'Close the other WanSurvey tabs on this device, then try again',
+          ),
+        );
+    });
+    // A newer version opened elsewhere: let it upgrade (this tab reopens on next use).
+    db.onversionchange = () => db.close();
+    return new InterviewStore(db);
   }
 
   close() {

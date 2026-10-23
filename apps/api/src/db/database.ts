@@ -30,6 +30,37 @@ export function pgCode(e: unknown): string | undefined {
   return undefined;
 }
 
+/** The database cannot be reached now (failover, restart, no free connection). */
+const UNAVAILABLE = new Set(['57P01', '57P02', '57P03', '53300']);
+const DRIVER_UNAVAILABLE = new Set([
+  'CONNECT_TIMEOUT',
+  'CONNECTION_CLOSED',
+  'CONNECTION_DESTROYED',
+  'CONNECTION_ENDED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+]);
+
+function unavailable(e: unknown): boolean {
+  const code = pgCode(e);
+  if (code && (UNAVAILABLE.has(code) || code.startsWith('08'))) return true;
+  for (let x = e as { code?: unknown; cause?: unknown } | undefined, i = 0; x && i < 4; i++) {
+    if (typeof x.code === 'string' && DRIVER_UNAVAILABLE.has(x.code)) return true;
+    x = x.cause as typeof x;
+  }
+  return false;
+}
+
+/** An error worth trying again later: busy, unreachable, or a 503 made from one. */
+export function isTransient(e: unknown): boolean {
+  const code = pgCode(e);
+  if (code && (BUSY.has(code) || RETRYABLE.has(code))) return true;
+  if (unavailable(e)) return true;
+  return e instanceof ServiceUnavailableException;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface AuthUserRow {
@@ -145,7 +176,7 @@ export class Database implements OnModuleDestroy {
           await new Promise((ok) => setTimeout(ok, 20 * attempt + Math.random() * 50));
           continue;
         }
-        if (code && BUSY.has(code))
+        if ((code && BUSY.has(code)) || unavailable(e))
           throw new ServiceUnavailableException({
             code: 'BUSY',
             message: 'The server is busy; please try again in a moment',

@@ -40,17 +40,18 @@ API and worker read the same environment (validated at start; see `apps/api/.env
 
 ## Background jobs
 
-| Job                 | When                                                     | What                                                                                            |
-| ------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `mail.dispatch`     | every 15 s                                               | Sends queued invitations and due reminders, up to 200 per organisation per run                  |
-| `stats.refresh`     | after each submission or review decision (debounced 1 s) | Recomputes one project day of `stats_daily`, then announces it to dashboards                    |
-| `stats.nightly`     | 02:00 UTC                                                | Recomputes all daily figures                                                                    |
-| `exports.build`     | on request                                               | Builds an export file (up to 100 MB)                                                            |
-| `pii.encrypt`       | at worker start, then hourly                             | Seals personal sample fields still in plain text (for example after a field is marked personal) |
-| `privacy.retention` | 02:30 UTC                                                | Removes personal data from cases past their project's retention period                          |
-| `bi.refresh`        | `BI_REFRESH_CRON` (hourly at :20 UTC)                    | Refreshes the analysis model, schema `bi` ([bi.md](bi.md))                                      |
+| Job                 | When                                                     | What                                                                                                     |
+| ------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `mail.dispatch`     | every 15 s                                               | Sends queued invitations and due reminders, up to 200 per organisation per run                           |
+| `stats.refresh`     | after each submission or review decision (debounced 1 s) | Recomputes one project day of `stats_daily`, then announces it to dashboards                             |
+| `stats.nightly`     | 02:00 UTC                                                | Recomputes all daily figures                                                                             |
+| `exports.build`     | on request                                               | Builds an export file (up to 100 MB)                                                                     |
+| `pii.encrypt`       | at worker start, then hourly                             | Seals personal sample fields still in plain text (for example after a field is marked personal)          |
+| `privacy.retention` | 02:30 UTC                                                | Removes personal data from cases past their project's retention period                                   |
+| `bi.refresh`        | `BI_REFRESH_CRON` (hourly at :20 UTC)                    | Refreshes the analysis model, schema `bi` ([bi.md](bi.md))                                               |
+| `jobs.sweep`        | every 5 minutes                                          | Requeues exports and scanned batches left queued or abandoned by a lost worker; fails them after 3 tries |
 
-Failed jobs retry three times with backoff; the last 100 failures are kept in Redis for inspection. Without the worker, e-mail stops, dashboards stop updating and exports stay queued; the API keeps working.
+Failed jobs retry three times with backoff; the last 500 failures (a week at most) are kept in Redis for inspection. Without the worker, e-mail stops, dashboards stop updating and exports stay queued; the API keeps working. Without Redis, the API still answers: jobs are not queued (submissions, exports and uploads go through; the sweeper and the nightly recompute catch up), live notices are skipped and rate limits are not counted.
 
 ## Backups and restore
 

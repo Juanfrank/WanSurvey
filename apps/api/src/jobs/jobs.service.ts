@@ -25,6 +25,23 @@ const HEAVY_QUEUE = 'wansurvey-heavy';
 const HEAVY = new Set(['exports.build', 'papi.scan']);
 /** Failed jobs are kept a week (at most 500) to look into, then dropped. */
 const KEEP_FAILED = { count: 500, age: 7 * 24 * 3600 };
+/** Longest wait for Redis to take a job. */
+const ENQUEUE_TIMEOUT_MS = 3000;
+
+const withTimeout = <T>(ms: number, p: Promise<T>): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Redis did not answer in ${ms} ms`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(t);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      },
+    );
+  });
 
 interface Schedule {
   name: string;
@@ -49,6 +66,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   private heavyQueue: Queue | null = null;
   private readonly workers: Worker[] = [];
   private connection: Redis | null = null;
+  private producer: Redis | null = null;
   private readonly intervals = new Set<ReturnType<typeof setInterval>>();
   /** Inline mode: jobs waiting for their delay (by key) and jobs running. */
   private readonly waiting = new Map<string, () => void>();
@@ -60,9 +78,37 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     @Inject(PROCESS_ROLE) private readonly role: ProcessRole,
   ) {
     if (config.REDIS_URL) {
+      // Workers block on Redis and wait for it to come back; producers fail fast instead, so a
+      // request never hangs on an unreachable Redis (BullMQ's advice for queues).
       this.connection = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
-      this.queue = new Queue(QUEUE, { connection: this.connection });
-      this.heavyQueue = new Queue(HEAVY_QUEUE, { connection: this.connection });
+      this.producer = new Redis(config.REDIS_URL, {
+        enableOfflineQueue: false,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 5000,
+      });
+      for (const c of [this.connection, this.producer])
+        c.on('error', (e: Error) => this.logger.warn(`Redis: ${e.message}`));
+      this.queue = new Queue(QUEUE, { connection: this.producer });
+      this.heavyQueue = new Queue(HEAVY_QUEUE, { connection: this.producer });
+    }
+  }
+
+  /**
+   * Enqueues without ever failing the caller: when Redis is unavailable the job is logged as
+   * not queued, and the work is picked up later (the sweeper, the next schedule or the
+   * nightly recompute).
+   */
+  async offer(
+    name: string,
+    data: Record<string, unknown> = {},
+    opts: { jobId?: string; delayMs?: number } = {},
+  ): Promise<boolean> {
+    try {
+      await this.enqueue(name, data, opts);
+      return true;
+    } catch (e) {
+      this.logger.warn(`Job ${name} not queued: ${(e as Error).message}`);
+      return false;
     }
   }
 
@@ -86,15 +132,18 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   ): Promise<void> {
     if (this.queue) {
       const queue = HEAVY.has(name) ? this.heavyQueue! : this.queue;
-      await queue.add(name, data, {
-        // BullMQ job ids may not contain ':' (it separates Redis keys).
-        ...(opts.jobId ? { jobId: `${name}.${opts.jobId}`.replaceAll(':', '_') } : {}),
-        delay: opts.delayMs ?? 0,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: true,
-        removeOnFail: KEEP_FAILED,
-      });
+      await withTimeout(
+        ENQUEUE_TIMEOUT_MS,
+        queue.add(name, data, {
+          // BullMQ job ids may not contain ':' (it separates Redis keys).
+          ...(opts.jobId ? { jobId: `${name}.${opts.jobId}`.replaceAll(':', '_') } : {}),
+          delay: opts.delayMs ?? 0,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: true,
+          removeOnFail: KEEP_FAILED,
+        }),
+      );
       return;
     }
     const key = opts.jobId ? `${name}.${opts.jobId}` : `${name}.${++this.seq}`;
@@ -174,6 +223,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.queue?.close();
     await this.heavyQueue?.close();
     this.connection?.disconnect();
+    this.producer?.disconnect();
     await closeThrottleStorage();
   }
 }

@@ -879,6 +879,8 @@ export const invitations = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
     remindersSent: integer('reminders_sent').notNull().default(0),
     lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
+    /** A dispatcher took it to send until this time; after it, another may (lost worker). */
+    leaseUntil: timestamp('lease_until', { withTimezone: true }),
     lastError: text('last_error'),
     interviewId: uuid('interview_id'),
   },
@@ -1058,6 +1060,9 @@ export const exports = pgTable(
     error: text('error'),
     createdAt: createdAt(),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** When the last attempt started, and how many there were (stuck jobs are retried). */
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
   },
   (t) => [index('exports_project_idx').on(t.tenantId, t.projectId, t.createdAt)],
 );
@@ -1280,6 +1285,9 @@ export const papiScanBatches = pgTable(
     error: text('error'),
     createdAt: createdAt(),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** When the last attempt started, and how many there were (stuck jobs are retried). */
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
   },
   (t) => [index('papi_scan_batches_project_idx').on(t.tenantId, t.projectId, t.createdAt)],
 );

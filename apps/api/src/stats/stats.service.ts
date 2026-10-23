@@ -23,6 +23,9 @@ export function localDay(at: Date, timeZone: string): string {
  * enqueues a refresh of that day (debounced by job id), the worker recomputes the day from the
  * interviews and announces the change, and a nightly job recomputes everything to fix drift.
  */
+/** Submissions within this window share one refresh of the day's figures. */
+const REFRESH_WINDOW_MS = 5000;
+
 @Injectable()
 export class StatsService implements OnModuleInit {
   private readonly logger = new Logger('Stats');
@@ -52,10 +55,13 @@ export class StatsService implements OnModuleInit {
       .from(projects)
       .where(eq(projects.id, projectId));
     const day = localDay(at, p?.tz ?? 'UTC');
-    await this.jobs.enqueue(
+    // At most one refresh per project day every few seconds. The id changes with the time
+    // window, so a refresh already running (or one that failed) never swallows later ones; it
+    // is queued without waiting on Redis, and the nightly recompute covers a lost one.
+    void this.jobs.offer(
       'stats.refresh',
       { tenantId, projectId, day },
-      { jobId: `${projectId}.${day}`, delayMs: 1000 },
+      { jobId: `${projectId}.${day}.${Math.floor(Date.now() / REFRESH_WINDOW_MS)}`, delayMs: 1000 },
     );
   }
 

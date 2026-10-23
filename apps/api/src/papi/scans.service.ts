@@ -10,6 +10,7 @@ import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
+import { claimable } from '../jobs/claims.js';
 import { Database, type Tx } from '../db/database.js';
 import {
   cases,
@@ -175,22 +176,24 @@ export class ScansService implements OnModuleInit {
       );
       return out;
     });
+    // A batch not queued now (Redis away) is taken by the sweeper.
     for (const id of ids)
-      await this.jobs.enqueue(
-        JOB,
-        { tenantId: ctx.tenantId, batchId: id },
-        { jobId: `scan-${id}` },
-      );
+      await this.jobs.offer(JOB, { tenantId: ctx.tenantId, batchId: id }, { jobId: `scan-${id}` });
     return { batches: ids };
   }
 
   /** Reads one uploaded PDF: splits it into forms, reads the marks and makes the interviews. */
   async process(tenantId: string, batchId: string) {
     const batch = await this.database.withTenant(tenantId, async (tx) => {
+      // Taken once: a queued batch, or one whose worker was lost (running for too long).
       const [b] = await tx
         .update(papiScanBatches)
-        .set({ status: 'running' })
-        .where(and(eq(papiScanBatches.id, batchId), eq(papiScanBatches.status, 'queued')))
+        .set({
+          status: 'running',
+          startedAt: new Date(),
+          attempts: sql`${papiScanBatches.attempts} + 1`,
+        })
+        .where(and(eq(papiScanBatches.id, batchId), claimable(papiScanBatches)))
         .returning();
       return b;
     });

@@ -253,6 +253,13 @@
       "when": 1793100000000,
       "tag": "0035_bi_model_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793200000000,
+      "tag": "0036_resilience",
+      "breakpoints": true
     }
   ]
 }

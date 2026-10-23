@@ -96,6 +96,8 @@ export const messagesEn = {
     BUSY: 'The server is busy right now. Please try again in a moment.',
     CALL_OPEN: 'Finish the call in progress first.',
     NO_OFFLINE_STORAGE: 'This browser cannot store data offline.',
+    STORAGE_FULL: 'This device has no space left for offline interviews. Sync and free some space.',
+    STORAGE_BLOCKED: 'Close the other WanSurvey tabs on this device, then try again.',
     CASE_NOT_ON_DEVICE: 'This case is not on this device.',
     VERSION_NOT_ON_DEVICE: 'The questionnaire is not on this device.',
     CANNOT_CALL: 'This case cannot be called now.',
@@ -249,6 +251,10 @@ export const messagesEs: MessagesCatalogue = {
     BUSY: 'El servidor está ocupado en este momento. Inténtelo de nuevo en unos segundos.',
     CALL_OPEN: 'Termine primero la llamada en curso.',
     NO_OFFLINE_STORAGE: 'Este navegador no puede guardar datos sin conexión.',
+    STORAGE_FULL:
+      'Este dispositivo no tiene espacio para entrevistas sin conexión. Sincronice y libere espacio.',
+    STORAGE_BLOCKED:
+      'Cierre las otras pestañas de WanSurvey en este dispositivo e intente de nuevo.',
     CASE_NOT_ON_DEVICE: 'Este caso no está en este dispositivo.',
     VERSION_NOT_ON_DEVICE: 'El cuestionario no está en este dispositivo.',
     CANNOT_CALL: 'Este caso no se puede llamar ahora.',

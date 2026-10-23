@@ -42,9 +42,7 @@ export class WaveDispatcher implements OnModuleInit {
       }
       for (const tenantId of due) {
         try {
-          sent += await this.database.withTenant(tenantId, (tx) =>
-            this.cawi.dispatch(tx, tenantId, now),
-          );
+          sent += await this.cawi.dispatch(tenantId, now);
         } catch (e) {
           this.logger.error(`Dispatch failed for ${tenantId}: ${(e as Error).message}`);
         }

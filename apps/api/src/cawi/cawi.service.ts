@@ -4,6 +4,7 @@ import {
   GoneException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -89,6 +90,8 @@ export const RespondentSync = SyncItem.omit({ id: true, start: true }).extend({
 const MAX_SEND_ATTEMPTS = 5;
 /** E-mails per organisation and run of the dispatcher. */
 export const DISPATCH_BATCH = 200;
+/** How long a dispatcher keeps the invitations it took; after that another run may take them. */
+const DISPATCH_LEASE_MS = 10 * 60_000;
 
 type InvitationRow = typeof invitations.$inferSelect;
 
@@ -101,6 +104,8 @@ const lower = (e: string) => e.trim().toLowerCase();
  */
 @Injectable()
 export class CawiService implements OnModuleInit {
+  private readonly logger = new Logger('Cawi');
+
   constructor(
     private readonly database: Database,
     private readonly cases: CasesService,
@@ -572,79 +577,130 @@ export class CawiService implements OnModuleInit {
   // Dispatch (called by the dispatcher, per organisation)
   // -------------------------------------------------------------------------
 
-  /** Sends queued invitations and due reminders of one organisation. Returns how many went out. */
-  async dispatch(tx: Tx, tenantId: string, now = new Date(), limit = DISPATCH_BATCH) {
-    let sent = 0;
-    const queued = await tx
-      .select({ inv: invitations, wave: waves })
-      .from(invitations)
-      .innerJoin(waves, eq(waves.id, invitations.waveId))
-      .where(
-        and(
-          eq(invitations.status, 'queued'),
-          sql`(${waves.sendAt} is null or ${waves.sendAt} <= ${now.toISOString()}::timestamptz)`,
-          // A disabled or completed questionnaire sends nothing; queued mail waits.
-          sql`exists (select 1 from questionnaires qq where qq.id = ${invitations.questionnaireId}
-                and qq.state = 'active')`,
-        ),
-      )
-      .orderBy(asc(invitations.queuedAt))
-      .limit(limit)
-      .for('update', { of: invitations, skipLocked: true });
-    for (const { inv } of queued)
-      if (await this.sendOne(tx, tenantId, inv, 'invitation', now)) sent++;
+  /**
+   * Sends queued invitations and due reminders of one organisation. Returns how many went out.
+   * A batch is taken under a lease in one short transaction; then each message is prepared,
+   * sent and recorded on its own, so a lost worker or a failed commit resends at most the one
+   * message in flight, and no row stays locked while the mail server answers.
+   */
+  async dispatch(tenantId: string, now = new Date(), limit = DISPATCH_BATCH) {
+    const lease = new Date(now.getTime() + DISPATCH_LEASE_MS);
+    const free = sql`(${invitations.leaseUntil} is null or ${invitations.leaseUntil} < ${now.toISOString()}::timestamptz)`;
+    const active = sql`exists (select 1 from questionnaires qq where qq.id = ${invitations.questionnaireId}
+                and qq.state = 'active')`;
+    const batch = await this.database.withTenant(tenantId, async (tx) => {
+      const queued = await tx
+        .select({ inv: invitations })
+        .from(invitations)
+        .innerJoin(waves, eq(waves.id, invitations.waveId))
+        .where(
+          and(
+            eq(invitations.status, 'queued'),
+            free,
+            sql`(${waves.sendAt} is null or ${waves.sendAt} <= ${now.toISOString()}::timestamptz)`,
+            // A disabled or completed questionnaire sends nothing; queued mail waits.
+            active,
+          ),
+        )
+        .orderBy(asc(invitations.queuedAt))
+        .limit(limit)
+        .for('update', { of: invitations, skipLocked: true });
+      const due = await tx
+        .select({ inv: invitations })
+        .from(invitations)
+        .innerJoin(waves, eq(waves.id, invitations.waveId))
+        .where(
+          and(
+            eq(invitations.status, 'sent'),
+            isNull(invitations.completedAt),
+            free,
+            active,
+            sql`${invitations.remindersSent} < cardinality(${waves.reminderDays})`,
+            sql`${invitations.sentAt} + (${waves.reminderDays}[${invitations.remindersSent} + 1] * interval '1 day') <= ${now.toISOString()}::timestamptz`,
+          ),
+        )
+        .limit(limit)
+        .for('update', { of: invitations, skipLocked: true });
+      const items = [
+        ...queued.map((r) => ({ inv: r.inv, kind: 'invitation' as TemplateKind })),
+        ...due.map((r) => ({ inv: r.inv, kind: 'reminder' as TemplateKind })),
+      ];
+      if (items.length)
+        await tx
+          .update(invitations)
+          .set({ leaseUntil: lease })
+          .where(
+            inArray(
+              invitations.id,
+              items.map((i) => i.inv.id),
+            ),
+          );
+      return items;
+    });
 
-    const due = await tx
-      .select({ inv: invitations, wave: waves })
-      .from(invitations)
-      .innerJoin(waves, eq(waves.id, invitations.waveId))
-      .where(
-        and(
-          eq(invitations.status, 'sent'),
-          isNull(invitations.completedAt),
-          sql`exists (select 1 from questionnaires qq where qq.id = ${invitations.questionnaireId}
-                and qq.state = 'active')`,
-          sql`${invitations.remindersSent} < cardinality(${waves.reminderDays})`,
-          sql`${invitations.sentAt} + (${waves.reminderDays}[${invitations.remindersSent} + 1] * interval '1 day') <= ${now.toISOString()}::timestamptz`,
-        ),
-      )
-      .limit(limit)
-      .for('update', { of: invitations, skipLocked: true });
-    for (const { inv } of due) if (await this.sendOne(tx, tenantId, inv, 'reminder', now)) sent++;
+    let sent = 0;
+    const memo = new Map<string, Promise<unknown>>();
+    for (const { inv, kind } of batch) {
+      try {
+        if (await this.sendOne(tenantId, inv, kind, now, memo)) sent++;
+      } catch (e) {
+        // The lease runs out and a later run tries again.
+        this.logger.error(`Invitation ${inv.id} not sent: ${(e as Error).message}`);
+      }
+    }
 
     // Waves whose invitations have all left are sent.
-    await tx.execute(sql`
-      update waves set status = 'sent'
-      where status = 'sending' and not exists (
-        select 1 from invitations i where i.wave_id = waves.id and i.status = 'queued')`);
+    await this.database.withTenant(tenantId, (tx) =>
+      tx.execute(sql`
+        update waves set status = 'sent'
+        where status = 'sending' and not exists (
+          select 1 from invitations i where i.wave_id = waves.id and i.status = 'queued')`),
+    );
     return sent;
   }
 
+  /** Prepares one message (short transaction), sends it (none), records the result (short). */
   private async sendOne(
-    tx: Tx,
     tenantId: string,
     inv: InvitationRow,
     kind: TemplateKind,
     now: Date,
+    memo: Map<string, Promise<unknown>>,
   ) {
-    const [s] = await tx
-      .select({ id: suppressions.id })
-      .from(suppressions)
-      .where(eq(suppressions.email, inv.email!));
-    if (s) {
-      await tx.update(invitations).set({ status: 'suppressed' }).where(eq(invitations.id, inv.id));
-      return false;
-    }
-    const [c] = inv.caseId
-      ? await tx
-          .select({ sample: cases.sample, samplePii: cases.samplePii })
-          .from(cases)
-          .where(eq(cases.id, inv.caseId))
-      : [];
-    const settings = await this.cases.settings(tx, inv.projectId);
+    const once = <T>(key: string, load: () => Promise<T>) => {
+      if (!memo.has(key)) memo.set(key, load());
+      return memo.get(key) as Promise<T>;
+    };
+    const prepared = await this.database.withTenant(tenantId, async (tx) => {
+      const [s] = await tx
+        .select({ id: suppressions.id })
+        .from(suppressions)
+        .where(eq(suppressions.email, inv.email!));
+      if (s) {
+        await tx
+          .update(invitations)
+          .set({ status: 'suppressed', leaseUntil: null })
+          .where(eq(invitations.id, inv.id));
+        return null;
+      }
+      const [c] = inv.caseId
+        ? await tx
+            .select({ sample: cases.sample, samplePii: cases.samplePii })
+            .from(cases)
+            .where(eq(cases.id, inv.caseId))
+        : [];
+      const settings = await once(`settings:${inv.projectId}`, () =>
+        this.cases.settings(tx, inv.projectId),
+      );
+      const template = await once(`template:${inv.projectId}:${kind}:${inv.language}`, () =>
+        this.templateFor(tx, inv.projectId, kind, inv.language),
+      );
+      return { case: c ? this.cases.pii.read(c) : {}, settings, template };
+    });
+    if (!prepared) return false;
     const token = decryptField(inv.tokenEnc, this.config.APP_ENCRYPTION_KEY);
-    const t = renderTemplate(await this.templateFor(tx, inv.projectId, kind, inv.language), {
-      case: c ? this.cases.pii.read(c) : {},
+    const t = renderTemplate(prepared.template, {
+      case: prepared.case,
       link: this.clickUrl(token),
       unsubscribe: this.unsubscribeUrl(token),
     });
@@ -655,7 +711,9 @@ export class CawiService implements OnModuleInit {
         subject: t.subject,
         text: t.body,
         html: htmlBody(t.body, this.pixelUrl(token)),
-        ...(settings.cawi.senderName ? { fromName: settings.cawi.senderName } : {}),
+        ...(prepared.settings.cawi.senderName
+          ? { fromName: prepared.settings.cawi.senderName }
+          : {}),
         headers: {
           'List-Unsubscribe': `<${this.unsubscribeUrl(token)}>`,
           'X-WanSurvey-Invitation': inv.id,
@@ -664,25 +722,29 @@ export class CawiService implements OnModuleInit {
       });
     } catch (e) {
       const attempts = inv.sendAttempts + 1;
-      await tx
-        .update(invitations)
-        .set({
-          sendAttempts: attempts,
-          lastError: (e as Error).message.slice(0, 500),
-          ...(attempts >= MAX_SEND_ATTEMPTS && kind === 'invitation' ? { status: 'failed' } : {}),
-        })
-        .where(eq(invitations.id, inv.id));
+      await this.database.withTenant(tenantId, (tx) =>
+        tx
+          .update(invitations)
+          .set({
+            sendAttempts: attempts,
+            lastError: (e as Error).message.slice(0, 500),
+            leaseUntil: null,
+            ...(attempts >= MAX_SEND_ATTEMPTS && kind === 'invitation' ? { status: 'failed' } : {}),
+          })
+          .where(eq(invitations.id, inv.id)),
+      );
       return false;
     }
-    await tx
-      .update(invitations)
-      .set(
-        kind === 'invitation'
-          ? { status: 'sent', sentAt: now, lastError: null }
-          : { remindersSent: inv.remindersSent + 1, lastReminderAt: now },
-      )
-      .where(eq(invitations.id, inv.id));
-    void tenantId;
+    await this.database.withTenant(tenantId, (tx) =>
+      tx
+        .update(invitations)
+        .set(
+          kind === 'invitation'
+            ? { status: 'sent', sentAt: now, lastError: null, leaseUntil: null }
+            : { remindersSent: inv.remindersSent + 1, lastReminderAt: now, leaseUntil: null },
+        )
+        .where(eq(invitations.id, inv.id)),
+    );
     return true;
   }
 

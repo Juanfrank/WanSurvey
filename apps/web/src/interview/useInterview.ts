@@ -11,7 +11,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { InterviewClock } from './paradata.js';
 import { isOffline } from './device.js';
-import { InterviewStore, lowOnSpace, type LocalInterview, type NewOp } from './store.js';
+import {
+  InterviewStore,
+  keepStorage,
+  lowOnSpace,
+  type LocalInterview,
+  type NewOp,
+} from './store.js';
 import { Syncer } from './sync.js';
 
 export interface InterviewPayload {
@@ -320,6 +326,7 @@ export function useInterview(id: string) {
         record([paradata('enter_question', { key: s.currentKey(), resumed: !fresh })]);
         if (fresh && p.settings?.capi?.gps === 'start_end' && p.interview.mode === 'CAPI')
           void position().then((at) => record([paradata('gps', { when: 'start', ...at })]));
+        void keepStorage();
         setLowSpace(await lowOnSpace());
       } catch (e) {
         if (!cancelled) setError(e);

@@ -8,12 +8,13 @@ import {
   writeZip,
   type Table,
 } from '@wansurvey/exporters';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
-import { Database, type Tx } from '../db/database.js';
+import { Database, isTransient, type Tx } from '../db/database.js';
+import { claimable, MAX_JOB_ATTEMPTS } from '../jobs/claims.js';
 import { exports } from '../db/schema.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 import { JobsService } from '../jobs/jobs.service.js';
@@ -143,7 +144,8 @@ export class ExportsService implements OnModuleInit {
 
   /** Builds the export in the background; call it after the request's transaction commits. */
   queue(tenantId: string, exportId: string) {
-    return this.jobs.enqueue('exports.build', { tenantId, exportId });
+    // Not queued now (Redis away): the sweeper takes it.
+    return this.jobs.offer('exports.build', { tenantId, exportId });
   }
 
   async list(tx: Tx, projectId: string) {
@@ -197,9 +199,13 @@ export class ExportsService implements OnModuleInit {
       const [row] = await tx.select().from(exports).where(eq(exports.id, exportId));
       // Not visible yet (its transaction still open): fail, and the queue tries again.
       if (!row) throw new Error(`Export ${exportId} not found yet`);
-      if (row.status === 'done') return null;
-      await tx.update(exports).set({ status: 'running' }).where(eq(exports.id, exportId));
-      return row;
+      // Taken once: a queued export, or one whose worker was lost (running for too long).
+      const [claimed] = await tx
+        .update(exports)
+        .set({ status: 'running', startedAt: new Date(), attempts: sql`${exports.attempts} + 1` })
+        .where(and(eq(exports.id, exportId), claimable(exports)))
+        .returning();
+      return claimed ?? null;
     });
     if (!job) return;
     try {
@@ -234,6 +240,17 @@ export class ExportsService implements OnModuleInit {
           .where(eq(exports.id, exportId)),
       );
     } catch (e) {
+      // The database busy or away: back to the queue, tried again (by the queue's retries or
+      // the sweeper) a few times before giving up.
+      if (isTransient(e) && job.attempts < MAX_JOB_ATTEMPTS) {
+        this.logger.warn(`Export ${exportId} will be retried: ${(e as Error).message}`);
+        await this.database
+          .withTenant(tenantId, (tx) =>
+            tx.update(exports).set({ status: 'queued' }).where(eq(exports.id, exportId)),
+          )
+          .catch(() => undefined);
+        throw e;
+      }
       this.logger.error(`Export ${exportId} failed: ${(e as Error).message}`);
       await this.database.withTenant(tenantId, (tx) =>
         tx
