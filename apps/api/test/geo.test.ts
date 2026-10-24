@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { sampleTable, toCsv } from '@wansurvey/fixtures';
+import { ROLE_PERMISSIONS } from '@wansurvey/schema';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { NominatimGeocoder, normaliseAddress } from '../src/geo/geocoder.js';
 import {
@@ -171,6 +172,18 @@ describe('geocoding, the case map and duplicates across projects', () => {
       quality: 'house',
     });
     expect(JSON.stringify(points.body)).not.toContain('Arequipa');
+    const viewed = await t.admin`select details from audit_log
+      where target_id = ${projectA} and action = 'cases.map_viewed'`;
+    expect(viewed.map((a) => a.details)).toEqual([{ points: 2 }]);
+    // Coordinates locate the person: none without `pii.view`.
+    await t.admin`update tenants set role_permissions = ${t.admin.json({
+      supervisor: ROLE_PERMISSIONS.supervisor.filter((p) => p !== 'pii.view'),
+    })} where id = ${tenant.id}`;
+    try {
+      expect((await supervisor.agent.get(`${base}/cases-map`)).status).toBe(403);
+    } finally {
+      await t.admin`update tenants set role_permissions = '{}' where id = ${tenant.id}`;
+    }
     // The interviewer sees only the points of their cases (none here).
     expect((await interviewerS.agent.get(`${base}/cases-map`)).body).toEqual([]);
 

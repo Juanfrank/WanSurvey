@@ -1,4 +1,5 @@
 import { sampleTable, toCsv } from '@wansurvey/fixtures';
+import { ROLE_PERMISSIONS } from '@wansurvey/schema';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseSampleFile, sniffDelimiter } from '../src/cases/sample-file.js';
@@ -361,6 +362,29 @@ describe('cases API', () => {
 
     const found = await pm.agent.get(`${base}/cases`).query({ q: 'HH0003' });
     expect(found.body.rows.map((r: { externalId: string }) => r.externalId)).toEqual(['HH0003']);
+  });
+
+  it('filters by personal fields only as the viewer sees them', async () => {
+    const [c] =
+      await t.admin`select id from cases where project_id = ${project} and external_id = 'HH0001'`;
+    const shown = await pm.agent.get(`${base}/cases/${c!.id}`).query({ reveal: 'pii' });
+    const name = shown.body.sample.first_name as string;
+    const filter = `case.first_name == ${JSON.stringify(name)}`;
+    const byPm = await pm.agent.get(`${base}/cases`).query({ filter });
+    expect(byPm.body.rows.map((r: { externalId: string }) => r.externalId)).toContain('HH0001');
+    // Without `pii.view`, a filter cannot test hidden values one guess at a time.
+    await t.admin`update tenants set role_permissions = ${t.admin.json({
+      supervisor: ROLE_PERMISSIONS.supervisor.filter((p) => p !== 'pii.view'),
+    })} where id = ${tenant.id}`;
+    try {
+      const bySup = await supervisor.agent.get(`${base}/cases`).query({ filter });
+      expect(bySup.status).toBe(200);
+      expect(bySup.body.total).toBe(0);
+      const preview = await post(supervisor, `${base}/assignments/preview`, { filter });
+      expect(preview.body.matching).toBe(0);
+    } finally {
+      await t.admin`update tenants set role_permissions = '{}' where id = ${tenant.id}`;
+    }
   });
 
   it('reveals personal data only on request, with an audit entry', async () => {

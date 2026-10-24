@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import type { Question } from '@wansurvey/schema';
-import { and, asc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
 import { CasesService } from '../cases/cases.service.js';
@@ -20,11 +20,17 @@ import {
   caseEvents,
   cases,
   contacts,
+  entryMismatches,
+  frameUnits,
   interviews,
   invitations,
+  papiScanForms,
+  papiScanPages,
   projects,
   questionnaireVersions,
+  sampleImports,
 } from '../db/schema.js';
+import { ImportMapping, type ImportReport } from '../cases/sample-mapping.js';
 import { JobsService, PROCESS_ROLE, type ProcessRole } from '../jobs/jobs.service.js';
 
 /** Removes the given keys at any depth (top-level answers and roster rows). */
@@ -156,13 +162,24 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
         this.logger.error(`Retention failed for ${tenantId}: ${(e as Error).message}`);
       }
     }
+    if (n) await this.refreshAnalysis();
     return n;
   }
 
   /**
-   * Removes a case's personal data and keeps the rest for statistics: personal sample fields,
-   * contacts, answers marked personal (with their history), notes, the case copy kept with
-   * each interview, call notes and invitation addresses.
+   * The analysis model keeps copies of the answers: refreshed once erased cases are committed,
+   * not at its next scheduled time.
+   */
+  refreshAnalysis() {
+    return this.jobs.offer('bi.refresh', {}, { jobId: 'erasure' });
+  }
+
+  /**
+   * Removes a case's personal data and keeps the rest for statistics: personal sample fields
+   * (also on its unit of the sampling frame), contacts, answers marked personal (with their
+   * history and their double-entry differences), notes, the case copy kept with each
+   * interview, call notes, invitation addresses, scanned pages of its paper forms and the
+   * personal values shown as examples in the report of the import it came from.
    */
   async anonymise(
     tx: Tx,
@@ -202,6 +219,45 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
       .set({ note: null, numberMasked: null })
       .where(eq(callAttempts.caseId, caseId));
     await tx.update(invitations).set({ email: null }).where(eq(invitations.caseId, caseId));
+    const units = await tx
+      .select({ id: frameUnits.id, sample: frameUnits.sample, importId: frameUnits.importId })
+      .from(frameUnits)
+      .where(
+        and(
+          eq(frameUnits.projectId, projectId),
+          or(
+            eq(frameUnits.caseId, caseId),
+            ...(c.frameUnitId ? [eq(frameUnits.id, c.frameUnitId)] : []),
+          ),
+        ),
+      );
+    for (const u of units)
+      await tx
+        .update(frameUnits)
+        .set({
+          sample: Object.fromEntries(
+            Object.entries((u.sample ?? {}) as Record<string, unknown>).filter(
+              ([k]) => !pii.has(k),
+            ),
+          ),
+          samplePii: null,
+          contacts: [],
+        })
+        .where(eq(frameUnits.id, u.id));
+    const imports = [c.importId, ...units.map((u) => u.importId)].filter((x): x is string => !!x);
+    await this.scrubImportReports(tx, projectId, [...new Set(imports)], pii);
+    // Scanned pages show the whole form, handwriting and all.
+    await tx
+      .delete(papiScanPages)
+      .where(
+        inArray(
+          papiScanPages.formId,
+          tx
+            .select({ id: papiScanForms.id })
+            .from(papiScanForms)
+            .where(eq(papiScanForms.caseId, caseId)),
+        ),
+      );
 
     const ivs = await tx
       .select({
@@ -216,19 +272,39 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
         eq(questionnaireVersions.id, interviews.questionnaireVersionId),
       )
       .where(eq(interviews.caseId, caseId));
+    const personal = new Set<string>();
     for (const iv of ivs) {
       const names = personalVariables(iv.compiled as CompiledQuestionnaire);
+      names.forEach((n) => personal.add(n));
       await tx
         .update(interviews)
         .set({
           answers: stripKeys(iv.answers, names) as Record<string, unknown>,
           state: stripKeys(iv.state, names) as Record<string, unknown>,
           context: {},
+          // Seen as a change by the analysis model, which is then refreshed.
+          updatedAt: now,
         })
         .where(eq(interviews.id, iv.id));
       await tx.execute(
         sql`select erase_interview_history(${iv.id}::uuid, ${sql.param([...names])}::text[])`,
       );
+    }
+    // Double-entry differences keep both keyed values: personal ones go, rosters lose theirs.
+    for (const m of await tx
+      .select()
+      .from(entryMismatches)
+      .where(eq(entryMismatches.caseId, caseId))) {
+      const gone = personal.has(m.variable);
+      const strip = (v: unknown) => (gone ? null : stripKeys(v, personal));
+      await tx
+        .update(entryMismatches)
+        .set({
+          firstValue: strip(m.firstValue),
+          secondValue: strip(m.secondValue),
+          resolvedValue: strip(m.resolvedValue),
+        })
+        .where(eq(entryMismatches.id, m.id));
     }
     await this.cases.events(tx, tenantId, ctx?.userId ?? null, [
       { caseId, type: 'anonymised', details: { reason } },
@@ -247,6 +323,51 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
     };
     await this.audit.record(tx, tenantId, ctx ? this.audit.fromContext(ctx, entry) : entry);
     return { interviews: ivs.length, contacts: gone.length };
+  }
+
+  /**
+   * Blanks the example values of personal columns (contacts and personal sample fields) in
+   * the validation reports of these imports.
+   */
+  private async scrubImportReports(
+    tx: Tx,
+    projectId: string,
+    importIds: string[],
+    pii: ReadonlySet<string>,
+  ) {
+    if (!importIds.length) return;
+    const rows = await tx
+      .select({
+        id: sampleImports.id,
+        headers: sampleImports.headers,
+        mapping: sampleImports.mapping,
+        report: sampleImports.report,
+      })
+      .from(sampleImports)
+      .where(and(eq(sampleImports.projectId, projectId), inArray(sampleImports.id, importIds)));
+    for (const r of rows) {
+      const report = r.report as ImportReport | null;
+      if (!report?.issues?.length) continue;
+      const mapping = ImportMapping.safeParse(r.mapping);
+      const headers = (r.headers ?? []) as string[];
+      const personal = new Set<string>();
+      // Without a mapping nothing says which columns are personal: every example goes.
+      if (mapping.success)
+        mapping.data.columns.forEach((col, i) => {
+          if (col.kind === 'contact' || (col.kind === 'sample' && (col.pii || pii.has(col.field))))
+            personal.add(headers[i] ?? `Column ${i + 1}`);
+        });
+      const issues = report.issues.map((it) => ({
+        ...it,
+        examples: it.examples.map((e) =>
+          !mapping.success || personal.has(e.column) ? { ...e, value: '' } : e,
+        ),
+      }));
+      await tx
+        .update(sampleImports)
+        .set({ report: { ...report, issues } })
+        .where(eq(sampleImports.id, r.id));
+    }
   }
 
   /** Everything held about a case's respondent, for a data subject access request (H3). */

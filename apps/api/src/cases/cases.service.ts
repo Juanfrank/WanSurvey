@@ -32,6 +32,7 @@ import {
   tenants,
   users,
 } from '../db/schema.js';
+import { maskSample } from './case-logic.js';
 import { PiiCipher } from './pii.js';
 import { rememberedProject } from './project-memo.js';
 import { STRATEGIES } from './strategies.js';
@@ -129,6 +130,23 @@ export class CasesService {
 
   canSeePii(ctx: AuthContext, projectId: string) {
     return can(ctx.memberships, 'pii.view', projectId);
+  }
+
+  /**
+   * Cases as a person's rule filter sees them: without `pii.view`, personal fields masked,
+   * as they are listed, so a filter cannot tell what a hidden value is.
+   */
+  forRules<T extends { sample: unknown }>(
+    ctx: AuthContext,
+    projectId: string,
+    pii: ReadonlySet<string>,
+    rows: T[],
+  ): T[] {
+    if (!pii.size || this.canSeePii(ctx, projectId)) return rows;
+    return rows.map((r) => ({
+      ...r,
+      sample: maskSample(r.sample as Record<string, unknown>, pii, false),
+    }));
   }
 
   /** Only cases assigned to them, for people who may not read every case of the project. */

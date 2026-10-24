@@ -201,11 +201,16 @@ export class CasesController {
         // Rule filters run in the engine, over the already narrowed set.
         const match = compileRule(q.filter);
         const all = this.svc
-          .openRows(
-            await this.svc
-              .selectCases(tx)
-              .where(and(...conds))
-              .orderBy(by, asc(cases.id)),
+          .forRules(
+            ctx,
+            projectId,
+            pii,
+            this.svc.openRows(
+              await this.svc
+                .selectCases(tx)
+                .where(and(...conds))
+                .orderBy(by, asc(cases.id)),
+            ),
           )
           .filter(match);
         total = all.length;
@@ -527,10 +532,15 @@ export class CasesController {
         const err = ruleError(body.filter || 'true');
         if (body.filter && err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
         const match = compileRule(body.filter);
-        const all = this.svc.openRows(
-          await this.svc
-            .selectCases(tx)
-            .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
+        const all = this.svc.forRules(
+          ctx,
+          projectId,
+          await this.svc.piiFields(tx, projectId),
+          this.svc.openRows(
+            await this.svc
+              .selectCases(tx)
+              .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
+          ),
         );
         ids = all.filter(match).map((c) => c.id);
       }

@@ -1,5 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { createInterview, type CompiledQuestionnaire } from '@wansurvey/logic';
+import { ROLE_PERMISSIONS } from '@wansurvey/schema';
 import ExcelJS from 'exceljs';
 import request from 'supertest';
 import { uuidv7 } from 'uuidv7';
@@ -418,5 +419,26 @@ describe('metrics, live dashboard, topline, exports and share links', () => {
     expect(listed.body[0].url).toBe(link.body.url);
     await post(pm, `/projects/${project}/share-links/${link.body.id}/revoke`).expect(204);
     expect((await anon.get(`/api/v1/public/share/${token}`)).status).toBe(404);
+  });
+  it('gives an export with personal answers only to people allowed to see personal data', async () => {
+    const personal = await post(pm, `/projects/${project}/exports`, { format: 'csv' }).expect(201);
+    // Supervisors run exports here, but may not see personal data.
+    await t.admin`update tenants set role_permissions = ${t.admin.json({
+      supervisor: [...ROLE_PERMISSIONS.supervisor.filter((p) => p !== 'pii.view'), 'exports.run'],
+    })} where id = ${tenant.id}`;
+    try {
+      const own = await post(sup, `/projects/${project}/exports`, { format: 'csv' }).expect(201);
+      await jobs.drain();
+      const list = await get(sup, `/projects/${project}/exports`).expect(200);
+      const byId = new Map(list.body.map((e: { id: string }) => [e.id, e]));
+      expect(byId.get(personal.body.id)).toMatchObject({ status: 'done', personal: true });
+      expect(byId.get(own.body.id)).toMatchObject({ status: 'done', personal: false });
+      const denied = await get(sup, `/projects/${project}/exports/${personal.body.id}/file`);
+      expect(denied.status).toBe(403);
+      await get(sup, `/projects/${project}/exports/${own.body.id}/file`).expect(200);
+      await get(pm, `/projects/${project}/exports/${personal.body.id}/file`).expect(200);
+    } finally {
+      await t.admin`update tenants set role_permissions = '{}' where id = ${tenant.id}`;
+    }
   });
 });

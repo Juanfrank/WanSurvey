@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   Inject,
@@ -91,15 +92,22 @@ export class GeoController {
 
   /**
    * Geocoded points of the cases the caller may see. Points carry no address or name: the
-   * address stays behind the audited reveal in the case drawer.
+   * address stays behind the audited reveal in the case drawer. Coordinates locate the person
+   * as well as the address does, so they go only to people allowed to see personal data, and
+   * each view is audited.
    */
   @Get('cases-map')
   @RequirePermission(['cases.read_all', 'cases.read_assigned'], PERM)
   map(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       await this.cases.project(tx, projectId);
+      if (!this.cases.canSeePii(ctx, projectId))
+        throw new ForbiddenException({
+          code: 'FORBIDDEN',
+          message: 'You may not see personal data',
+        });
       const own = this.cases.restrictedToOwn(ctx, projectId);
-      return tx
+      const points = await tx
         .select({
           caseId: cases.id,
           externalId: cases.externalId,
@@ -119,6 +127,18 @@ export class GeoController {
           ),
         )
         .limit(20_000);
+      if (points.length)
+        await this.audit.record(
+          tx,
+          ctx.tenantId,
+          this.audit.fromContext(ctx, {
+            action: 'cases.map_viewed',
+            targetType: 'project',
+            targetId: projectId,
+            details: { points: points.length },
+          }),
+        );
+      return points;
     });
   }
 }

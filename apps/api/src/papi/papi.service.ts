@@ -70,23 +70,29 @@ export class PapiService implements OnModuleInit {
     // Each questionnaire prints its own cases.
     const ofQ = ofQuestionnaire(chosen?.id);
     if (ofQ) conds.push(ofQ);
-    const rows = (
-      await tx
-        .select({
-          id: cases.id,
-          externalId: cases.externalId,
-          sample: cases.sample,
-          samplePii: cases.samplePii,
-          status: cases.status,
-          priority: cases.priority,
-          modePreference: cases.modePreference,
-          assignedTo: cases.assignedTo,
-        })
-        .from(cases)
-        .where(and(...conds))
-        .orderBy(asc(cases.externalId))
-    )
-      .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
+    // Filtered as the forms show the cases: without `pii.view`, personal fields masked.
+    const rows = this.cases
+      .forRules(
+        ctx,
+        projectId,
+        pii,
+        (
+          await tx
+            .select({
+              id: cases.id,
+              externalId: cases.externalId,
+              sample: cases.sample,
+              samplePii: cases.samplePii,
+              status: cases.status,
+              priority: cases.priority,
+              modePreference: cases.modePreference,
+              assignedTo: cases.assignedTo,
+            })
+            .from(cases)
+            .where(and(...conds))
+            .orderBy(asc(cases.externalId))
+        ).map((r) => ({ ...r, sample: this.cases.pii.read(r) })),
+      )
       .filter(compileRule(q.filter))
       .slice(0, q.caseIds?.length ? 200 : q.limit);
     const auto = this.cases.autoReveal(ctx, projectId, settings);

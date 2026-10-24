@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, NotFoundException, type OnModuleInit } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleInit,
+} from '@nestjs/common';
 import {
   buildTables,
   codebook,
@@ -90,6 +97,8 @@ function addCodebookSheets(wb: ExcelJS.Workbook, table: Table) {
   values.columns.forEach((c, i) => (c.width = i === 2 ? 40 : 14));
 }
 
+const isPersonal = (options: unknown) => (options as { personal?: boolean }).personal === true;
+
 /**
  * Data exports (M6): requested here, built by the worker (`exports.build`), stored with the
  * request and downloaded once ready. Every request is audited.
@@ -176,8 +185,9 @@ export class ExportsService implements OnModuleInit {
     return this.jobs.offer('exports.build', { tenantId, exportId });
   }
 
+  /** Exports holding personal answers are marked, so the list can say who may download them. */
   async list(tx: Tx, projectId: string) {
-    return tx
+    const rows = await tx
       .select({
         id: exports.id,
         options: exports.options,
@@ -194,6 +204,7 @@ export class ExportsService implements OnModuleInit {
       .where(eq(exports.projectId, projectId))
       .orderBy(desc(exports.createdAt))
       .limit(100);
+    return rows.map((r) => ({ ...r, personal: isPersonal(r.options) }));
   }
 
   async file(tx: Tx, ctx: AuthContext, projectId: string, id: string) {
@@ -203,11 +214,15 @@ export class ExportsService implements OnModuleInit {
         contentType: exports.contentType,
         file: exports.file,
         status: exports.status,
+        options: exports.options,
       })
       .from(exports)
       .where(and(eq(exports.id, id), eq(exports.projectId, projectId)));
     if (!row || row.status !== 'done' || !row.file)
       throw new NotFoundException({ code: 'NOT_READY', message: 'This export is not ready' });
+    // A file with personal answers goes only to people allowed to see personal data.
+    if (isPersonal(row.options) && !can(ctx.memberships, 'pii.view', projectId))
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not see personal data' });
     await this.audit.record(
       tx,
       ctx.tenantId,
@@ -238,7 +253,7 @@ export class ExportsService implements OnModuleInit {
     if (!job) return;
     try {
       const opts = ExportBody.parse(job.options);
-      const personal = (job.options as { personal?: boolean }).personal === true;
+      const personal = isPersonal(job.options);
       // Read in a short transaction; build and write the file outside any, so the connection
       // and its snapshot are not held while the CPU works.
       const data = await this.database.withTenant(tenantId, (tx) =>

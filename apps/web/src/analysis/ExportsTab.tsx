@@ -8,12 +8,15 @@ import { localiseError } from '../i18n-messages.js';
 import { Button, Card, ErrorText } from '../routes/ui.js';
 import { FilterBar, type DataFilters } from './ResultsTab.js';
 import { fileSize } from '../format.js';
+import { useCan } from '../designer/hooks.js';
 
 const FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 
 interface ExportRow {
   id: string;
   options: { format: (typeof FORMATS)[number] };
+  /** Holds personal answers: downloaded only with `pii.view`. */
+  personal: boolean;
   status: 'queued' | 'running' | 'done' | 'failed' | 'expired';
   fileName: string | null;
   size: number | null;
@@ -28,6 +31,7 @@ const kb = (n: number | null) => (n === null ? '–' : fileSize(n));
 export function ExportsTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
+  const pii = useCan('pii.view', projectId);
   const [format, setFormat] = useState<(typeof FORMATS)[number]>('csv');
   const [labels, setLabels] = useState<'codes' | 'labels'>('codes');
   const [rosters, setRosters] = useState<'wide' | 'long'>('wide');
@@ -207,7 +211,9 @@ export function ExportsTab({ projectId }: { projectId: string }) {
                     <td className="px-3 py-2 text-right tabular-nums">{e.rows ?? '–'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{kb(e.size)}</td>
                     <td className="px-3 py-2">
-                      {e.status === 'done' ? (
+                      {e.personal && !pii ? (
+                        <span className="text-slate-600">{t('analysis.exports.personal')}</span>
+                      ) : e.status === 'done' ? (
                         <a
                           className="font-medium text-indigo-ink-700 hover:underline"
                           href={`/api/v1/projects/${projectId}/exports/${e.id}/file`}
@@ -215,6 +221,11 @@ export function ExportsTab({ projectId }: { projectId: string }) {
                         >
                           {t('analysis.exports.download')} {e.fileName}
                         </a>
+                      ) : null}
+                      {e.personal && pii ? (
+                        <span className="block text-slate-600">
+                          {t('analysis.exports.personal')}
+                        </span>
                       ) : null}
                     </td>
                   </tr>
