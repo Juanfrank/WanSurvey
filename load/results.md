@@ -1,5 +1,32 @@
 # Load test results
 
+## 2026-10-24 (eighth run) — exports streamed into Blob Storage
+
+One export of the load project (176,129 submitted interviews, 19 columns) by the worker's own
+services, with the Node heap capped at 256 MB (the worker gets 1,280 MB on P0v3), into Azurite
+(Blob Storage) and into a directory. Before this change the same export was refused (over the
+size limit) or built entirely in memory.
+
+| Format | File    | Time, pages by `(submitted_at, id)` | Time, first version (sorted per page) | Peak memory (process base ~185 MB) |
+| ------ | ------- | ----------------------------------- | ------------------------------------- | ---------------------------------- |
+| CSV    | 26.1 MB | 13.8–19.8 s                         | 271 s                                 | 215–220 MB (+36 MB)                |
+| SPSS   | 40.9 MB | 23.3–29.5 s                         | 421 s                                 | 221–226 MB (+34 MB)                |
+| Stata  | 30.8 MB | 22.9–31.9 s                         | 388 s                                 | 222–229 MB (+43 MB)                |
+| Excel  | 13.5 MB | 29.5–39.6 s                         | 289 s                                 | 223–224 MB (+36 MB)                |
+| SQL    | 0 MB    | 8.6 s (one pass, columns only)      | 132 s                                 | 212 MB                             |
+
+**Reading.**
+
+- **Memory no longer grows with the export**: about 40 MB over the process's base for 176,000
+  interviews, the same as for a few hundred (one page of 500 interviews and the storage's
+  4 MB blocks). Any export up to `EXPORT_MAX_BYTES` (2 GB) fits the worker.
+- **The pages must be an index range.** The first version ordered pages by an expression, so
+  every page scanned and sorted the whole project (66 ms a page, growing with the project);
+  ordered by `(submitted_at, id)` with an index on `(project_id, submitted_at, id)` a page
+  takes 2 ms, and exports got 10–15× faster.
+- **Every file reads back whole**: 176,129 rows in the CSV (Python's csv), SPSS and Stata
+  (pyreadstat) and Excel (openpyxl).
+
 ## 2026-10-24 (seventh run) — after the full code review (45 fixes)
 
 Same machine and method. The load database now holds about 196,000 interviews in the one load

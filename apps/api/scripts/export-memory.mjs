@@ -28,6 +28,7 @@ const app = await NestFactory.createApplicationContext(AppModule.register({ role
   logger: ['error', 'warn'],
 });
 await app.init();
+const base = process.memoryUsage().rss;
 let peak = 0;
 const tick = setInterval(() => (peak = Math.max(peak, process.memoryUsage().rss)), 50);
 const t0 = Date.now();
@@ -44,6 +45,7 @@ console.log(
     rows: done.rows,
     sizeMB: Math.round((done.size ?? 0) / 1e5) / 10,
     seconds: Math.round(ms / 100) / 10,
+    baseRssMB: Math.round(base / 1e6),
     peakRssMB: Math.round(peak / 1e6),
   }),
 );

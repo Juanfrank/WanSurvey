@@ -138,8 +138,9 @@ export class DatasetService {
     opts: { paradata?: boolean; completesOnly?: boolean },
     page: { after: PageKey | null; size: number } | null,
   ): Promise<{ interviews: ExportInterview[]; after: PageKey | null }> {
-    // Submission time as text keeps its microseconds, so the next page starts exactly after.
-    const at = sql`coalesce(i.submitted_at, 'infinity'::timestamptz)`;
+    // Counted interviews are all submitted. Submission time as text keeps its microseconds, so
+    // the next page starts exactly after; (submitted_at, id) is an index range.
+    const at = sql`i.submitted_at`;
     const rows = await tx.execute<{
       id: string;
       caseId: string | null;
@@ -190,6 +191,7 @@ export class DatasetService {
           : sql``
       }
       where ${this.scope(projectId, src.questionnaireId, src.tz, f, opts)}
+        and i.submitted_at is not null
         ${page?.after ? sql`and (${at}, i.id) > (${page.after.at}::timestamptz, ${page.after.id}::uuid)` : sql``}
       order by ${at}, i.id
       ${page ? sql`limit ${page.size}` : sql``}`);
