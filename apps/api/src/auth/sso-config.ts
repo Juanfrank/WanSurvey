@@ -77,6 +77,8 @@ export class SsoConfigs implements OnModuleDestroy {
           clientId: c.ENTRA_CLIENT_ID.toLowerCase(),
           clientSecret: c.ENTRA_CLIENT_SECRET,
           allowedDomains: c.ENTRA_ALLOWED_DOMAINS,
+          // Required only when asked, or when there is no password to fall back on.
+          enforceSso: !c.PASSWORD_LOGIN || c.ENTRA_ENFORCE,
         }
       : null;
   }
@@ -127,7 +129,7 @@ export class SsoConfigs implements OnModuleDestroy {
           entraTenantId: d.entraTenantId,
           clientId: d.clientId,
           enabled: true,
-          enforceSso: true,
+          enforceSso: d.enforceSso,
           allowedDomains: d.allowedDomains,
         }
       : null;
@@ -159,7 +161,7 @@ export class SsoConfigs implements OnModuleDestroy {
         clientId: d.clientId,
         clientSecret: d.clientSecret,
         enabled: true,
-        enforceSso: true,
+        enforceSso: d.enforceSso,
         allowedDomains: d.allowedDomains,
         fromDeployment: true,
       };
@@ -195,10 +197,9 @@ export class SsoConfigs implements OnModuleDestroy {
     const d = this.deployment;
     const own = d ? await this.tenantIdBySlug(d.slug) : null;
     if (!d || !own || !tenantIds.includes(own)) return rows;
-    return [
-      ...rows.filter((r) => r.tenantId !== own),
-      { tenantId: own, entraTenantId: d.entraTenantId },
-    ];
+    // The deployment's settings replace the organisation's own, enforceSso included.
+    const others = rows.filter((r) => r.tenantId !== own);
+    return d.enforceSso ? [...others, { tenantId: own, entraTenantId: d.entraTenantId }] : others;
   }
 
   /** The organisation whose people sign in with this e-mail domain, if the deployment's. */

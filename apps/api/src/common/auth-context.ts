@@ -10,6 +10,9 @@ export interface MembershipGrant {
   permissions?: readonly Permission[];
 }
 
+/** A WanSurvey code entered in this browser, or MFA performed by Microsoft. */
+export type MfaMethod = 'totp' | 'entra';
+
 export interface AuthContext {
   tenantId: string;
   userId: string;
@@ -17,6 +20,8 @@ export interface AuthContext {
   email: string;
   memberships: MembershipGrant[];
   mfaState: 'ok' | 'pending' | 'enroll';
+  /** How the second factor was verified; null when none was ('ok' may mean none was needed). */
+  mfaMethod: MfaMethod | null;
   authMethod: 'password' | 'sso';
   /** Entra tenant that authenticated an SSO session. */
   idpTenant: string | null;

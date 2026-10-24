@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
@@ -17,7 +18,7 @@ import {
 } from '@wansurvey/schema';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { AuditService, type AuditEntry } from '../audit/audit.service.js';
-import type { AuthContext } from '../common/auth-context.js';
+import type { AuthContext, MfaMethod } from '../common/auth-context.js';
 import {
   decryptField,
   encryptField,
@@ -77,7 +78,11 @@ const invalidCredentials = () =>
     message: 'Invalid e-mail or password',
   });
 
-/** The account is locked after too many failed passwords or codes (from any address). */
+/**
+ * The account is locked after too many failed passwords or codes (from any address). Said only
+ * after the password was right (at the code step): at sign-in it would tell that an address
+ * has an account.
+ */
 const accountLocked = (until: Date) =>
   new HttpException(
     {
@@ -91,6 +96,8 @@ const accountLocked = (until: Date) =>
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger('Auth');
+
   constructor(
     private readonly database: Database,
     private readonly audit: AuditService,
@@ -108,17 +115,21 @@ export class AuthService {
     client: ClientInfo,
   ): Promise<LoginResult> {
     const user = await this.database.authUserByEmail(input.email);
-    // A locked account is not even tried: guesses during the lock tell nothing.
+    // A locked account is not tried, so guesses during the lock tell nothing; it answers as a
+    // wrong password would, after the same work (an address without an account never locks,
+    // so any other answer would tell that one has). Its owner hears of the lock by e-mail.
     const lockedUntil = user ? await this.database.accountLockedUntil(user.id) : null;
-    if (lockedUntil) throw accountLocked(lockedUntil);
-    const ok = await verifyPassword(user?.passwordHash, input.password);
+    const ok = await verifyPassword(lockedUntil ? null : user?.passwordHash, input.password);
     if (!user || !ok || user.status !== 'active') {
       if (user) {
-        if (!ok) await this.countFailure(user.id);
+        if (!ok && !lockedUntil) await this.countFailure(user.id);
         await this.auditEverywhere(user.id, {
           action: 'auth.login_failed',
           actorUserId: user.id,
-          details: { email: input.email, reason: ok ? `status_${user.status}` : 'bad_password' },
+          details: {
+            email: input.email,
+            reason: lockedUntil ? 'locked' : ok ? `status_${user.status}` : 'bad_password',
+          },
           ...client,
         });
       }
@@ -154,7 +165,7 @@ export class AuthService {
     }
     const session = await this.openSession(chosen.id, user.id, {
       totpEnabled: user.totpEnabled,
-      mfaAlreadyVerified: false,
+      mfaVerifiedBy: null,
       authMethod: 'password',
       action: 'auth.login',
       client,
@@ -219,13 +230,19 @@ export class AuthService {
     );
     const session = await this.openSession(target.id, ctx.userId, {
       totpEnabled,
-      // A code entered in this browser counts in every organisation; Microsoft's own MFA only
-      // in the organisation whose directory performed it.
-      mfaAlreadyVerified:
-        ctx.mfaState === 'ok' &&
-        (ctx.authMethod === 'password' ||
-          (!!enforced && ctx.idpTenant === enforced.entraTenantId) ||
-          (adOnly && ctx.idpTenant === targetSso?.entraTenantId)),
+      // Only a second factor actually verified carries over ('ok' may mean none was needed in
+      // the organisation left): a code entered in this browser counts in every organisation;
+      // Microsoft's own MFA only in the organisation whose directory performed it.
+      mfaVerifiedBy:
+        ctx.mfaState !== 'ok'
+          ? null
+          : ctx.mfaMethod === 'totp'
+            ? 'totp'
+            : ctx.mfaMethod === 'entra' &&
+                ((!!enforced && ctx.idpTenant === enforced.entraTenantId) ||
+                  (adOnly && ctx.idpTenant === targetSso?.entraTenantId))
+              ? 'entra'
+              : null,
       authMethod: ctx.authMethod,
       idpTenant: ctx.idpTenant,
       action: 'auth.login',
@@ -236,14 +253,14 @@ export class AuthService {
 
   /**
    * Starts a session in one organisation. TOTP is skipped when it was already entered in this
-   * browser, or when Microsoft reports that it performed MFA (`mfaAlreadyVerified`).
+   * browser, or when Microsoft reports that it performed MFA (`mfaVerifiedBy`).
    */
   async openSession(
     tenantId: string,
     userId: string,
     opts: {
       totpEnabled: boolean;
-      mfaAlreadyVerified: boolean;
+      mfaVerifiedBy: MfaMethod | null;
       authMethod: 'password' | 'sso';
       idpTenant?: string | null;
       action: AuditEntry['action'];
@@ -267,7 +284,7 @@ export class AuthService {
     userId: string,
     opts: {
       totpEnabled: boolean;
-      mfaAlreadyVerified: boolean;
+      mfaVerifiedBy: MfaMethod | null;
       authMethod: 'password' | 'sso';
       idpTenant?: string | null;
       action: AuditEntry['action'];
@@ -285,7 +302,7 @@ export class AuthService {
           .where(eq(memberships.userId, userId))
       ).map((r) => r.role);
     const needs2fa = roles.some((r) => ROLES_REQUIRING_2FA.includes(r as Role));
-    const mfaState: AuthContext['mfaState'] = opts.mfaAlreadyVerified
+    const mfaState: AuthContext['mfaState'] = opts.mfaVerifiedBy
       ? 'ok'
       : opts.totpEnabled
         ? 'pending'
@@ -300,6 +317,7 @@ export class AuthService {
       tokenHash: sha256Hex(token),
       csrfToken,
       mfaState,
+      mfaMethod: opts.mfaVerifiedBy,
       authMethod: opts.authMethod,
       idpTenant: opts.idpTenant ?? null,
       ip: opts.client.ip,
@@ -434,7 +452,10 @@ export class AuthService {
           .update(users)
           .set({ totpEnabled: true, totpLastStep: step })
           .where(eq(users.id, ctx.userId));
-        await tx.update(sessions).set({ mfaState: 'ok' }).where(eq(sessions.id, ctx.sessionId));
+        await tx
+          .update(sessions)
+          .set({ mfaState: 'ok', mfaMethod: 'totp' })
+          .where(eq(sessions.id, ctx.sessionId));
         await this.audit.record(
           tx,
           ctx.tenantId,
@@ -469,7 +490,10 @@ export class AuthService {
         const valid = step !== null && (user!.totpLastStep ?? -1) < step;
         if (valid) {
           await tx.update(users).set({ totpLastStep: step }).where(eq(users.id, ctx.userId));
-          await tx.update(sessions).set({ mfaState: 'ok' }).where(eq(sessions.id, ctx.sessionId));
+          await tx
+            .update(sessions)
+            .set({ mfaState: 'ok', mfaMethod: 'totp' })
+            .where(eq(sessions.id, ctx.sessionId));
         }
         await this.audit.record(
           tx,
@@ -487,14 +511,34 @@ export class AuthService {
     await this.database.accountSucceeded(ctx.userId);
   }
 
-  /** A failed password or code; enough in a row lock the account (LOGIN_LOCK_AFTER). */
+  /**
+   * A failed password or code; enough in a row lock the account (LOGIN_LOCK_AFTER), and its
+   * owner is told: sign-in then refuses even the right password without saying why.
+   */
   private async countFailure(userId: string) {
     if (!this.config.LOGIN_LOCK_AFTER) return;
-    await this.database.accountFailed(
+    const until = await this.database.accountFailed(
       userId,
       this.config.LOGIN_LOCK_AFTER,
       this.config.LOGIN_LOCK_MINUTES * 60,
     );
+    if (until)
+      await this.notifyLocked(userId, until).catch((e: unknown) =>
+        this.logger.error(`Could not send the lock notice of ${userId}: ${String(e)}`),
+      );
+  }
+
+  private async notifyLocked(userId: string, until: Date) {
+    const [row] = await this.database.withUser(userId, (tx) =>
+      tx.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, userId)),
+    );
+    if (!row) return;
+    await this.mailer.send({
+      to: row.email,
+      subject: 'Your WanSurvey account is locked for a while',
+      text: `Hello ${row.name},\n\nThere were ${this.config.LOGIN_LOCK_AFTER} failed attempts in a row to sign in to your WanSurvey account, so it is locked until ${until.toISOString().slice(0, 16).replace('T', ' ')} UTC. Until then even the right password is refused.\n\nIf it was not you, someone may be guessing your password: choose a new one once the lock ends, and tell your administrator.`,
+      idempotencyKey: `locked:${userId}:${until.getTime()}`,
+    });
   }
 
   // --- invitations and password reset -------------------------------------------

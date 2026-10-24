@@ -54,6 +54,8 @@ param entraClientId string = ''
 param entraClientSecret string = ''
 @description('E-mail domains of that directory, comma-separated, e.g. poderjudicial.gob.do.')
 param entraAllowedDomains string = ''
+@description('With passwordLogin true: require Microsoft in ssoDefaultOrg too (its owners keep a password).')
+param entraEnforce bool = false
 @description('false: Microsoft sign-in only (no passwords, no password reset); needs ssoDefaultOrg and the four entra* values, or the API refuses to start.')
 param passwordLogin bool = true
 
@@ -105,6 +107,7 @@ var entraSettings = empty(ssoDefaultOrg)
       ENTRA_CLIENT_ID: entraClientId
       ENTRA_CLIENT_SECRET: entraClientSecret
       ENTRA_ALLOWED_DOMAINS: entraAllowedDomains
+      ENTRA_ENFORCE: entraEnforce ? 'true' : 'false'
     }
 
 // Every container sees every app setting; a container overrides one by pointing a variable

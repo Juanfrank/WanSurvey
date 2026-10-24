@@ -38,9 +38,11 @@ describe('Microsoft Entra ID sign-in', () => {
   });
 
   /** An organisation linked to its own Entra tenant. */
-  async function ssoTenant(opts: { enforce?: boolean; domains?: string[] } = {}) {
+  async function ssoTenant(
+    opts: { enforce?: boolean; domains?: string[]; entraTenantId?: string } = {},
+  ) {
     const tenant = await createTenant(t.admin);
-    const entraTenantId = randomUUID();
+    const entraTenantId = opts.entraTenantId ?? randomUUID();
     await t.admin`
       insert into tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, enforce_sso, allowed_domains)
       values (${tenant.id}, ${entraTenantId}, ${CLIENT_ID}, ${encryptField('s3cret', process.env.APP_ENCRYPTION_KEY!)},
@@ -209,6 +211,64 @@ describe('Microsoft Entra ID sign-in', () => {
     expect(await t.admin`select 1 from user_identities where user_id = ${user.id}`).toHaveLength(1);
   });
 
+  it('an identity linked in another organisation on the same directory needs an allowed domain here', async () => {
+    const a = await ssoTenant();
+    const b = await ssoTenant({
+      entraTenantId: a.entraTenantId,
+      domains: [`b${uuidv7().slice(-8)}.org`],
+    });
+    const claims = person(`shared-${uuidv7()}@agency.org`);
+    expect((await signIn(a.slug, claims)).callback.headers.location).toBe(`${WEB}/`);
+    const other = await signIn(b.slug, claims);
+    expect(other.callback.headers.location).toBe(`${WEB}/login?sso_error=domain_not_allowed`);
+    const [u] = await t.admin`select user_id from user_identities where subject = ${claims.oid}`;
+    expect(
+      await t.admin`select 1 from tenant_members where user_id = ${u!.user_id} and tenant_id = ${b.id}`,
+    ).toHaveLength(0);
+  });
+
+  it('a mail server that fails does not fail the first sign-in', async () => {
+    const org = await ssoTenant();
+    await createUser(t.admin, org.id, [{ role: 'owner' }]);
+    const send = t.mailer.send;
+    t.mailer.send = () => Promise.reject(new Error('SMTP down'));
+    try {
+      const { agent, callback } = await signIn(org.slug, person(`m-${uuidv7()}@agency.org`));
+      expect(callback.status).toBe(302);
+      expect(callback.headers.location).toBe(`${WEB}/`);
+      expect((await agent.get('/api/v1/auth/me')).status).toBe(200);
+    } finally {
+      t.mailer.send = send;
+    }
+  });
+
+  it('two first sign-ins of one person at once both succeed, with one account', async () => {
+    const org = await ssoTenant();
+    const claims = person(`twice-${uuidv7()}@agency.org`);
+    const http = t.app.getHttpServer();
+    // Both browsers are at Microsoft before either comes back.
+    const legs = await Promise.all(
+      [0, 1].map(async () => {
+        const agent = request.agent(http);
+        const start = await agent.get('/api/v1/auth/sso/start').query({ org: org.slug });
+        const p = new URL(start.headers.location!).searchParams;
+        const code = entra.issueCode({
+          claims: { nonce: p.get('nonce'), ...claims },
+          codeChallenge: p.get('code_challenge')!,
+          clientId: p.get('client_id')!,
+        });
+        return { agent, code, state: p.get('state') };
+      }),
+    );
+    const backs = await Promise.all(
+      legs.map((l) =>
+        l.agent.get('/api/v1/auth/sso/callback').query({ code: l.code, state: l.state }),
+      ),
+    );
+    for (const b of backs) expect(b.headers.location, b.text).toBe(`${WEB}/`);
+    expect(await t.admin`select 1 from users where lower(email) = ${claims.email}`).toHaveLength(1);
+  });
+
   it('refuses deactivated members, foreign domains and unknown organisations', async () => {
     const org = await ssoTenant();
     const gone = await createUser(t.admin, org.id, [{ role: 'interviewer' }], {
@@ -371,6 +431,34 @@ describe('Microsoft Entra ID sign-in', () => {
       const [log] =
         await t.admin`select details from audit_log where tenant_id = ${org.id} and action = 'tenant.sso_updated' order by at limit 1`;
       expect(JSON.stringify(log!.details)).not.toContain('super-secret-value');
+    });
+
+    it('two organisations saving the same domain at once cannot both get it', async () => {
+      const domain = `race-${uuidv7().slice(-8)}.org`;
+      const admins = await Promise.all(
+        [0, 1].map(async () => {
+          const org = await createTenant(t.admin);
+          return login(t.app, await createUser(t.admin, org.id, [{ role: 'admin' }]), org.slug);
+        }),
+      );
+      const results = await Promise.all(
+        admins.map((a) =>
+          a.agent
+            .put('/api/v1/tenant/sso')
+            .set('x-csrf-token', a.csrf)
+            .send({
+              entraTenantId: randomUUID(),
+              clientId: CLIENT_ID,
+              clientSecret: 'x',
+              enabled: true,
+              allowedDomains: [domain],
+            }),
+        ),
+      );
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      const owners =
+        await t.admin`select tenant_id from tenant_sso where ${domain} = any (allowed_domains)`;
+      expect(owners).toHaveLength(1);
     });
   });
 });

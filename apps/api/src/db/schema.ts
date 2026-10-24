@@ -201,6 +201,8 @@ export const sessions = pgTable(
     csrfToken: text('csrf_token').notNull(),
     /** ok | pending (TOTP code needed) | enroll (TOTP enrolment required) */
     mfaState: text('mfa_state').notNull(),
+    /** totp | entra: how the second factor was verified; null when none was (even if 'ok'). */
+    mfaMethod: text('mfa_method'),
     /** password | sso */
     authMethod: text('auth_method').notNull().default('password'),
     /** Entra tenant id that authenticated an SSO session. */

@@ -96,8 +96,10 @@ export function nextRouteFor(me: Pick<Me, 'mfaState' | 'access'>): string | null
 }
 
 /** Microsoft sign-in; without an e-mail the deployment's organisation (SSO_DEFAULT_ORG). */
-export function ssoStartUrl(email?: string, returnTo = '/'): string {
-  const q = new URLSearchParams(email ? { email, returnTo } : { returnTo });
+export function ssoStartUrl(who?: string | { org: string }, returnTo = '/'): string {
+  const target: Record<string, string> =
+    typeof who === 'string' ? (who ? { email: who } : {}) : (who ?? {});
+  const q = new URLSearchParams({ ...target, returnTo });
   return `/api/v1/auth/sso/start?${q.toString()}`;
 }
 

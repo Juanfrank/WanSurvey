@@ -8,14 +8,22 @@ import { AuthShell, Button, ErrorText, Field } from './ui.js';
 /** As the server requires (`MIN_PASSWORD_LENGTH`). */
 const MIN = 10;
 
-const tokenFromAddress = () => new URLSearchParams(window.location.search).get('token') ?? '';
+const fromAddress = (name: string) => new URLSearchParams(window.location.search).get(name);
+const tokenFromAddress = () => fromAddress('token') ?? '';
 
-/** With password sign-in off: no password to set or reset, only the Microsoft button. */
-function MicrosoftOnly({ title }: { title: string }) {
+/**
+ * With password sign-in off: no password to set or reset, only the Microsoft button. An
+ * invitation is accepted by signing in to the organisation that sent it (`?org=` in its link).
+ */
+function MicrosoftOnly({ title, invitation = false }: { title: string; invitation?: boolean }) {
   const { t } = useTranslation();
+  const org = (invitation && fromAddress('org')) || undefined;
   return (
     <AuthShell title={title}>
-      <MicrosoftSignIn intro={t('login.passwordOff')} />
+      <MicrosoftSignIn
+        intro={invitation ? t('password.acceptMicrosoft') : t('login.passwordOff')}
+        org={org}
+      />
     </AuthShell>
   );
 }
@@ -63,7 +71,7 @@ function TokenPasswordPage({ kind }: { kind: 'accept' | 'reset' }) {
   };
 
   const title = kind === 'accept' ? t('password.acceptTitle') : t('password.resetTitle');
-  if (!passwords) return <MicrosoftOnly title={title} />;
+  if (!passwords) return <MicrosoftOnly title={title} invitation={kind === 'accept'} />;
   if (done)
     return (
       <AuthShell title={title}>
