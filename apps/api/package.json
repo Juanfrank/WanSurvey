@@ -17,6 +17,7 @@
     "db:seed-demo": "tsx src/db/seed-demo.ts"
   },
   "dependencies": {
+    "@azure/storage-blob": "12.34.0",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
@@ -57,6 +58,7 @@
     "@types/pngjs": "6.0.5",
     "@types/qrcode": "1.5.5",
     "@types/supertest": "^6.0.3",
+    "azurite": "3.37.0",
     "drizzle-kit": "0.31.11",
     "supertest": "^7.1.1",
     "tsx": "^4.20.0",

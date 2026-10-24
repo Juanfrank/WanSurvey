@@ -1065,7 +1065,10 @@ export const exports = pgTable(
     status: text('status').notNull().default('queued'),
     fileName: text('file_name'),
     contentType: text('content_type'),
+    /** Exports made before files went to storage keep theirs here. */
     file: bytea('file'),
+    /** The file in export storage (Blob Storage, or a directory in development). */
+    storageKey: text('storage_key'),
     size: integer('size'),
     rows: integer('rows'),
     error: text('error'),

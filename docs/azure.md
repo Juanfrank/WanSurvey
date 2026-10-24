@@ -43,12 +43,13 @@ The three separate apps of the earlier setup (web, API and worker each on its ow
 
 Managed services:
 
-| Service                                                     | Size                                          | Notes                                                                                                                                   |
-| ----------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Azure Database for PostgreSQL – Flexible Server, version 16 | Burstable B1ms for testing, B2s for fieldwork | `require_secure_transport` on; add `?sslmode=require` to both URLs. No extensions needed. User connections: B1ms 35, B2s 414            |
-| Azure Cache for Redis                                       | Standard C1                                   | TLS port 6380: `REDIS_URL=rediss://:<key>@<name>.redis.cache.windows.net:6380`. Set **maxmemory-policy = noeviction** (BullMQ needs it) |
+| Service                                                     | Size                                          | Notes                                                                                                                                                                                                                          |
+| ----------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Azure Database for PostgreSQL – Flexible Server, version 16 | Burstable B1ms for testing, B2s for fieldwork | `require_secure_transport` on; add `?sslmode=require` to both URLs. No extensions needed. User connections: B1ms 35, B2s 414                                                                                                   |
+| Azure Cache for Redis                                       | Standard C1                                   | TLS port 6380: `REDIS_URL=rediss://:<key>@<name>.redis.cache.windows.net:6380`. Set **maxmemory-policy = noeviction** (BullMQ needs it)                                                                                        |
+| Azure Storage (StorageV2, Standard LRS)                     | Pay per use                                   | Export files, container `exports`. Made by `main.bicep`: no account keys, no public blobs, reached with the app's identity (Storage Blob Data Contributor); files deleted after 7 days by the app, after 8 by a lifecycle rule |
 
-Reach the database and Redis through VNet integration and **private endpoints**: they carry no SNAT limit (App Service gives each instance 128 SNAT ports to the internet, and asks for under 100 outbound connections per remote address and port), and the pools below keep the connections few and long-lived anyway.
+Reach the database, Redis and the storage account through VNet integration and **private endpoints**: they carry no SNAT limit (App Service gives each instance 128 SNAT ports to the internet, and asks for under 100 outbound connections per remote address and port), and the pools below keep the connections few and long-lived anyway.
 
 ## App settings
 
@@ -64,6 +65,9 @@ API_PUBLIC_URL=https://encuestas.example.org
 MAILER=smtp
 SMTP_URL=smtps://<user>:<password>@smtp.example.org:465
 MAIL_FROM=WanSurvey <encuestas@example.org>
+EXPORT_STORAGE=blob                # export files in Blob Storage
+EXPORT_BLOB_URL=https://<account>.blob.core.windows.net/exports
+AZURE_CLIENT_ID=<the user-assigned identity's client id>
 PASSWORD_LOGIN=false               # the Microsoft button only
 SSO_DEFAULT_ORG=<slug>             # with ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET
 ENTRA_ALLOWED_DOMAINS=agency.org   # (secret from Key Vault)
@@ -103,7 +107,7 @@ What changed from S1 (1 core, 1.75 GB, three apps) to P0v3 (1 vCPU on newer hard
 | ---------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Memory per instance                | 1.75 GB shared by three apps    | 4 GB shared by three containers                                                                         | Plan size                                                                                                                                                                                          |
 | Node heap (`--max-old-space-size`) | 512 MB each                     | API 1024 MB, worker 1280 MB                                                                             | About 2.3 GB of heap at most, ~3 GB with Node's memory outside the heap; the rest (≈1 GB) for the platform, nginx and `pdftoppm` while scans are read. At rest the three use about 350 MB together |
-| Exports                            | Large ones could exhaust 512 MB | Up to the 100 MB file limit in the worker                                                               | Exports are built in memory, several times the file's size while they are written                                                                                                                  |
+| Exports                            | Large ones could exhaust 512 MB | Any size up to `EXPORT_MAX_BYTES` (2 GB), in ~50 MB of worker memory                                    | Read 500 interviews at a time and written to Blob Storage as they are built, in 4 MB blocks                                                                                                        |
 | DB connections per instance        | 15 (10 API + 5 worker)          | 16 (9 API + 5 worker + 1 health probe each)                                                             | One vCPU gains nothing from more; Burstable B1ms gives 35 user connections, so 2 instances (32) fit, 3 or more need B2s or the built-in PgBouncer                                                  |
 | Jobs at once                       | 4 light + 1 heavy               | 4 light + 1 heavy                                                                                       | Light jobs wait on the database and e-mail, not the CPU; one heavy job (export, scan reading) at a time keeps the API responsive on the one vCPU                                                   |
 | Requests at once (load shedding)   | 200 per API                     | 50 per API                                                                                              | About 5 waiting per pooled connection; beyond that a fast 503 with Retry-After beats waiting into the front end's 230 s timeout                                                                    |
@@ -113,9 +117,9 @@ What changed from S1 (1 core, 1.75 GB, three apps) to P0v3 (1 vCPU on newer hard
 
 - **CPU**: one vCPU per instance, shared by the API, the worker and nginx. For 300 interviewers syncing or a 50-per-second web survey burst, allow 2–3 instances (raise `maxInstances`, and the database as above), or move to P1v3 (2 vCPU, 8 GB) and double `DB_POOL_MAX`. Check the numbers with `load/` (k6) before a large wave.
 - **Concurrency settings** (pool sizes, timeouts, PgBouncer, rate limits, job concurrency): see [`docs/concurrency.md`](concurrency.md), including how to size pools against the server's `max_connections`.
-- **Scale-out is safe**: sessions are in Postgres, exports in Postgres, and live dashboards are fanned out through Redis, so any instance can serve any request. Rate limits are counted in Redis, so they hold across instances.
+- **Scale-out is safe**: sessions are in Postgres, export files in Blob Storage, and live dashboards are fanned out through Redis, so any instance can serve any request. Rate limits are counted in Redis, so they hold across instances.
 - **Live dashboards**: Server-Sent Events work through App Service; the 15-second heartbeat stays well under the 230-second idle timeout, and nginx has buffering off for `/api/`.
-- **Files**: nothing is written to local disk (exports are stored in the database), so the ephemeral container storage of App Service is fine.
+- **Files**: nothing is written to local disk (export files go to Blob Storage, streamed both ways: the worker writes them as it builds them, the API passes downloads through without holding them), so the ephemeral container storage of App Service is fine. The API refuses to start in production without `EXPORT_STORAGE=blob`.
 - **A worker that stops**: the health check goes through the API, so it does not see the worker. Watch the worker's log stream and its jobs (failed jobs are kept in Redis); a restart of the app restarts all three containers.
 
 ### Sources

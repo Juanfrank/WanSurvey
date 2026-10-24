@@ -59,6 +59,9 @@ param entraEnforce bool = false
 @description('false: Microsoft sign-in only (no passwords, no password reset); needs ssoDefaultOrg and the four entra* values, or the API refuses to start.')
 param passwordLogin bool = true
 
+@description('Storage account for export files: 3-24 lowercase letters and digits, unique in Azure.')
+param storageName string = take('${toLower(replace(name, '-', ''))}${uniqueString(resourceGroup().id)}', 24)
+
 @description('Extra app settings (name: value), e.g. SSO or retention settings.')
 param extraSettings object = {}
 
@@ -79,6 +82,80 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
       '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+    )
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Export files, written by the worker as they are built and read back by the API; reached
+// with the app's identity only (no account keys, no public blobs).
+resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageName
+  location: location
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
+  properties: {
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource blobs 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storage
+  name: 'default'
+}
+
+resource exportsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobs
+  name: 'exports'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// The app deletes files after EXPORT_RETENTION_DAYS (7); this catches any it missed.
+resource exportsLifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
+  parent: storage
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          name: 'expire-exports'
+          enabled: true
+          type: 'Lifecycle'
+          definition: {
+            filters: {
+              blobTypes: ['blockBlob']
+              prefixMatch: ['exports/']
+            }
+            actions: {
+              baseBlob: {
+                delete: {
+                  daysAfterModificationGreaterThan: 8
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+// Storage Blob Data Contributor: read, write and delete the export files.
+resource blobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, identity.id, 'blobcontributor')
+  scope: storage
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
     )
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -123,6 +200,9 @@ var settings = union(
     MAILER: empty(smtpUrl) ? 'console' : 'smtp'
     SMTP_URL: smtpUrl
     MAIL_FROM: mailFrom
+    // Export files in Blob Storage (AZURE_CLIENT_ID, the identity reaching it, is set below).
+    EXPORT_STORAGE: 'blob'
+    EXPORT_BLOB_URL: 'https://${storageName}.blob.${environment().suffixes.storage}/exports'
     PASSWORD_LOGIN: passwordLogin ? 'true' : 'false'
     // nginx → API on the same host; App Service front end → nginx → API.
     API_UPSTREAM: 'http://localhost:3000'
@@ -149,6 +229,8 @@ var settings = union(
   extraSettings
 )
 
+var settingList = [for s in items(settings): { name: s.key, value: string(s.value) }]
+
 resource site 'Microsoft.Web/sites@2024-11-01' = {
   name: name
   location: location
@@ -171,7 +253,8 @@ resource site 'Microsoft.Web/sites@2024-11-01' = {
       ftpsState: 'Disabled'
       acrUseManagedIdentityCreds: true
       acrUserManagedIdentityID: identity.properties.clientId
-      appSettings: [for s in items(settings): { name: s.key, value: string(s.value) }]
+      // The identity's client id is known only once it exists: added after the loop.
+      appSettings: concat(settingList, [{ name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }])
     }
   }
   dependsOn: [acrPull]

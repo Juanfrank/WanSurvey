@@ -157,11 +157,26 @@ const Env = z.object({
   BI_REFRESH_CRON: z.string().trim().min(1).default('40 */6 * * *'),
   /** Days an export's file is kept before it is deleted (the request stays, as expired); 0 keeps them. */
   EXPORT_RETENTION_DAYS: z.coerce.number().int().min(0).default(7),
+  /** Largest export file in bytes, counted as it is written (under ZIP's 4 GiB). */
+  EXPORT_MAX_BYTES: z.coerce.number().int().min(1).max(2_147_483_647).default(2_000_000_000),
   /**
-   * Largest export, as interviews × questions, estimated before anything is read: the file is
-   * built in the worker's memory.
+   * Where export files go as they are written: 'blob' (Azure Blob Storage; required in
+   * production, where the API and the worker share no disk) or 'local' (a directory, for
+   * development and tests on one machine).
    */
-  EXPORT_MAX_CELLS: z.coerce.number().int().min(1).default(25_000_000),
+  EXPORT_STORAGE: z.enum(['blob', 'local']).optional(),
+  /** 'local': the directory (created if missing). */
+  EXPORT_DIR: optionalText(1000),
+  /**
+   * 'blob': the container's URL (https://<account>.blob.core.windows.net/exports), reached
+   * with the app's managed identity (AZURE_CLIENT_ID for a user-assigned one)…
+   */
+  EXPORT_BLOB_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
+  /** The user-assigned managed identity's client id (App Service sets no default one). */
+  AZURE_CLIENT_ID: optionalText(100),
+  /** …or a connection string (Azurite in development and tests), with EXPORT_BLOB_CONTAINER. */
+  AZURE_STORAGE_CONNECTION_STRING: optionalText(2000),
+  EXPORT_BLOB_CONTAINER: z.string().min(3).max(63).default('exports'),
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -185,6 +200,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('Invalid configuration:\n  SMTP_URL: required when MAILER=smtp');
   if (parsed.success) {
     const d = parsed.data;
+    // The API and the worker run in separate containers: only Blob Storage is shared.
+    if (d.NODE_ENV === 'production' && d.EXPORT_STORAGE !== 'blob')
+      throw new Error('Invalid configuration:\n  EXPORT_STORAGE: must be blob in production');
+    if (d.EXPORT_STORAGE === 'blob' && !d.EXPORT_BLOB_URL && !d.AZURE_STORAGE_CONNECTION_STRING)
+      throw new Error(
+        'Invalid configuration:\n  EXPORT_BLOB_URL or AZURE_STORAGE_CONNECTION_STRING: required when EXPORT_STORAGE=blob',
+      );
     // The deployment's Microsoft sign-in comes whole, or not at all.
     const deployment = {
       SSO_DEFAULT_ORG: d.SSO_DEFAULT_ORG,

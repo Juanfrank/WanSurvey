@@ -6,16 +6,22 @@ import {
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
+import { Readable, Writable } from 'node:stream';
 import {
-  buildTables,
   codebook,
-  writeCsv,
-  writeDta,
-  writeSav,
-  writeZip,
-  type Table,
+  csvEncoder,
+  dtaEncoder,
+  savEncoder,
+  StatsCollector,
+  TableBuilder,
+  ZipStream,
+  type Cell,
+  type ExportInterview,
+  type TableEncoder,
+  type TableLayout,
+  type TableStats,
 } from '@wansurvey/exporters';
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
@@ -26,7 +32,13 @@ import { claimable, MAX_JOB_ATTEMPTS } from '../jobs/claims.js';
 import { exports } from '../db/schema.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 import { JobsService } from '../jobs/jobs.service.js';
-import { DataFilter, DatasetService, type Dataset } from '../analysis/dataset.service.js';
+import {
+  DataFilter,
+  DatasetService,
+  type DataSource,
+  type PageKey,
+} from '../analysis/dataset.service.js';
+import { EXPORT_STORAGE, type ExportStorage, type StorageWriter } from './storage.js';
 import { sqlExport } from './sql-export.js';
 
 export const EXPORT_FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
@@ -45,8 +57,11 @@ export const ExportBody = DataFilter.extend({
 });
 export type ExportBody = z.infer<typeof ExportBody>;
 
-/** Large exports are refused rather than filling the database (M6). */
-const MAX_BYTES = 100 * 1024 * 1024;
+/** Interviews read at a time: the most an export holds in memory. */
+const PAGE = 500;
+
+/** A file past EXPORT_MAX_BYTES: the export stops and fails, nothing is kept. */
+class TooLarge extends Error {}
 
 const CONTENT_TYPES = {
   csv: 'text/csv; charset=utf-8',
@@ -65,36 +80,29 @@ const safeName = (s: string) =>
     .replace(/^_+|_+$/g, '')
     .slice(0, 60) || 'data';
 
-async function workbook(sheets: { name: string; table: Table }[], labels: boolean) {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'WanSurvey';
-  for (const { name, table } of sheets) {
-    const ws = wb.addWorksheet(name.slice(0, 31));
-    ws.addRow(table.columns.map((c) => c.name)).font = { bold: true };
-    for (const row of table.rows)
-      ws.addRow(
-        row.map((v, i) => {
-          const c = table.columns[i]!;
-          if (labels && typeof v === 'number' && c.valueLabels?.has(v)) return c.valueLabels.get(v);
-          return v;
-        }),
-      );
-    ws.views = [{ state: 'frozen', ySplit: 1 }];
-  }
-  return wb;
-}
-
-function addCodebookSheets(wb: ExcelJS.Workbook, table: Table) {
-  const entries = codebook(table);
+/** The codebook sheets of a table, into a streaming workbook. */
+function addCodebookSheets(
+  wb: ExcelJS.stream.xlsx.WorkbookWriter,
+  columns: TableLayout['columns'],
+) {
+  const entries = codebook({ name: '', columns, rows: [] });
   const vars = wb.addWorksheet('variables');
-  vars.addRow(['name', 'label', 'type', 'measure']).font = { bold: true };
-  for (const e of entries) vars.addRow([e.name, e.label, e.type, e.measure]);
+  vars.columns = [16, 60, 16, 16].map((width) => ({ width }));
+  const head = (ws: ExcelJS.Worksheet, names: string[]) => {
+    const r = ws.addRow(names);
+    r.font = { bold: true };
+    r.commit();
+  };
+  head(vars, ['name', 'label', 'type', 'measure']);
+  for (const e of entries) vars.addRow([e.name, e.label, e.type, e.measure]).commit();
+  vars.commit();
   const values = wb.addWorksheet('values');
-  values.addRow(['name', 'code', 'label', 'missing']).font = { bold: true };
+  values.columns = [14, 14, 40, 14].map((width) => ({ width }));
+  head(values, ['name', 'code', 'label', 'missing']);
   for (const e of entries)
-    for (const v of e.values) values.addRow([e.name, v.code, v.label, v.missing ? 'yes' : '']);
-  vars.columns.forEach((c, i) => (c.width = i === 1 ? 60 : 16));
-  values.columns.forEach((c, i) => (c.width = i === 2 ? 40 : 14));
+    for (const v of e.values)
+      values.addRow([e.name, v.code, v.label, v.missing ? 'yes' : '']).commit();
+  values.commit();
 }
 
 const isPersonal = (options: unknown) => (options as { personal?: boolean }).personal === true;
@@ -106,6 +114,8 @@ const isPersonal = (options: unknown) => (options as { personal?: boolean }).per
 @Injectable()
 export class ExportsService implements OnModuleInit {
   private readonly logger = new Logger('Exports');
+  /** Interviews read at a time (tests make it small to cross pages). */
+  pageSize = PAGE;
 
   constructor(
     private readonly database: Database,
@@ -114,6 +124,7 @@ export class ExportsService implements OnModuleInit {
     private readonly audit: AuditService,
     @Inject(BUS) private readonly bus: Bus,
     @Inject(CONFIG) private readonly config: AppConfig,
+    @Inject(EXPORT_STORAGE) private readonly storage: ExportStorage,
   ) {}
 
   onModuleInit() {
@@ -135,17 +146,36 @@ export class ExportsService implements OnModuleInit {
     const before = new Date(now.getTime() - days * 86_400_000);
     let n = 0;
     for (const tenantId of await this.database.allTenantIds()) {
-      const rows = await this.database.withTenant(tenantId, (tx) =>
-        tx
-          .update(exports)
-          .set({ status: 'expired', file: null })
+      const rows = await this.database.withTenant(tenantId, async (tx) => {
+        const old = await tx
+          .select({ id: exports.id, key: exports.storageKey })
+          .from(exports)
           .where(and(eq(exports.status, 'done'), lt(exports.finishedAt, before)))
-          .returning({ id: exports.id }),
-      );
+          .for('update');
+        if (old.length)
+          await tx
+            .update(exports)
+            .set({ status: 'expired', file: null, storageKey: null })
+            .where(
+              inArray(
+                exports.id,
+                old.map((r) => r.id),
+              ),
+            );
+        return old;
+      });
       n += rows.length;
+      for (const r of rows) if (r.key) await this.forget(r.key);
     }
     if (n) this.logger.log(`Deleted the files of ${n} old exports`);
     return n;
+  }
+
+  /** Deletes a stored file; a failure is logged (the storage's own expiry is the backstop). */
+  private async forget(key: string) {
+    await this.storage
+      .remove(key)
+      .catch((e: Error) => this.logger.warn(`Export file ${key} not deleted: ${e.message}`));
   }
 
   async request(tx: Tx, ctx: AuthContext, projectId: string, body: ExportBody) {
@@ -213,12 +243,13 @@ export class ExportsService implements OnModuleInit {
         fileName: exports.fileName,
         contentType: exports.contentType,
         file: exports.file,
+        storageKey: exports.storageKey,
         status: exports.status,
         options: exports.options,
       })
       .from(exports)
       .where(and(eq(exports.id, id), eq(exports.projectId, projectId)));
-    if (!row || row.status !== 'done' || !row.file)
+    if (!row || row.status !== 'done' || (!row.file && !row.storageKey))
       throw new NotFoundException({ code: 'NOT_READY', message: 'This export is not ready' });
     // A file with personal answers goes only to people allowed to see personal data.
     if (isPersonal(row.options) && !can(ctx.memberships, 'pii.view', projectId))
@@ -233,10 +264,52 @@ export class ExportsService implements OnModuleInit {
         details: { projectId, fileName: row.fileName },
       }),
     );
-    return row as { fileName: string; contentType: string; file: Buffer };
+    const { fileName, contentType, file, storageKey } = row as typeof row & {
+      fileName: string;
+      contentType: string;
+    };
+    return {
+      fileName,
+      contentType,
+      /** The file's bytes as a stream, from storage (or the database, for older exports). */
+      open: async () =>
+        storageKey
+          ? this.storage.open(storageKey)
+          : { stream: Readable.from([file!]), size: file!.length },
+    };
   }
 
-  /** The job: reads the data, writes the file, stores it. */
+  /** The interviews of an export, page by page, each page read in its own short transaction. */
+  private async *pages(
+    tenantId: string,
+    projectId: string,
+    src: DataSource,
+    opts: ExportBody,
+  ): AsyncGenerator<ExportInterview[]> {
+    let after: PageKey | null = null;
+    do {
+      const page = await this.database.withTenant(tenantId, (tx) =>
+        this.datasets.page(
+          tx,
+          projectId,
+          src,
+          opts,
+          { paradata: opts.paradata },
+          after,
+          this.pageSize,
+        ),
+      );
+      if (page.interviews.length) yield page.interviews;
+      after = page.after;
+    } while (after);
+  }
+
+  /**
+   * The job: reads the data page by page and writes the file to storage as it goes, so any
+   * size of export needs memory for one page (PAGE interviews) and the storage's buffers.
+   * Tables whose columns or header depend on the data are read twice or three times: once for
+   * the columns (coded texts, wide roster rows), once for SPSS/Stata stats, once to write.
+   */
   async build(tenantId: string, exportId: string): Promise<void> {
     const job = await this.database.withTenant(tenantId, async (tx) => {
       const [row] = await tx.select().from(exports).where(eq(exports.id, exportId));
@@ -251,51 +324,119 @@ export class ExportsService implements OnModuleInit {
       return claimed ?? null;
     });
     if (!job) return;
+    let writer: StorageWriter | undefined;
     try {
       const opts = ExportBody.parse(job.options);
-      const personal = isPersonal(job.options);
-      // Read in a short transaction; build and write the file outside any, so the connection
-      // and its snapshot are not held while the CPU works.
-      const data = await this.database.withTenant(tenantId, async (tx) => {
-        // Too large is refused before reading: loading and building happen in memory.
-        const size = await this.datasets.estimate(tx, job.projectId, opts);
-        if (
-          size.answerBytes > MAX_BYTES ||
-          size.interviews * Math.max(size.questions, 1) > this.config.EXPORT_MAX_CELLS
-        )
-          throw new Error(
-            `The export is too large (${size.interviews} interviews × ${size.questions} questions); filter the data or split the export`,
-          );
-        return this.datasets.load(tx, job.projectId, opts, { paradata: opts.paradata });
-      });
-      const built = buildTables(data.compiled, data.interviews, {
+      const src = await this.database.withTenant(tenantId, (tx) =>
+        this.datasets.source(tx, job.projectId, opts),
+      );
+      const builder = new TableBuilder(src.compiled, {
         rosters: opts.rosters,
         paradata: opts.paradata,
-        personal,
+        personal: isPersonal(job.options),
         ...(opts.language ? { language: opts.language } : {}),
       });
-      const result = { data, built, ...(await this.render(data, job.projectId, built, opts)) };
-      if (result.bytes.length > MAX_BYTES)
-        throw new Error('The file is larger than 100 MB; filter the data or split the export');
+      let interviews = 0;
+      for await (const page of this.pages(tenantId, job.projectId, src, opts)) {
+        for (const i of page) builder.observe(i);
+        interviews += page.length;
+      }
+      const layout = builder.layout();
+      const tables = [layout.main, ...layout.rosters];
+      const rowsOf = (i: ExportInterview, t: number): Cell[][] =>
+        t === 0 ? [builder.mainRow(i)] : builder.rosterRows(i, t - 1);
+      // The rows of one table, batch by batch (a page of interviews each).
+      const rows = async function* (this: ExportsService, t: number) {
+        for await (const page of this.pages(tenantId, job.projectId, src, opts))
+          yield page.flatMap((i) => rowsOf(i, t));
+      }.bind(this);
+
+      const file = this.fileOf(src.name, opts, tables);
+      writer = this.storage.create(`${tenantId}/${exportId}/${file.fileName}`, file.contentType);
+      const max = this.config.EXPORT_MAX_BYTES;
+      const w = writer;
+      const out = async (chunk: Uint8Array) => {
+        if (!chunk.length) return;
+        if (w.size + chunk.length > max) throw new TooLarge();
+        await w.write(chunk);
+      };
+
+      if (opts.format === 'sql') {
+        await out(
+          new TextEncoder().encode(
+            sqlExport({
+              name: src.name,
+              projectId: job.projectId,
+              questionnaireId: src.questionnaireId,
+              versionId: src.versionId,
+              language: opts.language ?? src.compiled.questionnaire.defaultLanguage,
+              opts,
+              main: { ...layout.main, rows: [] },
+              rosters: layout.rosters.map((t) => ({ ...t, rows: [] })),
+            }),
+          ),
+        );
+      } else if (opts.format === 'xlsx' || opts.format === 'codebook') {
+        await this.workbook(out, opts, tables, rows);
+      } else {
+        // SPSS and Stata write sizes in the header: one pass for every table's stats.
+        let stats: TableStats[] | undefined;
+        if (opts.format !== 'csv') {
+          const collectors = tables.map((t) => new StatsCollector(t.columns));
+          for await (const page of this.pages(tenantId, job.projectId, src, opts))
+            for (const i of page) collectors.forEach((c, t) => c.add(rowsOf(i, t)));
+          stats = collectors.map((c) => c.result());
+        }
+        const encoderOf = (t: number): TableEncoder => {
+          const columns = tables[t]!.columns;
+          if (opts.format === 'csv')
+            return csvEncoder(columns, { labels: opts.labels === 'labels' });
+          const o = { label: src.name };
+          return opts.format === 'sav'
+            ? savEncoder(columns, stats![t]!, o)
+            : dtaEncoder(columns, stats![t]!, o);
+        };
+        const zip = tables.length > 1 ? new ZipStream() : undefined;
+        for (let t = 0; t < tables.length; t++) {
+          const enc = encoderOf(t);
+          const put = zip ? (b: Uint8Array) => out(zip.data(b)) : out;
+          if (zip) await out(zip.open(file.entries[t]!));
+          await put(enc.head());
+          for await (const batch of rows(t)) await put(enc.rows(batch));
+          await put(enc.tail());
+          if (zip) await out(zip.close());
+        }
+        if (zip) await out(zip.finish());
+      }
+      await writer.done();
+      const size = writer.size;
+      writer = undefined;
       await this.database.withTenant(tenantId, (tx) =>
         tx
           .update(exports)
           .set({
             status: 'done',
-            fileName: result.fileName,
-            contentType: result.contentType,
-            file: Buffer.from(result.bytes),
-            size: result.bytes.length,
-            rows: result.built.main.rows.length,
+            fileName: file.fileName,
+            contentType: file.contentType,
+            storageKey: `${tenantId}/${exportId}/${file.fileName}`,
+            size,
+            rows: interviews,
             finishedAt: new Date(),
           })
           .where(eq(exports.id, exportId)),
       );
     } catch (e) {
+      await writer?.abort().catch(() => undefined);
+      const error =
+        e instanceof TooLarge
+          ? new Error(
+              `The file is larger than ${Math.round(this.config.EXPORT_MAX_BYTES / 1e6)} MB; filter the data or split the export`,
+            )
+          : (e as Error);
       // The database busy or away: back to the queue, tried again (by the queue's retries or
       // the sweeper) a few times before giving up.
       if (isTransient(e) && job.attempts < MAX_JOB_ATTEMPTS) {
-        this.logger.warn(`Export ${exportId} will be retried: ${(e as Error).message}`);
+        this.logger.warn(`Export ${exportId} will be retried: ${error.message}`);
         await this.database
           .withTenant(tenantId, (tx) =>
             tx.update(exports).set({ status: 'queued' }).where(eq(exports.id, exportId)),
@@ -303,13 +444,13 @@ export class ExportsService implements OnModuleInit {
           .catch(() => undefined);
         throw e;
       }
-      this.logger.error(`Export ${exportId} failed: ${(e as Error).message}`);
+      this.logger.error(`Export ${exportId} failed: ${error.message}`);
       await this.database.withTenant(tenantId, (tx) =>
         tx
           .update(exports)
           .set({
             status: 'failed',
-            error: (e as Error).message.slice(0, 500),
+            error: error.message.slice(0, 500),
             finishedAt: new Date(),
           })
           .where(eq(exports.id, exportId)),
@@ -318,75 +459,87 @@ export class ExportsService implements OnModuleInit {
     await this.bus.publish(projectChannel(job.projectId), { type: 'export', id: exportId });
   }
 
-  private async render(
-    data: Dataset,
-    projectId: string,
-    built: { main: Table; rosters: Table[] },
-    opts: ExportBody,
-  ): Promise<{ fileName: string; contentType: string; bytes: Uint8Array }> {
-    const name = data.name;
+  /** The file's name and type; with several tables (long rosters) a zip and its entries. */
+  private fileOf(name: string, opts: ExportBody, tables: TableLayout[]) {
     const stamp = new Date().toISOString().slice(0, 10);
     const base = `${safeName(name)}_${stamp}`;
-    const labels = opts.labels === 'labels';
-    if (opts.format === 'sql') {
-      const text = sqlExport({
-        name,
-        projectId,
-        questionnaireId: data.questionnaireId,
-        versionId: data.versionId,
-        language: opts.language ?? data.compiled.questionnaire.defaultLanguage,
-        opts,
-        main: built.main,
-        rosters: built.rosters,
-      });
-      return {
-        fileName: `${base}.sql`,
-        contentType: CONTENT_TYPES.sql,
-        bytes: new TextEncoder().encode(text),
-      };
-    }
-    if (opts.format === 'xlsx' || opts.format === 'codebook') {
-      const wb =
-        opts.format === 'xlsx'
-          ? await workbook(
-              [
-                { name: 'data', table: built.main },
-                ...built.rosters.map((t) => ({ name: t.name, table: t })),
-              ],
-              labels,
-            )
-          : new ExcelJS.Workbook();
-      addCodebookSheets(wb, built.main);
-      for (const r of opts.format === 'codebook' ? built.rosters : []) {
-        const ws = wb.addWorksheet(`variables_${r.name}`.slice(0, 31));
-        ws.addRow(['name', 'label', 'type']).font = { bold: true };
-        for (const e of codebook(r)) ws.addRow([e.name, e.label, e.type]);
-      }
-      const bytes = new Uint8Array(await wb.xlsx.writeBuffer());
+    if (opts.format === 'sql')
+      return { fileName: `${base}.sql`, contentType: CONTENT_TYPES.sql, entries: [] };
+    if (opts.format === 'xlsx' || opts.format === 'codebook')
       return {
         fileName: `${base}${opts.format === 'codebook' ? '_codebook' : ''}.xlsx`,
         contentType: CONTENT_TYPES.xlsx,
-        bytes,
+        entries: [],
       };
-    }
-    const one = (t: Table): Uint8Array =>
-      opts.format === 'csv'
-        ? new TextEncoder().encode(writeCsv(t, { labels }))
-        : opts.format === 'sav'
-          ? writeSav(t, { label: name })
-          : writeDta(t, { label: name });
     const ext = opts.format;
-    if (!built.rosters.length)
-      return {
-        fileName: `${base}.${ext}`,
-        contentType: CONTENT_TYPES[ext],
-        bytes: one(built.main),
-      };
+    if (tables.length === 1)
+      return { fileName: `${base}.${ext}`, contentType: CONTENT_TYPES[ext], entries: [] };
     // Long rosters: one file per table, in a zip.
-    const bytes = writeZip([
-      { name: `${base}.${ext}`, data: one(built.main) },
-      ...built.rosters.map((t) => ({ name: `${base}_${t.name}.${ext}`, data: one(t) })),
-    ]);
-    return { fileName: `${base}.zip`, contentType: CONTENT_TYPES.zip, bytes };
+    return {
+      fileName: `${base}.zip`,
+      contentType: CONTENT_TYPES.zip,
+      entries: tables.map((t, k) => (k === 0 ? `${base}.${ext}` : `${base}_${t.name}.${ext}`)),
+    };
+  }
+
+  /**
+   * Excel, written sheet by sheet as rows come (ExcelJS's streaming writer): the data sheets
+   * (none for a codebook), then the codebook of the main table and of each roster table.
+   */
+  private async workbook(
+    out: (chunk: Uint8Array) => Promise<void>,
+    opts: ExportBody,
+    tables: TableLayout[],
+    rows: (t: number) => AsyncGenerator<Cell[][]>,
+  ) {
+    const sink = new Writable({
+      write(chunk: Buffer, _enc, done) {
+        out(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.length)).then(() => done(), done);
+      },
+    });
+    const finished = new Promise<void>((ok, fail) => {
+      sink.on('finish', ok);
+      sink.on('error', fail);
+    });
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: sink,
+      useStyles: true,
+      useSharedStrings: false,
+    });
+    wb.creator = 'WanSurvey';
+    const labels = opts.labels === 'labels';
+    if (opts.format === 'xlsx')
+      for (let t = 0; t < tables.length; t++) {
+        const table = tables[t]!;
+        const ws = wb.addWorksheet((t === 0 ? 'data' : table.name).slice(0, 31), {
+          views: [{ state: 'frozen', ySplit: 1 }],
+        });
+        const head = ws.addRow(table.columns.map((c) => c.name));
+        head.font = { bold: true };
+        head.commit();
+        for await (const batch of rows(t))
+          for (const row of batch)
+            ws.addRow(
+              row.map((v, i) => {
+                const c = table.columns[i]!;
+                if (labels && typeof v === 'number' && c.valueLabels?.has(v))
+                  return c.valueLabels.get(v);
+                return v;
+              }),
+            ).commit();
+        ws.commit();
+      }
+    addCodebookSheets(wb, tables[0]!.columns);
+    if (opts.format === 'codebook')
+      for (const r of tables.slice(1)) {
+        const ws = wb.addWorksheet(`variables_${r.name}`.slice(0, 31));
+        const head = ws.addRow(['name', 'label', 'type']);
+        head.font = { bold: true };
+        head.commit();
+        for (const e of codebook({ ...r, rows: [] })) ws.addRow([e.name, e.label, e.type]).commit();
+        ws.commit();
+      }
+    await wb.commit();
+    await finished;
   }
 }

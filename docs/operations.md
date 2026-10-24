@@ -45,7 +45,7 @@ API and worker read the same environment (validated at start; see `apps/api/.env
 | `mail.dispatch`     | every 15 s                                               | Sends queued invitations and due reminders, up to 200 per organisation per run                           |
 | `stats.refresh`     | after each submission or review decision (debounced 1 s) | Recomputes one project day of `stats_daily`, then announces it to dashboards                             |
 | `stats.nightly`     | 02:00 UTC                                                | Recomputes all daily figures                                                                             |
-| `exports.build`     | on request                                               | Builds an export file (up to 100 MB)                                                                     |
+| `exports.build`     | on request                                               | Builds an export file page by page into export storage (up to `EXPORT_MAX_BYTES`, 2 GB)                  |
 | `pii.encrypt`       | at worker start, then hourly                             | Seals personal sample fields still in plain text (for example after a field is marked personal)          |
 | `privacy.retention` | 02:30 UTC                                                | Removes personal data from cases past their project's retention period                                   |
 | `bi.refresh`        | `BI_REFRESH_CRON` (every 6 h at :40 UTC)                 | Refreshes the analysis model, schema `bi` ([bi.md](bi.md)), when its data changed                        |

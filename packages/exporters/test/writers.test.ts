@@ -4,8 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  concat,
   crc32,
+  csvEncoder,
+  dtaEncoder,
+  savEncoder,
   shortNames,
+  statsOf,
+  ZipStream,
   stataNames,
   writeCsv,
   writeDta,
@@ -127,6 +133,46 @@ describe('export writers', () => {
       );
       expect(names.trim()).toBe("['a.csv'] x");
     }
+  });
+
+  it('streams a ZIP whose sizes follow each file (data descriptors)', () => {
+    const zip = new ZipStream(new Date('2026-10-13T08:00:00'));
+    const big = new Uint8Array(70_000).map((_, i) => i % 251);
+    const parts = [zip.open('uno.csv')];
+    for (let k = 0; k < big.length; k += 16_384) parts.push(zip.data(big.slice(k, k + 16_384)));
+    parts.push(zip.close(), zip.open('dos ñ.csv'), zip.data(new TextEncoder().encode('x')));
+    parts.push(zip.close(), zip.finish());
+    const file = concat(parts);
+    if (py) {
+      const dir = mkdtempSync(join(tmpdir(), 'ws-zip-'));
+      writeFileSync(join(dir, 'a.zip'), file);
+      const out = execFileSync(
+        'python3',
+        [
+          '-c',
+          `import zipfile,hashlib;z=zipfile.ZipFile('${join(dir, 'a.zip')}');print(z.testzip(),z.namelist(),len(z.read('uno.csv')),z.read('dos ñ.csv').decode())`,
+        ],
+        { encoding: 'utf8' },
+      );
+      expect(out.trim()).toBe("None ['uno.csv', 'dos ñ.csv'] 70000 x");
+    }
+  });
+
+  it('writes the same file in batches as all at once (CSV, SPSS, Stata)', () => {
+    const now = new Date('2026-10-13T08:00:00Z');
+    const stats = statsOf(table);
+    for (const enc of [
+      () => csvEncoder(table.columns, { labels: true }),
+      () => savEncoder(table.columns, stats, { name: table.name, now }),
+      () => dtaEncoder(table.columns, stats, { name: table.name, now }),
+    ]) {
+      const whole = enc();
+      const all = concat([whole.head(), whole.rows(table.rows), whole.tail()]);
+      const one = enc();
+      const parts = [one.head(), ...table.rows.map((r) => one.rows([r])), one.tail()];
+      expect(Buffer.from(concat(parts)).equals(Buffer.from(all))).toBe(true);
+    }
+    expect(Buffer.from(writeSav(table, { now })).length).toBeGreaterThan(0);
   });
 
   it.skipIf(!py && !required)(

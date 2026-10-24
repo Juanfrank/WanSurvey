@@ -1,4 +1,6 @@
+import { existsSync, readdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { join } from 'node:path';
 import { createInterview, type CompiledQuestionnaire } from '@wansurvey/logic';
 import { ROLE_PERMISSIONS } from '@wansurvey/schema';
 import ExcelJS from 'exceljs';
@@ -6,6 +8,7 @@ import request from 'supertest';
 import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config.js';
+import { ExportsService } from '../src/exports/exports.service.js';
 import { JobsService } from '../src/jobs/jobs.service.js';
 import { StatsService } from '../src/stats/stats.service.js';
 import {
@@ -399,7 +402,10 @@ describe('metrics, live dashboard, topline, exports and share links', () => {
     expect([...labels].sort()).toEqual(['No', 'Sí']);
     const values = wb.getWorksheet('values')!;
     const rows: unknown[][] = [];
-    values.eachRow((row) => rows.push((row.values as unknown[]).slice(1)));
+    // A blank cell (the streaming writer leaves empty texts out) reads as ''.
+    values.eachRow((row) =>
+      rows.push([0, 1, 2, 3].map((k) => (row.values as unknown[])[k + 1] ?? '')),
+    );
     expect(rows).toContainEqual(['WORK', 1, 'Sí', '']);
     const vars: unknown[][] = [];
     wb.getWorksheet('variables')!.eachRow((row) => vars.push((row.values as unknown[]).slice(1)));
@@ -442,18 +448,60 @@ describe('metrics, live dashboard, topline, exports and share links', () => {
       await t.admin`update tenants set role_permissions = '{}' where id = ${tenant.id}`;
     }
   });
-  it('refuses an export too large before reading the data', async () => {
+  it('stops an export past the size limit and keeps nothing of it', async () => {
     const config = t.app.get(CONFIG);
-    const before = config.EXPORT_MAX_CELLS;
-    config.EXPORT_MAX_CELLS = 10;
+    const before = config.EXPORT_MAX_BYTES;
+    config.EXPORT_MAX_BYTES = 100;
     try {
       const e = await post(pm, `/projects/${project}/exports`, { format: 'csv' }).expect(201);
       await jobs.drain();
       const list = await get(pm, `/projects/${project}/exports`).expect(200);
       const row = list.body.find((x: { id: string }) => x.id === e.body.id);
-      expect(row).toMatchObject({ status: 'failed', error: expect.stringMatching(/too large/) });
+      expect(row).toMatchObject({ status: 'failed', error: expect.stringMatching(/larger than/) });
+      const dir = join(process.env.EXPORT_DIR!, tenant.id, e.body.id);
+      expect(existsSync(dir) ? readdirSync(dir) : []).toEqual([]);
     } finally {
-      config.EXPORT_MAX_CELLS = before;
+      config.EXPORT_MAX_BYTES = before;
     }
+  });
+
+  it('reads the data page by page: the same file with pages of 2 interviews as of 500', async () => {
+    const svc = t.app.get(ExportsService);
+    const file = async () => {
+      const e = await post(pm, `/projects/${project}/exports`, {
+        format: 'csv',
+        rosters: 'long',
+      }).expect(201);
+      await jobs.drain();
+      const res = await get(pm, `/projects/${project}/exports/${e.body.id}/file`)
+        .buffer(true)
+        .parse((r, cb) => {
+          const parts: Buffer[] = [];
+          r.on('data', (c: Buffer) => parts.push(c));
+          r.on('end', () => cb(null, Buffer.concat(parts)));
+        })
+        .expect(200);
+      return res.body as Buffer;
+    };
+    const whole = await file();
+    svc.pageSize = 2;
+    try {
+      const paged = await file();
+      expect(paged.equals(whole)).toBe(true);
+    } finally {
+      svc.pageSize = 500;
+    }
+  });
+
+  it('still downloads an export stored in the database before files went to storage', async () => {
+    const [row] = await t.admin`
+      insert into exports (id, tenant_id, project_id, questionnaire_id, requested_by, options, status,
+                           file_name, content_type, file, size, finished_at)
+      select gen_random_uuid(), tenant_id, project_id, questionnaire_id, requested_by,
+             options, 'done', 'old.csv', 'text/csv; charset=utf-8', convert_to('a,b', 'UTF8'), 3, now()
+      from exports where project_id = ${project} limit 1
+      returning id`;
+    const res = await get(pm, `/projects/${project}/exports/${row!.id}/file`).expect(200);
+    expect(res.text).toBe('a,b');
   });
 });

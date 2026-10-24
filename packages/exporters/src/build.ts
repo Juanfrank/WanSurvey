@@ -482,82 +482,153 @@ function rosterRows(answers: Record<string, unknown>, chain: string[]) {
   return level;
 }
 
+/** One table's columns, before any row (the layout the rows follow). */
+export interface TableLayout {
+  name: string;
+  columns: Column[];
+}
+
+/** Compares 1-based roster row indexes, outermost first. */
+const byIndex = (a: number[], b: number[]) => {
+  for (let k = 0; k < Math.max(a.length, b.length); k++)
+    if ((a[k] ?? 0) !== (b[k] ?? 0)) return (a[k] ?? 0) - (b[k] ?? 0);
+  return 0;
+};
+
 /**
- * The dataset of a questionnaire's interviews: meta columns, then one or more columns per
- * variable in questionnaire order, the same for every mode (so data from all modes merges).
- * Coded columns carry value labels; don't know / refused keep their codes and are declared
- * missing. Rosters are numbered columns (wide) or a table each (long).
+ * The dataset of a questionnaire's interviews, built one interview at a time so an export of
+ * any size needs memory for one page of interviews only: `observe` every interview first (the
+ * columns depend on the data: coded "other" texts, and in wide rosters how many rows there
+ * are), then `layout`, then the rows of each interview with `mainRow` and `rosterRows`.
+ *
+ * Meta columns, then one or more columns per variable in questionnaire order, the same for
+ * every mode (so data from all modes merges). Coded columns carry value labels; don't know /
+ * refused keep their codes and are declared missing. Rosters are numbered columns (wide) or a
+ * table each (long).
  */
-export function buildTables(
-  compiled: CompiledQuestionnaire,
-  interviews: ExportInterview[],
-  opts: BuildOptions,
-): { main: Table; rosters: Table[] } {
-  const lang = opts.language ?? compiled.questionnaire.defaultLanguage;
-  const fields = fieldsOf(compiled, lang, opts.personal ?? true);
-  // Text of "other" and coding results are separate answer keys.
-  const top = fields.filter((f) => !f.chain.length);
-  const nested = fields.filter((f) => f.chain.length);
-  const coded = new Set<string>();
-  for (const i of interviews)
-    for (const k of Object.keys(i.answers)) if (/_CODE$/.test(k) && !k.includes('[')) coded.add(k);
+export class TableBuilder {
+  private readonly top: Field[];
+  /** Roster fields by chain ("HH" or "HH.KIDS"), in questionnaire order. */
+  private readonly chains = new Map<string, Field[]>();
+  private readonly coded = new Set<string>();
+  /** Wide rosters: the rows seen, by chain. */
+  private readonly seen = new Map<string, Map<string, number[]>>();
+  private frozen?: {
+    coded: string[];
+    wide: { f: Field; idx: number[]; key: string }[];
+    main: TableLayout;
+    rosters: TableLayout[];
+  };
 
-  const cellsFor = (answers: Record<string, unknown>, f: Field) => f.cells(answers[f.source]);
-
-  const columns: Column[] = [...META];
-  for (const f of top) columns.push(...f.columns.map((c) => ({ ...c, variable: true })));
-  for (const c of [...coded].sort())
-    columns.push({
-      name: c,
-      label: `${c.replace(/_CODE$/, '')} (codificado)`,
-      type: 'numeric',
-      measure: 'nominal',
-      source: answer(c, 'coded'),
-    });
-
-  // Wide rosters: numbered copies of each roster column, as many as the data needs.
-  const wide: { f: Field; idx: number[] }[] = [];
-  if (opts.rosters === 'wide') {
-    const chains = new Map<string, Field[]>();
-    for (const f of nested)
-      chains.set(f.chain.join('.'), [...(chains.get(f.chain.join('.')) ?? []), f]);
-    for (const fs of chains.values()) {
-      const seen = new Map<string, number[]>();
-      for (const i of interviews)
-        for (const r of rosterRows(i.answers, fs[0]!.chain)) seen.set(r.idx.join('_'), r.idx);
-      const keys = [...seen.values()].sort((a, b) => {
-        for (let k = 0; k < Math.max(a.length, b.length); k++)
-          if ((a[k] ?? 0) !== (b[k] ?? 0)) return (a[k] ?? 0) - (b[k] ?? 0);
-        return 0;
-      });
-      // Person by person: every column of row 1, then of row 2…
-      for (const idx of keys)
-        for (const f of fs) {
-          wide.push({ f, idx });
-          for (const c of f.columns)
-            columns.push({
-              ...c,
-              name: `${c.name}_${idx.join('_')}`,
-              label: `${c.label} [${idx.join('.')}]`,
-              ...(c.source?.kind === 'answer' ? { source: { ...c.source, path: idx } } : {}),
-            });
-        }
+  constructor(
+    private readonly compiled: CompiledQuestionnaire,
+    private readonly opts: BuildOptions,
+  ) {
+    const lang = opts.language ?? compiled.questionnaire.defaultLanguage;
+    const fields = fieldsOf(compiled, lang, opts.personal ?? true);
+    this.top = fields.filter((f) => !f.chain.length);
+    for (const f of fields.filter((x) => x.chain.length)) {
+      const k = f.chain.join('.');
+      this.chains.set(k, [...(this.chains.get(k) ?? []), f]);
     }
   }
-  if (opts.paradata) columns.push(...PARADATA);
 
-  const rows: Cell[][] = interviews.map((i) => {
+  /** Notes what an interview adds to the columns. */
+  observe(i: ExportInterview) {
+    if (this.frozen) throw new Error('observe() after layout()');
+    // Text of "other" and coding results are separate answer keys.
+    for (const k of Object.keys(i.answers))
+      if (/_CODE$/.test(k) && !k.includes('[')) this.coded.add(k);
+    if (this.opts.rosters === 'wide')
+      for (const [k, fs] of this.chains) {
+        let rows = this.seen.get(k);
+        if (!rows) this.seen.set(k, (rows = new Map()));
+        for (const r of rosterRows(i.answers, fs[0]!.chain)) rows.set(r.idx.join('_'), r.idx);
+      }
+  }
+
+  /** The tables' columns, fixed from here on. */
+  layout(): { main: TableLayout; rosters: TableLayout[] } {
+    if (this.frozen) return { main: this.frozen.main, rosters: this.frozen.rosters };
+    const coded = [...this.coded].sort();
+    const columns: Column[] = [...META];
+    for (const f of this.top) columns.push(...f.columns.map((c) => ({ ...c, variable: true })));
+    for (const c of coded)
+      columns.push({
+        name: c,
+        label: `${c.replace(/_CODE$/, '')} (codificado)`,
+        type: 'numeric',
+        measure: 'nominal',
+        source: answer(c, 'coded'),
+      });
+    // Wide rosters: numbered copies of each roster column, as many as the data needs.
+    const wide: { f: Field; idx: number[]; key: string }[] = [];
+    if (this.opts.rosters === 'wide')
+      for (const [k, fs] of this.chains) {
+        const keys = [...(this.seen.get(k)?.values() ?? [])].sort(byIndex);
+        // Person by person: every column of row 1, then of row 2…
+        for (const idx of keys)
+          for (const f of fs) {
+            wide.push({ f, idx, key: idx.join('_') });
+            for (const c of f.columns)
+              columns.push({
+                ...c,
+                name: `${c.name}_${idx.join('_')}`,
+                label: `${c.label} [${idx.join('.')}]`,
+                ...(c.source?.kind === 'answer' ? { source: { ...c.source, path: idx } } : {}),
+              });
+          }
+      }
+    if (this.opts.paradata) columns.push(...PARADATA);
+    const rosters: TableLayout[] = [];
+    if (this.opts.rosters === 'long')
+      for (const [k, fs] of this.chains)
+        rosters.push({
+          name: k.replace(/\./g, '_'),
+          columns: [
+            META[0]!,
+            META[1]!,
+            ...fs[0]!.chain.map((r, level) => ({
+              name: `${r}_row`,
+              label: `${r} row`,
+              type: 'numeric' as const,
+              source: { kind: 'roster_row' as const, level: level + 1 },
+            })),
+            ...fs.flatMap((f) => f.columns),
+          ],
+        });
+    this.frozen = {
+      coded,
+      wide,
+      main: { name: this.compiled.questionnaire.id, columns },
+      rosters,
+    };
+    return { main: this.frozen.main, rosters };
+  }
+
+  /** An interview's row of the main table. */
+  mainRow(i: ExportInterview): Cell[] {
+    const { coded, wide } = this.frozen ?? this.fix();
     const row: Cell[] = meta(i);
-    for (const f of top) row.push(...cellsFor(i.answers, f));
-    for (const c of [...coded].sort()) {
+    for (const f of this.top) row.push(...f.cells(i.answers[f.source]));
+    for (const c of coded) {
       const v = i.answers[c];
       row.push(typeof v === 'number' ? v : null);
     }
-    for (const w of wide) {
-      const hit = rosterRows(i.answers, w.f.chain).find((r) => r.idx.join('_') === w.idx.join('_'));
-      row.push(...(hit ? cellsFor(hit.row, w.f) : w.f.columns.map(() => null)));
+    if (wide.length) {
+      const rows = new Map<string, Map<string, Record<string, unknown>>>();
+      for (const w of wide) {
+        const chain = w.f.chain.join('.');
+        let byIdx = rows.get(chain);
+        if (!byIdx) {
+          byIdx = new Map(rosterRows(i.answers, w.f.chain).map((r) => [r.idx.join('_'), r.row]));
+          rows.set(chain, byIdx);
+        }
+        const hit = byIdx.get(w.key);
+        row.push(...(hit ? w.f.cells(hit[w.f.source]) : w.f.columns.map(() => null)));
+      }
     }
-    if (opts.paradata)
+    if (this.opts.paradata)
       row.push(
         i.paradata?.backMoves ?? 0,
         i.paradata?.notes ?? 0,
@@ -566,34 +637,37 @@ export function buildTables(
         i.flags && Object.keys(i.flags).length ? Object.keys(i.flags).sort().join(' ') : null,
       );
     return row;
-  });
-
-  const rosters: Table[] = [];
-  if (opts.rosters === 'long') {
-    const chains = new Map<string, Field[]>();
-    for (const f of nested) {
-      const k = f.chain.join('.');
-      chains.set(k, [...(chains.get(k) ?? []), f]);
-    }
-    for (const [k, fs] of chains) {
-      const chain = fs[0]!.chain;
-      const cols: Column[] = [
-        META[0]!,
-        META[1]!,
-        ...chain.map((r, level) => ({
-          name: `${r}_row`,
-          label: `${r} row`,
-          type: 'numeric' as const,
-          source: { kind: 'roster_row' as const, level: level + 1 },
-        })),
-        ...fs.flatMap((f) => f.columns),
-      ];
-      const rrows: Cell[][] = [];
-      for (const i of interviews)
-        for (const r of rosterRows(i.answers, chain))
-          rrows.push([i.id, i.caseId, ...r.idx, ...fs.flatMap((f) => cellsFor(r.row, f))]);
-      rosters.push({ name: k.replace(/\./g, '_'), columns: cols, rows: rrows });
-    }
   }
-  return { main: { name: compiled.questionnaire.id, columns, rows }, rosters };
+
+  /** An interview's rows of a long roster table (by its index in `layout().rosters`). */
+  rosterRows(i: ExportInterview, table: number): Cell[][] {
+    if (!this.frozen) this.fix();
+    const fs = [...this.chains.values()][table]!;
+    return rosterRows(i.answers, fs[0]!.chain).map((r) => [
+      i.id,
+      i.caseId,
+      ...r.idx,
+      ...fs.flatMap((f) => f.cells(r.row[f.source])),
+    ]);
+  }
+
+  private fix() {
+    this.layout();
+    return this.frozen!;
+  }
+}
+
+/** The whole dataset in memory (topline, summaries, small exports and tests). */
+export function buildTables(
+  compiled: CompiledQuestionnaire,
+  interviews: ExportInterview[],
+  opts: BuildOptions,
+): { main: Table; rosters: Table[] } {
+  const b = new TableBuilder(compiled, opts);
+  for (const i of interviews) b.observe(i);
+  const { main, rosters } = b.layout();
+  return {
+    main: { ...main, rows: interviews.map((i) => b.mainRow(i)) },
+    rosters: rosters.map((t, k) => ({ ...t, rows: interviews.flatMap((i) => b.rosterRows(i, k)) })),
+  };
 }

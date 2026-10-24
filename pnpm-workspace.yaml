@@ -8,6 +8,9 @@ onlyBuiltDependencies:
 overrides:
   # One Vite for the app and Vitest, pinned to a release at least two weeks old.
   vite: 7.3.6
+  # One set of Node types: apache-arrow (Blob Storage SDK) and mysql2 (Azurite) ask for newer
+  # ones, and two copies split Vite's types.
+  '@types/node': 22.20.5
 auditConfig:
   # The fixes came out on 2026-10-22, under two weeks ago; upgrade from 2026-11-05 and remove
   # these. body-parser: compressed request bodies are refused before parsing (plain-body.ts).

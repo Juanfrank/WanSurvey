@@ -1,9 +1,15 @@
 export * from './table.js';
-export { safeCell, writeCsv } from './csv.js';
-export { writeSav, shortNames, SAV_MAX_STRING } from './sav.js';
-export { writeDta, stataNames, DTA_MAX_STRING } from './dta.js';
-export { writeZip, crc32 } from './zip.js';
-export { buildTables, type ExportInterview, type BuildOptions } from './build.js';
+export { safeCell, writeCsv, csvEncoder } from './csv.js';
+export { writeSav, savEncoder, shortNames, SAV_MAX_STRING } from './sav.js';
+export { writeDta, dtaEncoder, stataNames, DTA_MAX_STRING } from './dta.js';
+export { writeZip, crc32, Crc32, ZipStream } from './zip.js';
+export {
+  buildTables,
+  TableBuilder,
+  type TableLayout,
+  type ExportInterview,
+  type BuildOptions,
+} from './build.js';
 export {
   topline,
   crosstab,

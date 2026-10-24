@@ -11,3 +11,4 @@ dump.rdb
 
 # Written by apps/api/scripts/load-setup.ts
 load/sync-users.json
+apps/api/.exports/

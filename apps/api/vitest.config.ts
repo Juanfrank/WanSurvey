@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
@@ -13,6 +15,8 @@ const env = {
   LOGIN_RATE_LIMIT: '1000',
   RATE_LIMIT_PER_IP: '100000',
   LOG_LEVEL: 'silent',
+  // Export files of the tests, kept out of the repository.
+  EXPORT_DIR: join(tmpdir(), 'wansurvey-test-exports'),
 };
 // globalSetup runs in the main process, so it needs the same variables.
 Object.assign(process.env, env);

@@ -43,6 +43,19 @@ server {
     proxy_read_timeout 1h;
   }
 
+  # Export files (up to EXPORT_MAX_BYTES): passed through as they come from Blob Storage, not
+  # copied to this container's disk first.
+  location ~ ^/api/v1/projects/[^/]+/exports/[^/]+/file$ {
+    proxy_pass ${API_UPSTREAM};
+    proxy_set_header Host $proxy_host;
+    proxy_ssl_server_name on;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_read_timeout 4m;
+  }
+
   # Scanned paper forms: several PDFs in one upload.
   location ~ ^/api/v1/projects/[^/]+/papi/scans$ {
     proxy_pass ${API_UPSTREAM};

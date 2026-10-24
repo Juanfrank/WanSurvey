@@ -51,6 +51,70 @@ export interface Table {
   rows: Cell[][];
 }
 
+/**
+ * A file format written in parts, so a table of any size streams through it: `head` once,
+ * `rows` for each batch, `tail` once. Concatenated, the parts are the whole file.
+ */
+export interface TableEncoder {
+  head(): Uint8Array;
+  rows(batch: Cell[][]): Uint8Array;
+  tail(): Uint8Array;
+}
+
+/** What fixed-layout formats (SPSS, Stata) need to know of the rows before writing them. */
+export interface TableStats {
+  rows: number;
+  /** Longest text of each column, in UTF-8 bytes (0 for numeric columns). */
+  widths: number[];
+  /** Whether each numeric column holds a number that is not whole. */
+  decimals: boolean[];
+}
+
+/** Collects `TableStats` batch by batch (a first pass over the rows). */
+export class StatsCollector {
+  private n = 0;
+  private readonly widths: number[];
+  private readonly decimals: boolean[];
+  constructor(private readonly columns: Column[]) {
+    this.widths = columns.map(() => 0);
+    this.decimals = columns.map(() => false);
+  }
+  add(batch: Cell[][]) {
+    this.n += batch.length;
+    for (const row of batch)
+      this.columns.forEach((c, i) => {
+        const v = row[i];
+        if (v === null || v === undefined) return;
+        if (c.type === 'string') {
+          const w = utf8Length(String(v));
+          if (w > this.widths[i]!) this.widths[i] = w;
+        } else if (typeof v === 'number' && !Number.isInteger(v)) this.decimals[i] = true;
+      });
+    return this;
+  }
+  result(): TableStats {
+    return { rows: this.n, widths: [...this.widths], decimals: [...this.decimals] };
+  }
+}
+
+/** The stats of a table held in memory. */
+export const statsOf = (table: Table) => new StatsCollector(table.columns).add(table.rows).result();
+
+/** Joins byte arrays. */
+export function concat(parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
+
+/** The whole file of an encoder, for a table held in memory. */
+export const encodeAll = (e: TableEncoder, rows: Cell[][]) =>
+  concat([e.head(), e.rows(rows), e.tail()]);
+
 /** A growable little-endian byte buffer. */
 export class Bytes {
   private buf = new Uint8Array(1024);

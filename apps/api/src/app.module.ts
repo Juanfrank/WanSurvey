@@ -36,6 +36,7 @@ import { DatasetService } from './analysis/dataset.service.js';
 import { ShareService } from './analysis/share.service.js';
 import { LiveService } from './dashboard/live.service.js';
 import { ExportsService } from './exports/exports.service.js';
+import { EXPORT_STORAGE, exportStorage, type ExportStorage } from './exports/storage.js';
 import { BUS, LocalBus, RedisBus, type Bus } from './jobs/bus.js';
 import { JobsService, PROCESS_ROLE, type ProcessRole } from './jobs/jobs.service.js';
 import { MetricsService } from './metrics/metrics.service.js';
@@ -90,6 +91,8 @@ export interface AppModuleOptions {
   role?: ProcessRole;
   /** Replaces the configured bus (tests). */
   bus?: Bus;
+  /** Replaces the configured export storage (tests: Azurite). */
+  exportStorage?: ExportStorage;
 }
 
 const BUS_OWNED = Symbol('BUS_OWNED');
@@ -219,6 +222,7 @@ export class AppModule {
         DatasetService,
         AnalysisService,
         ExportsService,
+        { provide: EXPORT_STORAGE, useValue: opts.exportStorage ?? exportStorage(config) },
         ShareService,
         PrivacyService,
         ExpiryService,

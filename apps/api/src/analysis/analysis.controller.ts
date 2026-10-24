@@ -141,10 +141,12 @@ export class AnalysisController {
     const f = await this.database.withTenant(ctx.tenantId, (tx) =>
       this.exportsService.file(tx, ctx, projectId, id),
     );
-    return new StreamableFile(f.file, {
+    // Streamed from storage as it is read: a large file never sits in the API's memory.
+    const { stream, size } = await f.open();
+    return new StreamableFile(stream, {
       type: f.contentType,
       disposition: `attachment; filename="${f.fileName}"`,
-      length: f.file.length,
+      length: size,
     });
   }
 

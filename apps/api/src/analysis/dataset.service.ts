@@ -19,6 +19,21 @@ export const DataFilter = z.object({
 });
 export type DataFilter = z.infer<typeof DataFilter>;
 
+/** Where the next page starts: after this submission time and id. */
+export interface PageKey {
+  at: string;
+  id: string;
+}
+
+/** The questionnaire version a read is against, resolved once. */
+export interface DataSource {
+  questionnaireId: string;
+  versionId: string;
+  name: string;
+  compiled: CompiledQuestionnaire;
+  tz: string;
+}
+
 export interface Dataset {
   questionnaireId: string;
   /** The latest version, whose variables and labels the data is read against. */
@@ -81,22 +96,10 @@ export class DatasetService {
         ${f.to ? sql`and ${day} <= ${f.to}::date` : sql``}`;
   }
 
-  /**
-   * What loading would read, without reading it: the interviews, the size of their answers as
-   * stored, and the questions of the version (cells are about interviews × questions).
-   */
-  async estimate(tx: Tx, projectId: string, f: DataFilter) {
+  /** What a paged read needs, fixed once: the version read against and the project's zone. */
+  async source(tx: Tx, projectId: string, f: DataFilter): Promise<DataSource> {
     const { qid, v } = await this.version(tx, projectId, f);
-    const [r] = await tx.execute<{ n: number; bytes: string | number }>(sql`
-      select count(*)::int as n, coalesce(sum(octet_length(i.answers::text)), 0) as bytes
-      from interviews i
-      join questionnaire_versions v on v.id = i.questionnaire_version_id
-      where ${this.scope(projectId, qid, v.tz, f, {})}`);
-    return {
-      interviews: r?.n ?? 0,
-      answerBytes: Number(r?.bytes ?? 0),
-      questions: v.compiled.nodes.filter((n) => n.kind === 'question').length,
-    };
+    return { questionnaireId: qid, versionId: v.id, name: v.name, compiled: v.compiled, tz: v.tz };
   }
 
   async load(
@@ -105,7 +108,38 @@ export class DatasetService {
     f: DataFilter,
     opts: { paradata?: boolean; completesOnly?: boolean } = {},
   ): Promise<Dataset> {
-    const { qid, v } = await this.version(tx, projectId, f);
+    const { tz, ...src } = await this.source(tx, projectId, f);
+    const { interviews } = await this.read(tx, projectId, { ...src, tz }, f, opts, null);
+    return { ...src, interviews };
+  }
+
+  /**
+   * One page of the interviews, in submission order, after `after` (null: the first). Each
+   * page is read on its own, so an export of any size never holds a connection or the whole
+   * data: ask again with the returned `after` until it is null.
+   */
+  page(
+    tx: Tx,
+    projectId: string,
+    src: DataSource,
+    f: DataFilter,
+    opts: { paradata?: boolean },
+    after: PageKey | null,
+    size: number,
+  ) {
+    return this.read(tx, projectId, src, f, opts, { after, size });
+  }
+
+  private async read(
+    tx: Tx,
+    projectId: string,
+    src: DataSource,
+    f: DataFilter,
+    opts: { paradata?: boolean; completesOnly?: boolean },
+    page: { after: PageKey | null; size: number } | null,
+  ): Promise<{ interviews: ExportInterview[]; after: PageKey | null }> {
+    // Submission time as text keeps its microseconds, so the next page starts exactly after.
+    const at = sql`coalesce(i.submitted_at, 'infinity'::timestamptz)`;
     const rows = await tx.execute<{
       id: string;
       caseId: string | null;
@@ -129,11 +163,12 @@ export class DatasetService {
       stratum: string | null;
       prob: number | null;
       weight: number | null;
+      pageAt: string;
     }>(sql`
       select i.id, i.case_id as "caseId", c.external_id as "caseCode", i.mode, i.status, i.disposition, u.name as interviewer,
              c.selection_role as role, fu.stratum, c.inclusion_prob as prob, c.base_weight as weight,
              i.started_at as "startedAt", i.submitted_at as "submittedAt", i.active_ms as "activeMs",
-             v.version, i.language, i.answers, i.flags
+             v.version, i.language, i.answers, i.flags, ${at}::text as "pageAt"
              ${
                opts.paradata
                  ? sql`, pd.back, pd.notes, pd.pauses, pd.warnings`
@@ -154,14 +189,14 @@ export class DatasetService {
               from interview_paradata pd where pd.interview_id = i.id) pd on true`
           : sql``
       }
-      where ${this.scope(projectId, qid, v.tz, f, opts)}
-      order by i.submitted_at, i.id`);
+      where ${this.scope(projectId, src.questionnaireId, src.tz, f, opts)}
+        ${page?.after ? sql`and (${at}, i.id) > (${page.after.at}::timestamptz, ${page.after.id}::uuid)` : sql``}
+      order by ${at}, i.id
+      ${page ? sql`limit ${page.size}` : sql``}`);
+    const last = rows.at(-1);
     return {
-      questionnaireId: qid,
-      versionId: v.id,
-      name: v.name,
-      compiled: v.compiled,
-      interviews: rows.map(({ role, stratum, prob, weight, ...r }) => ({
+      after: page && last && rows.length === page.size ? { at: last.pageAt, id: last.id } : null,
+      interviews: rows.map(({ role, stratum, prob, weight, pageAt: _at, ...r }) => ({
         ...r,
         sampling: { role, stratum, prob, weight },
         paradata: opts.paradata
