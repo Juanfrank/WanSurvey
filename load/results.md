@@ -1,5 +1,39 @@
 # Load test results
 
+## 2026-10-24 (fifth run) — proposals 1, 2 and 3 implemented
+
+The code now has:
+
+- shedding by priority;
+- every query of the four respondent requests built once (`Prepared`, with hand-written SQL
+  for the joined reads);
+- 19 statements per web complete instead of 33.
+
+Same machine and method as the earlier runs.
+
+|                                          | Before (second run)                                 | After                                                                          |
+| ---------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Statements per web complete              | 33                                                  | **19** (open 3, start 6, sync 5, submit 5)                                     |
+| API CPU per complete (sequential)        | 22.6–26.1 ms                                        | **20.8 ms**                                                                    |
+| Knee (ramp)                              | ~47 completes/s                                     | **~72 completes/s**                                                            |
+| Ramp at 125–150 offered a second         | 33–39 completes/s, 26–35 % 503s, served p95 ~320 ms | **70–74 completes/s**, 12–19 % 503s, served p95 **~140 ms**                    |
+| 503s on interviews under way, whole ramp | 2,414 (before priority)                             | **0**: all 3,664 503s were link openings                                       |
+| 50 completes/s for 2 min                 | 0 % errors, submit p95 126 ms, sync p95 109 ms      | 0 % errors, submit p95 **25 ms**, sync p95 **25 ms**, queue drained within 2 s |
+| 300 interviewers syncing                 | sync p95 30 ms, login p95 75 ms                     | sync p95 31 ms, login p95 295 ms (under the 2 s target)                        |
+
+**Reading.**
+
+- **Throughput rose more than the CPU per complete fell (+53 % against −10 %).** The profile
+  explains it: under concurrency, each statement removed is also one less wait on its
+  connection and its row locks. With fewer and shorter transactions, the pool of 9 connections
+  serves more requests a second.
+- **One P0v3 instance now carries the spec's 50 web completes a second with room to spare.**
+  Past its limit it keeps about 70 a second, and only new link openings are refused.
+- **Login p95 rose (75 → 295 ms) while 300 people signed in within 30 s.**
+  - It is argon2, deliberately expensive, sharing the core; the sync itself did not change.
+  - It is far under the target, but it is the place to look if sign-in at the start of a
+    field day matters.
+
 ## 2026-10-24 (fourth run) — experiments behind each proposal
 
 Same setup as the earlier runs. Each proposal was tried as a variant of the build and measured
