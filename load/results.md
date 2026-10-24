@@ -1,5 +1,30 @@
 # Load test results
 
+## 2026-10-24 (seventh run) — after the full code review (45 fixes)
+
+Same machine and method. The load database now holds about 196,000 interviews in the one load
+project, from all the runs of the day; the earlier runs started with far fewer.
+
+| Measure                                | Before the fixes (same database) | After the fixes                         |
+| -------------------------------------- | -------------------------------- | --------------------------------------- |
+| API CPU per web complete (sequential)  | 22.9–24.3 ms                     | 22.8–26.2 ms (same, within the noise)   |
+| 50 completes/s for 90 s: failed, p95   | 0.21 %, submit 126 ms            | 0.22 %, submit 136 ms                   |
+| Knee (ramp)                            | —                                | ~62 completes/s; all 503s on link opens |
+| 300 interviewers: sync p95, login p95  | —                                | 32 ms, 467 ms (0 errors)                |
+| Start of day, button only, 300 in 30 s | —                                | p95 223 ms, CPU 31 % (0 errors)         |
+
+**Reading.**
+
+- **The fixes cost nothing measurable.** Statements per web complete are still 19. The same
+  database gives the same CPU and the same 503 rate before and after (measured A/B, twice).
+- **What changed is the data volume.** The earlier 72 completes/s and 20.8 ms were measured
+  with a much smaller project. With ~200,000 interviews in one project, CPU per complete is
+  ~10 % higher and 50/s sheds 0.2 % of new link openings (never an interview under way). The
+  growth comes from the work that scales with the day's volume (the day's statistics); a
+  project of that size in one day is beyond the spec's 50/s for over an hour.
+- **Sign-in and syncs did not move**: interviewers' syncs p95 32 ms; the Microsoft button p95
+  ~220 ms, about 150 ms of it Microsoft's token endpoint.
+
 ## 2026-10-24 (sixth run) — start of a field day, Microsoft sign-in only
 
 300 interviewers sign in with Microsoft (`load/start-of-day.js`) and open the app:
