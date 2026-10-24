@@ -8,6 +8,8 @@ import { Counter, Trend } from 'k6/metrics';
 const BASE = __ENV.BASE ?? 'http://localhost:3000';
 const SLUG = __ENV.SLUG ?? 'load-open';
 const RATE = Number(__ENV.RATE ?? 50);
+// How far each respondent goes: 1 open, 2 start, 3 sync, 4 submit (to measure each step).
+const STEPS = Number(__ENV.STEPS ?? 4);
 
 const scenarios = {
   burst: {
@@ -68,6 +70,7 @@ export default function () {
     tags: { step: 'open' },
   });
   if (!check(open, { opened: (r) => r.status === 200 })) return completesFailed.add(1);
+  if (STEPS < 2) return;
   const token = open.json('token');
   const device = `k6-browser-${__VU}-${__ITER}`;
   const start = http.get(`${BASE}/api/v1/public/s/${token}?device=${device}`, {
@@ -75,6 +78,7 @@ export default function () {
     tags: { step: 'start' },
   });
   if (!check(start, { started: (r) => r.status === 200 })) return completesFailed.add(1);
+  if (STEPS < 3) return;
   // The load questionnaire (apps/api/scripts/load-setup.ts): AGE, SAT 1–5, COMMENTS.
   const now = new Date().toISOString();
   const answer = (seq, variable, value) => ({
@@ -114,6 +118,7 @@ export default function () {
     { headers, tags: { step: 'sync' } },
   );
   if (!check(sync, { synced: (r) => r.status === 200 })) return completesFailed.add(1);
+  if (STEPS < 4) return;
   const submit = http.post(
     `${BASE}/api/v1/public/s/${token}/submit`,
     JSON.stringify({ deviceId: device, seq: 3, path: ['AGE', 'SAT', 'COMMENTS'] }),
