@@ -33,6 +33,7 @@ import {
   users,
 } from '../db/schema.js';
 import { PiiCipher } from './pii.js';
+import { rememberedProject } from './project-memo.js';
 import { STRATEGIES } from './strategies.js';
 
 export interface Assignee {
@@ -111,6 +112,8 @@ export class CasesService {
   }
 
   async project(tx: Tx, projectId: string) {
+    const known = rememberedProject(tx, projectId);
+    if (known) return known;
     const [p] = await tx.select().from(projects).where(eq(projects.id, projectId));
     if (!p) throw new NotFoundException('Project not found');
     return p;

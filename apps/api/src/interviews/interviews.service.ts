@@ -78,17 +78,24 @@ const touchDevice = new Prepared<{ lastSeq: number }>(
       .returning({ lastSeq: interviewDevices.lastSeq }),
   { lastSeq: interviewDevices.lastSeq },
 );
-const setDeviceSeq = new Prepared<never>(
-  (tx) =>
-    tx
-      .update(interviewDevices)
-      .set({ lastSeq: sql`${sql.placeholder('seq')}`, updatedAt: sql`now()` })
-      .where(
-        and(
-          eq(interviewDevices.interviewId, sql.placeholder('id')),
-          eq(interviewDevices.deviceId, sql.placeholder('device')),
-        ),
-      ),
+/**
+ * The end of a sync: the interview's snapshot and times (when `touch`; only the fields sent)
+ * and the device's acknowledged number, in one statement.
+ */
+const finishSync = new Prepared<never>(
+  () => sql`
+    with i as (
+      update interviews set
+        state = case when ${sql.placeholder('hasState')} then ${sql.placeholder('state')}::jsonb else state end,
+        answers = case when ${sql.placeholder('hasState')} then ${sql.placeholder('answers')}::jsonb else answers end,
+        position = case when ${sql.placeholder('hasState')} then ${sql.placeholder('position')}::text else position end,
+        active_ms = coalesce(${sql.placeholder('active')}::int, active_ms),
+        total_ms = coalesce(${sql.placeholder('total')}::int, total_ms),
+        updated_at = now()
+      where id = ${sql.placeholder('id')} and ${sql.placeholder('touch')}::boolean
+    )
+    update interview_devices set last_seq = ${sql.placeholder('seq')}::int, updated_at = now()
+    where interview_id = ${sql.placeholder('id')} and device_id = ${sql.placeholder('device')}`,
   {},
 );
 
@@ -109,6 +116,11 @@ export interface Writer {
 }
 
 /** Runs inside the submitting transaction, after the interview is marked submitted. */
+export type SubmitContributor = (
+  tx: Tx,
+  row: InterviewRow,
+) => Promise<Partial<Pick<InterviewRow, 'flags' | 'sampled'>>>;
+
 export type SubmitHook = (
   tx: Tx,
   row: InterviewRow,
@@ -124,6 +136,7 @@ export type SubmitHook = (
 @Injectable()
 export class InterviewsService {
   private readonly hooks: SubmitHook[] = [];
+  private readonly contributors: SubmitContributor[] = [];
 
   constructor(
     private readonly audit: AuditService,
@@ -141,6 +154,14 @@ export class InterviewsService {
   /** Other modules react to submissions (close a call, mark an invitation, compare entries). */
   onSubmitted(hook: SubmitHook) {
     this.hooks.push(hook);
+  }
+
+  /**
+   * Fields other modules add to the submission's own update (the review flags), so they are
+   * written by the same statement instead of a second update after it.
+   */
+  onSubmitting(fn: SubmitContributor) {
+    this.contributors.push(fn);
   }
 
   /**
@@ -257,6 +278,8 @@ export class InterviewsService {
     items: SyncItem[],
     authorize: (row: InterviewRow) => string | null,
     create?: (item: SyncItem) => Promise<InterviewRow | string>,
+    /** An interview the caller already locked in this transaction (one fewer statement). */
+    locked?: InterviewRow,
   ) {
     const acks: Record<string, number> = {};
     const errors: Record<string, string> = {};
@@ -264,7 +287,7 @@ export class InterviewsService {
     // interviews at once wait for each other instead of deadlocking.
     const ordered = [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     for (const item of ordered) {
-      let [row] = await lockInterview.run(tx, { id: item.id });
+      let [row] = locked?.id === item.id ? [locked] : await lockInterview.run(tx, { id: item.id });
       if (!row && item.start && create) {
         const made = await create(item);
         if (typeof made === 'string') {
@@ -343,25 +366,20 @@ export class InterviewsService {
           .onConflictDoNothing();
       last += run.length;
       // The snapshot belongs to the end of the batch: keep it only when nothing was missed.
+      // The interview and the device's number are written by one statement.
       const complete = run.length === ops.length;
-      if (complete && (item.state || run.length)) {
-        await tx
-          .update(interviews)
-          .set({
-            ...(item.state
-              ? {
-                  state: item.state,
-                  answers: (item.state.answers as Record<string, unknown>) ?? {},
-                  position: item.position ?? null,
-                }
-              : {}),
-            ...(item.activeMs !== undefined ? { activeMs: item.activeMs } : {}),
-            ...(item.totalMs !== undefined ? { totalMs: item.totalMs } : {}),
-            updatedAt: new Date(),
-          })
-          .where(eq(interviews.id, row.id));
-      }
-      await setDeviceSeq.run(tx, { id: row.id, device: deviceId, seq: last });
+      await finishSync.run(tx, {
+        id: row.id,
+        device: deviceId,
+        seq: last,
+        touch: complete && (!!item.state || run.length > 0),
+        hasState: !!item.state,
+        state: item.state ? JSON.stringify(item.state) : null,
+        answers: item.state ? JSON.stringify(item.state.answers ?? {}) : null,
+        position: item.position ?? null,
+        active: item.activeMs ?? null,
+        total: item.totalMs ?? null,
+      });
       acks[item.id] = last;
     }
     return { acks, errors, serverTime: new Date().toISOString() };
@@ -371,7 +389,14 @@ export class InterviewsService {
    * Submits a finished interview: everything synced, the server's own run of the stored
    * answers reaches the end on the same path, then the case is finalised and hooks run.
    */
-  async submit(tx: Tx, row: InterviewRow, body: SubmitBody, writer: Writer) {
+  /** `known.lastSeq`: the device's last change number, when the caller read it with the lock. */
+  async submit(
+    tx: Tx,
+    row: InterviewRow,
+    body: SubmitBody,
+    writer: Writer,
+    known: { lastSeq?: number } = {},
+  ) {
     if (!EDITABLE.has(row.status))
       throw new ConflictException({ code: 'SUBMITTED', message: 'Already submitted' });
     if (row.deviceId !== body.deviceId)
@@ -379,8 +404,9 @@ export class InterviewsService {
         code: 'NOT_THIS_DEVICE',
         message: 'This interview is open on another device',
       });
-    const [dev] = await deviceSeq.run(tx, { id: row.id, device: body.deviceId });
-    if ((dev?.lastSeq ?? 0) < body.seq)
+    const lastSeq =
+      known.lastSeq ?? (await deviceSeq.run(tx, { id: row.id, device: body.deviceId }))[0]?.lastSeq;
+    if ((lastSeq ?? 0) < body.seq)
       throw new ConflictException({
         code: 'NOT_SYNCED',
         message: 'Some changes have not reached the server yet',
@@ -405,9 +431,12 @@ export class InterviewsService {
         offPathAnswers: check.offPathAnswers.slice(0, 50),
       });
     const disposition = status.disposition ?? 'COMPLETE';
+    const extra = {};
+    for (const c of this.contributors) Object.assign(extra, await c(tx, row));
     const [done] = (await tx
       .update(interviews)
       .set({
+        ...extra,
         status: 'submitted',
         disposition,
         endedAt: row.endedAt ?? new Date(),
@@ -549,6 +578,12 @@ export class InterviewsService {
    * and every submit need it, and it is the largest thing they read. Ids reach here only from
    * rows the caller's tenant can see (RLS), so the cache never crosses organisations.
    */
+  /** Records that the device is on the interview; returns its last acknowledged change. */
+  async touchDevice(tx: Tx, tenantId: string, interviewId: string, deviceId: string) {
+    const [d] = await touchDevice.run(tx, { tenantId, id: interviewId, device: deviceId });
+    return d?.lastSeq ?? 0;
+  }
+
   /** The interview, locked for this transaction (a prepared query). */
   async locked(tx: Tx, id: string): Promise<InterviewRow | undefined> {
     return (await lockInterview.run(tx, { id }))[0];
@@ -635,8 +670,17 @@ export class InterviewsService {
    * `settings` is the project's, when the caller has already read them (one read of the
    * project per request).
    */
-  async payload(tx: Tx, row: InterviewRow, deviceId: string, settings?: ProjectSettings) {
-    const [dev] = await deviceSeq.run(tx, { id: row.id, device: deviceId });
+  async payload(
+    tx: Tx,
+    row: InterviewRow,
+    deviceId: string,
+    settings?: ProjectSettings,
+    lastSeq?: number,
+  ) {
+    const [dev] =
+      lastSeq !== undefined
+        ? [{ lastSeq }]
+        : await deviceSeq.run(tx, { id: row.id, device: deviceId });
     const v = await this.versionOf(tx, row.questionnaireVersionId);
     const compiled = await this.compiledOf(tx, row.questionnaireVersionId);
     const [who] = row.interviewerId

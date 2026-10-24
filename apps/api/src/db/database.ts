@@ -5,7 +5,8 @@ import {
   ServiceUnavailableException,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { is, Param, Placeholder, sql, type Column } from 'drizzle-orm';
+import { Column, getTableColumns, is, Param, Placeholder, SQL, sql, type Table } from 'drizzle-orm';
+import type { PgDialect } from 'drizzle-orm/pg-core';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { CONFIG, type AppConfig } from '../config.js';
@@ -17,6 +18,20 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /** Lookups by a public key (link token, slug) that find the organisation before any context. */
 export type PublicLookup = 'invitation_by_token' | 'open_link_by_slug' | 'feedback_point_by_slug';
+
+/** Result fields of a prepared query: a column, or a group of columns (a joined table's row). */
+type Fields = Record<string, Column | 'raw' | Record<string, Column>>;
+
+/**
+ * A table's columns for a hand-written prepared query, as `"alias"."col" as "group__col"`:
+ * with `{ [group]: getTableColumns(table) }` in the fields, the row comes back as an object.
+ */
+export function columnsAs(table: Table, alias: string, group: string): SQL {
+  const cols = Object.values(getTableColumns(table)).map(
+    (c) => `"${alias}"."${c.name}" as "${group}__${c.name}"`,
+  );
+  return sql.raw(cols.join(', '));
+}
 
 /**
  * A query built once and run in any transaction. Drizzle builds a query's SQL each time it
@@ -31,17 +46,23 @@ export class Prepared<Row> {
   private slots?: ({ name: string; encode?: (v: unknown) => unknown } | { value: unknown })[];
 
   /**
-   * `build` returns the query with `sql.placeholder(name)` for each argument; `fields` maps
-   * each result key to its column (`getTableColumns(table)` for whole rows).
+   * `build` returns the query (a Drizzle builder, or `sql` written by hand) with
+   * `sql.placeholder(name)` for each argument. `fields` maps each result key to its column
+   * (`getTableColumns(table)` for whole rows), to `'raw'` for a computed value read as the
+   * driver returns it, or to a group of columns selected with
+   * `columnsAs` (null when the group's columns are all null, as for an outer join).
    */
   constructor(
-    private readonly build: (tx: Tx) => { toSQL(): { sql: string; params: unknown[] } },
-    private readonly fields: Record<string, Column>,
+    private readonly build: (tx: Tx) => { toSQL(): { sql: string; params: unknown[] } } | SQL,
+    private readonly fields: Fields,
   ) {}
 
   async run(tx: Tx, args: Record<string, unknown>): Promise<Row[]> {
     if (!this.text) {
-      const q = this.build(tx).toSQL();
+      const built = this.build(tx);
+      const q = is(built, SQL)
+        ? (tx as unknown as { dialect: PgDialect }).dialect.sqlToQuery(built)
+        : (built as { toSQL(): { sql: string; params: unknown[] } }).toSQL();
       this.slots = q.params.map((p) => {
         if (is(p, Placeholder)) return { name: p.name };
         // Insert values come wrapped with the column that encodes them.
@@ -63,11 +84,29 @@ export class Prepared<Row> {
     });
     const client = (tx as unknown as { session: { client: postgres.Sql } }).session.client;
     const raw = await client.unsafe(this.text, params as postgres.ParameterOrJSON<never>[]);
+    const decode = (col: Column, v: unknown) =>
+      v === null || v === undefined ? null : col.mapFromDriverValue(v);
     return raw.map((r) => {
+      const rec = r as Record<string, unknown>;
       const row: Record<string, unknown> = {};
-      for (const [key, col] of Object.entries(this.fields)) {
-        const v = (r as Record<string, unknown>)[col.name];
-        row[key] = v === null || v === undefined ? null : col.mapFromDriverValue(v);
+      for (const [key, f] of Object.entries(this.fields)) {
+        // A computed value (a count) is taken as the driver gives it.
+        if (f === 'raw') {
+          row[key] = rec[key] ?? null;
+          continue;
+        }
+        if (is(f, Column)) {
+          row[key] = decode(f, rec[f.name]);
+          continue;
+        }
+        const group: Record<string, unknown> = {};
+        let any = false;
+        for (const [k, col] of Object.entries(f)) {
+          const v = rec[`${key}__${col.name}`];
+          if (v !== null && v !== undefined) any = true;
+          group[k] = decode(col, v);
+        }
+        row[key] = any ? group : null;
       }
       return row as Row;
     });

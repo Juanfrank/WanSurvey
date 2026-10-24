@@ -178,6 +178,36 @@ describe('load shedding', () => {
     expect(passed).toEqual([1, 2, 4]);
   });
 
+  it('turns new work away first and lets interviews under way go on longest', () => {
+    const shed = loadShedding(10);
+    const at = (method: string, path: string) => ({ method, path, headers: {} }) as never;
+    let n = 0;
+    // Fill to 6 with ordinary requests: an open link is now refused, the rest go on.
+    for (let i = 0; i < 6; i++) shed(at('GET', '/api/v1/projects'), fakeRes() as never, () => n++);
+    const open = fakeRes();
+    shed(at('POST', '/api/v1/public/o/slug/start'), open as never, () => n++);
+    expect(open.statusCode).toBe(503);
+    // At 10 an ordinary request is refused; a respondent's sync or a device's submission is not.
+    for (let i = 0; i < 4; i++) shed(at('GET', '/api/v1/projects'), fakeRes() as never, () => n++);
+    const staff = fakeRes();
+    shed(at('GET', '/api/v1/projects'), staff as never, () => n++);
+    expect(staff.statusCode).toBe(503);
+    for (const [m, p] of [
+      ['POST', '/api/v1/public/s/token-abc/sync'],
+      ['POST', '/api/v1/interviews/sync'],
+      ['POST', '/api/v1/interviews/0190-x/submit'],
+    ])
+      shed(at(m!, p!), fakeRes() as never, () => n++);
+    expect(n).toBe(13);
+    // Up to twice the limit, then those too are refused.
+    for (let i = 0; i < 7; i++)
+      shed(at('GET', '/api/v1/public/s/t'), fakeRes() as never, () => n++);
+    const late = fakeRes();
+    shed(at('GET', '/api/v1/public/s/t'), late as never, () => n++);
+    expect(late.statusCode).toBe(503);
+    expect(shed.inFlight()).toBe(20);
+  });
+
   it('never counts health checks or live event streams', () => {
     const shed = loadShedding(1);
     shed(req(), fakeRes() as never, () => {});

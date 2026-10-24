@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import { Database, type Tx } from '../db/database.js';
 import { projects, statsDaily } from '../db/schema.js';
+import { rememberedProject } from '../cases/project-memo.js';
 import { InterviewsService } from '../interviews/interviews.service.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 import { JobsService } from '../jobs/jobs.service.js';
@@ -58,10 +59,10 @@ export class StatsService implements OnModuleInit {
 
   /** Called inside the transaction that changed an interview; the refresh runs after it. */
   async touched(tx: Tx, tenantId: string, projectId: string, at: Date): Promise<void> {
-    const [p] = await tx
-      .select({ tz: projects.timezone })
-      .from(projects)
-      .where(eq(projects.id, projectId));
+    const known = rememberedProject(tx, projectId);
+    const [p] = known
+      ? [{ tz: known.timezone }]
+      : await tx.select({ tz: projects.timezone }).from(projects).where(eq(projects.id, projectId));
     const day = localDay(at, p?.tz ?? 'UTC');
     // At most one refresh per project day every few seconds. The id changes with the time
     // window, so a refresh already running (or one that failed) never swallows later ones; it

@@ -13,11 +13,10 @@ import { z } from 'zod';
 import { AuditService, type AuditAction } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
-import type { Tx } from '../db/database.js';
+import { Prepared, type Tx } from '../db/database.js';
 import {
   cases,
   codedTexts,
-  entryMismatches,
   interviewAnswerEvents,
   interviewParadata,
   interviews,
@@ -121,6 +120,17 @@ const baseName = (key: string) =>
  * submission, the review queue and screen, status changes, corrections that re-run the
  * logic, comment threads, and coding of "other" texts.
  */
+/** Warnings confirmed and double-entry differences of an interview, in one query. */
+const submitCounts = new Prepared<{ warnings: number; differences: number }>(
+  () => sql`
+    select
+      (select count(*)::int from interview_paradata
+        where interview_id = ${sql.placeholder('id')} and type = 'warning_confirmed') as warnings,
+      (select count(*)::int from entry_mismatches
+        where second_interview_id = ${sql.placeholder('id')}) as differences`,
+  { warnings: 'raw', differences: 'raw' },
+);
+
 @Injectable()
 export class ReviewService implements OnModuleInit {
   constructor(
@@ -131,43 +141,29 @@ export class ReviewService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.runtime.onSubmitted((tx, row) => this.flag(tx, row));
+    // The flags are written by the submission's own update.
+    this.runtime.onSubmitting((tx, row) => this.flags(tx, row));
   }
 
   /** Flags and the sample, computed at each submission (R2, R3). */
-  private async flag(tx: Tx, row: InterviewRow) {
+  private async flags(tx: Tx, row: InterviewRow) {
     const settings = (await this.cases.settings(tx, row.projectId)).review;
     const compiled = await this.runtime.compiledOf(tx, row.questionnaireVersionId);
     const s = createInterview(compiled, {
       ...this.runtime.engineOptions(row),
       state: row.state as never,
     });
-    const [w] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(interviewParadata)
-      .where(
-        and(
-          eq(interviewParadata.interviewId, row.id),
-          eq(interviewParadata.type, 'warning_confirmed'),
-        ),
-      );
-    const [d] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(entryMismatches)
-      .where(eq(entryMismatches.secondInterviewId, row.id));
+    const [c] = await submitCounts.run(tx, { id: row.id });
     const flags = computeFlags({
       compiled,
       answers: (row.answers ?? {}) as Record<string, unknown>,
       path: s.pathKeys(),
       activeMs: row.activeMs,
-      warningsConfirmed: w?.n ?? 0,
-      doubleEntryDifferences: d?.n ?? 0,
+      warningsConfirmed: c?.warnings ?? 0,
+      doubleEntryDifferences: c?.differences ?? 0,
       settings,
     });
-    await tx
-      .update(interviews)
-      .set({ flags, sampled: inSample(row.id, settings.samplePercent) })
-      .where(eq(interviews.id, row.id));
+    return { flags, sampled: inSample(row.id, settings.samplePercent) };
   }
 
   private reviewer(ctx: AuthContext, projectId: string) {
