@@ -1,5 +1,33 @@
 # Load test results
 
+## 2026-10-24 (sixth run) — start of a field day, Microsoft sign-in only
+
+300 interviewers sign in with Microsoft (`load/start-of-day.js`) and open the app:
+`sso/start`, the callback, `auth/me` and `projects`. Microsoft is a local mock
+(`apps/api/scripts/load-mock-entra.ts`) that answers the token request in 150 ms, about what
+the real one takes. Same machine and method as the earlier runs (API on one core). Three waves:
+the first sign-in (the account is linked), then a usual morning in 120 s and in 30 s.
+
+| 300 interviewers                      | Before               | After (e-mail on the page) | After, button only (`PASSWORD_LOGIN=false`) |
+| ------------------------------------- | -------------------- | -------------------------- | ------------------------------------------- |
+| First sign-in in 120 s: p95, API CPU  | 233 ms, 22 %         | 234 ms, **12 %**           | 229 ms, **11 %**                            |
+| Morning in 120 s: p95, API CPU        | 219 ms, 19 %         | 210 ms, **9 %**            | 206 ms, **8 %**                             |
+| Morning in 30 s: p95, API CPU (peak)  | 239 ms, 58 % (91 %)  | 218 ms, **28 %** (41 %)    | 210 ms, **27 %** (43 %)                     |
+| Failed requests (morning in 30 s)     | 0.85 % (10 of 1,176) | **0**                      | **0**                                       |
+| Callback transactions (known account) | 3, plus 2 autocommit | **1**                      | **1**                                       |
+
+**Reading.**
+
+- **The API's CPU for the start of the day halved.** The session guard reads the session, the
+  account, the membership, the roles and the organisation's role changes in one prepared
+  statement (it runs on every request, syncs included), the SSO settings are read once a minute
+  per process, and a known account signs in with one transaction.
+- **Latency hardly moves (−10 to −30 ms).** About 150 ms of each sign-in is Microsoft's token
+  endpoint; the rest is network round trips. What the change buys is headroom: 300 people in
+  30 s now use about a quarter of one core, not more than half.
+- **The button alone costs the same as the e-mail.** Without an e-mail the deployment's
+  organisation is known at once (`SSO_DEFAULT_ORG`), so there is no domain lookup.
+
 ## 2026-10-24 (fifth run) — proposals 1, 2 and 3 implemented
 
 The code now has:
