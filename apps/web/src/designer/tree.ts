@@ -6,6 +6,7 @@ import type {
   QuestionType,
   Section,
 } from '@wansurvey/schema';
+import { renameInExpression, renameInTemplate } from '@wansurvey/logic';
 
 /**
  * Pure edits on a questionnaire draft, addressed by item/section id. Every function returns a
@@ -345,21 +346,18 @@ export function renameVariable(draft: Draft, id: string, newName: string): Draft
   if (!at || !('name' in at.node) || typeof at.node.name !== 'string') return draft;
   const old = at.node.name;
   if (old === newName) return draft;
-  const re = new RegExp(`(?<![A-Za-z0-9_.])${old}(?![A-Za-z0-9_])`, 'g');
+  const renames: Record<string, string> = { [old]: newName };
+  // The "other, specify" text follows its question.
+  const options = questionOptionsOf(draft, at.node);
+  if (options.some((o) => o.otherSpecify)) renames[`${old}_OTHER`] = `${newName}_OTHER`;
   const sameId = at.node.id === old;
   const json = JSON.stringify(draft, (key, value) => {
     if (typeof value !== 'string') return value;
-    if (EXPRESSION_KEYS.has(key)) return value.replace(re, newName);
+    if (EXPRESSION_KEYS.has(key)) return renameInExpression(value, renames);
     // Skip targets and script anchors name the item id.
     if (sameId && (key === 'to' || key === 'itemId') && value === old) return newName;
     // Pipes in texts: {{OLD}}, {{OLD | label}}, {{#if OLD == 1}}.
-    if (value.includes('{{')) {
-      return value.replace(
-        /\{\{([^}]*)\}\}/g,
-        (m, inner: string) => `{{${inner.replace(re, newName)}}}`,
-      );
-    }
-    return value;
+    return renameInTemplate(value, renames);
   });
   const renamed = JSON.parse(json) as Draft;
   return updateNode(renamed, id, (n) => ({
@@ -378,7 +376,15 @@ export const EXPRESSION_KEYS = new Set([
   'formula',
   'expr',
   'rowLabel',
+  'minDate',
+  'maxDate',
 ]);
+
+function questionOptionsOf(draft: Draft, node: TreeNode): AnswerOption[] {
+  const q = node as { options?: AnswerOption[]; answerSetId?: string };
+  if (q.options?.length) return q.options;
+  return (q.answerSetId && draft.answerSets?.[q.answerSetId]) || [];
+}
 
 /** What the question library stores: one item, block or roster and the answer sets it uses. */
 export interface LibraryContent {

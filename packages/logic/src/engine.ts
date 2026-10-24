@@ -661,6 +661,11 @@ export class InterviewSession {
     if (this.completed) return { ok: true, key: null, done: true };
     const idx = this.indexOnPath(this.position);
     if (idx === -1) {
+      // Nothing to ask (e.g. a full quota on sample fields ended it before the first question).
+      if (this.path_.length === 0) {
+        this.completed = true;
+        return { ok: true, key: null, done: true };
+      }
       this.reposition();
       return { ok: false, key: this.position };
     }
@@ -909,6 +914,13 @@ export class InterviewSession {
     this.walking = w;
     const roots = this.compiled.nodes.filter((n) => n.parent === null);
     const skip = { target: null as number | null, from: '' };
+    // Quotas on sample fields alone are decided before the first question.
+    const first = roots[0];
+    if (first)
+      this.checkQuotas(
+        formatKey([], first.id),
+        (refs) => !refs.some((r) => own(this.compiled.vars, r)),
+      );
     for (const n of roots) this.visit(n, [], skip, 0);
     this.walking = null;
     this.trace_ = w.entries;
@@ -1054,6 +1066,8 @@ export class InterviewSession {
             reason: 'computed',
           });
         }
+        if (frames.length === 0 && isAnswered(value as Value))
+          this.checkQuotas(formatKey(frames, node.name!), (refs) => refs.includes(node.name!));
         return;
       }
       default:
@@ -1181,10 +1195,13 @@ export class InterviewSession {
     };
     const raw = q.urlParam && frames.length === 0 ? this.context.params?.[q.urlParam] : undefined;
     const fromLink = raw === undefined ? undefined : fromParam(q, raw);
+    // A link value must pass the question's own checks (range, pattern, format, dates);
+    // otherwise it is dropped and the question is asked.
     if (
       fromLink !== undefined &&
       !this.shapeError(node, fromLink) &&
-      fitsOptions(q, questionOptions(q, this.compiled.questionnaire), fromLink)
+      fitsOptions(q, questionOptions(q, this.compiled.questionnaire), fromLink) &&
+      this.builtInChecks(node, frames, fromLink as Value).length === 0
     ) {
       setAuto(fromLink, 'url_param');
       auto = 'urlParam';
@@ -1223,23 +1240,7 @@ export class InterviewSession {
         return;
       }
     }
-    if (this.quotas && frames.length === 0) {
-      for (const quota of this.compiled.quotas) {
-        if (!quota.expr.ast || !quota.expr.refs.includes(q.name)) continue;
-        if (
-          truthy(evaluate(quota.expr.ast, new InterviewScope(this, []))) &&
-          this.quotas.isFull(quota.id)
-        ) {
-          w.ended = {
-            disposition: quota.disposition,
-            byKey: key,
-            reason: 'quota',
-            quotaId: quota.id,
-          };
-          return;
-        }
-      }
-    }
+    if (frames.length === 0 && this.checkQuotas(key, (refs) => refs.includes(q.name))) return;
     for (const s of node.skips) {
       if (!truthy(this.cached(node, `skip:${s.to}:${s.expr.src}`, s.expr, frames))) continue;
       if (s.target === SKIP_END) w.skipToEnd = key;
@@ -1252,6 +1253,31 @@ export class InterviewSession {
       }
       return;
     }
+  }
+
+  /**
+   * Ends the interview when a full quota's condition holds. `reads` picks the quotas to check
+   * (by their references): those reading the variable just set, or those reading none at all
+   * (sample fields, mode) at the start of the walk.
+   */
+  private checkQuotas(byKey: string, reads: (refs: string[]) => boolean): boolean {
+    if (!this.quotas) return false;
+    for (const quota of this.compiled.quotas) {
+      if (!quota.expr.ast || !reads(quota.expr.refs)) continue;
+      if (
+        truthy(evaluate(quota.expr.ast, new InterviewScope(this, []))) &&
+        this.quotas.isFull(quota.id)
+      ) {
+        this.walking!.ended = {
+          disposition: quota.disposition,
+          byKey,
+          reason: 'quota',
+          quotaId: quota.id,
+        };
+        return true;
+      }
+    }
+    return false;
   }
 
   private restoreIfMissing(frames: Frame[], name: string, key: string) {

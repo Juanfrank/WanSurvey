@@ -122,6 +122,7 @@ export function parseIsoDate(v: Value | undefined): number | null {
   const m = DATE_RE.exec(v.trim());
   if (!m) return null;
   const [, y, mo, d, h, mi, s, tz] = m;
+  if (Number(h ?? 0) > 23 || Number(mi ?? 0) > 59 || Number(s ?? 0) > 59) return null;
   let ms = Date.UTC(
     Number(y),
     Number(mo) - 1,
@@ -135,8 +136,10 @@ export function parseIsoDate(v: Value | undefined): number | null {
   if (tz && tz !== 'Z') {
     const sign = tz[0] === '-' ? -1 : 1;
     const digits = tz.slice(1).replace(':', '');
-    const offset = (Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2, 4))) * 60_000;
-    ms -= sign * offset;
+    const minutes = Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2, 4));
+    // Real offsets run from -12:00 to +14:00; allow ±14:00 either way.
+    if (Number(digits.slice(2, 4)) > 59 || minutes > 14 * 60) return null;
+    ms -= sign * minutes * 60_000;
   }
   return Number.isFinite(ms) ? ms : null;
 }

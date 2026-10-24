@@ -707,3 +707,93 @@ describe('answers from the link and from case data', () => {
     expect(s.getAnswer('TIPO')).toBeNull();
   });
 });
+
+describe('link parameters pass the question checks', () => {
+  const run = (items: ContainerItem[], params: Record<string, string>) =>
+    createInterview(compile(q(items)), { mode: 'CAWI', seed: 'x', now: NOW, context: { params } });
+
+  it('drops an out-of-range number and asks the question', () => {
+    const s = run([num('AGE', { urlParam: 'edad', min: 18, max: 99 })], { edad: '5' });
+    expect(s.getAnswer('AGE')).toBeNull();
+    expect(s.pathKeys()).toEqual(['AGE']);
+    const ok = run([num('AGE', { urlParam: 'edad', min: 18, max: 99 })], { edad: '30' });
+    expect(ok.getAnswer('AGE')).toBe(30);
+    expect(ok.pathKeys()).toEqual([]);
+  });
+
+  it('drops text that fails the pattern or format, and impossible dates', () => {
+    const text = (extra: Record<string, unknown>) =>
+      ({
+        kind: 'question',
+        id: 'T',
+        name: 'T',
+        type: 'text',
+        text: { en: 't' },
+        urlParam: 'p',
+        ...extra,
+      }) as ContainerItem;
+    expect(run([text({ pattern: '[A-Z]{3}' })], { p: 'ab1' }).getAnswer('T')).toBeNull();
+    expect(run([text({ pattern: '[A-Z]{3}' })], { p: 'ABC' }).getAnswer('T')).toBe('ABC');
+    expect(run([text({ format: 'email' })], { p: 'nope' }).getAnswer('T')).toBeNull();
+    const date = {
+      kind: 'question',
+      id: 'D',
+      name: 'D',
+      type: 'date',
+      text: { en: 'd' },
+      urlParam: 'd',
+      minDate: '2020-01-01',
+    } as ContainerItem;
+    expect(run([date], { d: '2026-02-31' }).getAnswer('D')).toBeNull();
+    expect(run([date], { d: '2019-05-01' }).getAnswer('D')).toBeNull();
+    expect(run([date], { d: '2021-05-01' }).getAnswer('D')).toBe('2021-05-01');
+  });
+});
+
+describe('quotas on computed variables and sample fields', () => {
+  const computed = {
+    kind: 'computed',
+    id: 'GROUP',
+    name: 'GROUP',
+    formula: 'AGE >= 60',
+    valueType: 'boolean',
+  } as ContainerItem;
+
+  it('a quota on a computed variable closes when the variable is set', () => {
+    const compiled = compile(
+      q([num('AGE'), computed, num('NEXT')], {
+        quotas: [{ id: 'OLD', name: 'Old', when: 'GROUP == true', max: 1 }],
+      } as never),
+    );
+    const s = createInterview(compiled, {
+      mode: 'CAPI',
+      now: NOW,
+      quotas: { isFull: (id) => id === 'OLD' },
+    });
+    s.setAnswer('AGE', 70);
+    expect(s.endState()).toMatchObject({ reason: 'quota', quotaId: 'OLD', byKey: 'GROUP' });
+    s.setAnswer('AGE', 30);
+    expect(s.endState()).toBeNull();
+  });
+
+  it('a quota on sample fields alone ends the interview before the first question', () => {
+    const compiled = compile(
+      q([num('AGE')], {
+        quotas: [{ id: 'NORTH', name: 'North', when: 'case.region == 2', max: 1 }],
+      } as never),
+    );
+    const open = (region: number) =>
+      createInterview(compiled, {
+        mode: 'CAPI',
+        now: NOW,
+        context: { case: { region } },
+        quotas: { isFull: (id) => id === 'NORTH' },
+      });
+    const s = open(2);
+    expect(s.endState()).toMatchObject({ reason: 'quota', quotaId: 'NORTH' });
+    expect(s.pathKeys()).toEqual([]);
+    expect(s.next()).toMatchObject({ ok: true, done: true });
+    expect(s.status()).toMatchObject({ state: 'ended', disposition: 'QUOTA_FULL' });
+    expect(open(1).endState()).toBeNull();
+  });
+});

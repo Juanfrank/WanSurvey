@@ -177,6 +177,65 @@ describe('breaking changes', () => {
       ['codes:A', 'removed:C', 'removed:G', 'removed:X'].sort(),
     );
   });
+
+  it('rejects renames into another roster level, or two variables onto one', () => {
+    const roster = (items: unknown[]) =>
+      ({
+        kind: 'roster',
+        id: 'HH',
+        name: 'HH',
+        title: en('HH'),
+        count: { type: 'fixed', n: 2 },
+        items,
+      }) as never;
+    const prev = q([num('AGE'), num('YEARS'), roster([num('SIZE')])]);
+    const next = q([roster([num('AGE2')]), num('SIZE2')]);
+    const changes = breakingChanges(prev, next);
+    const msgs = (mapping: Record<string, unknown>) =>
+      validateMapping(changes, mapping as never, prev, next).map((p) => p.msg.id);
+    expect(
+      msgs({
+        'removed:AGE': { action: 'rename', to: 'AGE2' },
+        'removed:YEARS': { action: 'drop' },
+        'removed:SIZE': { action: 'rename', to: 'SIZE2' },
+      }),
+    ).toEqual(['target_roster', 'target_roster']);
+    const flat = q([num('AGE2')]);
+    const flatChanges = breakingChanges(prev, flat);
+    expect(
+      validateMapping(
+        flatChanges,
+        {
+          'removed:AGE': { action: 'rename', to: 'AGE2' },
+          'removed:YEARS': { action: 'rename', to: 'AGE2' },
+          'removed:HH': { action: 'drop' },
+          'removed:SIZE': { action: 'drop' },
+        },
+        prev,
+        flat,
+      ).map((p) => p.msg.id),
+    ).toEqual(['target_twice']);
+  });
+
+  it('removing "other, specify" is a breaking change for its text', () => {
+    const withOther = q([
+      single('A', {
+        options: [
+          { code: 1, label: en('One') },
+          { code: 9, label: en('Other'), otherSpecify: true },
+        ],
+      }),
+    ]);
+    const without = q([
+      single('A', {
+        options: [
+          { code: 1, label: en('One') },
+          { code: 9, label: en('Other') },
+        ],
+      }),
+    ]);
+    expect(breakingChanges(withOther, without).map((c) => c.id)).toEqual(['removed:A_OTHER']);
+  });
 });
 
 describe('condition tree', () => {

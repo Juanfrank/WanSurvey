@@ -27,9 +27,28 @@ export function tryParse(
 
 const COMPARISON = new Set(['==', '!=', '<', '<=', '>', '>=']);
 
+/** Deepest nesting of brackets, calls, `not` and signs; deeper input is a syntax error. */
+export const MAX_NESTING = 200;
+
 class Parser {
   private pos = 0;
+  private depth = 0;
   constructor(private readonly tokens: Token[]) {}
+
+  /** Runs one nesting level, so hostile input fails cleanly instead of overflowing the stack. */
+  private nested<T>(fn: () => T): T {
+    if (++this.depth > MAX_NESTING) {
+      throw new LogicSyntaxError(
+        `Expression is nested too deeply (more than ${MAX_NESTING} levels)`,
+        this.peek().span,
+      );
+    }
+    try {
+      return fn();
+    } finally {
+      this.depth--;
+    }
+  }
 
   private peek(offset = 0): Token {
     return this.tokens[Math.min(this.pos + offset, this.tokens.length - 1)]!;
@@ -64,7 +83,7 @@ class Parser {
   }
 
   parseExpression(): Node {
-    return this.parseOr();
+    return this.nested(() => this.parseOr());
   }
 
   private parseOr(): Node {
@@ -90,7 +109,7 @@ class Parser {
   private parseNot(): Node {
     if (this.isKeyword('not')) {
       const t = this.next();
-      const arg = this.parseNot();
+      const arg = this.nested(() => this.parseNot());
       return { type: 'unary', op: 'not', arg, span: { start: t.span.start, end: arg.span.end } };
     }
     return this.parseComparison();
@@ -188,12 +207,12 @@ class Parser {
   private parseUnary(): Node {
     if (this.isOp('-')) {
       const t = this.next();
-      const arg = this.parseUnary();
+      const arg = this.nested(() => this.parseUnary());
       return { type: 'unary', op: '-', arg, span: { start: t.span.start, end: arg.span.end } };
     }
     if (this.isOp('+')) {
       this.next();
-      return this.parseUnary();
+      return this.nested(() => this.parseUnary());
     }
     return this.parsePower();
   }
@@ -202,7 +221,11 @@ class Parser {
     const base = this.parsePostfix();
     if (this.isOp('^')) {
       this.next();
-      return bin('^', base, this.parseUnary());
+      return bin(
+        '^',
+        base,
+        this.nested(() => this.parseUnary()),
+      );
     }
     return base;
   }

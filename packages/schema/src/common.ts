@@ -27,8 +27,11 @@ export const VariableName = z
 /** Item ids are used as skip targets; same shape as variable names. */
 export const ItemId = VariableName;
 
+/** Longest expression accepted; keeps parsing and evaluation well within the stack. */
+export const MAX_EXPRESSION_LENGTH = 4000;
+
 /** An expression in the WanSurvey logic language (see docs/logic-language.md). */
-export const Expression = z.string().min(1);
+export const Expression = z.string().min(1).max(MAX_EXPRESSION_LENGTH);
 export type Expression = z.infer<typeof Expression>;
 
 export const IsoDateTime = z.string().datetime({ offset: true });

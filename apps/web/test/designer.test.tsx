@@ -181,6 +181,62 @@ describe('tree edits', () => {
       'A? {{BB}}',
     );
   });
+
+  it('renames by token: roster fields, "other" text and date limits, not strings or case fields', () => {
+    const d = Questionnaire.parse({
+      id: 'R',
+      title: { en: 'R' },
+      defaultLanguage: 'en',
+      languages: ['en'],
+      sections: [
+        {
+          id: 'S',
+          title: { en: 'S' },
+          items: [
+            {
+              kind: 'roster',
+              id: 'HH',
+              name: 'HH',
+              title: { en: 'HH' },
+              count: { type: 'fixed', n: 2 },
+              items: [
+                { kind: 'question', id: 'AGE', name: 'AGE', type: 'numeric', text: { en: 'Age' } },
+              ],
+            },
+            {
+              kind: 'question',
+              id: 'A',
+              name: 'A',
+              type: 'single',
+              text: { en: 'A' },
+              options: [
+                { code: 1, label: { en: 'x' } },
+                { code: 9, label: { en: 'Other' }, otherSpecify: true },
+              ],
+            },
+            { kind: 'question', id: 'D', name: 'D', type: 'date', text: { en: 'D' } },
+            {
+              kind: 'question',
+              id: 'Z',
+              name: 'Z',
+              type: 'date',
+              text: { en: '{{HH[1].AGE}} {{A_OTHER | default:"A"}} {{#if A == 1}}y{{/if}}' },
+              minDate: 'D',
+              showIf: 'HH[1].AGE > 1 and A_OTHER != "A" and case.A == 1 and HH.AGE == 2',
+            },
+          ],
+        },
+      ],
+    });
+    const z = (x: Draft) =>
+      locate(x, 'Z')!.node as unknown as { text: { en: string }; minDate: string; showIf: string };
+    const r1 = renameVariable(renameVariable(d, 'AGE', 'YEARS'), 'A', 'B');
+    expect(z(r1).showIf).toBe(
+      'HH[1].YEARS > 1 and B_OTHER != "A" and case.A == 1 and HH.YEARS == 2',
+    );
+    expect(z(r1).text.en).toBe('{{HH[1].YEARS}} {{B_OTHER | default:"A"}} {{#if B == 1}}y{{/if}}');
+    expect(z(renameVariable(d, 'D', 'DOB')).minDate).toBe('DOB');
+  });
 });
 
 function Harness({ initial, onChange }: { initial: Draft; onChange?(d: Draft): void }) {

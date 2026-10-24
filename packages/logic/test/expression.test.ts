@@ -49,6 +49,21 @@ describe('parser', () => {
     expect(() => parse('constructor.constructor("return 1")()')).toThrow(LogicSyntaxError);
     expect(ev('constructor')).toBe(null);
   });
+
+  it('rejects very deep nesting with a syntax error, not a stack overflow', () => {
+    const deep = (n: number, open: string, close = '') => `${open.repeat(n)}1${close.repeat(n)}`;
+    expect(ev(deep(199, '(', ')'))).toBe(1);
+    for (const src of [
+      deep(20000, '(', ')'),
+      deep(20000, 'not '),
+      deep(20000, '-'),
+      `${'2 ^ '.repeat(20000)}1`,
+      `${'f('.repeat(20000)}1${')'.repeat(20000)}`,
+    ]) {
+      expect(() => parse(src)).toThrow(LogicSyntaxError);
+      expect(() => parse(src)).toThrow(/nested too deeply/);
+    }
+  });
 });
 
 describe('null semantics', () => {
@@ -162,6 +177,21 @@ describe('functions', () => {
     expect(s('today()')).toBe('2026-10-12');
     expect(s('date("2026-02-30")')).toBe(null);
     expect(s('age("not a date")')).toBe(null);
+  });
+  it('date-times with impossible hours, minutes or offsets are not dates', async () => {
+    const { parseIsoDate } = await import('../src/values.js');
+    expect(parseIsoDate('2026-01-01T23:59:59+14:00')).not.toBeNull();
+    expect(parseIsoDate('2026-01-01T10:00-05:30')).toBe(Date.UTC(2026, 0, 1, 15, 30));
+    for (const bad of [
+      '2026-01-01T24:00',
+      '2026-01-01T99:00',
+      '2026-01-01T10:60',
+      '2026-01-01T10:00:61',
+      '2026-01-01T10:00+15:00',
+      '2026-01-01T10:00+99:99',
+      '2026-01-01T10:00-05:75',
+    ])
+      expect(parseIsoDate(bad)).toBeNull();
   });
   it('label returns the label of the selected code', () => {
     expect(s('label(Q7)')).toBe('Rented');

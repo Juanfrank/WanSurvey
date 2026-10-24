@@ -28,6 +28,10 @@ Lowest precedence first:
 
 Comparisons cannot be chained (`1 < Q < 5` is an error); use `Q between 1 and 5`.
 
+The words `and`, `or`, `not`, `in`, `between`, `true`, `false` and `null` are keywords in any letter case (`AND` is `and`), so they cannot be variable names.
+
+An expression is at most 4,000 characters long, and brackets, function calls, `not` and signs nest at most 200 levels deep. Deeper nesting is a syntax error.
+
 ## Null semantics
 
 - Any comparison involving an unanswered or DK/RF value is **false**. This includes `!=`, `in` and `between`.
@@ -83,6 +87,10 @@ Comparisons cannot be chained (`1 < Q < 5` is an error); use `Q between 1 and 5`
 | Quota               | `quotas: [{ when, max }]`                                                                             | `AGE_GROUP == 3`, max 150     |
 | Assignment on entry | `prefill`                                                                                             | `case.region`                 |
 
+A quota is checked when a question or computed variable it reads gets its value. A quota that only reads sample fields (`case.region == 2`) is checked when the interview starts, before the first question.
+
+A question with `urlParam` takes its answer from the link (`?sede=2`) only when the value passes the question's own checks: an option code, the range, decimals, length, pattern, format (email, phone) and date limits. Otherwise the value is ignored and the question is asked.
+
 ## Piping
 
 Pipes are written in question text, instructions, option labels, messages and scripts:
@@ -93,7 +101,7 @@ Pipes are written in question text, instructions, option labels, messages and sc
 {{#if Q2 == 1}}your husband{{else}}your wife{{/if}}
 ```
 
-A pipe resolves at render time from the current answers, the case, the interviewer and the project. In preview, an unresolved pipe shows as `[Q3_NAME]`. If a pipe names an unknown variable, or a variable that is only asked later, publishing is blocked.
+A pipe resolves at render time from the current answers, the case, the interviewer and the project. The `date` filter takes `"full"`, `"long"`, `"medium"` (default), `"short"` or `"iso"`; any other style blocks publishing. In preview, an unresolved pipe shows as `[Q3_NAME]`. If a pipe names an unknown variable, or a variable that is only asked later, publishing is blocked.
 
 ## Static analysis at publish
 
@@ -107,8 +115,8 @@ Publishing is blocked by any of these errors:
 - Skips that go backwards, target an unknown item, or cross a roster boundary
 - Unreachable items
 - Cycles between computed variables
-- Missing or malformed pipes
-- Duplicate ids or variables, or reserved names
+- Missing or malformed pipes, including pipes in shared answer set labels and unknown filter arguments
+- Duplicate ids or variables, or reserved names (keywords in any case, `mode`, `index`, `code`, `i`, `today`, `roster` and the context names `case`, `interviewer`, `project`, `respondent`)
 - Duplicate codes, or codes that clash with the special codes
 - Unknown answer sets, empty option lists and invalid ranges or patterns
 

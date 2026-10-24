@@ -190,11 +190,43 @@ describe('static analysis', () => {
     expect(codes(q([single('A'), ok]))).toEqual([]);
   });
 
+  it('flags filter arguments the renderer cannot use', () => {
+    const bad = {
+      kind: 'static',
+      id: 'S',
+      text: en('On {{today | date:"weird"}}'),
+    } as ContainerItem;
+    expect(codes(q([bad]))).toContain('pipe_syntax');
+    const ok = { kind: 'static', id: 'S', text: en('On {{today | date:"long"}}') } as ContainerItem;
+    expect(codes(q([ok]))).toEqual([]);
+  });
+
+  it('checks the pipes in shared answer set labels', () => {
+    const uses = (label: string, before: ContainerItem[] = []) =>
+      codes(
+        q(
+          [...before, { ...single('A'), options: undefined, answerSetId: 'SET' } as ContainerItem],
+          {
+            answerSets: { SET: [{ code: 1, label: en(label) }] },
+          },
+        ),
+      );
+    expect(uses('Lives with {{NOPE}}')).toContain('missing_pipe');
+    expect(uses('Since {{#if 1}}x')).toContain('pipe_syntax');
+    expect(uses('With {{B}}', [single('B')])).toEqual([]);
+  });
+
   it('flags duplicate variables, reserved names and code clashes', () => {
     expect(codes(q([single('A'), { ...single('B'), name: 'A' } as ContainerItem]))).toContain(
       'duplicate_variable',
     );
     expect(codes(q([{ ...single('A'), name: 'mode' } as ContainerItem]))).toContain(
+      'reserved_name',
+    );
+    // Keywords in any case: `IN == 1` would never read the variable.
+    for (const name of ['and', 'OR', 'Not', 'IN', 'Between', 'TRUE', 'False', 'NULL'])
+      expect(codes(q([{ ...single('A'), name } as ContainerItem]))).toContain('reserved_name');
+    expect(codes(q([{ ...single('A'), name: 'INCOME' } as ContainerItem]))).not.toContain(
       'reserved_name',
     );
     expect(codes(q([single('A', { options: [{ code: -8, label: en('x') }] })]))).toContain(

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AnswerValueSchema,
   DEFAULT_SPECIAL_CODES,
+  Expression,
+  MAX_EXPRESSION_LENGTH,
   ModeVariant,
   Questionnaire,
   ROLE_PERMISSIONS,
@@ -103,5 +105,12 @@ describe('rbac matrix', () => {
     expect(roleMatrix({ supervisor: ['tenant.manage'] }).supervisor).toEqual(
       ROLE_PERMISSIONS.supervisor,
     );
+  });
+});
+
+describe('expressions', () => {
+  it('caps their length', () => {
+    expect(Expression.safeParse('A'.repeat(MAX_EXPRESSION_LENGTH)).success).toBe(true);
+    expect(Expression.safeParse('A'.repeat(MAX_EXPRESSION_LENGTH + 1)).success).toBe(false);
   });
 });

@@ -24,17 +24,35 @@ const SHARE_MS = 1_000;
 /** Bursts of changes (a wave of submissions) produce one snapshot per this window. */
 const DEBOUNCE_MS = 1_000;
 
-/** Variables from saved answers, enough to tell which quota cell an interview is in. */
-function answersScope(answers: Record<string, unknown>, mode: string): Scope {
+/**
+ * Variables from saved answers and the sample fields the interview ran with, enough to tell
+ * which quota cell an interview is in.
+ */
+function answersScope(
+  answers: Record<string, unknown>,
+  sample: Record<string, unknown>,
+  mode: string,
+): Scope {
   return {
-    get: (name) => (Object.hasOwn(answers, name) ? (answers[name] as Value) : null),
-    namespace: () => undefined,
+    // Unknown names stay undefined, so `case.x` and `mode` resolve as in the interview.
+    get: (name) => (Object.hasOwn(answers, name) ? (answers[name] as Value) : undefined),
+    namespace: (ns) => (ns === 'case' ? sample : undefined),
     rowIndex: () => null,
     rowScope: () => null,
     label: () => null,
     mode,
     today: new Date().toISOString().slice(0, 10),
   };
+}
+
+/** Sample fields an expression reads (`case.region`). */
+function caseFields(node: unknown, out: string[] = []): string[] {
+  if (!node || typeof node !== 'object') return out;
+  const n = node as { type?: string; object?: { type?: string; name?: string }; property?: string };
+  if (n.type === 'member' && n.object?.type === 'var' && n.object.name === 'case' && n.property)
+    out.push(n.property);
+  for (const v of Object.values(node)) if (v && typeof v === 'object') caseFields(v, out);
+  return out;
 }
 
 export interface LiveSnapshot {
@@ -98,26 +116,42 @@ export class LiveService {
       where project_id = ${projectId} and day > (now() at time zone ${p?.tz ?? 'UTC'})::date - 30
       group by 1 order by 1`);
 
-    // Quota cells of the latest version of each questionnaire, counted over the data.
-    const versions = await tx.execute<{ compiled: CompiledQuestionnaire }>(sql`
-      select distinct on (v.questionnaire_id) v.compiled from questionnaire_versions v
+    // Quota cells of the latest version of each questionnaire, each counted over the
+    // interviews of its own questionnaire.
+    const versions = await tx.execute<{ qid: string; compiled: CompiledQuestionnaire }>(sql`
+      select distinct on (v.questionnaire_id) v.questionnaire_id as qid, v.compiled
+      from questionnaire_versions v
       join questionnaires q on q.id = v.questionnaire_id
       where q.project_id = ${projectId} order by v.questionnaire_id, v.version desc`);
-    const quotaDefs = versions.flatMap((v) => v.compiled.quotas ?? []);
+    const quotaDefs = versions.flatMap((v) =>
+      (v.compiled.quotas ?? []).map((quota) => ({ ...quota, qid: v.qid })),
+    );
     const quotas = quotaDefs.map((q) => ({ id: q.id, name: q.name, max: q.max, count: 0 }));
     if (quotaDefs.length) {
       const refs = [...new Set(quotaDefs.flatMap((q) => q.expr.refs))];
-      const rows = await tx.execute<{ a: Record<string, unknown> | null; mode: string }>(sql`
-        select (select jsonb_object_agg(key, value) from jsonb_each(i.answers)
+      const fields = [...new Set(quotaDefs.flatMap((q) => caseFields(q.expr.ast)))];
+      const rows = await tx.execute<{
+        qid: string;
+        a: Record<string, unknown> | null;
+        c: Record<string, unknown> | null;
+        mode: string;
+      }>(sql`
+        select v.questionnaire_id as qid,
+               (select jsonb_object_agg(key, value) from jsonb_each(i.answers)
                 where key in ${refs.length ? refs : ['']}) as a,
+               (select jsonb_object_agg(key, value) from jsonb_each(
+                  case when jsonb_typeof(i.context->'case') = 'object'
+                       then i.context->'case' else '{}'::jsonb end)
+                where key in ${fields.length ? fields : ['']}) as c,
                i.mode
-        from interviews i
+        from interviews i join questionnaire_versions v on v.id = i.questionnaire_version_id
         where i.project_id = ${projectId} and i.entry_pass = 1 and i.disposition = 'COMPLETE'
           and i.status in ${COUNTED_SQL}`);
       for (const r of rows) {
-        const scope = answersScope(r.a ?? {}, r.mode);
+        const scope = answersScope(r.a ?? {}, r.c ?? {}, r.mode);
         quotaDefs.forEach((q, i) => {
-          if (q.expr.ast && truthy(evaluate(q.expr.ast, scope))) quotas[i]!.count++;
+          if (q.qid === r.qid && q.expr.ast && truthy(evaluate(q.expr.ast, scope)))
+            quotas[i]!.count++;
         });
       }
     }

@@ -18,7 +18,8 @@ export interface BreakingChange {
   allowed: ('rename' | 'recode' | 'drop')[];
 }
 
-const DATA_KINDS = new Set<VariableInfo['kind']>(['question', 'computed', 'roster']);
+/** Variables that hold data; `other` is a question's "other, specify" text (`X_OTHER`). */
+const DATA_KINDS = new Set<VariableInfo['kind']>(['question', 'computed', 'roster', 'other']);
 
 function gridRows(model: Model, v: VariableInfo): (string | number)[] {
   const def = model.nodes[v.node]?.def as Question | undefined;
@@ -120,6 +121,7 @@ export function validateMapping(
   const b = buildModel(next);
   const problems: MappingProblem[] = [];
   const ids = new Set(changes.map((c) => c.id));
+  const renamedTo = new Map<string, string>();
   for (const id of Object.keys(m)) {
     if (!ids.has(id))
       problems.push({
@@ -163,7 +165,11 @@ export function validateMapping(
           message: `${action.to} already existed and has its own data`,
           msg: { id: 'target_existed', params: { name: action.to } },
         });
-      } else if (target.type !== source.type) {
+      } else if (
+        target.type !== source.type ||
+        !DATA_KINDS.has(target.kind) ||
+        (target.kind === 'roster') !== (source.kind === 'roster')
+      ) {
         problems.push({
           changeId: c.id,
           message: `${action.to} holds ${target.type} values, ${c.variable} held ${source.type}`,
@@ -172,7 +178,23 @@ export function validateMapping(
             params: { name: action.to, type: target.type, old: c.variable, oldType: source.type },
           },
         });
-      }
+      } else if (target.rosterChain.join('/') !== source.rosterChain.join('/')) {
+        // Row data only lines up when both sit at the same roster level.
+        problems.push({
+          changeId: c.id,
+          message: `${action.to} is not in the same roster as ${c.variable}`,
+          msg: { id: 'target_roster', params: { name: action.to, old: c.variable } },
+        });
+      } else if (renamedTo.has(action.to)) {
+        problems.push({
+          changeId: c.id,
+          message: `${renamedTo.get(action.to)} is already renamed to ${action.to}`,
+          msg: {
+            id: 'target_twice',
+            params: { name: action.to, other: renamedTo.get(action.to)! },
+          },
+        });
+      } else renamedTo.set(action.to, c.variable);
     }
     if (action.action === 'recode') {
       const valid = new Set((b.vars[c.variable]?.codes ?? []).map(key));

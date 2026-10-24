@@ -1,6 +1,7 @@
 export * from './ast.js';
 export { tokenize, LogicSyntaxError } from './lexer.js';
-export { parse, tryParse } from './parser.js';
+export { parse, tryParse, MAX_NESTING } from './parser.js';
+export { renameInExpression, renameInTemplate } from './rename.js';
 export { evaluate, evaluateCondition, type Scope } from './evaluator.js';
 export { FUNCTIONS, type FunctionDef, type TypeTag } from './functions.js';
 export * from './values.js';

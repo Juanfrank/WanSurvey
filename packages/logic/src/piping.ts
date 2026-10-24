@@ -22,6 +22,8 @@ export type Segment =
   | { type: 'if'; src: string; cond: Node; then: Segment[]; else: Segment[] };
 
 export const PIPE_FILTERS = ['label', 'date', 'default'] as const;
+export const DATE_STYLES = ['full', 'long', 'medium', 'short', 'iso'] as const;
+type DateStyle = (typeof DATE_STYLES)[number];
 
 export class TemplateError extends Error {
   constructor(
@@ -116,7 +118,7 @@ class TemplateParser {
 }
 
 /** Splits `expr | filter:"arg" | filter2` on single pipes outside quotes. */
-function splitFilters(s: string): string[] {
+export function splitFilters(s: string): string[] {
   const out: string[] = [];
   let quote: string | null = null;
   let start = 0;
@@ -179,6 +181,30 @@ function rewritePipeAst(node: Node): Node {
     default:
       return node;
   }
+}
+
+/** Filters whose argument the renderer cannot use (e.g. `date:"weird"`), for static analysis. */
+export function templateFilterProblems(segments: Segment[]): string[] {
+  const out: string[] = [];
+  const visit = (segs: Segment[]) => {
+    for (const s of segs) {
+      if (s.type === 'if') {
+        visit(s.then);
+        visit(s.else);
+      } else if (s.type === 'expr') {
+        for (const f of s.filters) {
+          if (
+            f.name === 'date' &&
+            f.arg !== undefined &&
+            !(DATE_STYLES as readonly string[]).includes(f.arg)
+          )
+            out.push(`Unknown date style '${f.arg}' in {{${s.src}}}`);
+        }
+      }
+    }
+  };
+  visit(segments);
+  return out;
 }
 
 /** Every expression AST in a template, for static analysis. */
@@ -250,13 +276,18 @@ function renderExpr(
     } else if (f.name === 'date') {
       const ms = parseIsoDate(value);
       if (ms === null) return null;
-      const style = (f.arg ?? 'medium') as 'full' | 'long' | 'medium' | 'short' | 'iso';
-      text =
-        style === 'iso'
-          ? new Date(ms).toISOString().slice(0, 10)
-          : new Intl.DateTimeFormat(opts.lang, { dateStyle: style, timeZone: 'UTC' }).format(
-              new Date(ms),
-            );
+      const style = (f.arg ?? 'medium') as DateStyle;
+      // An unknown style or language shows the value unformatted rather than breaking the text.
+      try {
+        text =
+          style === 'iso'
+            ? new Date(ms).toISOString().slice(0, 10)
+            : new Intl.DateTimeFormat(opts.lang, { dateStyle: style, timeZone: 'UTC' }).format(
+                new Date(ms),
+              );
+      } catch {
+        text = formatValue(value, opts);
+      }
       value = text;
     }
   }

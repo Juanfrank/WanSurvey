@@ -61,6 +61,12 @@ describe('piping', () => {
     expect(() => parseTemplate('{{Q1 | upper}}')).toThrow(/Unknown filter/);
     expect(() => parseTemplate('{{1 +}}')).toThrow(TemplateError);
   });
+  it('an unknown date style shows the value unformatted instead of throwing', () => {
+    expect(r('On {{today | date:"weird"}}.')).toBe('On 2026-10-12.');
+    expect(renderTemplate('{{today | date:"long"}}', scope, { lang: 'not a lang' })).toBe(
+      '2026-10-12',
+    );
+  });
 });
 
 describe('hash', () => {

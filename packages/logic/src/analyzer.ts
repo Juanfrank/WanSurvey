@@ -18,7 +18,13 @@ import {
   type CompiledNode,
   type Model,
 } from './model.js';
-import { parseTemplate, TemplateError, templateExpressions, hasPipes } from './piping.js';
+import {
+  parseTemplate,
+  TemplateError,
+  templateExpressions,
+  templateFilterProblems,
+  hasPipes,
+} from './piping.js';
 import { typecheck, type MessageRef, type StaticType } from './typecheck.js';
 import { own, truthy } from './values.js';
 
@@ -440,6 +446,7 @@ function checkVariants(node: CompiledNode, modes: readonly string[], add: (d: Di
 // --- texts and pipes ---------------------------------------------------------
 
 function nodeTexts(
+  model: Model,
   node: CompiledNode,
 ): { field: string; text: LocalizedText; allowSelf: boolean }[] {
   const out: { field: string; text: LocalizedText; allowSelf: boolean }[] = [];
@@ -474,6 +481,15 @@ function nodeTexts(
     (q.options ?? []).forEach((o, i) =>
       out.push({ field: `options[${i}].label`, text: o.label, allowSelf: false }),
     );
+    // A shared answer set's labels are piped where each question using it is shown.
+    if (!q.options?.length && q.answerSetId)
+      (own(model.questionnaire.answerSets, q.answerSetId) ?? []).forEach((o, i) =>
+        out.push({
+          field: `answerSets.${q.answerSetId}[${i}].label`,
+          text: o.label,
+          allowSelf: false,
+        }),
+      );
     (q.validations ?? []).forEach((v) =>
       out.push({ field: `validations.${v.id}.message`, text: v.message, allowSelf: true }),
     );
@@ -495,7 +511,17 @@ function checkTemplate(
     if (!hasPipes(src)) continue;
     let exprs: { src: string; node: Node }[];
     try {
-      exprs = templateExpressions(parseTemplate(src));
+      const segments = parseTemplate(src);
+      exprs = templateExpressions(segments);
+      for (const problem of templateFilterProblems(segments))
+        add({
+          severity: 'error',
+          code: 'pipe_syntax',
+          message: `${problem} (${lang})`,
+          msg: { id: 'pipe_syntax', params: { lang } },
+          itemId: node.id,
+          field,
+        });
     } catch (e) {
       if (e instanceof TemplateError) {
         add({
@@ -571,7 +597,7 @@ function checkTexts(
   add: (d: Diagnostic) => void,
 ) {
   const languages = model.questionnaire.languages;
-  for (const { field, text, allowSelf } of nodeTexts(node)) {
+  for (const { field, text, allowSelf } of nodeTexts(model, node)) {
     const chain = node.kind === 'roster' ? [...node.rosterChain, node.name!] : node.rosterChain;
     checkTemplate(model, node, field, text, allowSelf, chain, specialCodes, add);
     if (field === 'text' || field === 'title') {

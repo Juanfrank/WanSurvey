@@ -12,6 +12,7 @@ import type {
 import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema/constants';
 import { NAMESPACES, RESERVED_IDENTIFIERS, type Node, type Span } from './ast.js';
 import type { TypeTag } from './functions.js';
+import { KEYWORDS } from './lexer.js';
 import { tryParse } from './parser.js';
 import { own } from './values.js';
 
@@ -197,7 +198,8 @@ export function buildModel(questionnaire: Questionnaire): Model {
   };
 
   const addVar = (info: VariableInfo, itemId: string) => {
-    if (RESERVED.has(info.name) || NS.has(info.name)) {
+    // Keywords in any case (`IN`, `Null`) could never be referenced in an expression.
+    if (RESERVED.has(info.name) || NS.has(info.name) || KEYWORDS.has(info.name.toLowerCase())) {
       problems.push({
         code: 'reserved_name',
         message: `'${info.name}' is a reserved word`,

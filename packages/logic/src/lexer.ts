@@ -18,7 +18,17 @@ export class LogicSyntaxError extends Error {
   }
 }
 
-const KEYWORDS = new Set(['and', 'or', 'not', 'in', 'between', 'true', 'false', 'null']);
+/** Operator and literal words; matched without regard to case (`AND` is `and`). */
+export const KEYWORDS: ReadonlySet<string> = new Set([
+  'and',
+  'or',
+  'not',
+  'in',
+  'between',
+  'true',
+  'false',
+  'null',
+]);
 const TWO_CHAR_OPS = new Set(['==', '!=', '<=', '>=', '&&', '||', '<>']);
 const ONE_CHAR_OPS = new Set(['+', '-', '*', '/', '^', '%', '<', '>', '!', '=']);
 const PUNCT = new Set(['(', ')', ',', '.', '[', ']']);
