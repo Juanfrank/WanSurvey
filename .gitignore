@@ -8,3 +8,6 @@ coverage
 test-results
 playwright-report
 dump.rdb
+
+# Written by apps/api/scripts/load-setup.ts
+load/sync-users.json
