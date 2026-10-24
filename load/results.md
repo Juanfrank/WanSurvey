@@ -1,5 +1,35 @@
 # Load test results
 
+## 2026-10-24 (third run) — CPU of each step
+
+One virtual user, so requests never overlap. N = 1,500 respondents per measure, each stopped
+after a given step (`STEPS=1…4`). The API's CPU time is read from `/proc` before and after
+each measure, and each measure was taken twice. The cost of a step is the difference between
+consecutive measures.
+
+| Step                                                      | API CPU per request | Share of a complete |
+| --------------------------------------------------------- | ------------------- | ------------------- |
+| Open link (`POST /public/o/:slug/start`)                  | 5.5 ms              | 21 %                |
+| Start (`GET /public/s/:token`, returns the questionnaire) | 7.4 ms              | 28 %                |
+| Sync (3 answers and the snapshot)                         | 5.4 ms              | 21 %                |
+| Submit                                                    | 7.8 ms              | 30 %                |
+| **Whole complete**                                        | **26.1 ms**         |                     |
+
+**What a submit spends.** With the post-submit hooks turned off in the build, a submit cost
+4.7 ms; the hooks are the review flags and the day's statistics. That leaves about **3 ms**
+(±1.5 between measures) that could move to the worker.
+
+**Where the rest goes.** Opening a link does almost nothing (one insert), yet costs 5.5 ms.
+Most of each request's cost is therefore fixed, spent before and after the handler. That
+fixed cost is an estimate, not a measure: about 3–4 ms a request, so over half of a complete.
+It covers:
+
+- Express and Nest;
+- the throttler's two Redis counters;
+- the request log;
+- the security headers;
+- JSON.
+
 ## 2026-10-24 (second run) — after the capacity changes
 
 Same machine, settings and method as the run below; the code changed:
