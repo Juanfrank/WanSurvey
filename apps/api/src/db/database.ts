@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
+import { is, Param, Placeholder, sql, type Column } from 'drizzle-orm';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { CONFIG, type AppConfig } from '../config.js';
@@ -14,6 +14,65 @@ import * as schema from './schema.js';
 
 export type Db = PostgresJsDatabase<typeof schema>;
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** Lookups by a public key (link token, slug) that find the organisation before any context. */
+export type PublicLookup = 'invitation_by_token' | 'open_link_by_slug' | 'feedback_point_by_slug';
+
+/**
+ * A query built once and run in any transaction. Drizzle builds a query's SQL each time it
+ * runs, which on the hot paths (each respondent and device request) costs more CPU than the
+ * query itself; this keeps the text and where each argument goes, runs it on the
+ * transaction's own connection (Postgres keeps it prepared there, DB_PREPARE) and maps the
+ * row back with the columns' own decoders, as Drizzle would.
+ */
+export class Prepared<Row> {
+  private text?: string;
+  /** Each parameter: an argument by name (with the column's encoder, in inserts) or a constant. */
+  private slots?: ({ name: string; encode?: (v: unknown) => unknown } | { value: unknown })[];
+
+  /**
+   * `build` returns the query with `sql.placeholder(name)` for each argument; `fields` maps
+   * each result key to its column (`getTableColumns(table)` for whole rows).
+   */
+  constructor(
+    private readonly build: (tx: Tx) => { toSQL(): { sql: string; params: unknown[] } },
+    private readonly fields: Record<string, Column>,
+  ) {}
+
+  async run(tx: Tx, args: Record<string, unknown>): Promise<Row[]> {
+    if (!this.text) {
+      const q = this.build(tx).toSQL();
+      this.slots = q.params.map((p) => {
+        if (is(p, Placeholder)) return { name: p.name };
+        // Insert values come wrapped with the column that encodes them.
+        if (is(p, Param) && is(p.value, Placeholder)) {
+          const encoder = p.encoder as { mapToDriverValue?(v: unknown): unknown } | undefined;
+          return {
+            name: (p.value as Placeholder<string>).name,
+            encode: encoder?.mapToDriverValue?.bind(encoder),
+          };
+        }
+        return { value: p };
+      });
+      this.text = q.sql;
+    }
+    const params = this.slots!.map((s) => {
+      if (!('name' in s)) return s.value;
+      const v = args[s.name];
+      return s.encode && v !== null && v !== undefined ? s.encode(v) : v;
+    });
+    const client = (tx as unknown as { session: { client: postgres.Sql } }).session.client;
+    const raw = await client.unsafe(this.text, params as postgres.ParameterOrJSON<never>[]);
+    return raw.map((r) => {
+      const row: Record<string, unknown> = {};
+      for (const [key, col] of Object.entries(this.fields)) {
+        const v = (r as Record<string, unknown>)[col.name];
+        row[key] = v === null || v === undefined ? null : col.mapFromDriverValue(v);
+      }
+      return row as Row;
+    });
+  }
+}
 
 /** Errors a transaction can simply be run again after (serialization failure, deadlock). */
 const RETRYABLE = new Set(['40001', '40P01']);
@@ -153,6 +212,20 @@ export class Database implements OnModuleDestroy {
     return this.withContext({ tenantId, userId }, fn);
   }
 
+  /**
+   * Finds a link's organisation and works in it in one transaction: the lookup (a
+   * security-definer function) and the context are set by the same first statement, where
+   * a lookup followed by `withTenant` takes two transactions and an extra round trip on every
+   * respondent request. `fn` gets null when nothing matches (no context is set then).
+   */
+  async withTenantOf<T>(
+    lookup: PublicLookup,
+    key: string,
+    fn: (tx: Tx, found: { id: string; tenantId: string } | null) => Promise<T>,
+  ): Promise<T> {
+    return this.withContext({ lookup: { fn: lookup, key } }, async (tx, found) => fn(tx, found));
+  }
+
   /** User context only, for account-level changes that belong to no organisation. */
   async withUser<T>(userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
     return this.withContext({ userId }, fn);
@@ -165,21 +238,34 @@ export class Database implements OnModuleDestroy {
    * back entirely); a lock or statement timeout becomes 503 BUSY, for the client to retry.
    */
   private async withContext<T>(
-    ctx: { tenantId?: string; userId?: string },
-    fn: (tx: Tx) => Promise<T>,
+    ctx: { tenantId?: string; userId?: string; lookup?: { fn: PublicLookup; key: string } },
+    fn: (tx: Tx, found: { id: string; tenantId: string } | null) => Promise<T>,
   ): Promise<T> {
     if (ctx.userId !== undefined && !isUuid(ctx.userId)) throw new Error('Invalid user id');
     for (let attempt = 1; ; attempt++) {
       try {
         return await this.db.transaction(async (tx) => {
-          await tx.execute(
-            sql`select set_config('statement_timeout', ${this.statementTimeout}, true),
+          const limits = sql`set_config('statement_timeout', ${this.statementTimeout}, true),
                        set_config('lock_timeout', ${this.lockTimeout}, true),
-                       set_config('idle_in_transaction_session_timeout', ${this.idleInTransaction}, true)
+                       set_config('idle_in_transaction_session_timeout', ${this.idleInTransaction}, true)`;
+          if (ctx.lookup) {
+            // The select list runs after the function's row is found, so the organisation is
+            // set for everything the transaction does next.
+            const rows = (await tx.execute(
+              sql`select f.id, f.tenant_id, ${limits},
+                         set_config('app.tenant_id', f.tenant_id::text, true)
+                  from ${sql.raw(ctx.lookup.fn)}(${ctx.lookup.key}) f`,
+            )) as unknown as { id: string; tenant_id: string }[];
+            const r = rows[0];
+            if (!r) await tx.execute(sql`select ${limits}`);
+            return fn(tx, r ? { id: r.id, tenantId: r.tenant_id } : null);
+          }
+          await tx.execute(
+            sql`select ${limits}
                        ${ctx.tenantId ? sql`, set_config('app.tenant_id', ${ctx.tenantId}, true)` : sql``}
                        ${ctx.userId ? sql`, set_config('app.user_id', ${ctx.userId}, true)` : sql``}`,
           );
-          return fn(tx);
+          return fn(tx, null);
         });
       } catch (e) {
         const code = pgCode(e);

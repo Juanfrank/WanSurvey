@@ -9,13 +9,21 @@ import { COUNTED_SQL } from '../common/statuses.js';
 
 export { COUNTED } from '../common/statuses.js';
 
+/** One formatter per time zone: building one is far slower than using it. */
+const dayFormats = new Map<string, Intl.DateTimeFormat | null>();
+
 /** The calendar day of `at` in a time zone, as YYYY-MM-DD. */
 export function localDay(at: Date, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone }).format(at);
-  } catch {
-    return at.toISOString().slice(0, 10);
+  let f = dayFormats.get(timeZone);
+  if (f === undefined) {
+    try {
+      f = new Intl.DateTimeFormat('en-CA', { timeZone });
+    } catch {
+      f = null;
+    }
+    dayFormats.set(timeZone, f);
   }
+  return f ? f.format(at) : at.toISOString().slice(0, 10);
 }
 
 /**

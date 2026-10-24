@@ -1,6 +1,52 @@
 # Load test results
 
-## 2026-10-24 — local run, one API process pinned to one core (P0v3-like)
+## 2026-10-24 (second run) — after the capacity changes
+
+Same machine, settings and method as the run below; the code changed:
+
+- **One transaction per respondent request.** The link's lookup and the context are set by
+  the first statement (`Database.withTenantOf`), instead of a lookup and then `withTenant`.
+- **Hot queries built once.** These are run directly on the transaction's connection
+  (`Prepared`), where Postgres keeps them prepared:
+  - the invitation and interview row locks;
+  - the device's last change number, read and written;
+  - the device row insert.
+- **Fewer reads:**
+  - `latestVersion` takes the compiled questionnaire from the in-process cache instead of
+    fetching and decoding it on every open and start;
+  - version numbers are cached;
+  - the project is read once per respondent start;
+  - `localDay()` keeps one date formatter per time zone.
+
+|                                                 | Before                                         | After                                                                   |
+| ----------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| Transactions per web complete                   | 7.4                                            | **4.0**                                                                 |
+| Statements per web complete (with the worker's) | 62                                             | 55                                                                      |
+| Knee (ramp)                                     | ~34 completes/s                                | **~47 completes/s**                                                     |
+| 50 completes/s for 2 min                        | 8.2 % shed (503), submit p95 431 ms            | **0 % errors**, submit p95 **126 ms**, sync p95 109 ms, 5,951 submitted |
+| 30 completes/s for 2 min                        | submit p95 96 ms, sync p95 73 ms, API CPU 98 % | submit p95 **32 ms**, sync p95 **23 ms**, API CPU 87 %                  |
+| 300 interviewers syncing                        | sync p95 35 ms, login p95 129 ms, API CPU 38 % | sync p95 30 ms, login p95 75 ms, API CPU 35 %                           |
+
+**Ramp, after.**
+
+| Offered (completes/s) | Requests/s | Completes/s done | 503    | p95 of answered requests |
+| --------------------- | ---------- | ---------------- | ------ | ------------------------ |
+| 10 → 25               | 70         | 17.5             | 0 %    | 30 ms                    |
+| 25 → 50               | 150        | 37.4             | 0 %    | 106 ms                   |
+| 50 → 75               | 215        | 47.4             | 6.4 %  | 297 ms                   |
+| 75 → 100              | 256        | 47.3             | 15.7 % | 277 ms                   |
+| 100 → 125             | 277        | 38.9             | 26.6 % | 319 ms                   |
+| 125 → 150             | 303        | 32.7             | 34.5 % | 319 ms                   |
+
+**Reading.**
+
+- **The spec's target holds on one instance:** 50 web completes a second with no errors and
+  p95 well under 800 ms. At that rate the instance has no headroom left (API CPU at the
+  limit), so for a planned mass mailing starting with 2 instances is still the safe choice.
+- **Past the knee:** load shedding behaves as before, and answered requests keep p95 near
+  300 ms.
+
+## 2026-10-24 (first run) — local run, one API process pinned to one core (P0v3-like)
 
 **What ran.** Production build (`NODE_ENV=production`) of the API and the worker on an
 Intel Xeon @ 2.80 GHz VM, Node 22.22, PostgreSQL 16.15 and Redis 7.0 on the same machine.
@@ -80,7 +126,7 @@ Each web complete costs:
   - For a planned launch (a mailing to the whole sample), start with 2 instances, or stagger the mailing.
   - Two instances fit the B1ms's connections. In this run each instance held 10 connections: pool 9 plus the health probe.
 
-### To improve capacity (not done)
+### To improve capacity (done in the second run, above)
 
 - The CPU cost per complete is mostly query building. Candidates:
   - prepared queries (`.prepare()` in Drizzle) on the respondent's hot path: start, sync, submit;

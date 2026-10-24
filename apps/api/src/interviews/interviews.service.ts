@@ -12,14 +12,14 @@ import {
   type CompiledQuestionnaire,
   type InterviewOptions,
 } from '@wansurvey/logic';
-import type { ContainerItem, Mode } from '@wansurvey/schema';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import type { ContainerItem, Mode, ProjectSettings } from '@wansurvey/schema';
+import { and, asc, desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { closedCode } from '../questionnaires/state.js';
-import type { Tx } from '../db/database.js';
+import { Prepared, type Tx } from '../db/database.js';
 import {
   cases,
   contacts,
@@ -32,9 +32,65 @@ import {
   users,
 } from '../db/schema.js';
 import type { StartBody, SubmitBody, SyncItem } from './schemas.js';
-import { compiledCache } from './compiled-cache.js';
+import { compiledCache, Lru } from './compiled-cache.js';
 
 export type InterviewRow = typeof interviews.$inferSelect;
+
+/** A version's number and questionnaire, by version id (immutable rows), per process. */
+const versionCache = new Lru<string, { version: number; questionnaireId: string }>(200);
+
+// The queries every device and respondent request runs, built once (see Prepared).
+const lockInterview = new Prepared<InterviewRow>(
+  (tx) =>
+    tx
+      .select()
+      .from(interviews)
+      .where(eq(interviews.id, sql.placeholder('id')))
+      .for('update'),
+  getTableColumns(interviews),
+);
+const deviceSeq = new Prepared<{ lastSeq: number }>(
+  (tx) =>
+    tx
+      .select({ lastSeq: interviewDevices.lastSeq })
+      .from(interviewDevices)
+      .where(
+        and(
+          eq(interviewDevices.interviewId, sql.placeholder('id')),
+          eq(interviewDevices.deviceId, sql.placeholder('device')),
+        ),
+      ),
+  { lastSeq: interviewDevices.lastSeq },
+);
+const touchDevice = new Prepared<{ lastSeq: number }>(
+  (tx) =>
+    tx
+      .insert(interviewDevices)
+      .values({
+        tenantId: sql.placeholder('tenantId'),
+        interviewId: sql.placeholder('id'),
+        deviceId: sql.placeholder('device'),
+      })
+      .onConflictDoUpdate({
+        target: [interviewDevices.interviewId, interviewDevices.deviceId],
+        set: { updatedAt: sql`now()` },
+      })
+      .returning({ lastSeq: interviewDevices.lastSeq }),
+  { lastSeq: interviewDevices.lastSeq },
+);
+const setDeviceSeq = new Prepared<never>(
+  (tx) =>
+    tx
+      .update(interviewDevices)
+      .set({ lastSeq: sql`${sql.placeholder('seq')}`, updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(interviewDevices.interviewId, sql.placeholder('id')),
+          eq(interviewDevices.deviceId, sql.placeholder('device')),
+        ),
+      ),
+  {},
+);
 
 /** Statuses in which the interviewer can still change answers: open, or returned by review. */
 export const EDITABLE = new Set(['in_progress', 'returned']);
@@ -208,11 +264,7 @@ export class InterviewsService {
     // interviews at once wait for each other instead of deadlocking.
     const ordered = [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     for (const item of ordered) {
-      let [row] = await tx
-        .select()
-        .from(interviews)
-        .where(eq(interviews.id, item.id))
-        .for('update');
+      let [row] = await lockInterview.run(tx, { id: item.id });
       if (!row && item.start && create) {
         const made = await create(item);
         if (typeof made === 'string') {
@@ -234,14 +286,11 @@ export class InterviewsService {
         errors[item.id] = 'NOT_THIS_DEVICE';
         continue;
       }
-      const [dev] = await tx
-        .insert(interviewDevices)
-        .values({ tenantId: writer.tenantId, interviewId: row.id, deviceId })
-        .onConflictDoUpdate({
-          target: [interviewDevices.interviewId, interviewDevices.deviceId],
-          set: { updatedAt: new Date() },
-        })
-        .returning({ lastSeq: interviewDevices.lastSeq });
+      const [dev] = await touchDevice.run(tx, {
+        tenantId: writer.tenantId,
+        id: row.id,
+        device: deviceId,
+      });
       let last = dev!.lastSeq;
       if (!EDITABLE.has(row.status)) {
         acks[item.id] = last;
@@ -312,12 +361,7 @@ export class InterviewsService {
           })
           .where(eq(interviews.id, row.id));
       }
-      await tx
-        .update(interviewDevices)
-        .set({ lastSeq: last, updatedAt: new Date() })
-        .where(
-          and(eq(interviewDevices.interviewId, row.id), eq(interviewDevices.deviceId, deviceId)),
-        );
+      await setDeviceSeq.run(tx, { id: row.id, device: deviceId, seq: last });
       acks[item.id] = last;
     }
     return { acks, errors, serverTime: new Date().toISOString() };
@@ -335,12 +379,7 @@ export class InterviewsService {
         code: 'NOT_THIS_DEVICE',
         message: 'This interview is open on another device',
       });
-    const [dev] = await tx
-      .select({ lastSeq: interviewDevices.lastSeq })
-      .from(interviewDevices)
-      .where(
-        and(eq(interviewDevices.interviewId, row.id), eq(interviewDevices.deviceId, body.deviceId)),
-      );
+    const [dev] = await deviceSeq.run(tx, { id: row.id, device: body.deviceId });
     if ((dev?.lastSeq ?? 0) < body.seq)
       throw new ConflictException({
         code: 'NOT_SYNCED',
@@ -431,11 +470,12 @@ export class InterviewsService {
     mode?: Mode,
     opts: { readOnly?: boolean } = {},
   ) {
-    const [v] = await tx
+    // The compiled form comes from the cache (versions never change): reading it here would
+    // fetch and decode the whole questionnaire on every start.
+    const [found] = await tx
       .select({
         id: questionnaireVersions.id,
         version: questionnaireVersions.version,
-        compiled: questionnaireVersions.compiled,
         state: questionnaires.state,
       })
       .from(questionnaireVersions)
@@ -449,6 +489,7 @@ export class InterviewsService {
       )
       .orderBy(desc(questionnaireVersions.version))
       .limit(1);
+    const v = found && { ...found, compiled: await this.compiledOf(tx, found.id) };
     if (!v)
       throw new BadRequestException({
         code: 'NO_PUBLISHED_VERSION',
@@ -508,6 +549,26 @@ export class InterviewsService {
    * and every submit need it, and it is the largest thing they read. Ids reach here only from
    * rows the caller's tenant can see (RLS), so the cache never crosses organisations.
    */
+  /** The interview, locked for this transaction (a prepared query). */
+  async locked(tx: Tx, id: string): Promise<InterviewRow | undefined> {
+    return (await lockInterview.run(tx, { id }))[0];
+  }
+
+  /** A version's number and questionnaire (immutable, so cached like the compiled form). */
+  async versionOf(tx: Tx, versionId: string) {
+    const hit = versionCache.get(versionId);
+    if (hit) return hit;
+    const [v] = await tx
+      .select({
+        version: questionnaireVersions.version,
+        questionnaireId: questionnaireVersions.questionnaireId,
+      })
+      .from(questionnaireVersions)
+      .where(eq(questionnaireVersions.id, versionId));
+    if (v) versionCache.set(versionId, v);
+    return v;
+  }
+
   async compiledOf(tx: Tx, versionId: string) {
     const hit = compiledCache.get(versionId);
     if (hit) return hit;
@@ -570,20 +631,13 @@ export class InterviewsService {
   }
 
   /** Everything a device needs to show and continue an interview. */
-  async payload(tx: Tx, row: InterviewRow, deviceId: string) {
-    const [dev] = await tx
-      .select({ lastSeq: interviewDevices.lastSeq })
-      .from(interviewDevices)
-      .where(
-        and(eq(interviewDevices.interviewId, row.id), eq(interviewDevices.deviceId, deviceId)),
-      );
-    const [v] = await tx
-      .select({
-        version: questionnaireVersions.version,
-        questionnaireId: questionnaireVersions.questionnaireId,
-      })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.id, row.questionnaireVersionId));
+  /**
+   * `settings` is the project's, when the caller has already read them (one read of the
+   * project per request).
+   */
+  async payload(tx: Tx, row: InterviewRow, deviceId: string, settings?: ProjectSettings) {
+    const [dev] = await deviceSeq.run(tx, { id: row.id, device: deviceId });
+    const v = await this.versionOf(tx, row.questionnaireVersionId);
     const compiled = await this.compiledOf(tx, row.questionnaireVersionId);
     const [who] = row.interviewerId
       ? await tx.select({ name: users.name }).from(users).where(eq(users.id, row.interviewerId))
@@ -610,9 +664,9 @@ export class InterviewsService {
       },
       context: row.context,
       compiled,
-      settings: await this.cases
-        .settings(tx, row.projectId)
-        .then((x) => ({ capi: x.capi, shortcuts: x.shortcuts })),
+      settings: await (
+        settings ? Promise.resolve(settings) : this.cases.settings(tx, row.projectId)
+      ).then((x) => ({ capi: x.capi, shortcuts: x.shortcuts })),
       lastSeq: dev?.lastSeq ?? 0,
       serverTime: new Date().toISOString(),
     };

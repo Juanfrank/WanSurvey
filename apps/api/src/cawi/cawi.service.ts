@@ -9,9 +9,9 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
-import type { CawiTheme } from '@wansurvey/schema';
+import { projectSettings, type CawiTheme } from '@wansurvey/schema';
 import { z } from 'zod';
 import { DisplayName } from '../common/zod.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -20,7 +20,7 @@ import { CasesService, ofQuestionnaire } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, type Tx } from '../db/database.js';
+import { Database, Prepared, type Tx } from '../db/database.js';
 import {
   cases,
   contacts,
@@ -752,18 +752,18 @@ export class CawiService implements OnModuleInit {
   // Tracking, webhook, unsubscribe (no sign-in)
   // -------------------------------------------------------------------------
 
+  /** One transaction per respondent request: the token's organisation, then its invitation, locked. */
   private async byToken<T>(token: string, fn: (tx: Tx, inv: InvitationRow) => Promise<T>) {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) throw new NotFoundException('Link not found');
-    const found = await this.database.invitationByToken(sha256Hex(token));
-    if (!found) throw new NotFoundException('Link not found');
-    return this.database.withTenant(found.tenantId, async (tx) => {
-      const [inv] = await tx
-        .select()
-        .from(invitations)
-        .where(eq(invitations.id, found.id))
-        .for('update');
-      return fn(tx, inv!);
-    });
+    return this.database.withTenantOf(
+      'invitation_by_token',
+      sha256Hex(token),
+      async (tx, found) => {
+        if (!found) throw new NotFoundException('Link not found');
+        const [inv] = await lockInvitation.run(tx, { id: found.id });
+        return fn(tx, inv!);
+      },
+    );
   }
 
   /** The open pixel (approximate: image blocking and proxies distort it, W2) and the click. */
@@ -897,7 +897,9 @@ export class CawiService implements OnModuleInit {
    */
   async respondent(token: string, deviceId: string, linkQuery = '') {
     return this.byToken(token, async (tx, inv) => {
-      const settings = await this.cases.settings(tx, inv.projectId);
+      // The project once: its settings, its logo and the interview's settings come from it.
+      const project = await this.cases.project(tx, inv.projectId);
+      const settings = projectSettings(project.settings);
       let row: InterviewRow | undefined;
       if (inv.interviewId)
         [row] = await tx.select().from(interviews).where(eq(interviews.id, inv.interviewId));
@@ -936,7 +938,7 @@ export class CawiService implements OnModuleInit {
           .update(invitations)
           .set({ startedAt: new Date() })
           .where(eq(invitations.id, inv.id));
-      const p = await this.runtime.payload(tx, row, deviceId);
+      const p = await this.runtime.payload(tx, row, deviceId, settings);
       const params = await this.keepParams(tx, row, p.compiled, linkQuery);
       return {
         interview: {
@@ -957,18 +959,13 @@ export class CawiService implements OnModuleInit {
           message: settings.cawi.completionMessage,
           redirectUrl: settings.cawi.redirectUrl,
         },
-        branding: await this.branding(tx, inv.projectId, settings.cawi.theme, token),
+        branding: this.branding(project.logoUpdatedAt, settings.cawi.theme, token),
       };
     });
   }
 
   /** The project's look for respondents: the theme, and the logo's address when there is one. */
-  private async branding(tx: Tx, projectId: string, theme: CawiTheme, token: string) {
-    const [p] = await tx
-      .select({ logoUpdatedAt: projects.logoUpdatedAt })
-      .from(projects)
-      .where(eq(projects.id, projectId));
-    const at = p?.logoUpdatedAt;
+  private branding(at: Date | null, theme: CawiTheme, token: string) {
     return {
       theme,
       logo:
@@ -1089,11 +1086,7 @@ export class CawiService implements OnModuleInit {
   async respondentSubmit(token: string, body: SubmitBody) {
     return this.byToken(token, async (tx, inv) => {
       if (!inv.interviewId) throw new NotFoundException('Survey not started');
-      const [row] = await tx
-        .select()
-        .from(interviews)
-        .where(eq(interviews.id, inv.interviewId))
-        .for('update');
+      const row = await this.runtime.locked(tx, inv.interviewId);
       return this.runtime.submit(tx, row!, body, this.writer(inv));
     });
   }
@@ -1130,9 +1123,8 @@ export class CawiService implements OnModuleInit {
   /** Starts an anonymous interview from an open link; the browser keeps the token (W6). */
   async openLinkStart(slug: string) {
     if (!/^[A-Za-z0-9_-]{6,32}$/.test(slug)) throw new NotFoundException('Link not found');
-    const found = await this.database.openLinkBySlug(slug);
-    if (!found) throw new NotFoundException('Link not found');
-    return this.database.withTenant(found.tenantId, async (tx) => {
+    return this.database.withTenantOf('open_link_by_slug', slug, async (tx, found) => {
+      if (!found) throw new NotFoundException('Link not found');
       const [l] = await tx.select().from(openLinks).where(eq(openLinks.id, found.id));
       // A completed questionnaire's link goes on with its continuation.
       const questionnaireId = await this.respondentTarget(tx, l!.questionnaireId, l!.projectId);
@@ -1152,6 +1144,17 @@ export class CawiService implements OnModuleInit {
     });
   }
 }
+
+/** The invitation of a request, locked: built once (every respondent request runs it). */
+const lockInvitation = new Prepared<InvitationRow>(
+  (tx) =>
+    tx
+      .select()
+      .from(invitations)
+      .where(eq(invitations.id, sql.placeholder('id')))
+      .for('update'),
+  getTableColumns(invitations),
+);
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

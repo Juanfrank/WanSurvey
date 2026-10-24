@@ -298,17 +298,21 @@ export class FeedbackService {
     });
   }
 
-  private async bySlug(slug: string) {
+  /** The point's organisation found and set in the same transaction as the work. */
+  private inPoint<T>(
+    slug: string,
+    fn: (tx: Tx, found: { id: string; tenantId: string }) => Promise<T>,
+  ): Promise<T> {
     if (!SLUG.test(slug)) throw new NotFoundException('Not found');
-    const found = await this.database.feedbackPointBySlug(slug);
-    if (!found) throw new NotFoundException('Not found');
-    return found;
+    return this.database.withTenantOf('feedback_point_by_slug', slug, (tx, found) => {
+      if (!found) throw new NotFoundException('Not found');
+      return fn(tx, found);
+    });
   }
 
   /** What the public page and the widget show. */
   async publicPoint(slug: string) {
-    const found = await this.bySlug(slug);
-    return this.database.withTenant(found.tenantId, async (tx) => {
+    return this.inPoint(slug, async (tx, found) => {
       const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
       return {
         question: p!.question as Record<string, string>,
@@ -322,8 +326,7 @@ export class FeedbackService {
 
   /** Records one face; the key lets the same browser add a comment to it. */
   async answer(slug: string, body: z.infer<typeof AnswerBody>) {
-    const found = await this.bySlug(slug);
-    return this.database.withTenant(found.tenantId, async (tx) => {
+    return this.inPoint(slug, async (tx, found) => {
       const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
       if (body.score > p!.faces) throw new NotFoundException('No such face');
       const items = p!.items as FeedbackItem[];
@@ -355,8 +358,7 @@ export class FeedbackService {
 
   /** The follow-up answers of one face, once (the key is spent). */
   async followUp(slug: string, body: z.infer<typeof FollowUpBody>) {
-    const found = await this.bySlug(slug);
-    return this.database.withTenant(found.tenantId, async (tx) => {
+    return this.inPoint(slug, async (tx, found) => {
       const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
       const [r] = await tx
         .select()
@@ -397,8 +399,7 @@ export class FeedbackService {
   }
 
   async comment(slug: string, body: z.infer<typeof CommentBody>) {
-    const found = await this.bySlug(slug);
-    return this.database.withTenant(found.tenantId, async (tx) => {
+    return this.inPoint(slug, async (tx, found) => {
       const [r] = await tx
         .select()
         .from(feedbackResponses)
