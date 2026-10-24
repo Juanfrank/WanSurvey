@@ -1,6 +1,7 @@
 import { sampleTable, toCsv } from '@wansurvey/fixtures';
 import { ROLE_PERMISSIONS } from '@wansurvey/schema';
 import ExcelJS from 'exceljs';
+import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseSampleFile, sniffDelimiter } from '../src/cases/sample-file.js';
 import { deal, distribute, fairWeights, productivity, quotas } from '../src/cases/distribute.js';
@@ -717,6 +718,38 @@ describe('cases API', () => {
         })
       ).status,
     ).toBe(403);
+  });
+
+  it('a share-out does not take a case claimed while it ran', async () => {
+    const other = await createProject(t.admin, tenant.id);
+    const ids = [uuidv7(), uuidv7()];
+    for (const [i, id] of ids.entries())
+      await t.admin`insert into cases (id, tenant_id, project_id, external_id, sample, status)
+        values (${id}, ${tenant.id}, ${other}, ${'R' + i}, ${t.admin.json({})}, 'fresh')`;
+    // An interviewer's claim of the first case, not committed yet.
+    let commit!: () => void;
+    const go = new Promise<void>((ok) => (commit = ok));
+    let locked!: () => void;
+    const held = new Promise<void>((ok) => (locked = ok));
+    const claim = t.admin.begin(async (x) => {
+      await x`update cases set assigned_to = ${interviewer.id}, status = 'assigned' where id = ${ids[0]!}`;
+      locked();
+      await go;
+    });
+    await held;
+    const share = post(supervisor, `/api/v1/projects/${other}/cases/distribute`, {
+      userIds: [interviewer2.id],
+    }).then((r) => r);
+    await new Promise((ok) => setTimeout(ok, 300));
+    commit();
+    await claim;
+    const res = await share;
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.perPerson[interviewer2.id]).toBe(2);
+    expect(res.body.changed).toBe(1);
+    const rows =
+      await t.admin`select id, assigned_to from cases where project_id = ${other} order by external_id`;
+    expect(rows.map((r) => r.assigned_to)).toEqual([interviewer.id, interviewer2.id]);
   });
 
   it('keeps cases inside their tenant', async () => {

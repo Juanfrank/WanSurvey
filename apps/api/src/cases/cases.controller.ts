@@ -570,7 +570,10 @@ export class CasesController {
           );
         rows.forEach((r) => workable.add(r.id));
       }
-      const n = await this.svc.assign(tx, ctx, projectId, [...workable], body.userId, 'manual');
+      const n = await this.svc.assign(tx, ctx, projectId, [...workable], body.userId, 'manual', {
+        statuses: ['fresh', 'assigned', 'in_progress'],
+        unassigned: body.onlyUnassigned,
+      });
       await this.audit.record(
         tx,
         ctx.tenantId,
@@ -625,7 +628,12 @@ export class CasesController {
       let changed = 0;
       for (const [userId, ids] of hands) {
         perPerson[userId] = ids.length;
-        if (ids.length) changed += await this.svc.assign(tx, ctx, projectId, ids, userId, 'random');
+        if (ids.length)
+          changed += await this.svc.assign(tx, ctx, projectId, ids, userId, 'random', {
+            statuses: ['fresh', 'assigned'],
+            // Planned on the free cases: only those still free.
+            unassigned: !body.caseIds,
+          });
       }
       await this.audit.record(
         tx,
@@ -839,6 +847,8 @@ export class CasesController {
       join projects p on p.id = i.project_id
       join questionnaire_versions v on v.id = i.questionnaire_version_id
       where i.project_id = ${projectId}
+        -- Second entries of paper forms are checks, not output (as in the metrics).
+        and i.entry_pass = 1
         and i.interviewer_id in (${sql.join(
           people.map((x) => sql`${x}::uuid`),
           sql`, `,

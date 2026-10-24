@@ -695,6 +695,17 @@ export class SamplingService {
     if (input.design.family !== 'probability' || !['srs', 'systematic', 'stratified'].includes(m))
       return;
     const checker = await this.checker(tx, projectId, input);
+    // N of each stratum: eligible units of the frame in it (stratum is set at selection on
+    // selected units only, so for N the frame is read by the stratum variable). The frame is
+    // read and screened once, then counted per stratum.
+    const screened = this.screen(input, await this.units(tx, projectId, q), checker).filter(
+      (s) => !s.out,
+    );
+    const sizes = new Map<string, number>();
+    for (const s of screened) {
+      const k = m === 'stratified' ? String(s.sample[input.design.strataVar] ?? '') : '';
+      sizes.set(k, (sizes.get(k) ?? 0) + 1);
+    }
     for (const stratum of strata) {
       const inStratum = await tx
         .select({
@@ -708,19 +719,15 @@ export class SamplingService {
           and(
             eq(frameUnits.projectId, projectId),
             sameQ(frameUnits.questionnaireId, q),
-            m === 'stratified' && stratum !== null ? eq(frameUnits.stratum, stratum) : sql`true`,
+            // Units without a stratum value make a stratum of their own (null), not all units.
+            m !== 'stratified'
+              ? sql`true`
+              : stratum === null
+                ? isNull(frameUnits.stratum)
+                : eq(frameUnits.stratum, stratum),
           ),
         );
-      // N of the stratum: eligible units of the frame in it (stratum is set at selection on
-      // selected units only, so for N the frame is read by the stratum variable).
-      const all = await this.units(tx, projectId, q);
-      const screened = this.screen(input, all, checker).filter((s) => !s.out);
-      const N =
-        m === 'stratified'
-          ? screened.filter(
-              (s) => String(s.sample[input.design.strataVar] ?? '') === (stratum ?? ''),
-            ).length
-          : screened.length;
+      const N = sizes.get(m === 'stratified' ? (stratum ?? '') : '') ?? 0;
       const taken = inStratum.filter((u) => u.caseId);
       if (!N || !taken.length) continue;
       const p = taken.length / N;

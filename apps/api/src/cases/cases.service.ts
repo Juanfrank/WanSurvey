@@ -229,7 +229,12 @@ export class CasesService {
     }
   }
 
-  /** Assigns (or unassigns, with null) cases; fresh ↔ assigned follows. Returns the count. */
+  /**
+   * Assigns (or unassigns, with null) cases; fresh ↔ assigned follows. Returns the count.
+   * The cases are locked and checked again here, so a share-out planned on an older read does
+   * not take a case someone claimed, started or finished meanwhile: only cases still in one of
+   * `only.statuses` (and, with `only.unassigned`, still held by no one) change hands.
+   */
   async assign(
     tx: Tx,
     ctx: AuthContext,
@@ -237,17 +242,28 @@ export class CasesService {
     caseIds: string[],
     userId: string | null,
     via: string,
+    only: { statuses?: string[]; unassigned?: boolean } = {},
   ): Promise<number> {
     if (userId) await this.assertAssignee(tx, projectId, userId);
     let changed: { id: string; from: string | null }[] = [];
     for (const part of chunks(caseIds)) {
+      // In id order, so two share-outs at once wait for each other instead of deadlocking.
       const before = await tx
         .select({ id: cases.id, from: cases.assignedTo })
         .from(cases)
-        .where(and(eq(cases.projectId, projectId), inArray(cases.id, part)));
+        .where(
+          and(
+            eq(cases.projectId, projectId),
+            inArray(cases.id, part),
+            ...(only.statuses ? [inArray(cases.status, only.statuses)] : []),
+            ...(only.unassigned ? [isNull(cases.assignedTo)] : []),
+          ),
+        )
+        .orderBy(asc(cases.id))
+        .for('update');
       const ids = before.filter((b) => b.from !== userId).map((b) => b.id);
       if (!ids.length) continue;
-      await tx
+      const done = await tx
         .update(cases)
         .set({
           assignedTo: userId,
@@ -257,8 +273,10 @@ export class CasesService {
             : sql`case when ${cases.status} = 'assigned' then 'fresh' else ${cases.status} end`,
           updatedAt: new Date(),
         })
-        .where(inArray(cases.id, ids));
-      changed = changed.concat(before.filter((b) => ids.includes(b.id)));
+        .where(inArray(cases.id, ids))
+        .returning({ id: cases.id });
+      const hit = new Set(done.map((d) => d.id));
+      changed = changed.concat(before.filter((b) => hit.has(b.id)));
     }
     await this.events(
       tx,
@@ -517,6 +535,7 @@ export class CasesService {
             hand.caseIds,
             hand.userId,
             `rule:${hand.ruleId}`,
+            { statuses: ['fresh'], unassigned: true },
           );
       }
     return total;

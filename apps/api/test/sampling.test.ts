@@ -177,6 +177,50 @@ describe('sampling selector', () => {
     expect(audit!.n).toBeGreaterThan(0);
   });
 
+  it('reweighs the units without a stratum value as a stratum of their own', async () => {
+    const other = await createProject(t.admin, tenant.id);
+    const at = `/api/v1/projects/${other}`;
+    const table = sampleTable(30).map((r, i) =>
+      i && i % 5 === 0 ? [...r.slice(0, 3), '', ...r.slice(4)] : r,
+    );
+    const up = await pm.agent
+      .post(`${at}/imports`)
+      .set('x-csrf-token', pm.csrf)
+      .field('target', 'frame')
+      .attach('file', Buffer.from(toCsv(table)), 'frame.csv');
+    await put(`${at}/imports/${up.body.id}/mapping`, up.body.suggested).expect(200);
+    await post(`${at}/imports/${up.body.id}/commit`).expect(200);
+    await put(`${at}/sampling`, {
+      source: { kind: 'frame', unit: 'hogares', populationKnown: true, populationSize: 30 },
+      design: {
+        family: 'probability',
+        method: 'stratified',
+        strataVar: 'region',
+        allocation: 'proportional',
+        within: 'srs',
+      },
+      size: { objective: 'fixed', fixedN: 6, response: 0.5, reserve: 1 },
+    }).expect(200);
+    await post(`${at}/sampling/select`).expect(200);
+    // Every reserve of the named strata, then what is left: those without a region.
+    for (const stratum of ['1', '2', '3'])
+      await post(`${at}/sampling/release`, { count: 100, stratum, reason: 'Cerrar campo' }).expect(
+        200,
+      );
+    const prob = () => t.admin<{ region: string | null; p: number; n: number }[]>`
+      select nullif(sample->>'region', '') as region, max(inclusion_prob) as p, count(*)::int as n
+      from cases where project_id = ${other} group by 1 order by 1`;
+    const before = await prob();
+    const last = await post(`${at}/sampling/release`, { count: 100, reason: 'Sin región' });
+    expect(last.status, JSON.stringify(last.body)).toBe(200);
+    expect(last.body.released).toBeGreaterThan(0);
+    const after = await prob();
+    // The regions keep theirs; the units without one get (cases / units) of their own.
+    expect(after.filter((r) => r.region)).toEqual(before.filter((r) => r.region));
+    const blank = after.find((r) => r.region === null)!;
+    expect(blank.p).toBeCloseTo(blank.n / 6);
+  });
+
   it('non-probability and field designs: no π, field cases on demand', async () => {
     const other = await createProject(t.admin, tenant.id);
     const b = `/api/v1/projects/${other}`;
