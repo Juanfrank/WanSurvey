@@ -5,9 +5,9 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
-import { SsoConfigs, type SsoStartConfig } from './sso-config.js';
+import { SsoConfigs, type SsoConfig, type SsoStartConfig } from './sso-config.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, isUuid, Prepared } from '../db/database.js';
+import { Database, isUuid, pgCode, Prepared } from '../db/database.js';
 import { memberships, sessions, tenantMembers, userIdentities, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { parseSessionCookie } from './auth.guard.js';
@@ -119,7 +119,7 @@ export class SsoService {
   /**
    * Builds the Microsoft authorize URL and the encrypted state cookie value. The organisation
    * comes from `org`, or from the e-mail's domain, or else is the default one (SSO_DEFAULT_ORG:
-   * the sign-in button alone).
+   * the sign-in button alone, or an e-mail whose domain no organisation claims).
    */
   async start(input: { org?: string; email?: string; returnTo?: string }) {
     // Public settings only (no secret): the authorize address needs the directory and client.
@@ -129,7 +129,12 @@ export class SsoService {
     } else if (input.email && input.email.includes('@')) {
       const found = await this.configs.startByDomain(input.email.split('@').pop()!.trim());
       if (found === 'ambiguous') throw new SsoError('choose_organisation');
-      config = found;
+      // The default organisation's directory decides at the callback whether it knows them.
+      config =
+        found ??
+        (this.config.SSO_DEFAULT_ORG
+          ? await this.configs.startBySlug(this.config.SSO_DEFAULT_ORG)
+          : null);
     } else {
       if (!this.config.SSO_DEFAULT_ORG) throw new SsoError('choose_organisation');
       config = await this.configs.startBySlug(this.config.SSO_DEFAULT_ORG);
@@ -230,6 +235,25 @@ export class SsoService {
       code,
       st,
     );
+    try {
+      return await this.signIn(st, config, claims, client, signedInUser);
+    } catch (e) {
+      // Two first sign-ins of one person at once (two tabs, a double click): the one that lost
+      // the race to create the account, identity or membership finds them made by the other.
+      if (pgCode(e) !== '23505') throw e;
+      return this.signIn(st, config, claims, client, signedInUser);
+    }
+  }
+
+  /** Finds or creates the account of verified claims and opens its session. */
+  private async signIn(
+    st: SsoState,
+    config: SsoConfig,
+    claims: EntraClaims,
+    client: ClientInfo,
+    signedInUser: () => Promise<string | null>,
+  ): Promise<{ cookie: string; csrfToken: string; mfaState: string; returnTo: string }> {
+    const fail = (c: string) => new SsoError(c, st.tenantId);
     const email = (claims.email ?? claims.preferred_username ?? '').toLowerCase();
     const domain = email.includes('@') ? email.split('@').pop()! : '';
 
@@ -245,7 +269,7 @@ export class SsoService {
       if (!a || a.userStatus !== 'active' || a.memberStatus !== 'active') return null;
       return this.auth.openSessionIn(tx, st.tenantId, a.userId, {
         totpEnabled: a.totpEnabled,
-        mfaAlreadyVerified: mfa,
+        mfaVerifiedBy: mfa ? 'entra' : null,
         authMethod: 'sso',
         idpTenant: config.entraTenantId,
         action: 'auth.login',
@@ -287,6 +311,15 @@ export class SsoService {
       st.tenantId,
       async (tx) => {
         let accountCreated = false;
+        const [member] = existingId
+          ? await tx
+              .select({ status: tenantMembers.status })
+              .from(tenantMembers)
+              .where(eq(tenantMembers.userId, userId))
+          : [];
+        // An identity linked elsewhere (another organisation on the same directory) joins this
+        // one only with an address of its domains, as a new identity would.
+        if (!member && !config.allowedDomains.includes(domain)) throw fail('domain_not_allowed');
         if (!existingId) {
           await tx.insert(users).values({
             id: userId,
@@ -319,10 +352,6 @@ export class SsoService {
             });
           }
         }
-        const [member] = await tx
-          .select({ status: tenantMembers.status })
-          .from(tenantMembers)
-          .where(eq(tenantMembers.userId, userId));
         let provisioned = false;
         if (!member) {
           // First Microsoft sign-in: a member with no role, waiting for an administrator.
@@ -365,13 +394,17 @@ export class SsoService {
 
     const session = await this.auth.openSession(st.tenantId, userId, {
       totpEnabled: outcome.totpEnabled,
-      mfaAlreadyVerified: mfa,
+      mfaVerifiedBy: mfa ? 'entra' : null,
       authMethod: 'sso',
       idpTenant: config.entraTenantId,
       action: 'auth.login',
       client,
     });
-    if (outcome.provisioned) await this.notifyAdmins(st.tenantId, email, claims.name ?? email);
+    // The session is open: a mail server that fails must not turn the sign-in into an error.
+    if (outcome.provisioned)
+      await this.notifyAdmins(st.tenantId, email, claims.name ?? email).catch((e: unknown) =>
+        this.logger.error(`Could not tell the administrators about ${email}: ${String(e)}`),
+      );
     return { ...session, returnTo: st.returnTo };
   }
 

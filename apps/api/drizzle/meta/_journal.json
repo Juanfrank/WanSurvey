@@ -281,6 +281,13 @@
       "when": 1793300002000,
       "tag": "0039_tenant_by_slug",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793300003000,
+      "tag": "0040_session_mfa_method",
+      "breakpoints": true
     }
   ]
 }

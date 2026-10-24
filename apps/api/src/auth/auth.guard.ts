@@ -175,6 +175,7 @@ export class AuthGuard implements CanActivate {
             permissions: matrix[g.role as Role],
           })),
         mfaState: session.mfaState as AuthContext['mfaState'],
+        mfaMethod: session.mfaMethod as AuthContext['mfaMethod'],
         authMethod: session.authMethod as AuthContext['authMethod'],
         idpTenant: session.idpTenant,
         csrfToken: session.csrfToken,

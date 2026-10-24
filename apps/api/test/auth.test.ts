@@ -215,10 +215,21 @@ describe('authentication', () => {
       for (let i = 0; i < 9; i++) expect((await attempt('wrong')).status).toBe(401);
       expect((await attempt(PASSWORD)).status).toBe(200);
       for (let i = 0; i < 10; i++) expect((await attempt('wrong')).status).toBe(401);
+      // Locked: the right password is refused as a wrong one would be (an address without an
+      // account answers the same), and the owner is told by e-mail, once.
       const locked = await attempt(PASSWORD);
-      expect(locked.status, JSON.stringify(locked.body)).toBe(429);
-      expect(locked.body.code).toBe('ACCOUNT_LOCKED');
-      expect(locked.body.retryAfter).toBeGreaterThan(800);
+      const unknown = await http
+        .post('/api/v1/auth/login')
+        .send({ email: `nobody-${Date.now()}@example.org`, password: PASSWORD });
+      for (const r of [locked, unknown]) {
+        expect(r.status, JSON.stringify(r.body)).toBe(401);
+        expect(r.body).toEqual(unknown.body);
+      }
+      expect(
+        t.mailer.sent.filter((m) => m.to === user.email && /locked/.test(m.subject)),
+      ).toHaveLength(1);
+      const [row] = await t.admin`select locked_until from users where id = ${user.id}`;
+      expect(new Date(row!.locked_until).getTime() - Date.now()).toBeGreaterThan(800_000);
       // When the lock ends, the right password works again.
       await t.admin`update users set locked_until = now() - interval '1 second' where id = ${user.id}`;
       expect((await attempt(PASSWORD)).status).toBe(200);
@@ -247,7 +258,8 @@ describe('authentication', () => {
       const res = await http
         .post('/api/v1/auth/login')
         .send({ email: owner.email, password: PASSWORD });
-      expect(res.status).toBe(429);
+      expect(res.status).toBe(401);
+      expect(res.body.code).toBe('INVALID_CREDENTIALS');
     });
   });
 
@@ -471,6 +483,23 @@ describe('authentication', () => {
         .send({ tenantId: other.id });
       expect(sw.body.mfaState).toBe('ok');
       expect((await s.agent.get('/api/v1/users')).status).toBe(200);
+    });
+
+    it('a session that needed no second factor does not skip it in another organisation', async () => {
+      // An interviewer here (no code needed) who is an admin there, never enrolled.
+      const other = await createTenant(t.admin);
+      const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
+      await createUser(t.admin, other.id, [{ role: 'admin' }], { existing: user });
+      const s = await login(t.app, user, tenant.slug);
+      const sw = await s.agent
+        .post('/api/v1/auth/switch-tenant')
+        .set('x-csrf-token', s.csrf)
+        .send({ tenantId: other.id });
+      expect(sw.status).toBe(200);
+      expect(sw.body.mfaState).toBe('enroll');
+      const blocked = await s.agent.get('/api/v1/users');
+      expect(blocked.status).toBe(403);
+      expect(blocked.body.code).toBe('MFA_ENROLLMENT_REQUIRED');
     });
 
     it('deactivation in one organisation leaves the others usable', async () => {

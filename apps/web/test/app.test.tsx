@@ -86,6 +86,7 @@ describe('api client', () => {
     expect(ssoStartUrl('ana@agency.org')).toBe(
       '/api/v1/auth/sso/start?email=ana%40agency.org&returnTo=%2F',
     );
+    expect(ssoStartUrl({ org: 'pj' })).toBe('/api/v1/auth/sso/start?org=pj&returnTo=%2F');
   });
 });
 
@@ -109,6 +110,25 @@ describe('screens', () => {
       'Your account is active, but no role has been assigned to you in Demo Research yet.',
     );
     expect(screen.getByRole('button', { name: 'Switch' })).toBeTruthy(); // other organisation offered
+  });
+
+  it('without passwords, an invitation is accepted by signing in to the organisation that sent it', async () => {
+    mockFetch({ '/auth/methods': { body: { password: false, microsoftNeedsEmail: true } } });
+    window.history.pushState({}, '', '/accept-invitation?org=pj');
+    try {
+      renderAt('/accept-invitation?org=pj');
+      expect(
+        await screen.findByText(
+          'Sign in with your Microsoft work account to accept your invitation.',
+        ),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Sign in with Microsoft' })).toBeTruthy();
+      // The organisation comes from the link: no e-mail to find it, no password.
+      expect(screen.queryByLabelText('E-mail')).toBeNull();
+      expect(screen.queryByLabelText('Password')).toBeNull();
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
   });
 
   it('sends signed-out visitors to the login page', async () => {

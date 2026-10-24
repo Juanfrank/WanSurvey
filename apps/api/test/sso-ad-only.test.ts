@@ -3,7 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { encryptField } from '../src/common/crypto.js';
 import { loadConfig, resetConfigCache } from '../src/config.js';
-import { bootstrap, createTenant, createUser, login, type TestApp } from './harness.js';
+import { bootstrap, createTenant, createUser, login, PASSWORD, type TestApp } from './harness.js';
 import { MockEntra } from './mock-entra.js';
 
 const WEB = 'http://localhost:5173';
@@ -118,6 +118,39 @@ describe('Microsoft-only sign-in', () => {
     expect(logins[0]!.n).toBe(2);
   });
 
+  it('starts at the default organisation for an e-mail whose domain no organisation claims', async () => {
+    const res = await request(t.app.getHttpServer())
+      .get('/api/v1/auth/sso/start')
+      .query({ email: `x@unclaimed-${Date.now()}.net` });
+    expect(res.headers.location).toContain(`/${entraTenantId}/oauth2/v2.0/authorize`);
+  });
+
+  it('invites to sign in with Microsoft, and the sign-in accepts the invitation', async () => {
+    const admin = await createUser(t.admin, org.id, [{ role: 'admin' }], {
+      email: `admin.${Date.now()}@court.gov`,
+    });
+    const { agent } = await button({ oid: randomUUID(), email: admin.email, amr: ['mfa'] });
+    const csrf = (await agent.get('/api/v1/auth/me').expect(200)).body.csrfToken as string;
+    const email = `nuevo.${Date.now()}@court.gov`;
+    await agent
+      .post('/api/v1/users/invite')
+      .set('x-csrf-token', csrf)
+      .send({ email, name: 'Nuevo', memberships: [{ role: 'interviewer' }] })
+      .expect(201);
+    const mail = t.mailer.last(email)!;
+    expect(mail.text).toContain('Ingresar con Microsoft');
+    expect(mail.text).toContain(`${WEB}/accept-invitation?org=${slug}`);
+    expect(mail.text).not.toMatch(/token=|password/i);
+    const back = await button({ oid: randomUUID(), email, amr: ['mfa'] });
+    expect(back.callback.headers.location).toBe(`${WEB}/`);
+    const me = await back.agent.get('/api/v1/auth/me').expect(200);
+    expect(me.body.memberships).toMatchObject([{ role: 'interviewer' }]);
+    const [m] = await t.admin`
+      select m.status from tenant_members m join users u on u.id = m.user_id
+      where u.email = ${email} and m.tenant_id = ${org.id}`;
+    expect(m!.status).toBe('active');
+  });
+
   it('links an account that also belongs to another organisation (no password to prove it)', async () => {
     const other = await createTenant(t.admin);
     const user = await createUser(t.admin, other.id, [{ role: 'interviewer' }], {
@@ -218,52 +251,66 @@ describe('Microsoft-only sign-in', () => {
   });
 });
 
-describe('the deployment’s Microsoft sign-in, with passwords on', () => {
-  const entra = new MockEntra();
-  const slug = `adp-${Date.now().toString(36)}`;
-  let t: TestApp;
-  let org: { id: string; slug: string };
+describe.each([false, true])(
+  'the deployment’s Microsoft sign-in, with passwords on (ENTRA_ENFORCE=%s)',
+  (enforce) => {
+    const entra = new MockEntra();
+    const slug = `adp-${enforce ? 'e' : 'o'}-${Date.now().toString(36)}`;
+    let t: TestApp;
+    let org: { id: string; slug: string };
 
-  beforeAll(async () => {
-    await entra.start();
-    Object.assign(process.env, {
-      ENTRA_AUTHORITY_HOST: entra.host,
-      SSO_DEFAULT_ORG: slug,
-      ENTRA_TENANT_ID: randomUUID(),
-      ENTRA_CLIENT_ID: CLIENT_ID,
-      ENTRA_CLIENT_SECRET: 'deploy-secret',
-      ENTRA_ALLOWED_DOMAINS: 'court.gov',
+    beforeAll(async () => {
+      await entra.start();
+      Object.assign(process.env, {
+        ENTRA_AUTHORITY_HOST: entra.host,
+        SSO_DEFAULT_ORG: slug,
+        ENTRA_TENANT_ID: randomUUID(),
+        ENTRA_CLIENT_ID: CLIENT_ID,
+        ENTRA_CLIENT_SECRET: 'deploy-secret',
+        ENTRA_ALLOWED_DOMAINS: 'court.gov',
+        ENTRA_ENFORCE: String(enforce),
+      });
+      resetConfigCache();
+      t = await bootstrap();
+      org = await createTenant(t.admin, slug);
     });
-    resetConfigCache();
-    t = await bootstrap();
-    org = await createTenant(t.admin, slug);
-  });
-  afterAll(async () => {
-    await t.close();
-    await entra.stop();
-    for (const k of [
-      'ENTRA_AUTHORITY_HOST',
-      'SSO_DEFAULT_ORG',
-      'ENTRA_TENANT_ID',
-      'ENTRA_CLIENT_ID',
-      'ENTRA_CLIENT_SECRET',
-      'ENTRA_ALLOWED_DOMAINS',
-    ])
-      delete process.env[k];
-    resetConfigCache();
-  });
+    afterAll(async () => {
+      await t.close();
+      await entra.stop();
+      for (const k of [
+        'ENTRA_AUTHORITY_HOST',
+        'SSO_DEFAULT_ORG',
+        'ENTRA_TENANT_ID',
+        'ENTRA_CLIENT_ID',
+        'ENTRA_CLIENT_SECRET',
+        'ENTRA_ALLOWED_DOMAINS',
+        'ENTRA_ENFORCE',
+      ])
+        delete process.env[k];
+      resetConfigCache();
+    });
 
-  it('requires Microsoft for the default organisation, except for its owners', async () => {
-    const interviewer = await createUser(t.admin, org.id, [{ role: 'interviewer' }]);
-    const res = await request(t.app.getHttpServer())
-      .post('/api/v1/auth/login')
-      .send({ email: interviewer.email, password: 'correct horse battery' });
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe('SSO_REQUIRED');
-    const owner = await createUser(t.admin, org.id, [{ role: 'owner' }]);
-    await login(t.app, owner);
-  });
-});
+    it(
+      enforce
+        ? 'requires Microsoft for the default organisation, except for its owners'
+        : 'still accepts passwords in the default organisation unless told to require Microsoft',
+      async () => {
+        const interviewer = await createUser(t.admin, org.id, [{ role: 'interviewer' }]);
+        const res = await request(t.app.getHttpServer())
+          .post('/api/v1/auth/login')
+          .send({ email: interviewer.email, password: PASSWORD });
+        if (enforce) {
+          expect(res.status).toBe(403);
+          expect(res.body.code).toBe('SSO_REQUIRED');
+        } else expect(res.status).toBe(200);
+        const owner = await createUser(t.admin, org.id, [{ role: 'owner' }]);
+        const s = await login(t.app, owner);
+        const view = await s.agent.get('/api/v1/tenant/sso').expect(200);
+        expect(view.body).toMatchObject({ managedByDeployment: true, enforceSso: enforce });
+      },
+    );
+  },
+);
 
 describe('configuration of Microsoft-only sign-in', () => {
   const base = () => ({ ...process.env, PASSWORD_LOGIN: 'true' }) as NodeJS.ProcessEnv;
@@ -280,6 +327,15 @@ describe('configuration of Microsoft-only sign-in', () => {
     );
     expect(loadConfig({ ...base(), ...deployment, PASSWORD_LOGIN: 'false' }).PASSWORD_LOGIN).toBe(
       false,
+    );
+  });
+
+  it('refuses Entra ids that are not GUIDs', () => {
+    expect(() =>
+      loadConfig({ ...base(), ...deployment, ENTRA_TENANT_ID: 'contoso.onmicrosoft.com' }),
+    ).toThrow(/ENTRA_TENANT_ID: Directory \(tenant\) ID, a GUID/);
+    expect(() => loadConfig({ ...base(), ...deployment, ENTRA_CLIENT_ID: 'my-app' })).toThrow(
+      /ENTRA_CLIENT_ID/,
     );
   });
 

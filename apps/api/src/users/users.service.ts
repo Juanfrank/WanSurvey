@@ -15,7 +15,15 @@ import { tenantRank, type AuthContext, type MembershipGrant } from '../common/au
 import { sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, type Tx } from '../db/database.js';
-import { memberships, projects, sessions, tenantMembers, userTokens, users } from '../db/schema.js';
+import {
+  memberships,
+  projects,
+  sessions,
+  tenantMembers,
+  tenants,
+  userTokens,
+  users,
+} from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 
 const INVITATION_TTL_HOURS = 7 * 24;
@@ -154,17 +162,40 @@ export class UsersService {
         .from(tenantMembers)
         .innerJoin(users, eq(users.id, tenantMembers.userId))
         .where(eq(tenantMembers.userId, userId));
-      return { member: member!, token };
+      return { member: member!, token, org: await this.slug(tx, ctx.tenantId) };
     });
-    await this.sendInvitation(result.member, result.token, !!existingId);
+    await this.sendInvitation(result.member, result.token, !!existingId, result.org);
     return { ...result.member, existingAccount: !!existingId, memberships: input.memberships };
+  }
+
+  private async slug(tx: Tx, tenantId: string): Promise<string> {
+    const [t] = await tx
+      .select({ slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId));
+    return t!.slug;
   }
 
   private async sendInvitation(
     member: { email: string; name: string },
     token: string,
     existingAccount: boolean,
+    org: string,
   ) {
+    // Without passwords the invitation is accepted by signing in with Microsoft to the
+    // organisation that sent it; the link carries the organisation, not the token.
+    if (!this.config.PASSWORD_LOGIN) {
+      const link = `${this.config.PUBLIC_WEB_URL}/accept-invitation?org=${encodeURIComponent(org)}`;
+      await this.mailer.send({
+        to: member.email,
+        subject: existingAccount
+          ? 'You have been added to an organisation on WanSurvey'
+          : 'You have been invited to WanSurvey',
+        text: `Hello ${member.name},\n\nYou have been invited to WanSurvey. To accept, open this link and choose "Ingresar con Microsoft" (sign in with Microsoft) with your work account:\n${link}`,
+        idempotencyKey: `invite:${sha256Hex(token)}`,
+      });
+      return;
+    }
     const link = `${this.config.PUBLIC_WEB_URL}/accept-invitation?token=${encodeURIComponent(token)}`;
     await this.mailer.send({
       to: member.email,
@@ -220,9 +251,14 @@ export class UsersService {
           targetId: userId,
         }),
       );
-      return { member: member!, token };
+      return { member: member!, token, org: await this.slug(tx, ctx.tenantId) };
     });
-    await this.sendInvitation(result.member, result.token, result.member.userStatus !== 'pending');
+    await this.sendInvitation(
+      result.member,
+      result.token,
+      result.member.userStatus !== 'pending',
+      result.org,
+    );
   }
 
   /** Gives a deactivated member their access back (still invited if they never accepted). */

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
@@ -160,7 +160,7 @@ export class SsoSettingsController {
         clientId: deployment.clientId,
         hasClientSecret: true,
         enabled: true,
-        enforceSso: true,
+        enforceSso: deployment.enforceSso,
         allowedDomains: deployment.allowedDomains,
         redirectUri: this.sso.redirectUri,
       };
@@ -185,18 +185,26 @@ export class SsoSettingsController {
       });
     // A domain belongs to one organisation: two would make e-mail sign-in ambiguous, and one
     // could claim another's addresses.
-    for (const domain of new Set(body.allowedDomains.map((d) => d.toLowerCase()))) {
+    const domains = [...new Set(body.allowedDomains.map((d) => d.toLowerCase()))];
+    const taken = (domain: string) =>
+      new ConflictException({
+        code: 'DOMAIN_TAKEN',
+        message: `The domain ${domain} is already used by another organisation`,
+      });
+    for (const domain of domains) {
       const deployment = await this.configs.deploymentTenantForDomain(domain);
-      const taken =
-        (deployment !== null && deployment !== ctx.tenantId) ||
-        (await this.database.ssoTenantsForDomain(domain)).some((t) => t.tenantId !== ctx.tenantId);
-      if (taken)
-        throw new ConflictException({
-          code: 'DOMAIN_TAKEN',
-          message: `The domain ${domain} is already used by another organisation`,
-        });
+      if (deployment !== null && deployment !== ctx.tenantId) throw taken(domain);
     }
     const saved = await this.database.withTenant(ctx.tenantId, async (tx) => {
+      // One organisation saves its domains at a time, and checks them once the saves before it
+      // have committed: two saving the same domain at once cannot both get it.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sso-domains'))`);
+      for (const domain of domains) {
+        const owners = (await tx.execute(
+          sql`select tenant_id from sso_tenants_for_domain(${domain})`,
+        )) as unknown as { tenant_id: string }[];
+        if (owners.some((t) => t.tenant_id !== ctx.tenantId)) throw taken(domain);
+      }
       const [current] = await tx
         .select()
         .from(tenantSso)
@@ -213,7 +221,7 @@ export class SsoSettingsController {
         clientSecretEnc: secretEnc,
         enabled: body.enabled,
         enforceSso: body.enforceSso,
-        allowedDomains: [...new Set(body.allowedDomains.map((d) => d.toLowerCase()))],
+        allowedDomains: domains,
         updatedAt: new Date(),
       };
       const [row] = await tx

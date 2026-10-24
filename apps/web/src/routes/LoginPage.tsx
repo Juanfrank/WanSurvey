@@ -20,17 +20,21 @@ export function useAuthMethods() {
 
 /**
  * Microsoft sign-in where it is the only way in: the button, and the e-mail field only when
- * the server needs it to find the organisation (no SSO_DEFAULT_ORG).
+ * the server needs it to find the organisation (no SSO_DEFAULT_ORG and no `org` given, as an
+ * invitation's link gives it).
  */
 export function MicrosoftSignIn({
   intro,
   error: initial = null,
+  org,
 }: {
   intro: string;
   error?: string | null;
+  org?: string;
 }) {
   const { t } = useTranslation();
-  const needsEmail = useAuthMethods().data?.microsoftNeedsEmail ?? true;
+  const methods = useAuthMethods().data;
+  const needsEmail = !org && (methods?.microsoftNeedsEmail ?? true);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(initial);
   return (
@@ -41,7 +45,7 @@ export function MicrosoftSignIn({
         e.preventDefault();
         if (email.includes('@')) return window.location.assign(ssoStartUrl(email));
         if (needsEmail) return setError(t('login.microsoftNeedsEmail'));
-        window.location.assign(ssoStartUrl());
+        window.location.assign(ssoStartUrl(org ? { org } : undefined));
       }}
     >
       <ErrorText>{error}</ErrorText>

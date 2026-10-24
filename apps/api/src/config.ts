@@ -4,6 +4,16 @@ import { z } from 'zod';
 const optionalText = (max: number) =>
   z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).max(max).optional());
 
+/** An optional GUID, such as Entra's ids (a typo would only fail at the first sign-in). */
+const optionalGuid = (message: string) =>
+  z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z
+      .string()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, message)
+      .optional(),
+  );
+
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(3000),
@@ -69,9 +79,17 @@ const Env = z.object({
    * instead of the organisation's own settings: with password sign-in off, nobody could sign
    * in to configure it otherwise. The secret should come from Key Vault.
    */
-  ENTRA_TENANT_ID: optionalText(100),
-  ENTRA_CLIENT_ID: optionalText(100),
+  ENTRA_TENANT_ID: optionalGuid('Directory (tenant) ID, a GUID'),
+  ENTRA_CLIENT_ID: optionalGuid('Application (client) ID, a GUID'),
   ENTRA_CLIENT_SECRET: optionalText(500),
+  /**
+   * With password sign-in on, 'true' requires Microsoft for SSO_DEFAULT_ORG (owners keep their
+   * password, as with an organisation's enforceSso). With it off, Microsoft is the only way anyway.
+   */
+  ENTRA_ENFORCE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   /** E-mail domains, comma-separated, whose people may sign in through ENTRA_TENANT_ID. */
   ENTRA_ALLOWED_DOMAINS: z
     .string()
