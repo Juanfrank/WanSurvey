@@ -256,9 +256,18 @@ export class ExportsService implements OnModuleInit {
       const personal = isPersonal(job.options);
       // Read in a short transaction; build and write the file outside any, so the connection
       // and its snapshot are not held while the CPU works.
-      const data = await this.database.withTenant(tenantId, (tx) =>
-        this.datasets.load(tx, job.projectId, opts, { paradata: opts.paradata }),
-      );
+      const data = await this.database.withTenant(tenantId, async (tx) => {
+        // Too large is refused before reading: loading and building happen in memory.
+        const size = await this.datasets.estimate(tx, job.projectId, opts);
+        if (
+          size.answerBytes > MAX_BYTES ||
+          size.interviews * Math.max(size.questions, 1) > this.config.EXPORT_MAX_CELLS
+        )
+          throw new Error(
+            `The export is too large (${size.interviews} interviews × ${size.questions} questions); filter the data or split the export`,
+          );
+        return this.datasets.load(tx, job.projectId, opts, { paradata: opts.paradata });
+      });
       const built = buildTables(data.compiled, data.interviews, {
         rosters: opts.rosters,
         paradata: opts.paradata,

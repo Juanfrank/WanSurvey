@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import request from 'supertest';
 import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CONFIG } from '../src/config.js';
 import { JobsService } from '../src/jobs/jobs.service.js';
 import { StatsService } from '../src/stats/stats.service.js';
 import {
@@ -439,6 +440,20 @@ describe('metrics, live dashboard, topline, exports and share links', () => {
       await get(pm, `/projects/${project}/exports/${personal.body.id}/file`).expect(200);
     } finally {
       await t.admin`update tenants set role_permissions = '{}' where id = ${tenant.id}`;
+    }
+  });
+  it('refuses an export too large before reading the data', async () => {
+    const config = t.app.get(CONFIG);
+    const before = config.EXPORT_MAX_CELLS;
+    config.EXPORT_MAX_CELLS = 10;
+    try {
+      const e = await post(pm, `/projects/${project}/exports`, { format: 'csv' }).expect(201);
+      await jobs.drain();
+      const list = await get(pm, `/projects/${project}/exports`).expect(200);
+      const row = list.body.find((x: { id: string }) => x.id === e.body.id);
+      expect(row).toMatchObject({ status: 'failed', error: expect.stringMatching(/too large/) });
+    } finally {
+      config.EXPORT_MAX_CELLS = before;
     }
   });
 });

@@ -26,6 +26,9 @@ export interface PageImage {
 /** The most pages read from one PDF: each is kept in memory while the batch is read. */
 export const MAX_SCAN_PAGES = 300;
 
+/** The longest side of a scanned page, in points: A3 and a little more. */
+const MAX_PAGE_PTS = 1200;
+
 /** The pages of a PDF as grey images (poppler's pdftoppm). */
 export async function rasterize(pdf: Buffer, dpi = DPI): Promise<PageImage[]> {
   const dir = await mkdtemp(join(tmpdir(), 'ws-scan-'));
@@ -36,10 +39,20 @@ export async function rasterize(pdf: Buffer, dpi = DPI): Promise<PageImage[]> {
     const pages = Number(/^Pages:\s+(\d+)/m.exec(stdout)?.[1] ?? 0);
     if (pages > MAX_SCAN_PAGES)
       throw new Error(`The PDF has ${pages} pages; upload at most ${MAX_SCAN_PAGES} per file`);
-    const size = /^Page size:\s+([\d.]+) x ([\d.]+) pts/m.exec(stdout);
-    // Larger than A3 at the most: anything bigger is not a scanned form.
-    if (size && (Number(size[1]) > 1200 || Number(size[2]) > 1200))
-      throw new Error('The PDF pages are larger than A3; scan the forms at their own size');
+    // Every page, not only the first, is at most A3: anything bigger is not a scanned form.
+    const sizes = pages
+      ? (
+          await run('pdfinfo', ['-f', '1', '-l', String(pages), join(dir, 'in.pdf')], {
+            timeout: 60_000,
+            maxBuffer: 1 << 20,
+          })
+        ).stdout
+      : stdout;
+    for (const m of sizes.matchAll(/^Page(?:\s+\d+)? size:\s+([\d.]+) x ([\d.]+) pts/gm))
+      if (Number(m[1]) > MAX_PAGE_PTS || Number(m[2]) > MAX_PAGE_PTS)
+        throw new Error('The PDF pages are larger than A3; scan the forms at their own size');
+    // And never more pixels than that, whatever pdfinfo said (pages are cropped, not drawn).
+    const most = String(Math.ceil((MAX_PAGE_PTS / 72) * dpi));
     await run(
       'pdftoppm',
       [
@@ -49,6 +62,10 @@ export async function rasterize(pdf: Buffer, dpi = DPI): Promise<PageImage[]> {
         '-png',
         '-l',
         String(MAX_SCAN_PAGES),
+        '-W',
+        most,
+        '-H',
+        most,
         join(dir, 'in.pdf'),
         join(dir, 'p'),
       ],

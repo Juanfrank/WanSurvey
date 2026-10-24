@@ -1,6 +1,7 @@
 import { allTypes } from '@wansurvey/fixtures';
 import { compile } from '@wansurvey/logic';
 import { Questionnaire } from '@wansurvey/schema';
+import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { interpret } from '../src/papi/omr/interpret.js';
 import { layoutForm, parsePageCode, type Bubble } from '../src/papi/omr/layout.js';
@@ -79,4 +80,19 @@ describe('machine-readable paper forms', () => {
     const a2 = readCase(layout.pages);
     expect(interpret(single, a2).issue?.kind).toBe('multiple');
   }, 60_000);
+  it('refuses a PDF with an oversized page anywhere, not only on the first', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([595, 842]);
+    doc.addPage([14_000, 14_000]);
+    await expect(rasterize(Buffer.from(await doc.save()))).rejects.toThrow(/larger than A3/);
+    // Pages within the limit are read at the scanning resolution.
+    const ok = await PDFDocument.create();
+    ok.addPage([595, 842]);
+    ok.addPage([842, 1190]);
+    const pages = await rasterize(Buffer.from(await ok.save()));
+    expect(pages.map((p) => [p.width, p.height])).toEqual([
+      [1240, 1755],
+      [1755, 2480],
+    ]);
+  });
 });

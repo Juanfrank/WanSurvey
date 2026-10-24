@@ -180,6 +180,8 @@ from envios e
 left join respuestas a on a.envio_id = e.envio_id
 left join bi.dim_caso ca on ca.caso_id = e.caso_id
 left join bi.dim_persona pe on pe.persona_id = e.persona_id
+  and pe.organizacion_id = (select pr.organizacion_id from bi.dim_proyecto pr
+                            where pr.proyecto_id = e.proyecto_id)
 order by e.enviado_en, e.envio_id;`;
     return `with ${envios},
 filas as (
