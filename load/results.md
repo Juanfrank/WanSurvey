@@ -1,5 +1,64 @@
 # Load test results
 
+## 2026-10-24 (fourth run) — experiments behind each proposal
+
+Same setup as the earlier runs. Each proposal was tried as a variant of the build and measured
+against the current code:
+
+- **CPU per request:** one virtual user, 1,500–3,000 requests per measure, each measure taken
+  twice.
+- **Behaviour under overload:** the ramp from 10 to 150 completes a second.
+
+| Proposal tried                                                                                                                                | Measure                                                            | Result                                                                                                                        | Decision                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Fixed cost per request                                                                                                                        | A request through the whole pipeline that ends before the database | **1.3 ms** (not 3–4 ms as estimated earlier)                                                                                  | Only about 20 % of a complete is fixed cost                                       |
+| One rate-limit counter instead of two on public routes                                                                                        | Per complete                                                       | −0.1 ms, within the noise                                                                                                     | Rejected                                                                          |
+| No rate limiting at all (the ceiling of any change there)                                                                                     | Per request                                                        | −0.4 ms                                                                                                                       | Rejected: not worth weakening the limits                                          |
+| No automatic request log                                                                                                                      | Per complete                                                       | No measurable change                                                                                                          | Rejected                                                                          |
+| Load shedding before the body parsers                                                                                                         | Ramp                                                               | Same completes per second and the same 503s                                                                                   | Rejected                                                                          |
+| Shedding by priority: new link openings turned away first (at 60 % of the limit), steps of interviews under way allowed up to twice the limit | Ramp, 75 → 150 offered a second                                    | **51 completes/s instead of 37**; served p95 **190 ms instead of 290 ms**; **0** 503s on start, sync or submit (2,414 before) | **Do**                                                                            |
+| Submit hooks (review flags, the day's statistics) to the worker                                                                               | Per submit                                                         | −3 ms on the API (±1.5)                                                                                                       | Not now: the worker shares the instance's vCPU, so it only moves the work in time |
+| Realistic questionnaire (household sample, 46 KB compiled instead of 3 KB)                                                                    | Start                                                              | +0.5 ms                                                                                                                       | Nothing to do: the compiled-form cache works                                      |
+| Cost of a statement                                                                                                                           | Three extra `select 1` when opening a link                         | +0.1 ms each                                                                                                                  | A round trip is cheap; building queries and moving rows is what costs             |
+
+**CPU profile of a whole complete** (22.6 ms of API CPU, sequential). Self time by package:
+
+| Share          | ms  | What                                                                           |
+| -------------- | --- | ------------------------------------------------------------------------------ |
+| 15.9 %         | 3.6 | Drizzle building queries (`entity.is`, `sql.js`, `buildQueryFromSourceParams`) |
+| 11.2 %         | 2.5 | the postgres driver                                                            |
+| 10.3 %         | 2.3 | socket writes to Postgres (`writeBuffer` from the driver)                      |
+| 8.6 %          | 2.0 | garbage collection                                                             |
+| 1.3 %          | 0.3 | Redis, plus 0.4 ms writing to it                                               |
+| under 3 % each |     | router, Express, Nest, zod, pino-http                                          |
+
+**Proposals, in order.** "Measured" means tested as a variant above; "estimated" is worked out
+from the profile.
+
+1. **Shedding by priority** (measured).
+   - Under overload: 37 → 51 completes/s, served p95 290 → 190 ms, and no 503 on interviews
+     already under way.
+   - A change in one middleware, with a test.
+2. **Build every query of the four respondent requests once** (`Prepared`, estimated).
+   - Saves most of Drizzle's 3.6 ms, about 2–2.5 ms per complete.
+   - Today only the locks and the device's change number use it.
+3. **Fewer statements per complete, from 33 to about 23** (estimated, about 2 ms). Each
+   statement removed saves its share of the driver, the socket writes and Drizzle:
+   - open and start: the questionnaire's state with its version in one query, and the two
+     invitation updates in one;
+   - start: the device row inserted with `returning last_seq` instead of read afterwards;
+   - sync and submit: the interview locked together with the device's last change number;
+     the interview and the device updated in one statement;
+   - submit: the two review counts in one query, and the flags written in the same update as
+     the status;
+   - start and submit: the project's settings and time zone read once.
+4. **Together (2 and 3), estimated:** about 4 ms less per complete (around 18 %), a knee near
+   **55–57 completes/s** on one instance. Measure with the ramp after each step.
+5. **Not now:**
+   - **Submit queue:** 3 ms, but on the same vCPU;
+   - **Rate limits:** combining or removing them gains at most 0.4 ms;
+   - **Logging and parsers:** no gain.
+
 ## 2026-10-24 (third run) — CPU of each step
 
 One virtual user, so requests never overlap. N = 1,500 respondents per measure, each stopped
