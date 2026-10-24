@@ -11,6 +11,7 @@ import { sql } from 'drizzle-orm';
 import { Observable } from 'rxjs';
 import { Database, type Tx } from '../db/database.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
+import { COUNTED_SQL } from '../common/statuses.js';
 
 /** Minutes without activity after which an interviewer no longer shows as working. */
 const ACTIVE_MINUTES = 5;
@@ -112,7 +113,7 @@ export class LiveService {
                i.mode
         from interviews i
         where i.project_id = ${projectId} and i.entry_pass = 1 and i.disposition = 'COMPLETE'
-          and i.status in ('submitted', 'in_review', 'approved')`);
+          and i.status in ${COUNTED_SQL}`);
       for (const r of rows) {
         const scope = answersScope(r.a ?? {}, r.mode);
         quotaDefs.forEach((q, i) => {

@@ -52,11 +52,22 @@ describe.skipIf(!url)('rate-limit counters in Redis', () => {
       await two.close();
     }
   });
+});
 
-  it('let requests through when Redis cannot answer', async () => {
+describe('rate limits without Redis', () => {
+  it('still hold, counted by this instance, when Redis cannot answer', async () => {
     const down = new RedisThrottlerStorage('redis://127.0.0.1:1');
-    const r = await down.increment('k', 60_000, 1, 60_000, 'default');
-    expect(r).toMatchObject({ totalHits: 0, isBlocked: false });
+    const hit = () => down.increment('login:203.0.113.7', 60_000, 2, 60_000, 'default');
+    expect(await hit()).toMatchObject({ totalHits: 1, isBlocked: false });
+    expect(await hit()).toMatchObject({ totalHits: 2, isBlocked: false });
+    // Over the limit: blocked, as Redis would have done.
+    expect(await hit()).toMatchObject({ totalHits: 3, isBlocked: true });
+    expect((await hit()).timeToBlockExpire).toBeGreaterThan(50);
+    // Another address has its own count.
+    expect(await down.increment('login:198.51.100.1', 60_000, 2, 60_000, 'default')).toMatchObject({
+      totalHits: 1,
+      isBlocked: false,
+    });
     await down.close();
   });
 });

@@ -49,6 +49,7 @@ import { ReviewController } from './review/review.controller.js';
 import { ReviewService } from './review/review.service.js';
 import { CatiController } from './cati/cati.controller.js';
 import { CatiService } from './cati/cati.service.js';
+import { AssignmentRulesController } from './cases/assignment-rules.controller.js';
 import { CasesController } from './cases/cases.controller.js';
 import { CasesService } from './cases/cases.service.js';
 import { ImportsController } from './cases/imports.controller.js';
@@ -162,6 +163,7 @@ export class AppModule {
         PublicShareController,
         PrivacyController,
         CasesController,
+        AssignmentRulesController,
         ImportsController,
         AuditController,
         FeedbackController,

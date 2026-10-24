@@ -24,6 +24,21 @@ describe('response headers and rate limits (H4)', () => {
     expect(res.headers['strict-transport-security']).toBeUndefined();
   });
 
+  it('refuses compressed request bodies before parsing them', async () => {
+    const { gzipSync } = await import('node:zlib');
+    // One valid gzip frame and trailing bytes: what crashes body-parser before 2.4.0.
+    const body = Buffer.concat([gzipSync('{"email":"a@b.c"}'), Buffer.from('trailing')]);
+    const res = await request(t.app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('content-type', 'application/json')
+      .set('content-encoding', 'gzip')
+      .send(body);
+    expect(res.status).toBe(415);
+    expect(res.body.code).toBe('UNSUPPORTED_ENCODING');
+    // The API is still up.
+    expect((await request(t.app.getHttpServer()).get('/health')).status).toBe(200);
+  });
+
   it('lets mail clients load the open pixel from other origins', async () => {
     const res = await request(t.app.getHttpServer()).get('/api/v1/t/o/nothing.gif');
     expect(res.headers['content-type']).toBe('image/gif');

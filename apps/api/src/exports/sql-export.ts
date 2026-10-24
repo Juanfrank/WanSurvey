@@ -1,5 +1,6 @@
 import type { Column, ColumnSource, Table } from '@wansurvey/exporters';
 import type { ExportBody } from './exports.service.js';
+import { COUNTED_LIST } from '../common/statuses.js';
 
 type Answer = Extract<ColumnSource, { kind: 'answer' }>;
 
@@ -62,9 +63,7 @@ export function sqlExport(input: SqlExportInput): string {
     `e.proyecto_id = ${lit(input.projectId)}`,
     // First keying only; returned and rejected interviews left out.
     'e.digitacion = 1',
-    opts.approvedOnly
-      ? `e.estado = 'approved'`
-      : `e.estado in ('submitted', 'in_review', 'approved')`,
+    opts.approvedOnly ? `e.estado = 'approved'` : `e.estado in ${COUNTED_LIST}`,
     ...(opts.mode ? [`e.canal = ${lit(opts.mode)}`] : []),
     ...(opts.interviewerId ? [`e.persona_id = ${lit(opts.interviewerId)}`] : []),
     // Days in the project's time zone, as the export counts them.

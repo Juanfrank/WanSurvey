@@ -8,3 +8,10 @@ onlyBuiltDependencies:
 overrides:
   # One Vite for the app and Vitest, pinned to a release at least two weeks old.
   vite: 7.3.6
+auditConfig:
+  # The fixes came out on 2026-10-22, under two weeks ago; upgrade from 2026-11-05 and remove
+  # these. body-parser: compressed request bodies are refused before parsing (plain-body.ts).
+  # multer: only an asynchronous fileFilter is affected, and none is used.
+  ignoreGhsas:
+    - GHSA-27r3-jxmh-p828
+    - GHSA-q7qp-rjg7-q26m

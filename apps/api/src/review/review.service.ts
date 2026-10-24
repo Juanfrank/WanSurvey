@@ -28,6 +28,7 @@ import {
 import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
 import { StatsService } from '../stats/stats.service.js';
 import { FLAG_KINDS, computeFlags, inSample } from './flags.js';
+import { COUNTED_SQL } from '../common/statuses.js';
 
 export const QueueQuery = z.object({
   status: z
@@ -602,7 +603,7 @@ export class ReviewService implements OnModuleInit {
       select a.key as key, a.value as value, i.id as interview_id
       from interviews i, jsonb_each_text(i.answers) a
       where i.project_id = ${projectId}
-        and i.status in ('submitted', 'in_review', 'approved')
+        and i.status in ${COUNTED_SQL}
         and a.key ~ '_OTHER$' and length(trim(a.value)) > 0`)) as unknown as {
       key: string;
       value: string;

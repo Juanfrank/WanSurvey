@@ -32,6 +32,8 @@ services:
     build: { context: ., dockerfile: apps/api/Dockerfile }
     profiles: ['full']
     command: ['node', 'dist/worker.js']
+    # No HTTP port: the image's /health check is for the API.
+    healthcheck: { disable: true }
     depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_started } }
     env_file: apps/api/.env
     environment:

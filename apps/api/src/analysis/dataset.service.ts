@@ -4,6 +4,7 @@ import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Tx } from '../db/database.js';
+import { COUNTED } from '../common/statuses.js';
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -113,7 +114,7 @@ export class DatasetService {
           : sql``
       }
       where i.project_id = ${projectId} and v.questionnaire_id = ${qid} and i.entry_pass = 1
-        and i.status in ${f.approvedOnly ? ['approved'] : ['submitted', 'in_review', 'approved']}
+        and i.status in ${f.approvedOnly ? ['approved'] : [...COUNTED]}
         ${opts.completesOnly ? sql`and i.disposition = 'COMPLETE'` : sql``}
         ${f.mode ? sql`and i.mode = ${f.mode}` : sql``}
         ${f.interviewerId ? sql`and i.interviewer_id = ${f.interviewerId}` : sql``}

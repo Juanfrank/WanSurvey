@@ -186,6 +186,71 @@ describe('authentication', () => {
     });
   });
 
+  describe('brute force', () => {
+    it('a code works once', async () => {
+      const owner = await createUser(t.admin, tenant.id, [{ role: 'owner' }]);
+      const code = totp(owner.totpSecret!);
+      const verify = async () => {
+        const agent = request.agent(t.app.getHttpServer());
+        const res = await agent
+          .post('/api/v1/auth/login')
+          .send({ email: owner.email, password: PASSWORD });
+        return agent
+          .post('/api/v1/auth/2fa/verify')
+          .set('x-csrf-token', res.body.csrfToken)
+          .send({ code });
+      };
+      expect((await verify()).status).toBe(204);
+      const again = await verify();
+      expect(again.status).toBe(401);
+      expect(again.body.code).toBe('INVALID_CODE');
+    });
+
+    it('locks an account after repeated failures from any address, the right password too', async () => {
+      const user = await createUser(t.admin, tenant.id, [{ role: 'interviewer' }]);
+      const http = request(t.app.getHttpServer());
+      const attempt = (password: string) =>
+        http.post('/api/v1/auth/login').send({ email: user.email, password });
+      // A success in between starts the count again.
+      for (let i = 0; i < 9; i++) expect((await attempt('wrong')).status).toBe(401);
+      expect((await attempt(PASSWORD)).status).toBe(200);
+      for (let i = 0; i < 10; i++) expect((await attempt('wrong')).status).toBe(401);
+      const locked = await attempt(PASSWORD);
+      expect(locked.status, JSON.stringify(locked.body)).toBe(429);
+      expect(locked.body.code).toBe('ACCOUNT_LOCKED');
+      expect(locked.body.retryAfter).toBeGreaterThan(800);
+      // When the lock ends, the right password works again.
+      await t.admin`update users set locked_until = now() - interval '1 second' where id = ${user.id}`;
+      expect((await attempt(PASSWORD)).status).toBe(200);
+    });
+
+    it('wrong codes count too, and signing in again does not reset them', async () => {
+      const owner = await createUser(t.admin, tenant.id, [{ role: 'owner' }]);
+      const http = request.agent(t.app.getHttpServer());
+      let last = 0;
+      for (let i = 0; i < 10; i++) {
+        const res = await http
+          .post('/api/v1/auth/login')
+          .send({ email: owner.email, password: PASSWORD });
+        if (res.status !== 200) {
+          last = res.status;
+          break;
+        }
+        last = (
+          await http
+            .post('/api/v1/auth/2fa/verify')
+            .set('x-csrf-token', res.body.csrfToken)
+            .send({ code: '000000' })
+        ).status;
+      }
+      expect(last).toBe(401);
+      const res = await http
+        .post('/api/v1/auth/login')
+        .send({ email: owner.email, password: PASSWORD });
+      expect(res.status).toBe(429);
+    });
+  });
+
   describe('account lifecycle', () => {
     it('invitation → accept → login', async () => {
       const admin = await createUser(t.admin, tenant.id, [{ role: 'admin' }]);

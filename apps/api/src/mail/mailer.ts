@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 
 export interface MailMessage {
   to: string;
@@ -71,7 +71,7 @@ export class FileMailer implements Mailer {
 }
 
 export class SmtpMailer implements Mailer {
-  private readonly transport: nodemailer.Transporter;
+  private readonly transport: Transporter;
   constructor(
     url: string,
     private readonly from: string,

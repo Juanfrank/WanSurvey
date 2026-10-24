@@ -12,6 +12,7 @@ import {
   rankTeam,
   type InterviewerInput,
 } from './metrics.js';
+import { COUNTED_SQL } from '../common/statuses.js';
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const MetricsQuery = z.object({
@@ -111,7 +112,7 @@ export class MetricsService {
                where pd.interview_id = i.id and pd.type = 'navigate_back') as back
       from interviews i
       where i.project_id = ${projectId} and i.interviewer_id is not null and i.entry_pass = 1
-        and i.status in ('submitted', 'in_review', 'approved') and i.disposition = 'COMPLETE'
+        and i.status in ${COUNTED_SQL} and i.disposition = 'COMPLETE'
         ${range('i.submitted_at')} ${mode('i.mode')} ${who('i.interviewer_id')}`);
     for (const r of completes) {
       const x = get(r.id);

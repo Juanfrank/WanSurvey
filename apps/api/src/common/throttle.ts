@@ -9,10 +9,14 @@ import { SESSION_COOKIE } from './cookies.js';
 /**
  * Rate-limit counters in Redis, so every API instance counts the same requests (in memory,
  * N instances would allow N times the limit). A fixed window per key; blocking when asked.
- * If Redis cannot answer, the request is let through: a cache outage must not stop fieldwork.
+ * If Redis cannot answer, this instance counts on its own until it is back: the limits hold
+ * (per instance, so a little looser), and sign-in can still not be guessed at freely, while
+ * ordinary work goes on under limits set well above it.
  */
 export class RedisThrottlerStorage implements ThrottlerStorage {
   private readonly redis: Redis;
+  /** Counters while Redis is unreachable: key → hits, window end, block end. */
+  private readonly local = new Map<string, { hits: number; until: number; blocked: number }>();
 
   constructor(url: string) {
     this.redis = new Redis(url, {
@@ -61,13 +65,30 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
         timeToBlockExpire: isBlocked ? Math.ceil(blockMs / 1000) : 0,
       };
     } catch {
-      return {
-        totalHits: 0,
-        timeToExpire: Math.ceil(ttl / 1000),
-        isBlocked: false,
-        timeToBlockExpire: 0,
-      };
+      return this.countHere(k, ttl, limit, blockDuration);
     }
+  }
+
+  /** The same fixed window, in this process's memory. */
+  countHere(k: string, ttl: number, limit: number, blockDuration: number): ThrottlerStorageRecord {
+    const now = Date.now();
+    if (this.local.size > 50_000)
+      for (const [key, v] of this.local)
+        if (v.until <= now && v.blocked <= now) this.local.delete(key);
+    let c = this.local.get(k);
+    if (!c || c.until <= now) {
+      c = { hits: 0, until: now + ttl, blocked: c && c.blocked > now ? c.blocked : 0 };
+      this.local.set(k, c);
+    }
+    c.hits++;
+    if (c.blocked <= now && c.hits > limit && blockDuration > 0) c.blocked = now + blockDuration;
+    const isBlocked = c.blocked > now;
+    return {
+      totalHits: c.hits,
+      timeToExpire: Math.max(0, Math.ceil((c.until - now) / 1000)),
+      isBlocked,
+      timeToBlockExpire: isBlocked ? Math.ceil((c.blocked - now) / 1000) : 0,
+    };
   }
 
   async close() {

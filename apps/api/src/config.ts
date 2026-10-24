@@ -53,6 +53,9 @@ const Env = z.object({
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  /** Failed passwords or codes in a row that lock an account, from any address; 0: never. */
+  LOGIN_LOCK_AFTER: z.coerce.number().int().min(0).default(10),
+  LOGIN_LOCK_MINUTES: z.coerce.number().int().positive().default(15),
   /**
    * Requests per minute from one IP address over all routes: a ceiling against floods. A field
    * office behind one address shares it, so it is well above one person's needs.

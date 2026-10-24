@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -23,7 +25,7 @@ import {
   otpauthUrl,
   randomToken,
   sha256Hex,
-  verifyTotp,
+  totpStep,
 } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isUuid, type Tx, type UserTenant } from '../db/database.js';
@@ -74,6 +76,18 @@ const invalidCredentials = () =>
     message: 'Invalid e-mail or password',
   });
 
+/** The account is locked after too many failed passwords or codes (from any address). */
+const accountLocked = (until: Date) =>
+  new HttpException(
+    {
+      statusCode: 429,
+      code: 'ACCOUNT_LOCKED',
+      message: 'Too many failed attempts. Try again later.',
+      retryAfter: Math.max(1, Math.ceil((until.getTime() - Date.now()) / 1000)),
+    },
+    HttpStatus.TOO_MANY_REQUESTS,
+  );
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -92,9 +106,13 @@ export class AuthService {
     client: ClientInfo,
   ): Promise<LoginResult> {
     const user = await this.database.authUserByEmail(input.email);
+    // A locked account is not even tried: guesses during the lock tell nothing.
+    const lockedUntil = user ? await this.database.accountLockedUntil(user.id) : null;
+    if (lockedUntil) throw accountLocked(lockedUntil);
     const ok = await verifyPassword(user?.passwordHash, input.password);
     if (!user || !ok || user.status !== 'active') {
       if (user) {
+        if (!ok) await this.countFailure(user.id);
         await this.auditEverywhere(user.id, {
           action: 'auth.login_failed',
           actorUserId: user.id,
@@ -104,6 +122,9 @@ export class AuthService {
       }
       throw invalidCredentials();
     }
+    // With a second factor the count starts again only after the code: otherwise signing in
+    // again would reset it between guesses of the code.
+    if (!user.totpEnabled) await this.database.accountSucceeded(user.id);
     const tenants = await this.database.userTenants(user.id);
     if (tenants.length === 0) throw invalidCredentials();
     // Organisations that require Microsoft sign-in accept a password only from their owners.
@@ -367,9 +388,13 @@ export class AuthService {
           throw new ConflictException('Two-factor authentication is already enabled');
         if (!user!.totpSecretEnc) throw new BadRequestException('Start the setup first');
         const secret = decryptField(user!.totpSecretEnc, this.config.APP_ENCRYPTION_KEY);
-        if (!verifyTotp(secret, code))
+        const step = totpStep(secret, code);
+        if (step === null)
           throw new UnauthorizedException({ code: 'INVALID_CODE', message: 'Invalid code' });
-        await tx.update(users).set({ totpEnabled: true }).where(eq(users.id, ctx.userId));
+        await tx
+          .update(users)
+          .set({ totpEnabled: true, totpLastStep: step })
+          .where(eq(users.id, ctx.userId));
         await tx.update(sessions).set({ mfaState: 'ok' }).where(eq(sessions.id, ctx.sessionId));
         await this.audit.record(
           tx,
@@ -388,14 +413,25 @@ export class AuthService {
   async verifyTotp(ctx: AuthContext, code: string) {
     if (ctx.mfaState !== 'pending')
       throw new BadRequestException('No code is expected for this session');
+    const lockedUntil = await this.database.accountLockedUntil(ctx.userId);
+    if (lockedUntil) throw accountLocked(lockedUntil);
     const ok = await this.database.withTenant(
       ctx.tenantId,
       async (tx) => {
-        const [user] = await tx.select().from(users).where(eq(users.id, ctx.userId));
+        const [user] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, ctx.userId))
+          // One check at a time per account, so a code cannot be used twice in parallel.
+          .for('update');
         const secret = decryptField(user!.totpSecretEnc!, this.config.APP_ENCRYPTION_KEY);
-        const valid = verifyTotp(secret, code);
-        if (valid)
+        const step = totpStep(secret, code);
+        // Each code works once: a code seen (or stolen) after use is refused.
+        const valid = step !== null && (user!.totpLastStep ?? -1) < step;
+        if (valid) {
+          await tx.update(users).set({ totpLastStep: step }).where(eq(users.id, ctx.userId));
           await tx.update(sessions).set({ mfaState: 'ok' }).where(eq(sessions.id, ctx.sessionId));
+        }
         await this.audit.record(
           tx,
           ctx.tenantId,
@@ -405,7 +441,21 @@ export class AuthService {
       },
       ctx.userId,
     );
-    if (!ok) throw new UnauthorizedException({ code: 'INVALID_CODE', message: 'Invalid code' });
+    if (!ok) {
+      await this.countFailure(ctx.userId);
+      throw new UnauthorizedException({ code: 'INVALID_CODE', message: 'Invalid code' });
+    }
+    await this.database.accountSucceeded(ctx.userId);
+  }
+
+  /** A failed password or code; enough in a row lock the account (LOGIN_LOCK_AFTER). */
+  private async countFailure(userId: string) {
+    if (!this.config.LOGIN_LOCK_AFTER) return;
+    await this.database.accountFailed(
+      userId,
+      this.config.LOGIN_LOCK_AFTER,
+      this.config.LOGIN_LOCK_MINUTES * 60,
+    );
   }
 
   // --- invitations and password reset -------------------------------------------

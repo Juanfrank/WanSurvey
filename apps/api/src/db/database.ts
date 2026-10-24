@@ -207,6 +207,25 @@ export class Database implements OnModuleDestroy {
     return rows[0] ?? null;
   }
 
+  /** Until when the account is locked after failed attempts; null when it is not. */
+  async accountLockedUntil(userId: string): Promise<Date | null> {
+    const [r] = await this.client<{ until: string | Date | null }[]>`
+      select account_locked_until(${userId}) as until`;
+    // Drizzle leaves dates as text on this client.
+    return r?.until ? new Date(r.until) : null;
+  }
+
+  /** Counts a failed password or code; returns the end of the lock it caused, if any. */
+  async accountFailed(userId: string, max: number, lockSeconds: number): Promise<Date | null> {
+    const [r] = await this.client<{ until: string | Date | null }[]>`
+      select account_failed(${userId}, ${max}, ${lockSeconds}) as until`;
+    return r?.until ? new Date(r.until) : null;
+  }
+
+  async accountSucceeded(userId: string): Promise<void> {
+    await this.client`select account_succeeded(${userId})`;
+  }
+
   async userIdByEmail(email: string): Promise<string | null> {
     const rows = await this.client<
       { id: string | null }[]

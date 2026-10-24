@@ -31,15 +31,15 @@ How WanSurvey meets spec §12, checked against the [OWASP ASVS 4.0.3](https://ow
 
 ## V2 Authentication
 
-| Item                      | Status | Notes                                                                                        |
-| ------------------------- | ------ | -------------------------------------------------------------------------------------------- |
-| 2.1 Password security     | ✅     | At least 10 characters, up to 512, any characters; no composition rules or rotation          |
-| 2.1.7 Breached passwords  | ◐      | Not checked against breach lists (needs an outbound service); planned with phase 5           |
-| 2.2 General authenticator | ✅     | Login limited per address and account (`LOGIN_RATE_LIMIT`); uniform errors; failures audited |
-| 2.4 Credential storage    | ✅     | Argon2id                                                                                     |
-| 2.5 Credential recovery   | ✅     | Single-use, expiring reset tokens stored hashed; reset revokes every session                 |
-| 2.7/2.8 Second factor     | ✅     | TOTP (RFC 6238) required for owners and admins; secrets encrypted                            |
-| 2.x Federation            | ✅     | Microsoft Entra ID with PKCE, nonce and state in an encrypted cookie (`docs/sso-entra.md`)   |
+| Item                      | Status | Notes                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.1 Password security     | ✅     | At least 10 characters, up to 512, any characters; no composition rules or rotation                                                                                                                                                                                                                                                                 |
+| 2.1.7 Breached passwords  | ◐      | Not checked against breach lists (needs an outbound service); planned with phase 5                                                                                                                                                                                                                                                                  |
+| 2.2 General authenticator | ✅     | Sign-in limited per client address (`LOGIN_RATE_LIMIT` a minute; the address comes from `X-Forwarded-For` only through `TRUST_PROXY_HOPS` proxies); an account locks for `LOGIN_LOCK_MINUTES` (15) after `LOGIN_LOCK_AFTER` (10) failed passwords or codes in a row from any address, the right password included; uniform errors; failures audited |
+| 2.4 Credential storage    | ✅     | Argon2id                                                                                                                                                                                                                                                                                                                                            |
+| 2.5 Credential recovery   | ✅     | Single-use, expiring reset tokens stored hashed; reset revokes every session                                                                                                                                                                                                                                                                        |
+| 2.7/2.8 Second factor     | ✅     | TOTP (RFC 6238) required for owners and admins; secrets encrypted; each code accepted once (the last step is kept); wrong codes count towards the lock                                                                                                                                                                                              |
+| 2.x Federation            | ✅     | Microsoft Entra ID with PKCE, nonce and state in an encrypted cookie (`docs/sso-entra.md`)                                                                                                                                                                                                                                                          |
 
 ## V3 Session management
 
@@ -61,13 +61,13 @@ How WanSurvey meets spec §12, checked against the [OWASP ASVS 4.0.3](https://ow
 
 ## V5 Validation, sanitisation and encoding
 
-| Item                 | Status | Notes                                                                                                                    |
-| -------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
-| 5.1 Input validation | ✅     | Zod on every input; size limits on bodies (5 MB) and uploads (20 MB, 200,000 rows)                                       |
-| 5.2 Sanitisation     | ✅     | Rich text in questionnaires is a restricted subset rendered as React elements, never as raw HTML; e-mails are plain text |
-| 5.3 Output encoding  | ✅     | React escapes output; the only raw markup is the QR code SVG the browser generates itself                                |
-| 5.3.4 SQL injection  | ✅     | Parameterised queries (Drizzle, postgres.js); identifiers never come from input                                          |
-| 5.5 Deserialisation  | ✅     | JSON only; questionnaire logic is parsed by our own parser, never evaluated as code                                      |
+| Item                 | Status | Notes                                                                                                                       |
+| -------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------- |
+| 5.1 Input validation | ✅     | Zod on every input; size limits on bodies (5 MB) and uploads (20 MB, 200,000 rows); compressed request bodies refused (415) |
+| 5.2 Sanitisation     | ✅     | Rich text in questionnaires is a restricted subset rendered as React elements, never as raw HTML; e-mails are plain text    |
+| 5.3 Output encoding  | ✅     | React escapes output; the only raw markup is the QR code SVG the browser generates itself                                   |
+| 5.3.4 SQL injection  | ✅     | Parameterised queries (Drizzle, postgres.js); identifiers never come from input                                             |
+| 5.5 Deserialisation  | ✅     | JSON only; questionnaire logic is parsed by our own parser, never evaluated as code                                         |
 
 ## V6 Stored cryptography
 
@@ -102,9 +102,9 @@ How WanSurvey meets spec §12, checked against the [OWASP ASVS 4.0.3](https://ow
 
 ## V10 Malicious code
 
-| Item                       | Status | Notes                                                                             |
-| -------------------------- | ------ | --------------------------------------------------------------------------------- |
-| 10.3 Application integrity | ✅     | Dependencies pinned through the lockfile, `--frozen-lockfile` in CI, `pnpm audit` |
+| Item                       | Status | Notes                                                                                                                                                                       |
+| -------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 10.3 Application integrity | ✅     | Dependencies pinned through the lockfile, `--frozen-lockfile` in CI; `pnpm audit --prod --audit-level high` fails the build, with dated exceptions in `pnpm-workspace.yaml` |
 
 ## V11 Business logic
 

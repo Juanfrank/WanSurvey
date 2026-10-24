@@ -52,6 +52,8 @@ const en = {
     microsoftNeedsEmail: 'Enter your work e-mail first, so we can find your organisation.',
     errors: {
       INVALID_CREDENTIALS: 'The e-mail or password is not correct.',
+      ACCOUNT_LOCKED:
+        'Too many failed attempts. The account is locked for a few minutes; try again later.',
       SSO_REQUIRED: 'Your organisation requires signing in with Microsoft.',
       NOT_A_MEMBER: 'You are not a member of that organisation.',
       generic: 'Sign-in failed. Please try again.',
@@ -240,6 +242,8 @@ const es: Catalogue = {
     microsoftNeedsEmail: 'Escriba primero su correo de trabajo para encontrar su organización.',
     errors: {
       INVALID_CREDENTIALS: 'El correo o la contraseña no son correctos.',
+      ACCOUNT_LOCKED:
+        'Demasiados intentos fallidos. La cuenta queda bloqueada unos minutos; vuelva a intentarlo más tarde.',
       SSO_REQUIRED: 'Su organización exige ingresar con Microsoft.',
       NOT_A_MEMBER: 'No es miembro de esa organización.',
       generic: 'No se pudo iniciar sesión. Intente de nuevo.',

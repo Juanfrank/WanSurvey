@@ -73,6 +73,43 @@ export class CasesService {
     this.pii = new PiiCipher(config.APP_ENCRYPTION_KEY);
   }
 
+  /** Rows with the whole sample: plain fields and the sealed personal ones (H1). */
+  openRows<T extends { sample: unknown; samplePii: string | null }>(rows: T[]) {
+    return rows.map(({ samplePii, ...r }) => ({
+      ...r,
+      sample: this.pii.read({ sample: r.sample, samplePii }),
+    }));
+  }
+
+  selectCases(tx: Tx) {
+    return tx
+      .select({
+        id: cases.id,
+        externalId: cases.externalId,
+        sample: cases.sample,
+        samplePii: cases.samplePii,
+        questionnaireId: cases.questionnaireId,
+        status: cases.status,
+        disposition: cases.disposition,
+        attempts: cases.attempts,
+        assignedAt: cases.assignedAt,
+        priority: cases.priority,
+        modePreference: cases.modePreference,
+        assignedTo: cases.assignedTo,
+        assignedName: users.name,
+        checkedOutAt: cases.checkedOutAt,
+        anonymisedAt: cases.anonymisedAt,
+        updatedAt: cases.updatedAt,
+        selectionRole: cases.selectionRole,
+        substituteFor: cases.substituteFor,
+        inclusionProb: cases.inclusionProb,
+        baseWeight: cases.baseWeight,
+      })
+      .from(cases)
+      .leftJoin(users, eq(users.id, cases.assignedTo))
+      .$dynamic();
+  }
+
   async project(tx: Tx, projectId: string) {
     const [p] = await tx.select().from(projects).where(eq(projects.id, projectId));
     if (!p) throw new NotFoundException('Project not found');

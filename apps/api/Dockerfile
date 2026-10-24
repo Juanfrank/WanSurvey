@@ -16,13 +16,18 @@ RUN pnpm --filter @wansurvey/api... build \
 
 FROM node:22-slim
 ENV NODE_ENV=production
-# pdftoppm, to read scanned paper forms (the worker uses it).
+# pdftoppm, to read scanned paper forms (the worker uses it); tini, so Node is not PID 1:
+# signals reach it (a clean shutdown drains jobs and connections) and zombies are reaped.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends poppler-utils \
+  && apt-get install -y --no-install-recommends poppler-utils tini \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /out ./
 USER node
 EXPOSE 3000
-# The worker is the same image: `node dist/worker.js` (M1).
+# The API answers /health; the worker (the same image, `node dist/worker.js`, M1) has no
+# port, so its container overrides or disables this check.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/main.js"]

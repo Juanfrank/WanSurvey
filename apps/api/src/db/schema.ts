@@ -66,6 +66,11 @@ export const users = pgTable(
     /** AES-256-GCM encrypted TOTP secret. */
     totpSecretEnc: text('totp_secret_enc'),
     totpEnabled: boolean('totp_enabled').notNull().default(false),
+    /** The 30-second step of the last TOTP code accepted: each code works once. */
+    totpLastStep: bigint('totp_last_step', { mode: 'number' }),
+    /** Failed passwords and codes since the last success or lock (account_failed()). */
+    failedLogins: integer('failed_logins').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
     /** Organisation opened by default at the next login. */
     lastTenantId: uuid('last_tenant_id'),
     createdAt: createdAt(),

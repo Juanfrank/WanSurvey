@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  Delete,
   ForbiddenException,
   Get,
   HttpCode,
@@ -37,7 +36,6 @@ import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-c
 import { ZodPipe } from '../common/zod.js';
 import { Database, type Tx } from '../db/database.js';
 import {
-  assignments,
   caseEvents,
   cases,
   contacts,
@@ -126,31 +124,13 @@ interface ShareRow {
   limit: number | null;
 }
 
-const RuleBody = z.object({
-  userId: z.uuid(),
-  /** The questionnaire whose cases the rule hands out; left out: every case of the project. */
-  questionnaireId: z.uuid().nullable().optional(),
-  name: z.string().max(200).optional(),
-  filter: z.string().min(1).max(2000),
-  quota: z.number().int().min(1).max(1_000_000).nullable().optional(),
-  active: z.boolean().optional(),
-});
-const RulePatch = RuleBody.partial();
-const QuestionnaireQuery = z.object({ questionnaireId: z.uuid().optional() });
-/** Runs the rules: one rule, or all; over some cases (the selected ones), or every free one. */
-const ApplyBody = z.object({
-  ruleId: z.uuid().optional(),
-  caseIds: z.array(z.uuid()).max(50_000).optional(),
-  questionnaireId: z.uuid().optional(),
-});
-
 const FieldPatch = z.object({
   label: z.string().max(200).nullable().optional(),
   pii: z.boolean().optional(),
   type: z.enum(['text', 'number', 'date', 'code']).optional(),
 });
 
-/** Cases of a project: list, detail, edits, bulk assignment, assignment rules, sample fields. */
+/** Cases of a project: list, detail, edits, bulk assignment and distribution, sample fields. */
 @ApiTags('cases')
 @Controller('projects/:projectId')
 export class CasesController {
@@ -220,11 +200,14 @@ export class CasesController {
       if (q.filter) {
         // Rule filters run in the engine, over the already narrowed set.
         const match = compileRule(q.filter);
-        const all = this.open(
-          await this.selectCases(tx)
-            .where(and(...conds))
-            .orderBy(by, asc(cases.id)),
-        ).filter(match);
+        const all = this.svc
+          .openRows(
+            await this.svc
+              .selectCases(tx)
+              .where(and(...conds))
+              .orderBy(by, asc(cases.id)),
+          )
+          .filter(match);
         total = all.length;
         rows = all.slice((q.page - 1) * q.limit, q.page * q.limit);
       } else {
@@ -233,8 +216,9 @@ export class CasesController {
           .from(cases)
           .where(and(...conds));
         total = c?.n ?? 0;
-        rows = this.open(
-          await this.selectCases(tx)
+        rows = this.svc.openRows(
+          await this.svc
+            .selectCases(tx)
             .where(and(...conds))
             .orderBy(by, asc(cases.id))
             .limit(q.limit)
@@ -543,10 +527,10 @@ export class CasesController {
         const err = ruleError(body.filter || 'true');
         if (body.filter && err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
         const match = compileRule(body.filter);
-        const all = this.open(
-          await this.selectCases(tx).where(
-            and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId)),
-          ),
+        const all = this.svc.openRows(
+          await this.svc
+            .selectCases(tx)
+            .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
         );
         ids = all.filter(match).map((c) => c.id);
       }
@@ -877,234 +861,6 @@ export class CasesController {
     });
   }
 
-  // ---- Assignment rules ----------------------------------------------------
-
-  @Get('assignments')
-  @RequirePermission('cases.assign', PERM)
-  rules(
-    @Auth() ctx: AuthContext,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Query(new ZodPipe(QuestionnaireQuery)) q: z.infer<typeof QuestionnaireQuery>,
-  ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const rows = await tx
-        .select({
-          id: assignments.id,
-          userId: assignments.userId,
-          questionnaireId: assignments.questionnaireId,
-          userName: users.name,
-          name: assignments.name,
-          filter: assignments.filter,
-          quota: assignments.quota,
-          active: assignments.active,
-          createdAt: assignments.createdAt,
-        })
-        .from(assignments)
-        .innerJoin(users, eq(users.id, assignments.userId))
-        .where(
-          and(
-            eq(assignments.projectId, projectId),
-            // A questionnaire's rules and the project-wide ones.
-            q.questionnaireId
-              ? or(
-                  eq(assignments.questionnaireId, q.questionnaireId),
-                  isNull(assignments.questionnaireId),
-                )
-              : undefined,
-          ),
-        )
-        .orderBy(asc(assignments.createdAt));
-      const all = this.open(await this.selectCases(tx).where(eq(cases.projectId, projectId)));
-      return rows.map((r) => {
-        const match = compileRule(r.filter);
-        const matching = all
-          .filter(
-            (c) =>
-              !r.questionnaireId ||
-              c.questionnaireId === r.questionnaireId ||
-              c.questionnaireId === null,
-          )
-          .filter(match);
-        return {
-          ...r,
-          matching: matching.length,
-          unassigned: matching.filter((c) => !c.assignedTo && c.status === 'fresh').length,
-          assignedToUser: matching.filter((c) => c.assignedTo === r.userId).length,
-        };
-      });
-    });
-  }
-
-  /** How many cases a filter matches (for the rule editor and bulk assignment). */
-  @Post('assignments/preview')
-  @HttpCode(200)
-  @RequirePermission('cases.assign', PERM)
-  preview(
-    @Auth() ctx: AuthContext,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Body(
-      new ZodPipe(z.object({ filter: z.string().max(2000), questionnaireId: z.uuid().optional() })),
-    )
-    body: { filter: string; questionnaireId?: string },
-  ) {
-    const err = body.filter.trim() ? ruleError(body.filter) : null;
-    if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const match = compileRule(body.filter);
-      const all = this.open(
-        await this.selectCases(tx).where(
-          and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId)),
-        ),
-      ).filter(match);
-      return {
-        matching: all.length,
-        unassigned: all.filter((c) => !c.assignedTo && c.status === 'fresh').length,
-      };
-    });
-  }
-
-  @Post('assignments')
-  @RequirePermission('cases.assign', PERM)
-  @ApiBody({ schema: z.toJSONSchema(RuleBody) as object })
-  createRule(
-    @Auth() ctx: AuthContext,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Body(new ZodPipe(RuleBody)) body: z.infer<typeof RuleBody>,
-  ) {
-    const err = ruleError(body.filter);
-    if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
-      await this.svc.assertAssignee(tx, projectId, body.userId);
-      const questionnaireId = body.questionnaireId
-        ? await this.svc.questionnaireFor(tx, projectId, body.questionnaireId)
-        : null;
-      const [row] = await tx
-        .insert(assignments)
-        .values({
-          tenantId: ctx.tenantId,
-          projectId,
-          userId: body.userId,
-          questionnaireId,
-          kind: 'rule',
-          name: body.name ?? null,
-          filter: body.filter,
-          quota: body.quota ?? null,
-          active: body.active ?? true,
-          createdBy: ctx.userId,
-        })
-        .returning();
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
-        this.audit.fromContext(ctx, {
-          action: 'assignment.created',
-          targetType: 'assignment',
-          targetId: row!.id,
-          details: {
-            projectId,
-            userId: body.userId,
-            filter: body.filter,
-            quota: body.quota ?? null,
-          },
-        }),
-      );
-      return row;
-    });
-  }
-
-  @Patch('assignments/:ruleId')
-  @RequirePermission('cases.assign', PERM)
-  @ApiBody({ schema: z.toJSONSchema(RulePatch) as object })
-  updateRule(
-    @Auth() ctx: AuthContext,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Param('ruleId', ParseUUIDPipe) ruleId: string,
-    @Body(new ZodPipe(RulePatch)) body: z.infer<typeof RulePatch>,
-  ) {
-    if (body.filter) {
-      const err = ruleError(body.filter);
-      if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
-    }
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      if (body.userId) await this.svc.assertAssignee(tx, projectId, body.userId);
-      const [row] = await tx
-        .update(assignments)
-        .set(body)
-        .where(and(eq(assignments.id, ruleId), eq(assignments.projectId, projectId)))
-        .returning();
-      if (!row) throw new NotFoundException('Rule not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
-        this.audit.fromContext(ctx, {
-          action: 'assignment.updated',
-          targetType: 'assignment',
-          targetId: ruleId,
-          details: body,
-        }),
-      );
-      return row;
-    });
-  }
-
-  @Delete('assignments/:ruleId')
-  @HttpCode(204)
-  @RequirePermission('cases.assign', PERM)
-  async deleteRule(
-    @Auth() ctx: AuthContext,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Param('ruleId', ParseUUIDPipe) ruleId: string,
-  ): Promise<void> {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx
-        .delete(assignments)
-        .where(and(eq(assignments.id, ruleId), eq(assignments.projectId, projectId)))
-        .returning({ id: assignments.id });
-      if (!row) throw new NotFoundException('Rule not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
-        this.audit.fromContext(ctx, {
-          action: 'assignment.deleted',
-          targetType: 'assignment',
-          targetId: ruleId,
-          details: { projectId },
-        }),
-      );
-    });
-  }
-
-  /** Runs the active rules (or one rule) over the unassigned fresh cases now. */
-  @Post('assignments/apply')
-  @HttpCode(200)
-  @RequirePermission('cases.assign', PERM)
-  apply(
-    @Auth() ctx: AuthContext,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Body(new ZodPipe(ApplyBody)) body: z.infer<typeof ApplyBody>,
-  ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
-      const n = await this.svc.applyRules(tx, ctx, projectId, {
-        ...(body.ruleId ? { ruleId: body.ruleId } : {}),
-        ...(body.caseIds ? { onlyCaseIds: body.caseIds } : {}),
-        ...(body.questionnaireId ? { questionnaireId: body.questionnaireId } : {}),
-      });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
-        this.audit.fromContext(ctx, {
-          action: 'cases.assigned',
-          targetType: 'project',
-          targetId: projectId,
-          details: { via: 'rules', ruleId: body.ruleId ?? null, count: n },
-        }),
-      );
-      return { assigned: n };
-    });
-  }
-
   // ---- Sample dictionary ----------------------------------------------------
 
   /** Fields of the project's sample (`case.*`), for the case list and the designer. */
@@ -1146,43 +902,6 @@ export class CasesController {
 
   // -------------------------------------------------------------------------
 
-  /** Rows with the whole sample: plain fields and the sealed personal ones (H1). */
-  private open<T extends { sample: unknown; samplePii: string | null }>(rows: T[]) {
-    return rows.map(({ samplePii, ...r }) => ({
-      ...r,
-      sample: this.svc.pii.read({ sample: r.sample, samplePii }),
-    }));
-  }
-
-  private selectCases(tx: Tx) {
-    return tx
-      .select({
-        id: cases.id,
-        externalId: cases.externalId,
-        sample: cases.sample,
-        samplePii: cases.samplePii,
-        questionnaireId: cases.questionnaireId,
-        status: cases.status,
-        disposition: cases.disposition,
-        attempts: cases.attempts,
-        assignedAt: cases.assignedAt,
-        priority: cases.priority,
-        modePreference: cases.modePreference,
-        assignedTo: cases.assignedTo,
-        assignedName: users.name,
-        checkedOutAt: cases.checkedOutAt,
-        anonymisedAt: cases.anonymisedAt,
-        updatedAt: cases.updatedAt,
-        selectionRole: cases.selectionRole,
-        substituteFor: cases.substituteFor,
-        inclusionProb: cases.inclusionProb,
-        baseWeight: cases.baseWeight,
-      })
-      .from(cases)
-      .leftJoin(users, eq(users.id, cases.assignedTo))
-      .$dynamic();
-  }
-
   private fields(tx: Tx, projectId: string) {
     return tx
       .select({
@@ -1211,7 +930,7 @@ export class CasesController {
   ) {
     const conds = [eq(cases.id, caseId), eq(cases.projectId, projectId)];
     if (this.svc.restrictedToOwn(ctx, projectId)) conds.push(this.visibleToOwn(ctx, pool));
-    const [c] = this.open(await this.selectCases(tx).where(and(...conds)));
+    const [c] = this.svc.openRows(await this.svc.selectCases(tx).where(and(...conds)));
     if (!c) throw new NotFoundException('Case not found');
     return c;
   }

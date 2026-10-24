@@ -8,23 +8,34 @@ import {
   SPECIAL_METHODS,
   type SamplingPlanInput,
 } from '@wansurvey/schema/sampling';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { dateTime } from '../format.js';
-import { Button, Card, ErrorText } from '../routes/ui.js';
+import { Button, ErrorText } from '../routes/ui.js';
 import { ImportTab } from './ImportTab.js';
 import { CrossChecks } from './CrossChecks.js';
 import { useSampleFields } from './hooks.js';
+import {
+  Choice,
+  InfoTip,
+  Layer,
+  Num,
+  sevCls,
+  sevIcon,
+  VarSelect,
+  YesNo,
+} from './samplingControls.js';
+import { BatchForm, FieldForm, ReleaseForm } from './samplingForms.js';
 
 type Plan = SamplingPlanInput;
 type Family = Plan['design']['family'];
 type Method = Plan['design']['method'];
 
-interface Sampling {
+export interface Sampling {
   plan: Plan;
   status: 'draft' | 'selected';
   seed: string | null;
@@ -64,289 +75,6 @@ const METHODS: Record<Family, readonly Method[]> = {
   special: SPECIAL_METHODS,
   census: ['census'],
 };
-
-const sevCls: Record<PlanCheck['severity'], string> = {
-  error: 'border-red-200 bg-red-50 text-red-ink-900',
-  warning: 'border-amber-200 bg-amber-50 text-amber-ink-900',
-  info: 'border-sky-200 bg-sky-50 text-sky-ink-900',
-};
-const sevIcon: Record<PlanCheck['severity'], string> = { error: '✕', warning: '!', info: 'i' };
-
-function Layer({
-  title,
-  help,
-  children,
-  testId,
-}: {
-  title: string;
-  help: string;
-  children: ReactNode;
-  testId: string;
-}) {
-  const id = useId();
-  return (
-    <Card>
-      <section aria-labelledby={id} className="flex flex-col gap-4" data-testid={testId}>
-        <div>
-          <h2 id={id} className="text-lg font-semibold">
-            {title}
-          </h2>
-          <p className="text-sm text-slate-600">{help}</p>
-        </div>
-        {children}
-      </section>
-    </Card>
-  );
-}
-
-/**
- * An (i) next to a term: on hover, focus or tap it explains the term and the usual standard
- * (`cases.sampling.tips.<id>`). The explanation is the button's description for screen readers.
- */
-export function InfoTip({ id, term }: { id: string; term: string }) {
-  const { t } = useTranslation();
-  const tipId = useId();
-  const [open, setOpen] = useState(false);
-  const std = t(`cases.sampling.tips.${id}.std`, { defaultValue: '' });
-  return (
-    <span
-      className="relative inline-flex align-middle"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      <button
-        type="button"
-        className="ml-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-slate-400 font-serif text-[10px] font-bold italic leading-none text-slate-600 hover:border-indigo-600 hover:text-indigo-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-        aria-label={t('cases.sampling.tip.label', { term })}
-        aria-describedby={tipId}
-        aria-expanded={open}
-        data-tip={id}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen((o) => !o);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false);
-        }}
-      >
-        i
-      </button>
-      <span
-        role="tooltip"
-        id={tipId}
-        hidden={!open}
-        className="absolute left-1/2 top-full z-30 mt-1.5 w-72 max-w-[80vw] -translate-x-1/2 rounded-lg border border-slate-200 bg-white p-3 text-left text-xs font-normal not-italic leading-relaxed text-slate-700 shadow-lg"
-      >
-        <span className="block">{t(`cases.sampling.tips.${id}.text`)}</span>
-        {std ? (
-          <span className="mt-1.5 block">
-            <strong className="font-semibold text-slate-900">
-              {t('cases.sampling.tip.standard')}
-            </strong>{' '}
-            {std}
-          </span>
-        ) : null}
-      </span>
-    </span>
-  );
-}
-
-/** A choice among cards (radio group), each with a short explanation. */
-function Choice<T extends string>({
-  legend,
-  tip,
-  value,
-  options,
-  onChange,
-  disabled,
-  columns = 2,
-}: {
-  legend: string;
-  tip?: string;
-  value: T;
-  options: { value: T; label: string; hint?: string; tip?: string }[];
-  onChange(v: T): void;
-  disabled?: boolean;
-  columns?: number;
-}) {
-  const name = useId();
-  return (
-    <fieldset disabled={disabled} className="min-w-0">
-      <legend className="mb-2 text-sm font-medium text-slate-700">
-        {legend}
-        {tip ? <InfoTip id={tip} term={legend} /> : null}
-      </legend>
-      <div
-        className="grid gap-2"
-        style={{
-          gridTemplateColumns: `repeat(auto-fit, minmax(${columns > 2 ? 12 : 16}rem, 1fr))`,
-        }}
-      >
-        {options.map((o) => (
-          <div key={o.value} className="relative">
-            <label className="flex h-full cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white p-3 pr-7 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
-              <input
-                type="radio"
-                name={name}
-                className="mt-0.5"
-                checked={value === o.value}
-                onChange={() => onChange(o.value)}
-              />
-              <span>
-                <span className="block font-medium">{o.label}</span>
-                {o.hint ? <span className="block text-xs text-slate-600">{o.hint}</span> : null}
-              </span>
-            </label>
-            {o.tip ? (
-              <span className="absolute right-2 top-2.5">
-                <InfoTip id={o.tip} term={o.label} />
-              </span>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
-function YesNo({
-  label,
-  tip,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  tip?: string;
-  value: boolean;
-  onChange(v: boolean): void;
-  disabled?: boolean;
-}) {
-  const { t } = useTranslation();
-  const name = useId();
-  return (
-    <fieldset disabled={disabled} className="flex flex-wrap items-center gap-3 text-sm">
-      <legend className="mb-1 w-full font-medium text-slate-700">
-        {label}
-        {tip ? <InfoTip id={tip} term={label} /> : null}
-      </legend>
-      {[true, false].map((v) => (
-        <label key={String(v)} className="flex items-center gap-1.5">
-          <input type="radio" name={name} checked={value === v} onChange={() => onChange(v)} />
-          {v ? t('cases.sampling.yes') : t('cases.sampling.no')}
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
-function Num({
-  label,
-  tip,
-  value,
-  onChange,
-  step = 'any',
-  min,
-  max,
-  percent,
-  disabled,
-}: {
-  label: string;
-  tip?: string;
-  value: number | null;
-  onChange(v: number | null): void;
-  step?: string;
-  min?: number;
-  max?: number;
-  /** Shown and typed as a percentage (0.05 ↔ 5). */
-  percent?: boolean;
-  disabled?: boolean;
-}) {
-  const id = useId();
-  const shown =
-    value === null ? '' : percent ? String(Math.round(value * 10000) / 100) : String(value);
-  const [text, setText] = useState(shown);
-  useEffect(() => setText(shown), [shown]);
-  return (
-    <div className="flex flex-col gap-1 text-sm">
-      <span className="flex items-center">
-        <label htmlFor={id} className="font-medium text-slate-700">
-          {label}
-        </label>
-        {tip ? <InfoTip id={tip} term={label} /> : null}
-      </span>
-      <span className="relative flex items-center">
-        <input
-          id={id}
-          className={`${controlCls} w-full tabular-nums ${percent ? 'pr-7' : ''}`}
-          inputMode="decimal"
-          value={text}
-          disabled={disabled}
-          step={step}
-          {...(min !== undefined ? { min } : {})}
-          {...(max !== undefined ? { max } : {})}
-          onChange={(e) => {
-            setText(e.target.value);
-            const n = Number(e.target.value.replace(',', '.'));
-            if (e.target.value.trim() === '') onChange(null);
-            else if (Number.isFinite(n)) onChange(percent ? n / 100 : n);
-          }}
-        />
-        {percent ? (
-          <span aria-hidden className="pointer-events-none absolute right-2.5 text-slate-500">
-            %
-          </span>
-        ) : null}
-      </span>
-    </div>
-  );
-}
-
-function VarSelect({
-  label,
-  tip,
-  value,
-  fields,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  tip?: string;
-  value: string;
-  fields: string[];
-  onChange(v: string): void;
-  disabled?: boolean;
-}) {
-  const { t } = useTranslation();
-  const id = useId();
-  return (
-    <div className="flex flex-col gap-1 text-sm">
-      <span className="flex items-center">
-        <label htmlFor={id} className="font-medium text-slate-700">
-          {label}
-        </label>
-        {tip ? <InfoTip id={tip} term={label} /> : null}
-      </span>
-      <select
-        id={id}
-        className={`${controlCls} w-auto`}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">{t('cases.sampling.none')}</option>
-        {fields.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
 
 /**
  * The sampling selector (S1): layer 1 the source of the units (and the frame), layer 2 the
@@ -1133,29 +861,31 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               {t('cases.sampling.frameSummary', d.frame)}
             </p>
             {d.frame.byStratum.length ? (
-              <table className="w-auto text-sm">
-                <caption className="mb-1 text-left font-medium">
-                  {t('cases.sampling.strataTable')}
-                </caption>
-                <thead>
-                  <tr className="text-left text-xs text-slate-600">
-                    <th scope="col" className="pr-6">
-                      {t('cases.sampling.stratum')}
-                    </th>
-                    <th scope="col" className="text-right">
-                      {t('cases.sampling.units')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.frame.byStratum.map((s) => (
-                    <tr key={s.stratum}>
-                      <td className="pr-6">{s.stratum || '—'}</td>
-                      <td className="text-right tabular-nums">{fmt(s.units)}</td>
+              <div className="overflow-x-auto">
+                <table className="w-auto text-sm">
+                  <caption className="mb-1 text-left font-medium">
+                    {t('cases.sampling.strataTable')}
+                  </caption>
+                  <thead>
+                    <tr className="text-left text-xs text-slate-600">
+                      <th scope="col" className="pr-6">
+                        {t('cases.sampling.stratum')}
+                      </th>
+                      <th scope="col" className="text-right">
+                        {t('cases.sampling.units')}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {d.frame.byStratum.map((s) => (
+                      <tr key={s.stratum}>
+                        <td className="pr-6">{s.stratum || '—'}</td>
+                        <td className="text-right tabular-nums">{fmt(s.units)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -1324,34 +1054,36 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               <p>{t('cases.sampling.noProb')}</p>
             )}
             {preview.strata.length > 1 ? (
-              <table className="w-auto">
-                <thead>
-                  <tr className="text-left text-xs text-slate-600">
-                    <th scope="col" className="pr-6">
-                      {t('cases.sampling.stratum')}
-                    </th>
-                    <th scope="col" className="pr-6 text-right">
-                      N
-                    </th>
-                    <th scope="col" className="pr-6 text-right">
-                      n
-                    </th>
-                    <th scope="col" className="text-right">
-                      {t('cases.sampling.reserveRate')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.strata.map((s) => (
-                    <tr key={s.stratum}>
-                      <td className="pr-6">{s.stratum || '—'}</td>
-                      <td className="pr-6 text-right tabular-nums">{s.population}</td>
-                      <td className="pr-6 text-right tabular-nums">{s.selected}</td>
-                      <td className="text-right tabular-nums">{s.reserve}</td>
+              <div className="overflow-x-auto">
+                <table className="w-auto">
+                  <thead>
+                    <tr className="text-left text-xs text-slate-600">
+                      <th scope="col" className="pr-6">
+                        {t('cases.sampling.stratum')}
+                      </th>
+                      <th scope="col" className="pr-6 text-right">
+                        N
+                      </th>
+                      <th scope="col" className="pr-6 text-right">
+                        n
+                      </th>
+                      <th scope="col" className="text-right">
+                        {t('cases.sampling.reserveRate')}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {preview.strata.map((s) => (
+                      <tr key={s.stratum}>
+                        <td className="pr-6">{s.stratum || '—'}</td>
+                        <td className="pr-6 text-right tabular-nums">{s.population}</td>
+                        <td className="pr-6 text-right tabular-nums">{s.selected}</td>
+                        <td className="text-right tabular-nums">{s.reserve}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : null}
             {preview.warnings.map((w) => {
               const [code, a, b, c] = w.split(':');
@@ -1393,225 +1125,5 @@ export function SamplingTab({ projectId }: { projectId: string }) {
         ) : null}
       </Layer>
     </div>
-  );
-}
-
-/** Another batch from the units never selected, added to the cases already in the sample. */
-function BatchForm({
-  projectId,
-  data,
-  onDone,
-}: {
-  projectId: string;
-  data: Sampling;
-  onDone(): Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const scoped = useScoped();
-  const [count, setCount] = useState(10);
-  const [reason, setReason] = useState('');
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const add = useMutation({
-    mutationFn: () =>
-      api<{ added: number }>(scoped(`/projects/${projectId}/sampling/batch`), {
-        method: 'POST',
-        body: { count, reason },
-      }),
-    onSuccess: async (r) => {
-      setStatus(t('cases.sampling.batchDone', { count: r.added }));
-      setReason('');
-      setError(null);
-      await onDone();
-    },
-    onError: (e) => setError(localiseError(t, e)),
-  });
-  return (
-    <form
-      className="flex flex-col gap-2 border-t border-slate-200 pt-3"
-      data-testid="batch"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (reason.trim()) add.mutate();
-      }}
-    >
-      <h3 className="font-semibold">
-        {t('cases.sampling.batch')} ·{' '}
-        <span className="font-normal text-slate-600">
-          {t('cases.sampling.unitsLeft', { count: data.unitsLeft })}
-        </span>
-      </h3>
-      <p className="text-sm text-slate-600">{t('cases.sampling.batchHelp')}</p>
-      <div className="flex flex-wrap items-end gap-3">
-        <Num
-          label={t('cases.sampling.batchCount')}
-          value={count}
-          step="1"
-          min={1}
-          onChange={(n) => setCount(Math.max(1, Math.round(n ?? 1)))}
-        />
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700">{t('cases.sampling.releaseReason')}</span>
-          <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} />
-        </label>
-        <Button type="submit" disabled={!reason.trim() || !data.unitsLeft || add.isPending}>
-          {t('cases.sampling.batchAdd')}
-        </Button>
-      </div>
-      <p role="status" className="text-sm text-emerald-ink-800">
-        {status}
-      </p>
-      <ErrorText>{error}</ErrorText>
-    </form>
-  );
-}
-
-function ReleaseForm({
-  projectId,
-  data,
-  onDone,
-}: {
-  projectId: string;
-  data: Sampling;
-  onDone(): Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const scoped = useScoped();
-  const [count, setCount] = useState(1);
-  const [stratum, setStratum] = useState('');
-  const [reason, setReason] = useState('');
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const release = useMutation({
-    mutationFn: () =>
-      api<{ released: number }>(scoped(`/projects/${projectId}/sampling/release`), {
-        method: 'POST',
-        body: { count, stratum: stratum || null, reason },
-      }),
-    onSuccess: async (r) => {
-      setStatus(t('cases.sampling.releaseDone', { count: r.released }));
-      setReason('');
-      setError(null);
-      await onDone();
-    },
-    onError: (e) => setError(localiseError(t, e)),
-  });
-  return (
-    <form
-      className="flex flex-col gap-2 border-t border-slate-200 pt-3"
-      data-testid="release"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (reason.trim()) release.mutate();
-      }}
-    >
-      <h3 className="font-semibold">
-        {t('cases.sampling.release')} ·{' '}
-        <span className="font-normal text-slate-600">
-          {t('cases.sampling.reservesLeft', { count: data.reservesLeft })}
-        </span>
-      </h3>
-      <div className="flex flex-wrap items-end gap-3">
-        <Num
-          label={t('cases.sampling.releaseCount')}
-          value={count}
-          step="1"
-          min={1}
-          onChange={(n) => setCount(Math.max(1, Math.round(n ?? 1)))}
-        />
-        {data.frame.byStratum.length ? (
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">{t('cases.sampling.releaseStratum')}</span>
-            <select
-              className={`${controlCls} w-auto`}
-              value={stratum}
-              onChange={(e) => setStratum(e.target.value)}
-            >
-              <option value="">{t('cases.sampling.anyStratum')}</option>
-              {data.frame.byStratum.map((s) => (
-                <option key={s.stratum} value={s.stratum}>
-                  {s.stratum || '—'}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700">{t('cases.sampling.releaseReason')}</span>
-          <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} />
-        </label>
-        <Button type="submit" disabled={!reason.trim() || !data.reservesLeft || release.isPending}>
-          {t('cases.sampling.release')}
-        </Button>
-      </div>
-      <p role="status" className="text-sm text-emerald-ink-800">
-        {status}
-      </p>
-      <ErrorText>{error}</ErrorText>
-    </form>
-  );
-}
-
-function FieldForm({ projectId, onDone }: { projectId: string; onDone(): Promise<void> }) {
-  const { t } = useTranslation();
-  const scoped = useScoped();
-  const [count, setCount] = useState(10);
-  const [prefix, setPrefix] = useState('F');
-  const [cell, setCell] = useState('');
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const make = useMutation({
-    mutationFn: () =>
-      api<{ created: number }>(scoped(`/projects/${projectId}/sampling/field-cases`), {
-        method: 'POST',
-        body: { count, prefix, ...(cell.trim() ? { cell: cell.trim() } : {}) },
-      }),
-    onSuccess: async (r) => {
-      setStatus(t('cases.sampling.fieldDone', { count: r.created }));
-      setError(null);
-      await onDone();
-    },
-    onError: (e) => setError(localiseError(t, e)),
-  });
-  return (
-    <form
-      className="flex flex-col gap-2 border-t border-slate-200 pt-3"
-      data-testid="field-cases"
-      onSubmit={(e) => {
-        e.preventDefault();
-        make.mutate();
-      }}
-    >
-      <h3 className="font-semibold">{t('cases.sampling.fieldCases')}</h3>
-      <p className="text-xs text-slate-600">{t('cases.sampling.fieldHelp')}</p>
-      <div className="flex flex-wrap items-end gap-3">
-        <Num
-          label={t('cases.sampling.fieldCount')}
-          value={count}
-          step="1"
-          min={1}
-          onChange={(n) => setCount(Math.max(1, Math.round(n ?? 1)))}
-        />
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700">{t('cases.sampling.fieldPrefix')}</span>
-          <input
-            className={`${inputCls} w-28 font-mono`}
-            value={prefix}
-            onChange={(e) => setPrefix(e.target.value.replace(/[^A-Za-z0-9_-]/g, ''))}
-          />
-        </label>
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700">{t('cases.sampling.fieldCell')}</span>
-          <input className={inputCls} value={cell} onChange={(e) => setCell(e.target.value)} />
-        </label>
-        <Button type="submit" disabled={!prefix || make.isPending}>
-          {t('cases.sampling.fieldCreate')}
-        </Button>
-      </div>
-      <p role="status" className="text-sm text-emerald-ink-800">
-        {status}
-      </p>
-      <ErrorText>{error}</ErrorText>
-    </form>
   );
 }

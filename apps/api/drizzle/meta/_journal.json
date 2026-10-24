@@ -267,6 +267,13 @@
       "when": 1793300000000,
       "tag": "0037_lighter_load",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793300001000,
+      "tag": "0038_login_lockout",
+      "breakpoints": true
     }
   ]
 }

@@ -99,6 +99,8 @@ export interface Session {
   tenantId: string;
 }
 
+let codeReset: postgres.Sql | undefined;
+
 /** Logs in through the API (including the TOTP step when enrolled). */
 export async function login(
   app: INestApplication,
@@ -113,6 +115,13 @@ export async function login(
     throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
   const csrf = res.body.csrfToken as string;
   if (res.body.mfaState === 'pending') {
+    // Each code works once, and tests sign the same person in many times within 30 s.
+    await (codeReset ??= postgres(process.env.DATABASE_ADMIN_URL!, {
+      max: 1,
+      idle_timeout: 1,
+      onnotice: () => {},
+    }))`
+      update users set totp_last_step = null where id = ${user.id}`;
     const v = await agent
       .post('/api/v1/auth/2fa/verify')
       .set('x-csrf-token', csrf)

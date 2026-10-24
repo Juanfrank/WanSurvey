@@ -9,6 +9,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule, type AppModuleOptions } from './app.module.js';
 import { loadShedding } from './common/load-shed.js';
+import { plainBodiesOnly } from './common/plain-body.js';
 import { loadConfig } from './config.js';
 
 export async function createApp(opts: AppModuleOptions = {}): Promise<INestApplication> {
@@ -16,6 +17,8 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
     bufferLogs: true,
     bodyParser: false,
   });
+  // Before any body parser: compressed request bodies are refused (see plain-body.ts).
+  app.use(plainBodiesOnly());
   // Questionnaire definitions can be large; everything else is small.
   app.useBodyParser('json', { limit: '5mb' });
   app.useBodyParser('urlencoded', { extended: false, limit: '100kb' });

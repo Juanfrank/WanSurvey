@@ -116,13 +116,23 @@ export function verifyTotp(
   atMs = Date.now(),
   window = 1,
 ): boolean {
-  if (!/^\d{6}$/.test(code)) return false;
+  return totpStep(secretB32, code, atMs, window) !== null;
+}
+
+/** The 30-second step the code belongs to (within the window), or null when it is wrong. */
+export function totpStep(
+  secretB32: string,
+  code: string,
+  atMs = Date.now(),
+  window = 1,
+): number | null {
+  if (!/^\d{6}$/.test(code)) return null;
   const secret = base32Decode(secretB32);
   const counter = Math.floor(atMs / 1000 / 30);
   for (let w = -window; w <= window; w++) {
-    if (safeEqual(hotp(secret, counter + w), code)) return true;
+    if (safeEqual(hotp(secret, counter + w), code)) return counter + w;
   }
-  return false;
+  return null;
 }
 
 export function otpauthUrl(secretB32: string, account: string, issuer = 'WanSurvey'): string {

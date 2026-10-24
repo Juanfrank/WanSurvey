@@ -5,9 +5,9 @@ import { projects, statsDaily } from '../db/schema.js';
 import { InterviewsService } from '../interviews/interviews.service.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 import { JobsService } from '../jobs/jobs.service.js';
+import { COUNTED_SQL } from '../common/statuses.js';
 
-/** Interviews that count as data: submitted and not (yet) rejected or sent back. */
-export const COUNTED = ['submitted', 'in_review', 'approved'] as const;
+export { COUNTED } from '../common/statuses.js';
 
 /** The calendar day of `at` in a time zone, as YYYY-MM-DD. */
 export function localDay(at: Date, timeZone: string): string {
@@ -85,10 +85,10 @@ export class StatsService implements OnModuleInit {
         insert into stats_daily (tenant_id, project_id, day, mode, interviewer_id, submitted, completes, approved, rejected, active_ms)
         select ${tenantId}::uuid, ${projectId}::uuid, ${localDate}, i.mode, i.interviewer_id,
                count(*) filter (where i.status <> 'returned'),
-               count(*) filter (where i.status in ('submitted', 'in_review', 'approved') and i.disposition = 'COMPLETE'),
+               count(*) filter (where i.status in ${COUNTED_SQL} and i.disposition = 'COMPLETE'),
                count(*) filter (where i.status = 'approved'),
                count(*) filter (where i.status = 'rejected'),
-               coalesce(sum(i.active_ms) filter (where i.status in ('submitted', 'in_review', 'approved') and i.disposition = 'COMPLETE'), 0)
+               coalesce(sum(i.active_ms) filter (where i.status in ${COUNTED_SQL} and i.disposition = 'COMPLETE'), 0)
         from interviews i
         where i.project_id = ${projectId} and i.submitted_at is not null and i.entry_pass = 1
           and i.status in ('submitted', 'in_review', 'approved', 'rejected', 'returned')
