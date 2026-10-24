@@ -111,7 +111,8 @@ export class InterviewsController {
         { tenantId: ctx.tenantId, userId: ctx.userId, ctx },
         body.deviceId,
         body.interviews,
-        (row) => (row.interviewerId === ctx.userId ? null : 'NOT_FOUND'),
+        // As `own`: the caller's interview, in a project where they still conduct or key.
+        (row) => (this.mayWrite(ctx, row) ? null : 'NOT_FOUND'),
         this.runtime.createOffline
           ? (item) => this.runtime.createOffline!(tx, ctx, body.deviceId, item)
           : undefined,
@@ -253,15 +254,15 @@ export class InterviewsController {
   private async own(tx: Tx, ctx: AuthContext, id: string, lock = false) {
     const q = tx.select().from(interviews).where(eq(interviews.id, id));
     const [row] = lock ? await q.for('update') : await q;
-    if (
-      !row ||
-      row.interviewerId !== ctx.userId ||
-      !(
-        can(ctx.memberships, CONDUCT, row.projectId) ||
-        can(ctx.memberships, 'dataentry.key', row.projectId)
-      )
-    )
-      throw new NotFoundException('Interview not found');
+    if (!row || !this.mayWrite(ctx, row)) throw new NotFoundException('Interview not found');
     return row;
+  }
+
+  private mayWrite(ctx: AuthContext, row: { interviewerId: string | null; projectId: string }) {
+    return (
+      row.interviewerId === ctx.userId &&
+      (can(ctx.memberships, CONDUCT, row.projectId) ||
+        can(ctx.memberships, 'dataentry.key', row.projectId))
+    );
   }
 }

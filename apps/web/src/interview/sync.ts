@@ -1,5 +1,5 @@
 import { api, ApiError } from '../api.js';
-import type { InterviewStore, LocalInterview } from './store.js';
+import type { LocalInterview, LocalStore } from './store.js';
 
 const BATCH = 500;
 const MAX_BACKOFF_MS = 60_000;
@@ -7,6 +7,8 @@ const MAX_BACKOFF_MS = 60_000;
 export interface SyncResult {
   acks: Record<string, number>;
   errors: Record<string, string>;
+  /** The state version the server wrote each snapshot as (absent when none was written). */
+  versions?: Record<string, number>;
   serverTime: string;
 }
 
@@ -27,7 +29,7 @@ export class Syncer {
   readonly problems = new Map<string, string>();
 
   constructor(
-    private readonly store: InterviewStore,
+    private readonly store: LocalStore,
     private readonly deviceId: string,
     private readonly send: Send = defaultSend,
     private readonly now: () => number = Date.now,
@@ -49,8 +51,7 @@ export class Syncer {
   }
 
   private async run(ids: string[], keepalive: boolean): Promise<SyncResult | null> {
-    const items: { local: LocalInterview; ops: Awaited<ReturnType<InterviewStore['pending']>> }[] =
-      [];
+    const items: { local: LocalInterview; ops: Awaited<ReturnType<LocalStore['pending']>> }[] = [];
     for (const id of ids) {
       // The outbox first, then the interview: a change written between the two reads then
       // shows as a newer seq than the last op read, so the snapshot (which is that change's)
@@ -76,6 +77,8 @@ export class Syncer {
               ...(all
                 ? {
                     state: local.state,
+                    // What the snapshot builds on: one built on an older state is refused.
+                    ...(local.base !== undefined ? { baseVersion: local.base } : {}),
                     position: local.position,
                     activeMs: Math.round(local.activeMs),
                     totalMs: Math.round(local.totalMs),
@@ -87,7 +90,7 @@ export class Syncer {
         keepalive,
       );
       for (const [id, upto] of Object.entries(res.acks)) {
-        await this.store.acknowledge(id, upto);
+        await this.store.acknowledge(id, upto, res.versions?.[id]);
         // The server has created it: the start need not be sent again.
         const local = items.find((x) => x.local.id === id)?.local;
         if (local?.start) await this.store.patch(id, { start: undefined });

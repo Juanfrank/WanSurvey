@@ -4,7 +4,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
-import type { AuthContext } from '../common/auth-context.js';
+import { can, type AuthContext } from '../common/auth-context.js';
 import type { Tx } from '../db/database.js';
 import {
   cases,
@@ -20,6 +20,7 @@ import {
   type InterviewRow,
 } from '../interviews/interviews.service.js';
 import { DeviceId, type SyncItem } from '../interviews/schemas.js';
+import { closedCode } from '../questionnaires/state.js';
 
 export const CheckoutBody = z.strictObject({
   deviceId: DeviceId,
@@ -251,7 +252,8 @@ export class CapiService implements OnModuleInit {
   /**
    * Creates an interview a device started offline (D2): only on a case checked out to that
    * device by the caller, with no other interview in progress, on a published version of the
-   * case's project. The id is the device's, so a repeated sync finds it.
+   * case's questionnaire, while that questionnaire takes new fills. The id is the device's, so
+   * a repeated sync finds it.
    */
   private async createOffline(
     tx: Tx,
@@ -264,6 +266,8 @@ export class CapiService implements OnModuleInit {
     const [c] = await tx.select().from(cases).where(eq(cases.id, start.caseId)).for('update');
     if (!c || c.checkedOutDevice !== deviceId || c.checkedOutBy !== ctx.userId)
       return 'NOT_THIS_DEVICE';
+    // Downloading needed the permission; interviewing still does (it may have been taken away).
+    if (!can(ctx.memberships, 'interviews.conduct', c.projectId)) return 'NOT_FOUND';
     if (c.status === 'finalised' || c.status === 'withdrawn') return 'CASE_CLOSED';
     const [open] = await tx
       .select({ id: interviews.id })
@@ -275,6 +279,8 @@ export class CapiService implements OnModuleInit {
         id: questionnaireVersions.id,
         version: questionnaireVersions.version,
         compiled: questionnaireVersions.compiled,
+        questionnaireId: questionnaires.id,
+        state: questionnaires.state,
       })
       .from(questionnaireVersions)
       .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
@@ -286,6 +292,10 @@ export class CapiService implements OnModuleInit {
         ),
       );
     if (!v) return 'NO_PUBLISHED_VERSION';
+    // As when starting online: the case's own questionnaire, and one that takes new fills.
+    if (c.questionnaireId && c.questionnaireId !== v.questionnaireId) return 'OTHER_QUESTIONNAIRE';
+    const closed = closedCode(v.state);
+    if (closed) return closed;
     if (!fieldedIn(v.compiled as CompiledQuestionnaire, 'CAPI')) return 'MODE_NOT_IN_QUESTIONNAIRE';
     const settings = await this.cases.settings(tx, c.projectId);
     const context = await this.runtime.caseContext(

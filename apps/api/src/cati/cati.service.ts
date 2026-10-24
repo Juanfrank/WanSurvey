@@ -597,6 +597,25 @@ export class CatiService implements OnModuleInit {
     );
     let disposition: string = OUTCOME_DISPOSITION[body.outcome]!;
     if (interrupted && body.outcome === 'refusal') disposition = 'BREAK_OFF';
+    // The case was finished meanwhile (on the web, say): the call is recorded, and the case
+    // keeps its result and books no further call.
+    if (c.status === 'finalised' || c.status === 'withdrawn') {
+      await tx
+        .update(callAttempts)
+        .set({ ...common, outcome: body.outcome, disposition, endedAt: now })
+        .where(eq(callAttempts.id, a.id));
+      await tx
+        .update(cases)
+        .set({ ...counted, callLockUserId: null, callLockUntil: null, updatedAt: now })
+        .where(eq(cases.id, c.id));
+      await this.event(tx, ctx, c.id, a.id, body.outcome, c.disposition);
+      return {
+        outcome: body.outcome,
+        disposition: c.disposition,
+        final: true,
+        nextContactAt: null,
+      };
+    }
     let callbackAt: Date | null = null;
     let finalCase = isFinalOutcome(body.outcome);
     let nextContactAt: Date | null = null;

@@ -19,6 +19,17 @@ What the API does so that hundreds of interviewers, supervisors and web responde
 | Keep-alive                     | `HTTP_KEEPALIVE_MS` (65 s) is longer than the load balancer's idle timeout and `headersTimeout` longer still, so the balancer never reuses a connection the API has just closed (the cause of sporadic 502s)                                                                                                                                                                                                                                                                                                              | `app.ts`                                                      |
 | Shutdown                       | On SIGTERM the API stops taking requests, the worker finishes its jobs, and database pools, queues, the bus and rate-limit connections close                                                                                                                                                                                                                                                                                                                                                                              | `enableShutdownHooks`, `onModuleDestroy`                      |
 
+## One interview on several devices
+
+Changes are numbered per device (`interview_devices.last_seq`), as before. The interview's snapshot (`state`) belongs to the whole interview, so it carries a version of its own:
+
+- Every write of `state` bumps `interviews.state_version` and records the device that wrote it (`state_device`; `review` for a reviewer's correction). Payloads give `stateVersion` and `ownState` (this device wrote it last).
+- A sync item may carry `baseVersion`, the version its snapshot builds on. The snapshot is written only when the batch brought new changes and none was missed (a late or repeated batch carries an older snapshot), and, when `baseVersion` is given, only if it is the server's version or this device wrote the newer one itself (its last answer was lost). Otherwise the changes are still recorded and acknowledged, the snapshot is not, and the item reports `STALE_STATE`. The answer gives `versions[id]`, the version the snapshot was written as.
+- On opening, a device takes the server's copy when it has nothing left to send, when the server acknowledged more than it numbered, or when another device or a reviewer wrote a version newer than the one its copy builds on. Otherwise its own copy, with its unsent changes, goes on (`alignCopy` in `web/src/interview/store.ts`).
+- Devices that predate versions send no `baseVersion` and keep working: their snapshots are written as before, except a late or repeated batch's.
+
+Codes given to "other" texts (`<VAR>_CODE`) are not in the snapshot; rebuilding `answers` from a snapshot, by a sync or a correction, keeps each code while its text is unchanged.
+
 ## Sizing on Azure App Service S1
 
 Every process holds its own pool, so the database sees at most:

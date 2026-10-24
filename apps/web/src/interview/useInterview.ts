@@ -12,9 +12,11 @@ import { api } from '../api.js';
 import { InterviewClock } from './paradata.js';
 import { isOffline } from './device.js';
 import {
+  alignCopy,
   InterviewStore,
   keepStorage,
   lowOnSpace,
+  serverCopy,
   type LocalInterview,
   type NewOp,
 } from './store.js';
@@ -33,6 +35,9 @@ export interface InterviewPayload {
     disposition: string | null;
     startedAt: string;
     state: Partial<InterviewState>;
+    /** The snapshot's version on the server, and whether this device wrote it. */
+    stateVersion?: number;
+    ownState?: boolean;
     activeMs: number;
     totalMs: number;
     deviceId: string;
@@ -77,15 +82,7 @@ const jitter = (ms: number) => Math.round(ms * (0.8 + Math.random() * 0.4));
 export async function keepOnDevice(p: InterviewPayload, store?: InterviewStore) {
   const own = store ?? (await InterviewStore.open());
   try {
-    if (!(await own.get(p.interview.id)))
-      await own.adopt(p.interview.id, {
-        seq: p.lastSeq,
-        acked: p.lastSeq,
-        state: p.interview.state,
-        position: null,
-        activeMs: p.interview.activeMs,
-        totalMs: p.interview.totalMs,
-      });
+    await alignCopy(own, serverCopy(p));
   } finally {
     if (!store) own.close();
   }
@@ -294,17 +291,9 @@ export function useInterview(id: string) {
             if (!copy) throw e;
             p = copy;
           }
-        if (!local || local.seq < p.lastSeq) {
-          await store.adopt(id, {
-            seq: p.lastSeq,
-            acked: p.lastSeq,
-            state: p.interview.state,
-            position: null,
-            activeMs: p.interview.activeMs,
-            totalMs: p.interview.totalMs,
-          });
-          local = await store.get(id);
-        }
+        // The server's copy wins unless this device has changes of its own still to send on
+        // the same state (another device or a reviewer may have gone on meanwhile).
+        if (!p.offline) local = await alignCopy(store, serverCopy(p));
         const state = hasState(local?.state) ? local!.state : p.interview.state;
         const s = createInterview(p.compiled, {
           mode: p.interview.mode,

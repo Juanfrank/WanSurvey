@@ -31,6 +31,7 @@ const definition = {
           id: 'NAME',
           name: 'NAME',
           type: 'text',
+          personal: true,
           text: { es: '¿Su nombre, {{case.first_name}}?' },
         },
       ],
@@ -470,5 +471,137 @@ describe('web surveys by e-mail', () => {
         (l) => l.externalId === 'LNK0002',
       )?.status,
     ).toBe('started');
+  });
+  /** A links-only wave over these cases; returns each case's link token, by external id. */
+  async function linksFor(name: string, ids: string[], reminderDays: number[] = []) {
+    const w = await post(`/projects/${project}/waves`, {
+      name,
+      questionnaireId: qid,
+      channel: 'links',
+      reminderDays,
+      filter: `case.batch == '${name}'`,
+    }).expect(201);
+    await post(`/projects/${project}/waves/${w.body.id}/send`).expect(200);
+    const links = await pm.agent.get(`/api/v1/projects/${project}/waves/${w.body.id}/links`);
+    const [c] = await t.admin`select external_id from cases where id = ${ids[0]!}`;
+    const token = (links.body as { externalId: string; url: string }[])
+      .find((l) => l.externalId === c!.external_id)!
+      .url.split('/s/')[1]!;
+    return { wave: w.body.id as string, token };
+  }
+  /** Answers every question as a respondent on `device`, syncs and submits. */
+  async function answerAll(token: string, device: string, values: Record<string, unknown>) {
+    const p = (await api().get(`/api/v1/public/s/${token}?device=${device}`).expect(200)).body;
+    const s = createInterview(p.compiled, {
+      mode: 'CAWI',
+      language: 'es',
+      seed: p.interview.id,
+      now: () => new Date(p.interview.startedAt),
+      context: { case: p.context.case },
+    });
+    for (const [k, v] of Object.entries(values)) {
+      s.setAnswer(k, v as never, 'respondent');
+      s.next();
+    }
+    const ops = s.drainEvents().map((e, i) => ({
+      seq: i + 1,
+      kind: 'answer' as const,
+      variable: e.key,
+      oldValue: e.oldValue,
+      newValue: e.newValue,
+      at: new Date().toISOString(),
+      source: e.source,
+      reason: e.reason ?? null,
+    }));
+    await api()
+      .post(`/api/v1/public/s/${token}/sync`)
+      .send({ deviceId: device, ops, state: s.state() })
+      .expect(200);
+    const done = await api()
+      .post(`/api/v1/public/s/${token}/submit`)
+      .send({ deviceId: device, seq: ops.length, path: s.pathKeys() });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    return p as { interview: { id: string }; context: { case: Record<string, unknown> } };
+  }
+
+  it('keeps the respondent’s record sealed, masks it in review, and a finished link shows nothing', async () => {
+    const [caseId] = await addCases(1, 'SEAL');
+    await t.admin`update cases set sample = sample || '{"batch": "Sellado"}' where id = ${caseId!}`;
+    await t.admin`insert into sample_fields (id, tenant_id, project_id, name, pii)
+      values (${uuidv7()}, ${tenant.id}, ${project}, 'first_name', true) on conflict do nothing`;
+    const { token } = await linksFor('Sellado', [caseId!]);
+    const p = await answerAll(token, 'seal-browser-1', { AGE: 52, NAME: 'Ana Pérez' });
+    // The respondent got the fields the questionnaire uses; the row keeps them sealed.
+    expect(p.context.case).toEqual({ first_name: 'Ana0' });
+    const [row] = await t.admin`select context from interviews where id = ${p.interview.id}`;
+    expect(row!.context.case).toEqual({});
+    expect(JSON.stringify(row!.context)).not.toContain('Ana0');
+
+    // Without `pii.view` the review screen masks personal case fields and answers.
+    const reviewer = await login(
+      t.app,
+      await createUser(t.admin, tenant.id, [{ role: 'reviewer', projectId: project }]),
+    );
+    const seen = (await reviewer.agent.get(`/api/v1/review/interviews/${p.interview.id}`)).body;
+    expect(seen.context.case).toEqual({ first_name: '•••' });
+    expect(seen.context.casePii).toBeUndefined();
+    expect(seen.interview.state.answers).toEqual({ AGE: 52, NAME: '•••' });
+    expect(seen.history.find((h: { variable: string }) => h.variable === 'NAME').newValue).toBe(
+      '•••',
+    );
+    const sup = await login(
+      t.app,
+      await createUser(t.admin, tenant.id, [{ role: 'supervisor', projectId: project }]),
+    );
+    const full = (await sup.agent.get(`/api/v1/review/interviews/${p.interview.id}`)).body;
+    expect(full.context.case).toEqual({ first_name: 'Ana0' });
+    expect(full.interview.state.answers).toEqual({ AGE: 52, NAME: 'Ana Pérez' });
+
+    // The link, once answered, says so and gives nothing of the answers or the record.
+    const after = (await api().get(`/api/v1/public/s/${token}?device=other-browser`).expect(200))
+      .body;
+    expect(after.interview).toMatchObject({ status: 'submitted', state: {} });
+    expect(after.context).toEqual({ case: {}, params: {} });
+  });
+
+  it('sends no reminder to a case finished another way', async () => {
+    await t.admin`update projects set settings = jsonb_set(settings, '{cawi,lawfulBasis}', '"consent"') where id = ${project}`;
+    const [done, open] = await addCases(2, 'REM');
+    await t.admin`update cases set sample = sample || '{"batch": "REM"}' where id in ${t.admin([done!, open!])}`;
+    const w = await post(`/projects/${project}/waves`, {
+      name: 'Recordar',
+      questionnaireId: qid,
+      reminderDays: [3],
+      filter: `case.batch == 'REM'`,
+    }).expect(201);
+    await post(`/projects/${project}/waves/${w.body.id}/send`).expect(200);
+    await drain();
+    // One case is interviewed by telephone meanwhile.
+    await t.admin`update cases set status = 'finalised', disposition = 'COMPLETE' where id = ${done!}`;
+    await t.admin`update invitations set sent_at = now() - interval '4 days' where wave_id = ${w.body.id}`;
+    t.mailer.sent.length = 0;
+    await drain();
+    expect(mailsTo('rem0@example.org')).toHaveLength(0);
+    expect(mailsTo('rem1@example.org')).toHaveLength(1);
+    void open;
+  });
+
+  it('the open link only moves to a questionnaire of its project that is in use on the web', async () => {
+    await put(`/projects/${project}/open-link`, { active: true, questionnaireId: qid }).expect(200);
+    const elsewhere = await createProject(t.admin, tenant.id);
+    const foreign = await createQuestionnaire(t.admin, tenant.id, elsewhere, {
+      definition,
+      publish: true,
+    });
+    const r = await put(`/projects/${project}/open-link`, {
+      active: true,
+      questionnaireId: foreign,
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('NO_PUBLISHED_VERSION');
+    const [l] =
+      await t.admin`select questionnaire_id from open_links where project_id = ${project}`;
+    expect(l!.questionnaire_id).toBe(qid);
+    await put(`/projects/${project}/open-link`, { active: false }).expect(200);
   });
 });

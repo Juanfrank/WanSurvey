@@ -50,6 +50,12 @@ export const SyncItem = z.object({
   ops: z.array(Op).max(MAX_OPS),
   /** The engine snapshot after the last op in `ops`. */
   state: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * The server's `stateVersion` the snapshot builds on (devices that predate it leave it out).
+   * A snapshot on an older version than the server's, written meanwhile by another device or a
+   * reviewer, is refused (`STALE_STATE`); its changes are still recorded.
+   */
+  baseVersion: z.number().int().nonnegative().optional(),
   position: z.string().max(200).nullable().optional(),
   activeMs: z.number().int().nonnegative().optional(),
   totalMs: z.number().int().nonnegative().optional(),

@@ -334,4 +334,165 @@ describe('interview runtime', () => {
     });
     expect(none.body.code).toBe('NO_PUBLISHED_VERSION');
   });
+  /** Starts (or resumes) an interview on a case from a device. */
+  async function startOn(caseId: string, deviceId: string, id = uuidv7(), mode = 'CAPI') {
+    return post(me, `/projects/${project}/interviews`, {
+      id,
+      caseId,
+      questionnaireId: qid,
+      mode,
+      deviceId,
+    });
+  }
+  const stateOf = async (id: string) =>
+    (await t.admin`select state, state_version from interviews where id = ${id}`)[0]!;
+
+  it('a late or repeated batch does not write its older snapshot over a newer one', async () => {
+    const id = uuidv7();
+    const started = (await startOn(await newCase(interviewer.id), device, id)).body as Started;
+    const s = session(started);
+    s.setAnswer('WORK', 1);
+    s.next();
+    const first = ops(s, 0);
+    const older = { id, ops: first, state: s.state() };
+    s.setAnswer('HOURS', 40);
+    s.next();
+    const newer = { id, ops: [...first, ...ops(s, first.length)], state: s.state() };
+    // The answer to the first send was lost; the next one (with everything) arrives first.
+    const a = await post(me, '/interviews/sync', { deviceId: device, interviews: [newer] });
+    expect(a.body.acks[id]).toBe(2);
+    const b = await post(me, '/interviews/sync', { deviceId: device, interviews: [older] });
+    expect(b.body.acks[id]).toBe(2);
+    expect((await stateOf(id)).state.answers).toEqual({ WORK: 1, HOURS: 40 });
+  });
+
+  it('a device whose copy builds on an older state than another device wrote is refused', async () => {
+    const caseId = await newCase(interviewer.id);
+    const id = uuidv7();
+    const [phone, laptop] = ['device-phone-0001', 'device-laptop-001'];
+    const started = (await startOn(caseId, phone, id)).body as Started & {
+      interview: { stateVersion: number };
+    };
+    expect(started.interview.stateVersion).toBe(0);
+    const s = session(started);
+    s.setAnswer('WORK', 1);
+    s.next();
+    const r1 = await post(me, '/interviews/sync', {
+      deviceId: phone,
+      interviews: [{ id, ops: ops(s, 0), state: s.state(), baseVersion: 0 }],
+    });
+    expect(r1.body).toMatchObject({ acks: { [id]: 1 }, errors: {}, versions: { [id]: 1 } });
+    const stale = s.state();
+
+    // The laptop goes on with it, from the server's copy.
+    const resumed = (await startOn(caseId, laptop)).body;
+    expect(resumed.interview).toMatchObject({ stateVersion: 1, ownState: false });
+    expect(resumed.lastSeq).toBe(0);
+    const s2 = createInterview(started.compiled, {
+      mode: 'CAPI',
+      language: 'en',
+      seed: id,
+      now: () => new Date(started.interview.startedAt),
+      context: { case: started.context.case },
+      state: resumed.interview.state,
+    });
+    s2.setAnswer('HOURS', 40);
+    s2.next();
+    const r2 = await post(me, '/interviews/sync', {
+      deviceId: laptop,
+      interviews: [{ id, ops: ops(s2, 0), state: s2.state(), baseVersion: 1 }],
+    });
+    expect(r2.body.versions[id]).toBe(2);
+
+    // Back on the phone: the server's copy is newer than the phone's and not the phone's own.
+    const back = (await startOn(caseId, phone)).body;
+    expect(back.interview).toMatchObject({ stateVersion: 2, ownState: false });
+    expect(back.interview.state.answers).toEqual({ WORK: 1, HOURS: 40 });
+    // A phone still on its old copy: the change is recorded, its snapshot is not kept.
+    const para = (seq: number) => ({
+      kind: 'paradata' as const,
+      seq,
+      type: 'pause' as const,
+      at: new Date().toISOString(),
+      payload: {},
+    });
+    const r3 = await post(me, '/interviews/sync', {
+      deviceId: phone,
+      interviews: [{ id, ops: [para(2)], state: stale, baseVersion: 1 }],
+    });
+    expect(r3.body).toMatchObject({ acks: { [id]: 2 }, errors: { [id]: 'STALE_STATE' } });
+    expect(r3.body.versions[id]).toBeUndefined();
+    expect(await stateOf(id)).toMatchObject({
+      state_version: 2,
+      state: { answers: { WORK: 1, HOURS: 40 } },
+    });
+    // On the server's copy it goes on; and when an answer is lost, its own newer version is no
+    // reason to refuse the next send.
+    const r4 = await post(me, '/interviews/sync', {
+      deviceId: phone,
+      interviews: [{ id, ops: [para(3)], state: back.interview.state, baseVersion: 2 }],
+    });
+    expect(r4.body).toMatchObject({ errors: {}, versions: { [id]: 3 } });
+    const r5 = await post(me, '/interviews/sync', {
+      deviceId: phone,
+      interviews: [{ id, ops: [para(4)], state: back.interview.state, baseVersion: 2 }],
+    });
+    expect(r5.body).toMatchObject({ errors: {}, versions: { [id]: 4 } });
+    // Devices that send no version keep working as before.
+    const r6 = await post(me, '/interviews/sync', {
+      deviceId: phone,
+      interviews: [{ id, ops: [para(5)], state: back.interview.state }],
+    });
+    expect(r6.body).toMatchObject({ errors: {}, versions: { [id]: 5 } });
+  });
+
+  it('does not take over an interview open in another mode', async () => {
+    const caseId = await newCase(interviewer.id);
+    const [v] = await t.admin`
+      select v.id from questionnaire_versions v where v.questionnaire_id = ${qid}`;
+    // A respondent is answering on the web.
+    const web = uuidv7();
+    await t.admin`insert into interviews (id, tenant_id, project_id, case_id, questionnaire_version_id, mode, language, device_id)
+      values (${web}, ${tenant.id}, ${project}, ${caseId}, ${v!.id}, 'CAWI', 'en', 'browser-1')`;
+    const r = await startOn(caseId, device);
+    expect(r.status).toBe(409);
+    expect(r.body).toMatchObject({ code: 'IN_PROGRESS_OTHER_MODE', mode: 'CAWI' });
+    const [row] =
+      await t.admin`select mode, device_id, interviewer_id from interviews where id = ${web}`;
+    expect(row).toEqual({ mode: 'CAWI', device_id: 'browser-1', interviewer_id: null });
+  });
+
+  it('a device sync is refused in a project where the interviewer no longer conducts', async () => {
+    const elsewhere = await createProject(t.admin, tenant.id);
+    const u = await createUser(t.admin, tenant.id, [
+      { role: 'interviewer', projectId: project },
+      { role: 'interviewer', projectId: elsewhere },
+    ]);
+    const s = await login(t.app, u);
+    const caseId = uuidv7();
+    await t.admin`insert into cases (id, tenant_id, project_id, external_id, sample, status, assigned_to)
+      values (${caseId}, ${tenant.id}, ${project}, ${'X' + caseId.slice(-6)}, ${t.admin.json({})}, 'assigned', ${u.id})`;
+    const id = uuidv7();
+    const started = await post(s, `/projects/${project}/interviews`, {
+      id,
+      caseId,
+      questionnaireId: qid,
+      mode: 'CAPI',
+      deviceId: device,
+    });
+    expect(started.status).toBe(200);
+    await t.admin`delete from memberships where user_id = ${u.id} and project_id = ${project}`;
+    const pause = {
+      kind: 'paradata',
+      seq: 1,
+      type: 'pause',
+      at: new Date().toISOString(),
+      payload: {},
+    };
+    const r = await post(s, '/interviews/sync', {
+      deviceId: device,
+      interviews: [{ id, ops: [pause] }],
+    });
+    expect(r.body).toMatchObject({ acks: {}, errors: { [id]: 'NOT_FOUND' } });
+  });
 });

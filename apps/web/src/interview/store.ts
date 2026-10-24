@@ -92,6 +92,11 @@ export interface LocalInterview {
   activeMs: number;
   totalMs: number;
   updatedAt: string;
+  /**
+   * The server's state version this copy builds on (`stateVersion`), sent with each snapshot;
+   * absent on copies made before versions existed.
+   */
+  base?: number;
   meta?: InterviewMeta;
   start?: OfflineStart;
   submit?: PendingSubmit;
@@ -206,11 +211,15 @@ export class InterviewStore {
     );
   }
 
-  /** Starts (or re-aligns) the local copy with what the server has acknowledged. */
+  /**
+   * Starts (or re-aligns) the local copy with what the server has acknowledged. Changes still
+   * in the outbox are dropped: the copy now continues from the server's.
+   */
   async adopt(id: string, base: Omit<LocalInterview, 'id' | 'updatedAt'>): Promise<void> {
-    const tx = this.db.transaction('interviews', 'readwrite');
+    const tx = this.db.transaction(['interviews', 'outbox'], 'readwrite');
     const store = tx.objectStore('interviews');
     const cur = (await req(store.get(id))) as LocalInterview | undefined;
+    tx.objectStore('outbox').delete(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]));
     store.put({
       ...(cur?.meta ? { meta: cur.meta } : {}),
       id,
@@ -333,13 +342,21 @@ export class InterviewStore {
     return rows.map(({ interviewId: _i, ...op }) => op as Op);
   }
 
-  /** The server has everything up to `upto`: drop it from the outbox. */
-  async acknowledge(id: string, upto: number): Promise<void> {
+  /**
+   * The server has everything up to `upto`: drop it from the outbox. `version`: the server
+   * wrote this copy's snapshot as that state version.
+   */
+  async acknowledge(id: string, upto: number, version?: number): Promise<void> {
     const tx = this.db.transaction(['interviews', 'outbox'], 'readwrite');
     tx.objectStore('outbox').delete(IDBKeyRange.bound([id, 0], [id, upto]));
     const store = tx.objectStore('interviews');
     const cur = (await req(store.get(id))) as LocalInterview | undefined;
-    if (cur && upto > cur.acked) store.put({ ...cur, acked: upto });
+    if (cur && (upto > cur.acked || version !== undefined))
+      store.put({
+        ...cur,
+        acked: Math.max(upto, cur.acked),
+        ...(version !== undefined ? { base: version } : {}),
+      });
     await done(tx);
   }
 
@@ -357,6 +374,151 @@ export class InterviewStore {
     tx.objectStore('outbox').delete(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]));
     await done(tx);
   }
+}
+
+/** What a page or a sync needs of the device's copy (`InterviewStore`, or `MemoryStore`). */
+export type LocalStore = Pick<
+  InterviewStore,
+  'deviceId' | 'get' | 'adopt' | 'patch' | 'record' | 'pending' | 'acknowledge' | 'remove' | 'close'
+>;
+
+/**
+ * A copy kept in memory only, under a device id of its own: for a page whose browser storage
+ * has failed, so its answers can still be sent while it stays open.
+ */
+export class MemoryStore implements LocalStore {
+  private readonly id = `web-${crypto.randomUUID()}`;
+  private readonly rows = new Map<string, LocalInterview>();
+  private readonly outbox = new Map<string, Op[]>();
+
+  close() {}
+
+  async deviceId() {
+    return this.id;
+  }
+
+  async get(id: string) {
+    const r = this.rows.get(id);
+    return r ? { ...r } : null;
+  }
+
+  async adopt(id: string, base: Omit<LocalInterview, 'id' | 'updatedAt'>) {
+    this.outbox.delete(id);
+    this.rows.set(id, { id, ...base, updatedAt: new Date().toISOString() });
+  }
+
+  async patch(id: string, fields: Partial<Omit<LocalInterview, 'id'>>) {
+    const cur = this.rows.get(id);
+    if (cur) this.rows.set(id, { ...cur, ...fields });
+  }
+
+  async record(
+    id: string,
+    ops: NewOp[],
+    snapshot: Pick<LocalInterview, 'state' | 'position' | 'activeMs' | 'totalMs'>,
+  ) {
+    const cur = this.rows.get(id) ?? {
+      id,
+      seq: 0,
+      acked: 0,
+      state: null,
+      position: null,
+      activeMs: 0,
+      totalMs: 0,
+      updatedAt: '',
+    };
+    let seq = cur.seq;
+    const box = this.outbox.get(id) ?? [];
+    for (const op of ops) box.push({ ...op, seq: ++seq } as Op);
+    this.outbox.set(id, box);
+    this.rows.set(id, { ...cur, ...snapshot, seq, updatedAt: new Date().toISOString() });
+    return seq;
+  }
+
+  async pending(id: string, limit = 500) {
+    return (this.outbox.get(id) ?? []).slice(0, limit);
+  }
+
+  async acknowledge(id: string, upto: number, version?: number) {
+    this.outbox.set(
+      id,
+      (this.outbox.get(id) ?? []).filter((o) => o.seq > upto),
+    );
+    const cur = this.rows.get(id);
+    if (cur)
+      this.rows.set(id, {
+        ...cur,
+        acked: Math.max(upto, cur.acked),
+        ...(version !== undefined ? { base: version } : {}),
+      });
+  }
+
+  async remove(id: string) {
+    this.rows.delete(id);
+    this.outbox.delete(id);
+  }
+}
+
+/** The server's copy of an interview, as its payload gives it. */
+export interface ServerCopy {
+  id: string;
+  lastSeq: number;
+  state: unknown;
+  /** Absent from servers that predate state versions. */
+  stateVersion?: number;
+  /** This device wrote the server's snapshot last. */
+  ownState?: boolean;
+  activeMs: number;
+  totalMs: number;
+}
+
+/** The server's copy in an interview payload (a start, a resume, a checkout, a web survey). */
+export function serverCopy(p: {
+  interview: Omit<ServerCopy, 'lastSeq'> & { stateVersion?: number; ownState?: boolean };
+  lastSeq: number;
+}): ServerCopy {
+  const i = p.interview;
+  return {
+    id: i.id,
+    lastSeq: p.lastSeq,
+    state: i.state,
+    ...(i.stateVersion !== undefined ? { stateVersion: i.stateVersion } : {}),
+    ...(i.ownState !== undefined ? { ownState: i.ownState } : {}),
+    activeMs: i.activeMs,
+    totalMs: i.totalMs,
+  };
+}
+
+/**
+ * Lines this device's copy up with the server's, and returns it. The server's copy is taken
+ * when the device has nothing left to send (the server then holds everything this device
+ * confirmed, and whatever another device or a reviewer did since), when the server
+ * acknowledged more than the device numbered, or when another device or a reviewer wrote a
+ * newer state than the one the copy builds on: the device's unsent changes would be refused
+ * then anyway. Otherwise the device's copy, with its unsent changes (or an offline start, or a
+ * queued submission), goes on.
+ */
+export async function alignCopy(store: LocalStore, p: ServerCopy): Promise<LocalInterview | null> {
+  const local = await store.get(p.id);
+  const pending = !!local && (local.seq > local.acked || !!local.start || !!local.submit);
+  const overtaken =
+    !!local &&
+    !local.start &&
+    local.base !== undefined &&
+    p.stateVersion !== undefined &&
+    p.stateVersion > local.base &&
+    !p.ownState;
+  if (local && pending && local.seq >= p.lastSeq && !overtaken) return local;
+  await store.adopt(p.id, {
+    seq: p.lastSeq,
+    acked: p.lastSeq,
+    state: p.state,
+    position: null,
+    activeMs: p.activeMs,
+    totalMs: p.totalMs,
+    ...(p.stateVersion !== undefined ? { base: p.stateVersion } : {}),
+  });
+  return store.get(p.id);
 }
 
 /** Warns when the browser leaves less than 50 MB for this site. */

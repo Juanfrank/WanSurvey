@@ -17,6 +17,8 @@ export const interviewEn = {
       'This interview is now open on another device; changes made here are not sent. Open it again to continue here.',
     NOT_FOUND: 'This interview is no longer yours.',
     SUBMITTED: 'This interview has been submitted already.',
+    STALE_STATE:
+      'This interview was changed elsewhere meanwhile; the answers given here were not kept. Open it again to see the latest.',
   },
   lowSpace: 'This device is almost out of storage space. Sync and free some space soon.',
   side: 'Case details',
@@ -130,6 +132,8 @@ export const interviewEs: InterviewCatalogue = {
       'Esta entrevista está abierta ahora en otro dispositivo; los cambios hechos aquí no se envían. Ábrala de nuevo para continuar aquí.',
     NOT_FOUND: 'Esta entrevista ya no es suya.',
     SUBMITTED: 'Esta entrevista ya fue enviada.',
+    STALE_STATE:
+      'Esta entrevista se cambió en otro lugar mientras tanto; las respuestas dadas aquí no se guardaron. Ábrala de nuevo para ver la última versión.',
   },
   lowSpace: 'Este dispositivo casi no tiene espacio. Sincronice y libere espacio pronto.',
   side: 'Datos del caso',
