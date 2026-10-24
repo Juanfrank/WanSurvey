@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+/** An optional setting; empty counts as not set (App Service keeps empty settings). */
+const optionalText = (max: number) =>
+  z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).max(max).optional());
+
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(3000),
@@ -59,15 +63,15 @@ const Env = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   /** The organisation (slug) the Microsoft button signs in to when no e-mail is given. */
-  SSO_DEFAULT_ORG: z.string().min(1).max(64).optional(),
+  SSO_DEFAULT_ORG: optionalText(64),
   /**
    * Microsoft sign-in of SSO_DEFAULT_ORG from the deployment (App Service settings), used
    * instead of the organisation's own settings: with password sign-in off, nobody could sign
    * in to configure it otherwise. The secret should come from Key Vault.
    */
-  ENTRA_TENANT_ID: z.string().min(1).max(100).optional(),
-  ENTRA_CLIENT_ID: z.string().min(1).max(100).optional(),
-  ENTRA_CLIENT_SECRET: z.string().min(1).max(500).optional(),
+  ENTRA_TENANT_ID: optionalText(100),
+  ENTRA_CLIENT_ID: optionalText(100),
+  ENTRA_CLIENT_SECRET: optionalText(500),
   /** E-mail domains, comma-separated, whose people may sign in through ENTRA_TENANT_ID. */
   ENTRA_ALLOWED_DOMAINS: z
     .string()
@@ -156,6 +160,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('Invalid configuration:\n  MAIL_OUTBOX_DIR: required when MAILER=file');
   if (parsed.success && parsed.data.MAILER === 'smtp' && !parsed.data.SMTP_URL)
     throw new Error('Invalid configuration:\n  SMTP_URL: required when MAILER=smtp');
+  if (parsed.success) {
+    const d = parsed.data;
+    // The deployment's Microsoft sign-in comes whole, or not at all.
+    const deployment = {
+      SSO_DEFAULT_ORG: d.SSO_DEFAULT_ORG,
+      ENTRA_TENANT_ID: d.ENTRA_TENANT_ID,
+      ENTRA_CLIENT_ID: d.ENTRA_CLIENT_ID,
+      ENTRA_CLIENT_SECRET: d.ENTRA_CLIENT_SECRET,
+    };
+    const missing = Object.entries(deployment)
+      .filter(([, v]) => !v)
+      .map(([k]) => k);
+    if (missing.length && missing.length < 4)
+      throw new Error(
+        `Invalid configuration:\n  ${missing.join(', ')}: required with ${Object.keys(deployment)
+          .filter((k) => !missing.includes(k))
+          .join(', ')}`,
+      );
+    // Without passwords and without the deployment's directory nobody could sign in.
+    if (!d.PASSWORD_LOGIN && missing.length)
+      throw new Error(
+        'Invalid configuration:\n  PASSWORD_LOGIN=false: requires SSO_DEFAULT_ORG, ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET',
+      );
+  }
   if (!parsed.success) {
     throw new Error(
       `Invalid configuration:\n${parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n')}`,

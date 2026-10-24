@@ -131,7 +131,7 @@ export class AuthService {
     if (tenants.length === 0) throw invalidCredentials();
     // Organisations that require Microsoft sign-in accept a password only from their owners.
     const enforced = new Set(
-      (await this.database.ssoEnforcedTenants(tenants.map((t) => t.id))).map((e) => e.tenantId),
+      (await this.ssoConfigs.enforced(tenants.map((t) => t.id))).map((e) => e.tenantId),
     );
     const passwordAllowed = async (t: UserTenant) =>
       !enforced.has(t.id) || (await this.isOwnerIn(t.id, user.id));
@@ -185,7 +185,7 @@ export class AuthService {
       !(targetSso?.enabled && ctx.authMethod === 'sso' && ctx.idpTenant === targetSso.entraTenantId)
     )
       throw this.ssoRequired(target);
-    const [enforced] = adOnly ? [] : await this.database.ssoEnforcedTenants([target.id]);
+    const [enforced] = adOnly ? [] : await this.ssoConfigs.enforced([target.id]);
     if (
       !adOnly &&
       enforced &&

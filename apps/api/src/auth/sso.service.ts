@@ -5,7 +5,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
-import { SsoConfigs } from './sso-config.js';
+import { SsoConfigs, type SsoStartConfig } from './sso-config.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isUuid, Prepared } from '../db/database.js';
 import { memberships, sessions, tenantMembers, userIdentities, users } from '../db/schema.js';
@@ -122,22 +122,18 @@ export class SsoService {
    * the sign-in button alone).
    */
   async start(input: { org?: string; email?: string; returnTo?: string }) {
-    let tenantId: string | null = null;
+    // Public settings only (no secret): the authorize address needs the directory and client.
+    let config: SsoStartConfig | null;
     if (input.org) {
-      tenantId = await this.configs.tenantIdBySlug(input.org);
+      config = await this.configs.startBySlug(input.org);
     } else if (input.email && input.email.includes('@')) {
-      const domain = input.email.split('@').pop()!.trim().toLowerCase();
-      tenantId = await this.configs.deploymentTenantForDomain(domain);
-      if (!tenantId) {
-        const matches = await this.database.ssoTenantsForDomain(domain);
-        if (matches.length > 1) throw new SsoError('choose_organisation');
-        tenantId = matches[0]?.tenantId ?? null;
-      }
+      const found = await this.configs.startByDomain(input.email.split('@').pop()!.trim());
+      if (found === 'ambiguous') throw new SsoError('choose_organisation');
+      config = found;
     } else {
-      tenantId = await this.configs.defaultTenantId();
-      if (!tenantId) throw new SsoError('choose_organisation');
+      if (!this.config.SSO_DEFAULT_ORG) throw new SsoError('choose_organisation');
+      config = await this.configs.startBySlug(this.config.SSO_DEFAULT_ORG);
     }
-    const config = tenantId ? await this.configs.forTenant(tenantId) : null;
     if (!config || !config.enabled)
       throw new SsoError('sso_not_configured', config?.tenantId ?? null);
 
@@ -266,24 +262,24 @@ export class SsoService {
     if (!identity && !config.allowedDomains.includes(domain)) throw fail('domain_not_allowed');
     const existingId = identity?.userId ?? (await this.database.userIdByEmail(email));
     // An e-mail address in a token proves nothing about an account elsewhere: whoever runs
-    // this organisation's directory can put any address there. A Microsoft identity is linked
-    // to an existing account by e-mail only when that account belongs to this organisation
-    // alone, or when its owner is signed in with it in this browser (password and second
-    // factor); otherwise they sign in with their password first.
-    // With password sign-in off there is no password to prove it with. Linking by e-mail is
-    // then safe on other grounds: an e-mail domain belongs to one organisation only (the
-    // settings refuse a domain another uses), and a session opened through this directory
-    // works in this organisation alone (switching requires each organisation's own directory).
+    // this organisation's directory can put any address there (the claim is not verified,
+    // and a domain nobody claimed in WanSurvey may still be the address of someone in another
+    // organisation). A Microsoft identity is linked to an existing account by e-mail only when
+    // that account belongs to this organisation alone, when its owner is signed in with it in
+    // this browser (password and second factor), or when the directory is the deployment's
+    // own (ENTRA_*), run by those who run this installation. Otherwise: with passwords, they
+    // sign in with theirs first; without, an administrator has to add them.
     if (
       !identity &&
       existingId &&
-      this.config.PASSWORD_LOGIN &&
+      !config.fromDeployment &&
       (await signedInUser()) !== existingId
     ) {
       const elsewhere = (await this.database.userTenants(existingId, true)).filter(
         (t) => t.id !== st.tenantId,
       );
-      if (elsewhere.length) throw fail('link_required');
+      if (elsewhere.length)
+        throw fail(this.config.PASSWORD_LOGIN ? 'link_required' : 'link_not_allowed');
     }
     const userId = existingId ?? uuidv7();
 

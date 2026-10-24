@@ -54,8 +54,8 @@ param entraClientId string = ''
 param entraClientSecret string = ''
 @description('E-mail domains of that directory, comma-separated, e.g. poderjudicial.gob.do.')
 param entraAllowedDomains string = ''
-@description('false: Microsoft sign-in only (no passwords, no password reset).')
-param passwordLogin bool = false
+@description('false: Microsoft sign-in only (no passwords, no password reset); needs ssoDefaultOrg and the four entra* values, or the API refuses to start.')
+param passwordLogin bool = true
 
 @description('Extra app settings (name: value), e.g. SSO or retention settings.')
 param extraSettings object = {}

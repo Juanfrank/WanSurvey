@@ -18,6 +18,50 @@ export function useAuthMethods() {
   });
 }
 
+/**
+ * Microsoft sign-in where it is the only way in: the button, and the e-mail field only when
+ * the server needs it to find the organisation (no SSO_DEFAULT_ORG).
+ */
+export function MicrosoftSignIn({
+  intro,
+  error: initial = null,
+}: {
+  intro: string;
+  error?: string | null;
+}) {
+  const { t } = useTranslation();
+  const needsEmail = useAuthMethods().data?.microsoftNeedsEmail ?? true;
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(initial);
+  return (
+    <form
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (email.includes('@')) return window.location.assign(ssoStartUrl(email));
+        if (needsEmail) return setError(t('login.microsoftNeedsEmail'));
+        window.location.assign(ssoStartUrl());
+      }}
+    >
+      <ErrorText>{error}</ErrorText>
+      <p className="text-sm text-slate-600">{intro}</p>
+      {needsEmail ? (
+        <Field
+          id="email"
+          label={t('login.email')}
+          type="email"
+          autoComplete="username"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      ) : null}
+      <Button type="submit">{t('login.microsoft')}</Button>
+    </form>
+  );
+}
+
 export function LoginPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -73,29 +117,7 @@ export function LoginPage() {
   if (!passwords)
     return (
       <AuthShell title={t('login.title')}>
-        <form
-          className="flex flex-col gap-4"
-          noValidate
-          onSubmit={(e) => {
-            e.preventDefault();
-            microsoft();
-          }}
-        >
-          <ErrorText>{error}</ErrorText>
-          <p className="text-sm text-slate-600">{t('login.microsoftOnly')}</p>
-          {needsEmail ? (
-            <Field
-              id="email"
-              label={t('login.email')}
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          ) : null}
-          <Button type="submit">{t('login.microsoft')}</Button>
-        </form>
+        <MicrosoftSignIn intro={t('login.microsoftOnly')} error={error} />
       </AuthShell>
     );
 

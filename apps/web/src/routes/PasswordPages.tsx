@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError, ssoStartUrl } from '../api.js';
-import { useAuthMethods } from './LoginPage.js';
+import { api, ApiError } from '../api.js';
+import { MicrosoftSignIn, useAuthMethods } from './LoginPage.js';
 import { AuthShell, Button, ErrorText, Field } from './ui.js';
 
 /** As the server requires (`MIN_PASSWORD_LENGTH`). */
@@ -15,13 +15,7 @@ function MicrosoftOnly({ title }: { title: string }) {
   const { t } = useTranslation();
   return (
     <AuthShell title={title}>
-      <p className="mb-4 text-sm text-slate-600">{t('login.passwordOff')}</p>
-      <a
-        href={ssoStartUrl()}
-        className="block rounded-md border border-indigo-600 bg-indigo-600 px-4 py-2 text-center text-sm font-semibold text-on-fill hover:border-indigo-500 hover:bg-indigo-500"
-      >
-        {t('login.microsoft')}
-      </a>
+      <MicrosoftSignIn intro={t('login.passwordOff')} />
     </AuthShell>
   );
 }

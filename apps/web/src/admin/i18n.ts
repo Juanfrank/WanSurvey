@@ -128,6 +128,8 @@ export const adminEn = {
     domainsHint: 'Separated by commas, e.g. agency.org. Empty: any domain of the directory.',
     saveSso: 'Save sign-in settings',
     ssoSaved: 'Sign-in settings saved.',
+    ssoManaged:
+      'Microsoft sign-in for this organisation is set in the deployment (ENTRA_* settings), not here. To change it, change those settings.',
   },
   log: {
     intro:
@@ -299,6 +301,8 @@ export const adminEs: typeof adminEn = {
       'Separados por comas, p. ej. agencia.org. Vacío: cualquier dominio del directorio.',
     saveSso: 'Guardar inicio de sesión',
     ssoSaved: 'Inicio de sesión guardado.',
+    ssoManaged:
+      'El ingreso con Microsoft de esta organización se configura en el despliegue (ajustes ENTRA_*), no aquí. Para cambiarlo, cambie esos ajustes.',
   },
   log: {
     intro:

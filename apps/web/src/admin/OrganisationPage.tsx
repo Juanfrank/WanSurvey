@@ -14,6 +14,8 @@ interface Tenant {
 
 interface Sso {
   configured: boolean;
+  /** Set in the deployment (ENTRA_*): shown, not edited. */
+  managedByDeployment?: boolean;
   entraTenantId: string | null;
   clientId: string | null;
   hasClientSecret: boolean;
@@ -171,6 +173,39 @@ function General({ tenant }: { tenant: Tenant }) {
 }
 
 function SsoForm({ sso }: { sso: Sso }) {
+  if (sso.managedByDeployment) return <SsoFromDeployment sso={sso} />;
+  return <SsoEditor sso={sso} />;
+}
+
+function SsoFromDeployment({ sso }: { sso: Sso }) {
+  const { t } = useTranslation();
+  const rows: [string, string][] = [
+    [t('admin.org.redirectUri'), sso.redirectUri],
+    [t('admin.org.entraTenantId'), sso.entraTenantId ?? ''],
+    [t('admin.org.clientId'), sso.clientId ?? ''],
+    [t('admin.org.domains'), sso.allowedDomains.join(', ')],
+  ];
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold">{t('admin.org.sso')}</h2>
+      <p className="mb-4 mt-2 text-sm text-slate-600">{t('admin.org.ssoManaged')}</p>
+      <dl className="flex flex-col gap-3">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex flex-col gap-1">
+            <dt className="text-sm font-medium text-slate-700">{label}</dt>
+            <dd>
+              <code className="break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-800">
+                {value}
+              </code>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
+}
+
+function SsoEditor({ sso }: { sso: Sso }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [directory, setDirectory] = useState(sso.entraTenantId ?? '');

@@ -72,6 +72,8 @@ const en = {
       domain_not_allowed: 'Your e-mail domain is not allowed for this organisation.',
       link_required:
         'This e-mail already has a WanSurvey account in another organisation. Sign in with its password, then sign in with Microsoft to link them.',
+      link_not_allowed:
+        'This e-mail already has a WanSurvey account in another organisation. Ask an administrator of this organisation to add you.',
       account_disabled: 'This account is disabled.',
       membership_deactivated: 'Your access to this organisation has been removed.',
       generic: 'Microsoft sign-in failed.',
@@ -265,6 +267,8 @@ const es: Catalogue = {
       domain_not_allowed: 'El dominio de su correo no está permitido en esta organización.',
       link_required:
         'Este correo ya tiene una cuenta de WanSurvey en otra organización. Ingrese con su contraseña y luego con Microsoft para vincularlas.',
+      link_not_allowed:
+        'Este correo ya tiene una cuenta de WanSurvey en otra organización. Pida a un administrador de esta organización que lo agregue.',
       account_disabled: 'Esta cuenta está deshabilitada.',
       membership_deactivated: 'Se retiró su acceso a esta organización.',
       generic: 'Falló el ingreso con Microsoft.',

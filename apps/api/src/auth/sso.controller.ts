@@ -150,7 +150,20 @@ export class SsoSettingsController {
 
   @Get()
   @RequirePermission('tenant.manage')
-  get(@Auth() ctx: AuthContext) {
+  async get(@Auth() ctx: AuthContext) {
+    const deployment = await this.configs.deploymentSettings();
+    if (deployment?.tenantId === ctx.tenantId)
+      return {
+        configured: true,
+        managedByDeployment: true,
+        entraTenantId: deployment.entraTenantId,
+        clientId: deployment.clientId,
+        hasClientSecret: true,
+        enabled: true,
+        enforceSso: true,
+        allowedDomains: deployment.allowedDomains,
+        redirectUri: this.sso.redirectUri,
+      };
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const [row] = await tx.select().from(tenantSso).where(eq(tenantSso.tenantId, ctx.tenantId));
       return this.present(row ?? null);
@@ -164,6 +177,12 @@ export class SsoSettingsController {
     @Auth() ctx: AuthContext,
     @Body(new ZodPipe(SsoSettings)) body: z.infer<typeof SsoSettings>,
   ) {
+    // The deployment's settings (ENTRA_*) are the ones used: saving others would change nothing.
+    if (await this.configs.isDeploymentTenant(ctx.tenantId))
+      throw new ConflictException({
+        code: 'SSO_MANAGED_BY_DEPLOYMENT',
+        message: 'Microsoft sign-in of this organisation is set in the deployment (ENTRA_*)',
+      });
     // A domain belongs to one organisation: two would make e-mail sign-in ambiguous, and one
     // could claim another's addresses.
     for (const domain of new Set(body.allowedDomains.map((d) => d.toLowerCase()))) {
@@ -177,7 +196,7 @@ export class SsoSettingsController {
           message: `The domain ${domain} is already used by another organisation`,
         });
     }
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
+    const saved = await this.database.withTenant(ctx.tenantId, async (tx) => {
       const [current] = await tx
         .select()
         .from(tenantSso)
@@ -202,7 +221,6 @@ export class SsoSettingsController {
         .values({ tenantId: ctx.tenantId, ...values })
         .onConflictDoUpdate({ target: tenantSso.tenantId, set: values })
         .returning();
-      this.configs.invalidate(ctx.tenantId);
       const { clientSecret: _secret, ...audited } = body;
       await this.audit.record(
         tx,
@@ -216,11 +234,15 @@ export class SsoSettingsController {
       );
       return this.present(row!);
     });
+    // Once committed: every process reads the new settings on the next sign-in.
+    await this.configs.changed(ctx.tenantId);
+    return saved;
   }
 
   private present(row: typeof tenantSso.$inferSelect | null) {
     return {
       configured: !!row,
+      managedByDeployment: false,
       entraTenantId: row?.entraTenantId ?? null,
       clientId: row?.clientId ?? null,
       hasClientSecret: !!row?.clientSecretEnc,

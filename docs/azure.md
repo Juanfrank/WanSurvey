@@ -33,11 +33,11 @@ az deployment group create -g <group> -f infra/azure/main.bicep \
   -p name=wansurvey acrName=<registry> imageTag=<tag> publicUrl=https://encuestas.example.org \
      databaseUrl='@Microsoft.KeyVault(SecretUri=…)' redisUrl='@Microsoft.KeyVault(SecretUri=…)' \
      encryptionKey='@Microsoft.KeyVault(SecretUri=…)' smtpUrl=… mailFrom='WanSurvey <encuestas@example.org>' \
-     ssoDefaultOrg=<slug> entraTenantId=<directory id> entraClientId=<client id> \
+     passwordLogin=false ssoDefaultOrg=<slug> entraTenantId=<directory id> entraClientId=<client id> \
      entraClientSecret='@Microsoft.KeyVault(SecretUri=…)' entraAllowedDomains=agency.org
 ```
 
-`passwordLogin` defaults to `false`: sign-in is the Microsoft button alone (`docs/sso-entra.md`, section 4).
+`passwordLogin=false` makes sign-in the Microsoft button alone (`docs/sso-entra.md`, section 4). It defaults to `true`, so redeploying an environment that uses passwords keeps them. With `false`, the API refuses to start unless `ssoDefaultOrg` and the four `entra*` values are all set (an empty one counts as missing).
 
 The three separate apps of the earlier setup (web, API and worker each on its own Web App) still work: set `API_UPSTREAM` to the API app's address and `TRUST_PROXY_HOPS=3`. Docker Compose on App Service retires on 31 March 2027; sidecars are its replacement, so the single app is the layout to keep.
 
