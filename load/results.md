@@ -16,6 +16,15 @@ the first sign-in (the account is linked), then a usual morning in 120 s and in 
 | Failed requests (morning in 30 s)     | 0.85 % (10 of 1,176) | **0**                      | **0**                                       |
 | Callback transactions (known account) | 3, plus 2 autocommit | **1**                      | **1**                                       |
 
+**After the review fixes** (same waves; starting a sign-in reads public settings only, the
+cache is shared through Redis): 0 failed requests in every wave, and the same costs as above.
+
+| 300 interviewers                     | E-mail on the page  | Button only         |
+| ------------------------------------ | ------------------- | ------------------- |
+| First sign-in in 120 s: p95, API CPU | 231 ms, 11 %        | 232 ms, 12 %        |
+| Morning in 120 s: p95, API CPU       | 212 ms, 8 %         | 214 ms, 9 %         |
+| Morning in 30 s: p95, API CPU (peak) | 234 ms, 29 % (48 %) | 216 ms, 29 % (43 %) |
+
 **Reading.**
 
 - **The API's CPU for the start of the day halved.** The session guard reads the session, the
