@@ -643,6 +643,10 @@ export const interviews = pgTable(
     context: jsonb('context').notNull().default({}),
     state: jsonb('state').notNull().default({}),
     answers: jsonb('answers').notNull().default({}),
+    /** Bumped at every write of `state`; devices send the one their copy is based on. */
+    stateVersion: integer('state_version').notNull().default(0),
+    /** The device (or `review`) that wrote `state` last. */
+    stateDevice: text('state_device'),
     position: text('position'),
     /** The device writing this interview; others are refused until it is handed over. */
     deviceId: text('device_id').notNull(),

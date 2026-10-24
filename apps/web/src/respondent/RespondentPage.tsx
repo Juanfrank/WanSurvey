@@ -9,7 +9,14 @@ import {
 import { InterviewRunner, pick } from '@wansurvey/renderer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api.js';
-import { InterviewStore, type NewOp } from '../interview/store.js';
+import {
+  alignCopy,
+  InterviewStore,
+  MemoryStore,
+  serverCopy,
+  type LocalStore,
+  type NewOp,
+} from '../interview/store.js';
 import { Syncer, type SyncResult } from '../interview/sync.js';
 import { respondentText } from './text.js';
 import { themeStyle, type Branding } from './theme.js';
@@ -21,6 +28,8 @@ interface RespondentPayload {
     status: string;
     startedAt: string;
     state: Partial<InterviewState>;
+    stateVersion?: number;
+    ownState?: boolean;
     activeMs: number;
     totalMs: number;
   };
@@ -63,28 +72,52 @@ export function RespondentPage() {
   const [save, setSave] = useState<'saved' | 'saving' | 'offline'>('saved');
   const [phase, setPhase] = useState<'answering' | 'sending' | 'done' | 'already'>('answering');
   const [problem, setProblem] = useState('');
+  /** This device's storage failed: the answers are only in this page until sent. */
+  const [inMemory, setInMemory] = useState(false);
   const [, setTick] = useState(0);
   const ref = useRef<{
-    store: InterviewStore;
+    store: LocalStore;
     syncer: Syncer;
     session: InterviewSession;
     writes: Promise<unknown>;
     lastKey: string | null;
   } | null>(null);
 
+  /** Opens the survey for this device (which takes it over from any other). */
+  const open = useCallback(
+    (deviceId: string) =>
+      api<RespondentPayload>(
+        `/public/s/${token}?device=${encodeURIComponent(deviceId)}` +
+          (window.location.search
+            ? `&params=${encodeURIComponent(window.location.search.slice(1))}`
+            : ''),
+      ),
+    [token],
+  );
+  const send = useCallback(
+    async (body: unknown): Promise<SyncResult> => {
+      const b = body as { deviceId: string; interviews: Record<string, unknown>[] };
+      const { id: _id, ...item } = b.interviews[0]!;
+      return api<SyncResult>(`/public/s/${token}/sync`, {
+        method: 'POST',
+        body: { deviceId: b.deviceId, ...item },
+      });
+    },
+    [token],
+  );
+
   useEffect(() => {
-    let store: InterviewStore | null = null;
+    let store: LocalStore | null = null;
     let cancelled = false;
     void (async () => {
       try {
-        store = await InterviewStore.open();
+        // A browser that cannot store data (or refuses to) still answers, from memory.
+        store = await InterviewStore.open().catch(() => {
+          setInMemory(true);
+          return new MemoryStore();
+        });
         const deviceId = await store.deviceId();
-        const p = await api<RespondentPayload>(
-          `/public/s/${token}?device=${encodeURIComponent(deviceId)}` +
-            (window.location.search
-              ? `&params=${encodeURIComponent(window.location.search.slice(1))}`
-              : ''),
-        );
+        const p = await open(deviceId);
         if (cancelled) return;
         document.documentElement.lang = p.interview.language;
         if (p.interview.status !== 'in_progress') {
@@ -93,17 +126,9 @@ export function RespondentPage() {
           return;
         }
         const id = p.interview.id;
-        const local = await store.get(id);
-        if (!local || local.seq < p.lastSeq)
-          await store.adopt(id, {
-            seq: p.lastSeq,
-            acked: p.lastSeq,
-            state: p.interview.state,
-            position: null,
-            activeMs: p.interview.activeMs,
-            totalMs: p.interview.totalMs,
-          });
-        const kept = await store.get(id);
+        // The link may have been answered on another device since this one last had it: the
+        // server's copy wins unless this device has its own changes on the same state to send.
+        const kept = await alignCopy(store, serverCopy(p));
         const state = hasState(kept?.state) ? kept!.state : p.interview.state;
         const s = createInterview(p.compiled, {
           mode: 'CAWI',
@@ -118,14 +143,6 @@ export function RespondentPage() {
           ...(hasState(state) ? { state: state as Partial<InterviewState> } : {}),
         });
         s.drainEvents();
-        const send = async (body: unknown): Promise<SyncResult> => {
-          const b = body as { deviceId: string; interviews: Record<string, unknown>[] };
-          const { id: _id, ...item } = b.interviews[0]!;
-          return api<SyncResult>(`/public/s/${token}/sync`, {
-            method: 'POST',
-            body: { deviceId: b.deviceId, ...item },
-          });
-        };
         ref.current = {
           store,
           syncer: new Syncer(store, deviceId, send),
@@ -150,7 +167,7 @@ export function RespondentPage() {
       cancelled = true;
       store?.close();
     };
-  }, [token]);
+  }, [token, open, send]);
 
   const sync = useCallback(async () => {
     const r = ref.current;
@@ -160,12 +177,38 @@ export function RespondentPage() {
     setSave('saving');
     try {
       await r.syncer.flush([payload.interview.id], { force: true });
+      // Answered meanwhile on another device: show the survey as the server has it now.
+      if (r.syncer.problems.get(payload.interview.id) === 'STALE_STATE')
+        return window.location.reload();
       const local = await r.store.get(payload.interview.id);
       setSave(local && local.seq > local.acked ? 'offline' : 'saved');
     } catch {
       setSave('offline');
     }
   }, [payload]);
+
+  /**
+   * This device's storage failed: the page goes on with a copy in memory, under a device id of
+   * its own that the survey is handed over to, so its answers still reach the server.
+   */
+  const toMemory = useCallback(async () => {
+    const r = ref.current!;
+    const mem = new MemoryStore();
+    const device = await mem.deviceId();
+    const p = await open(device);
+    const id = p.interview.id;
+    await mem.adopt(id, {
+      seq: p.lastSeq,
+      acked: p.lastSeq,
+      state: r.session.state(),
+      position: null,
+      activeMs: 0,
+      totalMs: 0,
+      ...(p.interview.stateVersion !== undefined ? { base: p.interview.stateVersion } : {}),
+    });
+    r.store = mem;
+    r.syncer = new Syncer(mem, device, send);
+  }, [open, send]);
 
   useEffect(() => {
     const back = () => void sync();
@@ -201,11 +244,21 @@ export function RespondentPage() {
     }
     if (!ops.length) return setTick((n) => n + 1);
     const snapshot = { state: s.state(), position: key, activeMs: 0, totalMs: 0 };
-    r.writes = r.writes.then(() => r.store.record(payload.interview.id, ops, snapshot));
+    const id = payload.interview.id;
+    // A failed write does not stop the ones after it: the page goes on in memory (or tries
+    // again with the next change, when even that cannot be set up).
+    r.writes = r.writes
+      .then(() => r.store.record(id, ops, snapshot))
+      .catch(async () => {
+        setInMemory(true);
+        if (!(r.store instanceof MemoryStore)) await toMemory();
+        await r.store.record(id, ops, snapshot);
+      })
+      .catch(() => setSave('offline'));
     // Sent once written (the send itself waits for the writes, so it is not chained to them).
     void r.writes.then(() => sync());
     setTick((n) => n + 1);
-  }, [payload, sync]);
+  }, [payload, sync, toMemory]);
 
   const t = respondentText(payload?.interview.language ?? document.documentElement.lang ?? 'es');
 
@@ -281,7 +334,16 @@ export function RespondentPage() {
     <Shell
       title={title}
       branding={payload.branding}
-      status={save === 'saving' ? t.saving : save === 'offline' ? t.offline : t.saved}
+      status={
+        save === 'saving'
+          ? t.saving
+          : save === 'saved'
+            ? t.saved
+            : // Not on the server yet, and not on this device either.
+              inMemory
+              ? t.notKept
+              : t.offline
+      }
     >
       <InterviewRunner
         session={session}

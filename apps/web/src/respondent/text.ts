@@ -13,6 +13,8 @@ export const TEXT = {
     saving: 'Guardando…',
     saved: 'Respuestas guardadas',
     offline: 'Sin conexión: sus respuestas se guardan en este dispositivo.',
+    notKept:
+      'Este dispositivo no puede guardar sus respuestas: no cierre esta página hasta enviarlas.',
     send: 'Enviar mis respuestas',
     sending: 'Enviando…',
     sendFailed: 'No se pudieron enviar sus respuestas. Inténtelo de nuevo.',
@@ -35,6 +37,7 @@ export const TEXT = {
     saving: 'Saving…',
     saved: 'Answers saved',
     offline: 'No connection: your answers are kept on this device.',
+    notKept: 'This device cannot keep your answers: do not close this page until you send them.',
     send: 'Send my answers',
     sending: 'Sending…',
     sendFailed: 'Your answers could not be sent. Please try again.',

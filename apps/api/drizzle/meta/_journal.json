@@ -288,6 +288,13 @@
       "when": 1793300003000,
       "tag": "0040_session_mfa_method",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793300004000,
+      "tag": "0041_state_version",
+      "breakpoints": true
     }
   ]
 }

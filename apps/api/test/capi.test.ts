@@ -292,4 +292,48 @@ describe('offline face-to-face interviewing', () => {
     });
     expect(co.body.cases).toHaveLength(1);
   });
+  it('an offline start keeps to the case’s questionnaire, one in use, and the caller’s permission', async () => {
+    const u = await createUser(t.admin, tenant.id, [
+      { role: 'interviewer', projectId: project },
+      { role: 'interviewer', projectId: await createProject(t.admin, tenant.id) },
+    ]);
+    const s = await login(t.app, u);
+    const caseId = await newCase(u.id);
+    const co = (
+      await post(s, `/projects/${project}/capi/checkout`, { deviceId: device, caseIds: [caseId] })
+    ).body as Checkout;
+    const startedAt = new Date().toISOString();
+    const send = () => {
+      const id = uuidv7();
+      const { ops, state } = interviewOnDevice(co, 0, id, startedAt);
+      const start = {
+        caseId,
+        questionnaireVersionId: co.cases[0]!.questionnaireVersionId,
+        mode: 'CAPI',
+        language: 'es',
+        startedAt,
+      };
+      return post(s, '/interviews/sync', {
+        deviceId: device,
+        interviews: [{ id, start, ops, state }],
+      }).then((r) => r.body.errors[id] as string | undefined);
+    };
+    // The case was moved to another questionnaire after it was downloaded.
+    const other = await createQuestionnaire(t.admin, tenant.id, project, {
+      definition,
+      publish: true,
+    });
+    await t.admin`update cases set questionnaire_id = ${other} where id = ${caseId}`;
+    expect(await send()).toBe('OTHER_QUESTIONNAIRE');
+    await t.admin`update cases set questionnaire_id = null where id = ${caseId}`;
+    // The questionnaire was disabled meanwhile.
+    await t.admin`update questionnaires set state = 'disabled' where id = ${qid}`;
+    expect(await send()).toBe('QUESTIONNAIRE_DISABLED');
+    await t.admin`update questionnaires set state = 'active' where id = ${qid}`;
+    // The interviewer no longer works on this project.
+    await t.admin`delete from memberships where user_id = ${u.id} and project_id = ${project}`;
+    expect(await send()).toBe('NOT_FOUND');
+    const [n] = await t.admin`select count(*)::int as n from interviews where case_id = ${caseId}`;
+    expect(n!.n).toBe(0);
+  });
 });

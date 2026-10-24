@@ -368,4 +368,67 @@ describe('answer review', () => {
       .send({ codes: [] });
     expect(rm.body.code).toBe('CODE_IN_USE');
   });
+  it('codes of "other" texts outlive corrections and syncs, while their text stays', async () => {
+    const { id } = await interview([
+      ['AGE', 50],
+      ['WORK', 1],
+      ['HOURS', 20],
+      ['OCC', 9],
+      ['OCC_OTHER', 'Albañil'],
+    ]);
+    await sup.agent
+      .put(`/api/v1/projects/${project}/coding/OCC_OTHER/codes`)
+      .set('x-csrf-token', sup.csrf)
+      .send({
+        codes: [
+          { code: 71, label: 'Construcción' },
+          { code: 72, label: 'Obras' },
+        ],
+      })
+      .expect(200);
+    await post(sup, `/projects/${project}/coding/OCC_OTHER/assign`, {
+      texts: ['Albañil'],
+      code: 72,
+    }).expect(200);
+    const code = async () =>
+      (
+        (await t.admin`select answers from interviews where id = ${id}`)[0]!.answers as {
+          OCC_CODE?: number;
+        }
+      ).OCC_CODE;
+    expect(await code()).toBe(72);
+    // A reviewer's correction rebuilds the answers: the code stays.
+    await post(sup, `/review/interviews/${id}/correct`, {
+      variable: 'AGE',
+      value: 51,
+      reason: 'Según el documento',
+    }).expect(200);
+    expect(await code()).toBe(72);
+    // Returned and fixed on a device: the code stays while the text does, then goes with it.
+    await post(sup, `/review/interviews/${id}/transition`, {
+      to: 'returned',
+      comment: 'Revise las horas.',
+    }).expect(200);
+    const device2 = 'device-review-03';
+    const taken = (await post(me, `/interviews/${id}/takeover`, { deviceId: device2 }))
+      .body as Payload & { interview: { state: unknown } };
+    const s = session(taken, taken.interview.state);
+    s.jumpTo('HOURS');
+    s.setAnswer('HOURS', 25);
+    let seq = taken.lastSeq;
+    const send = async () => {
+      const o = ops(s, seq);
+      seq += o.length;
+      await post(me, '/interviews/sync', {
+        deviceId: device2,
+        interviews: [{ id, ops: o, state: s.state() }],
+      }).expect(200);
+    };
+    await send();
+    expect(await code()).toBe(72);
+    s.jumpTo('OCC_OTHER');
+    s.setAnswer('OCC_OTHER', 'Gasfitero');
+    await send();
+    expect(await code()).toBeUndefined();
+  });
 });

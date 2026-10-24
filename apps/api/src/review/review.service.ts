@@ -24,7 +24,12 @@ import {
   reviewComments,
   users,
 } from '../db/schema.js';
-import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
+import { MASK, maskContact, maskSample } from '../cases/case-logic.js';
+import {
+  InterviewsService,
+  personalVariables,
+  type InterviewRow,
+} from '../interviews/interviews.service.js';
 import { StatsService } from '../stats/stats.service.js';
 import { FLAG_KINDS, computeFlags, inSample } from './flags.js';
 import { COUNTED_SQL } from '../common/statuses.js';
@@ -104,6 +109,24 @@ const AUDIT: Record<To, AuditAction> = {
   returned: 'interview.returned',
   rejected: 'interview.rejected',
 };
+
+/**
+ * Answers rebuilt from the engine, with the codes given to "other" texts (`<VAR>_CODE`, which
+ * the engine does not hold) kept while their text is unchanged. The sync does the same in SQL.
+ */
+export function keepCodes(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(before ?? {})) {
+    if (!k.endsWith('_CODE')) continue;
+    const other = `${k.slice(0, -5)}_OTHER`;
+    if (other in after && JSON.stringify(after[other]) === JSON.stringify(before[other]))
+      out[k] = v;
+  }
+  return { ...out, ...after };
+}
 
 /** The device under which reviewers' changes are numbered. */
 const REVIEW_DEVICE = 'review';
@@ -292,6 +315,21 @@ export class ReviewService implements OnModuleInit {
       .leftJoin(users, eq(users.id, interviewAnswerEvents.byUserId))
       .where(eq(interviewAnswerEvents.interviewId, id))
       .orderBy(asc(interviewAnswerEvents.at), asc(interviewAnswerEvents.seq));
+    // Without `pii.view`, personal case fields, contacts and answers to personal questions are
+    // masked, as in the case's answer history.
+    const canSee = this.cases.canSeePii(ctx, row.projectId);
+    const personal = canSee ? new Set<string>() : personalVariables(compiled);
+    const piiFields = canSee ? new Set<string>() : await this.cases.piiFields(tx, row.projectId);
+    const isPersonal = (key: string) => personal.has(baseName(key).replace(/_OTHER$/, ''));
+    const hide = (v: unknown) => (v === null || v === undefined ? v : MASK);
+    const maskValues = (values: unknown) =>
+      values && typeof values === 'object'
+        ? Object.fromEntries(
+            Object.entries(values).map(([k, v]) => [k, isPersonal(k) ? hide(v) : v]),
+          )
+        : values;
+    const context = this.runtime.contextOf(row);
+    const state = row.state as Record<string, unknown>;
     const allowed = reviewer
       ? (Object.entries(TRANSITIONS[row.status] ?? {}) as [To, Permission][])
           .filter(([, perm]) => can(ctx.memberships, perm, row.projectId))
@@ -315,16 +353,32 @@ export class ReviewService implements OnModuleInit {
         flags: row.flags,
         sampled: row.sampled,
         submissions: row.submissions,
-        state: row.state,
+        state: canSee
+          ? state
+          : { ...state, answers: maskValues(state.answers), stash: maskValues(state.stash) },
         entryPass: row.entryPass,
       },
-      context: row.context,
+      context: canSee
+        ? context
+        : {
+            ...context,
+            case: maskSample(context.case ?? {}, piiFields, false),
+            ...(context.contacts
+              ? { contacts: context.contacts.map((x) => maskContact(x, false)) }
+              : {}),
+          },
       compiled,
       timings,
       notes,
       warnings,
       paper,
-      history,
+      history: canSee
+        ? history
+        : history.map((h) =>
+            isPersonal(h.variable)
+              ? { ...h, oldValue: hide(h.oldValue), newValue: hide(h.newValue) }
+              : h,
+          ),
       comments: await this.comments(tx, id),
       allowed,
       canCorrect:
@@ -533,7 +587,10 @@ export class ReviewService implements OnModuleInit {
       .update(interviews)
       .set({
         state: s.state(),
-        answers: s.getAnswers(),
+        answers: keepCodes(row.answers as Record<string, unknown>, s.getAnswers()),
+        // A device holding a copy of this interview (returned later) takes the new state.
+        stateVersion: row.stateVersion + 1,
+        stateDevice: REVIEW_DEVICE,
         disposition,
         updatedAt: now,
       })

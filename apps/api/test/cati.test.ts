@@ -426,4 +426,31 @@ describe('telephone interviewing', () => {
       .send({ settings: { cati: { callingHours: { from: '25:00', to: '20:00' } } } });
     expect(bad.status).toBe(400);
   });
+  it('a call on a case finished meanwhile is recorded without changing its result', async () => {
+    const { project, users, sessions, newCase } = await setup();
+    const [u] = users;
+    const [me] = sessions;
+    const caseId = await newCase(u!.id);
+    const a = await post(me!, `/projects/${project}/cati/next`);
+    expect(a.body.case.id).toBe(caseId);
+    // While the phone rings, the respondent finishes the survey on the web.
+    await t.admin`update cases set status = 'finalised', disposition = 'COMPLETE' where id = ${caseId}`;
+    const r = await post(me!, `/cati/attempts/${a.body.attempt.id}/outcome`, {
+      outcome: 'no_answer',
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body).toMatchObject({ disposition: 'COMPLETE', final: true, nextContactAt: null });
+    const [c] =
+      await t.admin`select status, disposition, next_contact_at, call_lock_user_id from cases where id = ${caseId}`;
+    expect(c).toMatchObject({
+      status: 'finalised',
+      disposition: 'COMPLETE',
+      next_contact_at: null,
+      call_lock_user_id: null,
+    });
+    const [att] =
+      await t.admin`select outcome, ended_at from call_attempts where id = ${a.body.attempt.id}`;
+    expect(att!.outcome).toBe('no_answer');
+    expect(att!.ended_at).not.toBeNull();
+  });
 });

@@ -51,6 +51,10 @@ export const deviceEn = {
     PATH_MISMATCH: 'The server found a different path; a supervisor will review it.',
     CASE_IN_PROGRESS: 'This case was started elsewhere.',
     CASE_CLOSED: 'This case is already finished.',
+    OTHER_QUESTIONNAIRE: 'This case belongs to another questionnaire; ask your supervisor.',
+    QUESTIONNAIRE_DISABLED: 'The questionnaire is disabled; ask your supervisor.',
+    QUESTIONNAIRE_COMPLETED: 'The questionnaire is completed; ask your supervisor.',
+    STALE_STATE: 'This interview was changed elsewhere; open it again to see the latest.',
   },
   reasons: {
     CHECKED_OUT_ELSEWHERE: 'on another device',
@@ -118,6 +122,11 @@ export const deviceEs: DeviceCatalogue = {
     PATH_MISMATCH: 'El servidor encontró otro recorrido; un supervisor lo revisará.',
     CASE_IN_PROGRESS: 'Este caso se inició en otro lugar.',
     CASE_CLOSED: 'Este caso ya terminó.',
+    OTHER_QUESTIONNAIRE: 'Este caso pertenece a otro cuestionario; consulte a su supervisor.',
+    QUESTIONNAIRE_DISABLED: 'El cuestionario está deshabilitado; consulte a su supervisor.',
+    QUESTIONNAIRE_COMPLETED: 'El cuestionario está completo; consulte a su supervisor.',
+    STALE_STATE:
+      'Esta entrevista se cambió en otro lugar; ábrala de nuevo para ver la última versión.',
   },
   reasons: {
     CHECKED_OUT_ELSEWHERE: 'en otro dispositivo',

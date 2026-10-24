@@ -36,6 +36,16 @@ import { compiledCache, Lru } from './compiled-cache.js';
 
 export type InterviewRow = typeof interviews.$inferSelect;
 
+/** What `interviews.context` holds: the case data the interview was given at start. */
+export interface StoredContext {
+  externalId?: string;
+  case?: Record<string, unknown>;
+  contacts?: { type: string; value: string; label: string | null }[];
+  /** The link's parameters (web surveys). */
+  params?: Record<string, string>;
+  [key: string]: unknown;
+}
+
 /** A version's number and questionnaire, by version id (immutable rows), per process. */
 const versionCache = new Lru<string, { version: number; questionnaireId: string }>(200);
 
@@ -80,14 +90,23 @@ const touchDevice = new Prepared<{ lastSeq: number }>(
 );
 /**
  * The end of a sync: the interview's snapshot and times (when `touch`; only the fields sent)
- * and the device's acknowledged number, in one statement.
+ * and the device's acknowledged number, in one statement. A new snapshot bumps the state's
+ * version and keeps the codes given to "other" texts (`<VAR>_CODE`, not in the snapshot)
+ * whose text is unchanged.
  */
 const finishSync = new Prepared<never>(
   () => sql`
     with i as (
       update interviews set
         state = case when ${sql.placeholder('hasState')} then ${sql.placeholder('state')}::jsonb else state end,
-        answers = case when ${sql.placeholder('hasState')} then ${sql.placeholder('answers')}::jsonb else answers end,
+        answers = case when ${sql.placeholder('hasState')} then coalesce((
+            select jsonb_object_agg(k.key, k.value) from jsonb_each(answers) k
+            where k.key like '%\\_CODE'
+              and ${sql.placeholder('answers')}::jsonb -> (left(k.key, -5) || '_OTHER')
+                = answers -> (left(k.key, -5) || '_OTHER')
+          ), '{}'::jsonb) || ${sql.placeholder('answers')}::jsonb else answers end,
+        state_version = state_version + case when ${sql.placeholder('hasState')} then 1 else 0 end,
+        state_device = case when ${sql.placeholder('hasState')} then ${sql.placeholder('device')}::text else state_device end,
         position = case when ${sql.placeholder('hasState')} then ${sql.placeholder('position')}::text else position end,
         active_ms = coalesce(${sql.placeholder('active')}::int, active_ms),
         total_ms = coalesce(${sql.placeholder('total')}::int, total_ms),
@@ -212,6 +231,13 @@ export class InterviewsService {
           code: 'ENTRY_IN_PROGRESS',
           message: 'Another entry of this case is in progress',
         });
+      // An interview open in another mode (a respondent on the web) is not taken over.
+      if (open.mode !== body.mode)
+        throw new ConflictException({
+          code: 'IN_PROGRESS_OTHER_MODE',
+          message: 'This case has an interview in progress in another mode',
+          mode: open.mode,
+        });
       // Resuming: the person holding the case now works it, on this device.
       [row] = (await tx
         .update(interviews)
@@ -283,6 +309,8 @@ export class InterviewsService {
   ) {
     const acks: Record<string, number> = {};
     const errors: Record<string, string> = {};
+    /** The state's new version, for the interviews whose snapshot was written. */
+    const versions: Record<string, number> = {};
     // Rows are locked in one global order (by id), so two devices syncing overlapping
     // interviews at once wait for each other instead of deadlocking.
     const ordered = [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -365,15 +393,26 @@ export class InterviewsService {
           )
           .onConflictDoNothing();
       last += run.length;
-      // The snapshot belongs to the end of the batch: keep it only when nothing was missed.
+      // The snapshot belongs to the end of the batch: keep it only when nothing was missed and
+      // the batch brought new changes (a late or repeated batch carries an older snapshot). A
+      // batch with no changes at all is a snapshot alone (a scanned form with no marks).
+      const fresh = run.length === ops.length && (run.length > 0 || item.ops.length === 0);
+      // A snapshot built on an older version than the server's is refused, unless this device
+      // wrote the newer one itself (its answer was lost): its copy then includes it.
+      const stale =
+        fresh &&
+        !!item.state &&
+        item.baseVersion !== undefined &&
+        item.baseVersion !== row.stateVersion &&
+        row.stateDevice !== deviceId;
+      const hasState = fresh && !!item.state && !stale;
       // The interview and the device's number are written by one statement.
-      const complete = run.length === ops.length;
       await finishSync.run(tx, {
         id: row.id,
         device: deviceId,
         seq: last,
-        touch: complete && (!!item.state || run.length > 0),
-        hasState: !!item.state,
+        touch: fresh && (!!item.state || run.length > 0),
+        hasState,
         state: item.state ? JSON.stringify(item.state) : null,
         answers: item.state ? JSON.stringify(item.state.answers ?? {}) : null,
         position: item.position ?? null,
@@ -381,8 +420,10 @@ export class InterviewsService {
         total: item.totalMs ?? null,
       });
       acks[item.id] = last;
+      if (hasState) versions[item.id] = row.stateVersion + 1;
+      if (stale) errors[item.id] = 'STALE_STATE';
     }
-    return { acks, errors, serverTime: new Date().toISOString() };
+    return { acks, errors, versions, serverTime: new Date().toISOString() };
   }
 
   /**
@@ -646,11 +687,18 @@ export class InterviewsService {
     };
   }
 
+  /**
+   * The interview's case data as the engine and the screen use it: a web respondent's record
+   * is kept sealed (`casePii`, see `CawiService`) and opened here.
+   */
+  contextOf(row: Pick<InterviewRow, 'context'>): StoredContext {
+    const { casePii, ...context } = row.context as StoredContext & { casePii?: string };
+    if (!casePii) return context;
+    return { ...context, case: { ...context.case, ...this.cases.pii.open(casePii) } };
+  }
+
   engineOptions(row: InterviewRow): Omit<InterviewOptions, 'state'> {
-    const context = row.context as {
-      case?: Record<string, unknown>;
-      params?: Record<string, string>;
-    };
+    const context = this.contextOf(row);
     return {
       mode: row.mode as Mode,
       language: row.language,
@@ -700,13 +748,16 @@ export class InterviewsService {
         disposition: row.disposition,
         startedAt: row.startedAt,
         state: row.state,
+        stateVersion: row.stateVersion,
+        /** This device wrote the snapshot last: its own copy includes it. */
+        ownState: row.stateDevice === deviceId,
         activeMs: row.activeMs,
         totalMs: row.totalMs,
         deviceId: row.deviceId,
         entryPass: row.entryPass,
         interviewer: who?.name ?? null,
       },
-      context: row.context,
+      context: this.contextOf(row),
       compiled,
       settings: await (
         settings ? Promise.resolve(settings) : this.cases.settings(tx, row.projectId)

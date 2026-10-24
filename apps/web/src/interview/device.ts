@@ -1,5 +1,12 @@
 import { api, ApiError } from '../api.js';
-import { InterviewStore, type DeviceCase, DeviceError, keepStorage } from './store.js';
+import {
+  alignCopy,
+  InterviewStore,
+  type DeviceCase,
+  DeviceError,
+  keepStorage,
+  serverCopy,
+} from './store.js';
 import { Syncer } from './sync.js';
 
 interface CheckoutResponse {
@@ -17,6 +24,8 @@ interface CheckoutResponse {
       language: string;
       startedAt: string;
       state: unknown;
+      stateVersion?: number;
+      ownState?: boolean;
       activeMs: number;
       totalMs: number;
     } | null;
@@ -57,16 +66,7 @@ export function downloadCases(projectId: string, caseIds: string[]) {
     for (const c of r.cases) {
       const existing = await store.getCase(c.caseId);
       if (c.interview) {
-        const local = await store.get(c.interview.id);
-        if (!local || local.seq < c.lastSeq)
-          await store.adopt(c.interview.id, {
-            seq: c.lastSeq,
-            acked: c.lastSeq,
-            state: c.interview.state,
-            position: null,
-            activeMs: c.interview.activeMs,
-            totalMs: c.interview.totalMs,
-          });
+        await alignCopy(store, serverCopy({ interview: c.interview, lastSeq: c.lastSeq }));
         await store.patch(c.interview.id, {
           meta: {
             projectId,

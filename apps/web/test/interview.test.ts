@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it, vi } from 'vitest';
 import { HIDDEN_GRACE_MS, InterviewClock } from '../src/interview/paradata.js';
-import { InterviewStore, type NewOp } from '../src/interview/store.js';
+import { alignCopy, InterviewStore, MemoryStore, type NewOp } from '../src/interview/store.js';
 import { Syncer, type SyncResult } from '../src/interview/sync.js';
 
 const answer = (variable: string, newValue: unknown): NewOp => ({
@@ -122,6 +122,84 @@ describe('sync loop', () => {
     expect(syncer.problems.get('i1')).toBe('NOT_THIS_DEVICE');
     expect(await store.pending('i1')).toHaveLength(1);
     store.close();
+  });
+});
+
+describe("the server's copy and this device's", () => {
+  const server = (over: Partial<Parameters<typeof alignCopy>[1]> = {}) => ({
+    id: 'i1',
+    lastSeq: 2,
+    state: { answers: { N: 99 } },
+    stateVersion: 5,
+    ownState: false,
+    activeMs: 10,
+    totalMs: 10,
+    ...over,
+  });
+
+  it("takes the server's copy when this device has nothing left to send", async () => {
+    // The link was answered here (2 changes), then on another device: the server is ahead.
+    const store = await freshStore();
+    await store.adopt('i1', { ...snap(0), seq: 0, acked: 0, base: 1 });
+    await store.record('i1', [answer('A', 1), answer('B', 2)], snap(2));
+    await store.acknowledge('i1', 2, 2);
+    const local = await alignCopy(store, server());
+    expect(local).toMatchObject({ seq: 2, acked: 2, base: 5, state: { answers: { N: 99 } } });
+    store.close();
+  });
+
+  it('keeps its own unsent changes on the same state, and drops them when another device went on', async () => {
+    const store = await freshStore();
+    await store.adopt('i1', { ...snap(0), seq: 2, acked: 2, base: 5 });
+    await store.record('i1', [answer('A', 3)], snap(3));
+    // Same version on the server, or a newer one this device wrote itself: the copy goes on.
+    expect(await alignCopy(store, server())).toMatchObject({
+      seq: 3,
+      state: { answers: { N: 3 } },
+    });
+    expect(await alignCopy(store, server({ stateVersion: 6, ownState: true }))).toMatchObject({
+      seq: 3,
+      state: { answers: { N: 3 } },
+    });
+    // Another device wrote version 6: its state wins and this device's change is dropped.
+    expect(await alignCopy(store, server({ stateVersion: 6 }))).toMatchObject({
+      seq: 2,
+      acked: 2,
+      base: 6,
+      state: { answers: { N: 99 } },
+    });
+    expect(await store.pending('i1')).toEqual([]);
+    store.close();
+  });
+
+  it('sends the version its snapshot builds on, and keeps the one the server wrote', async () => {
+    const store = await freshStore();
+    await store.adopt('i1', { ...snap(0), seq: 0, acked: 0, base: 4 });
+    await store.record('i1', [answer('A', 1)], snap(1));
+    const bodies: { interviews: { baseVersion?: number }[] }[] = [];
+    const syncer = new Syncer(store, 'dev', async (body) => {
+      bodies.push(body as (typeof bodies)[number]);
+      return { acks: { i1: 1 }, errors: {}, versions: { i1: 5 }, serverTime: '' };
+    });
+    await syncer.flush(['i1']);
+    expect(bodies[0]!.interviews[0]!.baseVersion).toBe(4);
+    expect(await store.get('i1')).toMatchObject({ acked: 1, base: 5 });
+    store.close();
+  });
+
+  it('a copy in memory numbers, sends and acknowledges like the device store', async () => {
+    const mem = new MemoryStore();
+    expect(await mem.deviceId()).toMatch(/^web-/);
+    await mem.record('i1', [answer('A', 1), answer('B', 2)], snap(2));
+    const syncer = new Syncer(mem, await mem.deviceId(), async () => ({
+      acks: { i1: 2 },
+      errors: {},
+      versions: { i1: 1 },
+      serverTime: '',
+    }));
+    await syncer.flush(['i1']);
+    expect(await mem.pending('i1')).toEqual([]);
+    expect(await mem.get('i1')).toMatchObject({ seq: 2, acked: 2, base: 1 });
   });
 });
 

@@ -552,6 +552,9 @@ export class CawiService implements OnModuleInit {
     body: z.infer<typeof OpenLinkBody>,
   ) {
     const current = await this.openLink(tx, projectId);
+    // The questionnaire must be this project's, in use and fielded on the web.
+    if (body.questionnaireId && body.questionnaireId !== current?.questionnaireId)
+      await this.runtime.latestVersion(tx, projectId, body.questionnaireId, 'CAWI');
     if (current) {
       await tx
         .update(openLinks)
@@ -563,7 +566,6 @@ export class CawiService implements OnModuleInit {
     } else {
       if (!body.questionnaireId)
         throw new BadRequestException({ code: 'NOT_FOUND', message: 'Choose a questionnaire' });
-      await this.runtime.latestVersion(tx, projectId, body.questionnaireId, 'CAWI');
       await tx.insert(openLinks).values({
         tenantId: ctx.tenantId,
         projectId,
@@ -617,6 +619,9 @@ export class CawiService implements OnModuleInit {
             isNull(invitations.completedAt),
             free,
             active,
+            // A case finished another way (by telephone, say) or withdrawn is not reminded.
+            sql`not exists (select 1 from cases cc where cc.id = ${invitations.caseId}
+                and cc.status in ('finalised', 'withdrawn'))`,
             sql`${invitations.remindersSent} < cardinality(${waves.reminderDays})`,
             sql`${invitations.sentAt} + (${waves.reminderDays}[${invitations.remindersSent} + 1] * interval '1 day') <= ${now.toISOString()}::timestamptz`,
           ),
@@ -987,6 +992,34 @@ export class CawiService implements OnModuleInit {
           .where(eq(interviews.id, row.id))
           .returning()) as [InterviewRow];
       }
+      const completion = {
+        message: settings.cawi.completionMessage,
+        redirectUrl: settings.cawi.redirectUrl,
+      };
+      const branding = this.branding(project.logoUpdatedAt, settings.cawi.theme, token);
+      // A finished survey says so and nothing more: its answers and the respondent's record
+      // are not handed to whoever holds the link.
+      if (row.status !== 'in_progress')
+        return {
+          interview: {
+            id: row.id,
+            mode: row.mode,
+            language: row.language,
+            status: row.status,
+            startedAt: row.startedAt,
+            state: {},
+            stateVersion: 0,
+            ownState: false,
+            activeMs: 0,
+            totalMs: 0,
+          },
+          context: { case: {}, params: {} },
+          compiled: await this.runtime.compiledOf(tx, row.questionnaireVersionId),
+          lastSeq: 0,
+          serverTime: new Date().toISOString(),
+          completion,
+          branding,
+        };
       const lastSeq = await this.runtime.touchDevice(tx, inv.tenantId, row.id, deviceId);
       if (!inv.startedAt)
         await tx
@@ -1003,18 +1036,17 @@ export class CawiService implements OnModuleInit {
           status: p.interview.status,
           startedAt: p.interview.startedAt,
           state: p.interview.state,
+          stateVersion: p.interview.stateVersion,
+          ownState: p.interview.ownState,
           activeMs: p.interview.activeMs,
           totalMs: p.interview.totalMs,
         },
-        context: { case: (p.context as { case?: unknown }).case ?? {}, params },
+        context: { case: p.context.case ?? {}, params },
         compiled: p.compiled,
         lastSeq: p.lastSeq,
         serverTime: p.serverTime,
-        completion: {
-          message: settings.cawi.completionMessage,
-          redirectUrl: settings.cawi.redirectUrl,
-        },
-        branding: this.branding(project.logoUpdatedAt, settings.cawi.theme, token),
+        completion,
+        branding,
       };
     });
   }
@@ -1098,7 +1130,13 @@ export class CawiService implements OnModuleInit {
       caseId: inv.caseId,
       versionId: version.id,
       language: inv.language,
-      context: { case: sample },
+      // Sealed as the case's personal fields are (`InterviewsService.contextOf` opens it).
+      context: Object.keys(sample).length
+        ? {
+            case: {},
+            casePii: encryptField(JSON.stringify(sample), this.config.APP_ENCRYPTION_KEY),
+          }
+        : { case: {} },
       deviceId,
     });
     // The interview and the start time in one update of the invitation.
