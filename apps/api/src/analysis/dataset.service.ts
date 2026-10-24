@@ -44,12 +44,8 @@ export class DatasetService {
       group by q.id, q.name order by max(v.published_at) desc`);
   }
 
-  async load(
-    tx: Tx,
-    projectId: string,
-    f: DataFilter,
-    opts: { paradata?: boolean; completesOnly?: boolean } = {},
-  ): Promise<Dataset> {
+  /** The latest version of the questionnaire asked for (or the newest), with the project's zone. */
+  private async version(tx: Tx, projectId: string, f: DataFilter) {
     const qid = f.questionnaireId ?? (await this.questionnaires(tx, projectId))[0]?.id;
     if (!qid) throw new NotFoundException({ code: 'NO_DATA', message: 'Nothing published yet' });
     const [v] = await tx.execute<{
@@ -64,7 +60,52 @@ export class DatasetService {
       where q.id = ${qid} and q.project_id = ${projectId}
       order by v.version desc limit 1`);
     if (!v) throw new NotFoundException({ code: 'NO_DATA', message: 'Nothing published yet' });
-    const day = sql`(i.submitted_at at time zone ${v.tz})::date`;
+    return { qid, v };
+  }
+
+  /** The interviews a filter reads (`i`, joined to its version `v`). */
+  private scope(
+    projectId: string,
+    qid: string,
+    tz: string,
+    f: DataFilter,
+    opts: { completesOnly?: boolean },
+  ) {
+    const day = sql`(i.submitted_at at time zone ${tz})::date`;
+    return sql`i.project_id = ${projectId} and v.questionnaire_id = ${qid} and i.entry_pass = 1
+        and i.status in ${f.approvedOnly ? ['approved'] : [...COUNTED]}
+        ${opts.completesOnly ? sql`and i.disposition = 'COMPLETE'` : sql``}
+        ${f.mode ? sql`and i.mode = ${f.mode}` : sql``}
+        ${f.interviewerId ? sql`and i.interviewer_id = ${f.interviewerId}` : sql``}
+        ${f.from ? sql`and ${day} >= ${f.from}::date` : sql``}
+        ${f.to ? sql`and ${day} <= ${f.to}::date` : sql``}`;
+  }
+
+  /**
+   * What loading would read, without reading it: the interviews, the size of their answers as
+   * stored, and the questions of the version (cells are about interviews × questions).
+   */
+  async estimate(tx: Tx, projectId: string, f: DataFilter) {
+    const { qid, v } = await this.version(tx, projectId, f);
+    const [r] = await tx.execute<{ n: number; bytes: string | number }>(sql`
+      select count(*)::int as n, coalesce(sum(octet_length(i.answers::text)), 0) as bytes
+      from interviews i
+      join questionnaire_versions v on v.id = i.questionnaire_version_id
+      where ${this.scope(projectId, qid, v.tz, f, {})}`);
+    return {
+      interviews: r?.n ?? 0,
+      answerBytes: Number(r?.bytes ?? 0),
+      questions: v.compiled.nodes.filter((n) => n.kind === 'question').length,
+    };
+  }
+
+  async load(
+    tx: Tx,
+    projectId: string,
+    f: DataFilter,
+    opts: { paradata?: boolean; completesOnly?: boolean } = {},
+  ): Promise<Dataset> {
+    const { qid, v } = await this.version(tx, projectId, f);
     const rows = await tx.execute<{
       id: string;
       caseId: string | null;
@@ -113,13 +154,7 @@ export class DatasetService {
               from interview_paradata pd where pd.interview_id = i.id) pd on true`
           : sql``
       }
-      where i.project_id = ${projectId} and v.questionnaire_id = ${qid} and i.entry_pass = 1
-        and i.status in ${f.approvedOnly ? ['approved'] : [...COUNTED]}
-        ${opts.completesOnly ? sql`and i.disposition = 'COMPLETE'` : sql``}
-        ${f.mode ? sql`and i.mode = ${f.mode}` : sql``}
-        ${f.interviewerId ? sql`and i.interviewer_id = ${f.interviewerId}` : sql``}
-        ${f.from ? sql`and ${day} >= ${f.from}::date` : sql``}
-        ${f.to ? sql`and ${day} <= ${f.to}::date` : sql``}
+      where ${this.scope(projectId, qid, v.tz, f, opts)}
       order by i.submitted_at, i.id`);
     return {
       questionnaireId: qid,

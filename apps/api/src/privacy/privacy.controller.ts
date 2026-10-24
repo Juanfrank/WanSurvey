@@ -48,7 +48,7 @@ export class PrivacyController {
   @HttpCode(200)
   @RequirePermission('cases.edit', PERM)
   @ApiBody({ schema: z.toJSONSchema(EraseBody) as object })
-  erase(
+  async erase(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('caseId', ParseUUIDPipe) caseId: string,
@@ -56,8 +56,10 @@ export class PrivacyController {
   ) {
     if (!can(ctx.memberships, 'pii.view', projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not do this' });
-    return this.database.withTenant(ctx.tenantId, (tx) =>
+    const out = await this.database.withTenant(ctx.tenantId, (tx) =>
       this.privacy.anonymise(tx, ctx.tenantId, ctx, projectId, caseId, 'request', body.note),
     );
+    await this.privacy.refreshAnalysis();
+    return out;
   }
 }

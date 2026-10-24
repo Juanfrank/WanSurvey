@@ -1,6 +1,8 @@
 import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Database } from '../src/db/database.js';
+import { JobsService } from '../src/jobs/jobs.service.js';
+import { BiService } from '../src/stats/bi.service.js';
 import { PrivacyService, stripKeys } from '../src/privacy/privacy.service.js';
 import {
   bootstrap,
@@ -197,6 +199,88 @@ describe('personal data: sealing, retention and data subject requests', () => {
       await t.admin`select action, details from audit_log where target_id = ${caseId} order by at`;
     expect(audit.map((a) => a.action)).toEqual(['case.subject_exported', 'case.anonymised']);
     expect(audit[1]!.details).toMatchObject({ reason: 'request', note: 'Solicitud ARCO 2026-17' });
+  });
+
+  it('erases the other copies too: frame unit, import report, double entry, scans, the model', async () => {
+    const { caseId, iv } = await interviewed();
+    const imp = uuidv7();
+    const mapping = {
+      columns: [
+        { kind: 'externalId' },
+        { kind: 'sample', field: 'first_name', pii: true },
+        { kind: 'contact', type: 'email' },
+        { kind: 'sample', field: 'region', type: 'number' },
+      ],
+    };
+    const report = {
+      total: 2,
+      valid: 1,
+      invalid: 1,
+      existing: 0,
+      toCreate: 1,
+      toUpdate: 0,
+      issues: [
+        {
+          code: 'invalid_email',
+          count: 1,
+          blocking: true,
+          examples: [{ row: 2, column: 'Correo', value: 'luis@@x' }],
+        },
+        {
+          code: 'invalid_number',
+          count: 1,
+          blocking: true,
+          examples: [{ row: 2, column: 'Región', value: 'norte' }],
+        },
+      ],
+    };
+    await t.admin`insert into sample_imports (id, tenant_id, project_id, file_name, size, sha256, headers, mapping, status, report)
+      values (${imp}, ${tenant.id}, ${project}, 's.csv', 1, 'x', ${t.admin.json(['id', 'Nombre', 'Correo', 'Región'])},
+        ${t.admin.json(mapping)}, 'committed', ${t.admin.json(report)})`;
+    const unit = uuidv7();
+    await t.admin`insert into frame_units (id, tenant_id, project_id, external_id, sample, sample_pii, contacts, import_id, case_id)
+      values (${unit}, ${tenant.id}, ${project}, ${'U' + unit.slice(-6)}, ${t.admin.json({ first_name: 'Luis', region: 1 })},
+        'v1.sealed', ${t.admin.json([{ type: 'phone', value: '+51987654321' }])}, ${imp}, ${caseId})`;
+    await t.admin`update cases set import_id = ${imp}, frame_unit_id = ${unit} where id = ${caseId}`;
+    const second = uuidv7();
+    await t.admin`insert into entry_mismatches (id, tenant_id, project_id, case_id, first_interview_id, second_interview_id, variable, first_value, second_value)
+      values (${uuidv7()}, ${tenant.id}, ${project}, ${caseId}, ${iv}, ${second}, 'PHONE', ${t.admin.json('987654321')}, ${t.admin.json('987654320')}),
+             (${uuidv7()}, ${tenant.id}, ${project}, ${caseId}, ${iv}, ${second}, 'AGE', ${t.admin.json(40)}, ${t.admin.json(41)})`;
+    const batch = uuidv7();
+    const form = uuidv7();
+    await t.admin`insert into papi_scan_batches (id, tenant_id, project_id, file_name, status)
+      values (${batch}, ${tenant.id}, ${project}, 'scan.pdf', 'done')`;
+    await t.admin`insert into papi_scan_forms (id, tenant_id, project_id, batch_id, case_id, questionnaire_version_id, lang, status, pages_expected)
+      values (${form}, ${tenant.id}, ${project}, ${batch}, ${caseId}, ${version}, 'es', 'done', 1)`;
+    await t.admin`insert into papi_scan_pages (id, tenant_id, batch_id, form_id, page_no, width, height, image)
+      values (${uuidv7()}, ${tenant.id}, ${batch}, ${form}, 1, 10, 10, ${Buffer.from('png')})`;
+    await t.app.get(BiService).refresh(true);
+    const inModel = () =>
+      t.admin`select 1 from bi.fact_respuesta where envio_id = ${iv} and variable = 'PHONE'`;
+    expect(await inModel()).toHaveLength(1);
+
+    await pm.agent
+      .post(`${base()}/cases/${caseId}/erase`)
+      .set('x-csrf-token', pm.csrf)
+      .send({ note: 'Solicitud ARCO 2026-18' })
+      .expect(200);
+
+    const [u] =
+      await t.admin`select sample, sample_pii, contacts from frame_units where id = ${unit}`;
+    expect(u).toEqual({ sample: { region: 1 }, sample_pii: null, contacts: [] });
+    const [r] = await t.admin`select report from sample_imports where id = ${imp}`;
+    const examples = (r!.report as typeof report).issues.map((i) => i.examples[0]!.value);
+    expect(examples).toEqual(['', 'norte']);
+    const ms = await t.admin`select variable, first_value, second_value from entry_mismatches
+      where case_id = ${caseId} order by variable`;
+    expect(ms.map((m) => [m.variable, m.first_value, m.second_value])).toEqual([
+      ['AGE', 40, 41],
+      ['PHONE', null, null],
+    ]);
+    expect(await t.admin`select 1 from papi_scan_pages where form_id = ${form}`).toHaveLength(0);
+    // The analysis model sees the change and is refreshed.
+    await t.app.get(JobsService).drain();
+    expect(await inModel()).toHaveLength(0);
   });
 
   it('removes personal data after the retention period, and only then', async () => {

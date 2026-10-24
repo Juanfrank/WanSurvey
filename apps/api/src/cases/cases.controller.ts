@@ -201,11 +201,16 @@ export class CasesController {
         // Rule filters run in the engine, over the already narrowed set.
         const match = compileRule(q.filter);
         const all = this.svc
-          .openRows(
-            await this.svc
-              .selectCases(tx)
-              .where(and(...conds))
-              .orderBy(by, asc(cases.id)),
+          .forRules(
+            ctx,
+            projectId,
+            pii,
+            this.svc.openRows(
+              await this.svc
+                .selectCases(tx)
+                .where(and(...conds))
+                .orderBy(by, asc(cases.id)),
+            ),
           )
           .filter(match);
         total = all.length;
@@ -527,10 +532,15 @@ export class CasesController {
         const err = ruleError(body.filter || 'true');
         if (body.filter && err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
         const match = compileRule(body.filter);
-        const all = this.svc.openRows(
-          await this.svc
-            .selectCases(tx)
-            .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
+        const all = this.svc.forRules(
+          ctx,
+          projectId,
+          await this.svc.piiFields(tx, projectId),
+          this.svc.openRows(
+            await this.svc
+              .selectCases(tx)
+              .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
+          ),
         );
         ids = all.filter(match).map((c) => c.id);
       }
@@ -560,7 +570,10 @@ export class CasesController {
           );
         rows.forEach((r) => workable.add(r.id));
       }
-      const n = await this.svc.assign(tx, ctx, projectId, [...workable], body.userId, 'manual');
+      const n = await this.svc.assign(tx, ctx, projectId, [...workable], body.userId, 'manual', {
+        statuses: ['fresh', 'assigned', 'in_progress'],
+        unassigned: body.onlyUnassigned,
+      });
       await this.audit.record(
         tx,
         ctx.tenantId,
@@ -615,7 +628,12 @@ export class CasesController {
       let changed = 0;
       for (const [userId, ids] of hands) {
         perPerson[userId] = ids.length;
-        if (ids.length) changed += await this.svc.assign(tx, ctx, projectId, ids, userId, 'random');
+        if (ids.length)
+          changed += await this.svc.assign(tx, ctx, projectId, ids, userId, 'random', {
+            statuses: ['fresh', 'assigned'],
+            // Planned on the free cases: only those still free.
+            unassigned: !body.caseIds,
+          });
       }
       await this.audit.record(
         tx,
@@ -829,6 +847,8 @@ export class CasesController {
       join projects p on p.id = i.project_id
       join questionnaire_versions v on v.id = i.questionnaire_version_id
       where i.project_id = ${projectId}
+        -- Second entries of paper forms are checks, not output (as in the metrics).
+        and i.entry_pass = 1
         and i.interviewer_id in (${sql.join(
           people.map((x) => sql`${x}::uuid`),
           sql`, `,

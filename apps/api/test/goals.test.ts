@@ -40,13 +40,13 @@ describe('interviewer goals per period', () => {
   const post = (s: Session, path: string, body: object) =>
     s.agent.post(path).set('x-csrf-token', s.csrf).send(body);
 
-  async function interview(status: string, disposition = 'COMPLETE') {
+  async function interview(status: string, disposition = 'COMPLETE', entryPass = 1) {
     const [v] =
       await t.admin`select id from questionnaire_versions where questionnaire_id = ${qid}`;
     await t.admin`insert into interviews (id, tenant_id, project_id, questionnaire_version_id, mode,
-        interviewer_id, status, disposition, language, device_id, submitted_at, submissions, ended_at)
-      values (${uuidv7()}, ${tenant.id}, ${project}, ${v!.id}, 'CAPI', ${ana.id},
-        ${status}, ${disposition}, 'es', 'dev-goal', now(), 1, now())`;
+        interviewer_id, status, disposition, language, device_id, submitted_at, submissions, ended_at, entry_pass)
+      values (${uuidv7()}, ${tenant.id}, ${project}, ${v!.id}, ${entryPass > 1 ? 'PAPI' : 'CAPI'}, ${ana.id},
+        ${status}, ${disposition}, 'es', 'dev-goal', now(), 1, now(), ${entryPass})`;
   }
 
   it('sets a goal for a period and counts the completes against the pace', async () => {
@@ -94,9 +94,11 @@ describe('interviewer goals per period', () => {
     await interview('approved');
     await interview('rejected');
     await interview('submitted', 'REFUSAL');
+    // The second keying of a paper form checks the first; it is not another complete.
+    await interview('submitted', 'COMPLETE', 2);
     const list = await supervisor.agent.get(base).expect(200);
     expect(list.body).toHaveLength(1);
-    // Two completes count; the rejected one and the refusal do not. 4 were due by today (2/3).
+    // Two completes count; the rejected one, the refusal and the second entry do not. 4 were due by today (2/3).
     expect(list.body[0]).toMatchObject({
       name: expect.any(String),
       target: 6,

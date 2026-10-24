@@ -59,6 +59,7 @@ export type AuditAction =
   | 'case.released'
   | 'case.checkout_released'
   | 'cases.geocoded'
+  | 'cases.map_viewed'
   | 'interview.submitted'
   | 'entry.resolved'
   | 'papi.scans_uploaded'

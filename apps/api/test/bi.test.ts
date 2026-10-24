@@ -7,8 +7,10 @@ import {
   createProject,
   createQuestionnaire,
   createTenant,
+  createUser,
   unique,
   type TestApp,
+  type TestUser,
 } from './harness.js';
 
 /** The analysis model (schema bi): snowflake and flat table, refreshed by a scheduled job. */
@@ -16,6 +18,7 @@ describe('analysis model', () => {
   let t: TestApp;
   let tenant: { id: string; slug: string };
   let project: string;
+  let ines: TestUser;
   const interview = uuidv7();
   const response = uuidv7();
 
@@ -26,12 +29,24 @@ describe('analysis model', () => {
     const qid = await createQuestionnaire(t.admin, tenant.id, project, { publish: true });
     const [v] =
       await t.admin`select id from questionnaire_versions where questionnaire_id = ${qid}`;
+    // An interviewer in a team here and in another organisation's team too.
+    ines = await createUser(t.admin, tenant.id, [{ role: 'interviewer', projectId: project }]);
+    const elsewhere = await createTenant(t.admin);
+    await createUser(t.admin, elsewhere.id, [{ role: 'interviewer' }], { existing: ines });
+    for (const [org, name] of [
+      [tenant.id, 'Brigada Norte'],
+      [elsewhere.id, 'Otra empresa'],
+    ] as const) {
+      const team = uuidv7();
+      await t.admin`insert into teams (id, tenant_id, name) values (${team}, ${org}, ${name})`;
+      await t.admin`insert into team_members (team_id, user_id, tenant_id) values (${team}, ${ines.id}, ${org})`;
+    }
     const caseId = uuidv7();
     await t.admin`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, status)
       values (${caseId}, ${tenant.id}, ${project}, ${qid}, 'BI001', 'finalised')`;
     await t.admin`insert into interviews (id, tenant_id, project_id, case_id, questionnaire_version_id,
-        mode, status, disposition, language, device_id, answers, submitted_at)
-      values (${interview}, ${tenant.id}, ${project}, ${caseId}, ${v!.id}, 'CAPI', 'submitted',
+        interviewer_id, mode, status, disposition, language, device_id, answers, submitted_at)
+      values (${interview}, ${tenant.id}, ${project}, ${caseId}, ${v!.id}, ${ines.id}, 'CAPI', 'submitted',
         'COMPLETE', 'es', 'd1', ${t.admin.json({
           A1_CONSENT: 1,
           A2_AGE: { $special: 'DK' },
@@ -83,6 +98,14 @@ describe('analysis model', () => {
     expect(by('_CARA')).toMatchObject({ respuesta: 'Bien', valor_numero: 4, canal: 'link' });
     expect(by('SEDE')).toMatchObject({ respuesta: 'Centro', instrumento_tipo: 'valoracion' });
     expect(by('_COMENTARIO')).toMatchObject({ respuesta: 'Rápido' });
+    // The interviewer's teams are those of this organisation only, once per answer.
+    const [team] = await t.admin`
+      select count(*)::int as n, min(entrevistador) as who, min(equipos) as equipos
+      from bi.plano_respuestas where envio_id = ${interview} and variable = 'A1_CONSENT'`;
+    expect(team).toEqual({ n: 1, who: ines.email, equipos: 'Brigada Norte' });
+    const people = await t.admin`select equipos from bi.dim_persona
+      where persona_id = ${ines.id} order by equipos`;
+    expect(people.map((p) => p.equipos)).toEqual(['Brigada Norte', 'Otra empresa']);
 
     // The snowflake joins on single keys and finds every answer's question.
     const [orphans] = await t.admin`

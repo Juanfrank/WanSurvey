@@ -128,10 +128,15 @@ export class AssignmentRulesController {
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const match = compileRule(body.filter);
       const all = this.svc
-        .openRows(
-          await this.svc
-            .selectCases(tx)
-            .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
+        .forRules(
+          ctx,
+          projectId,
+          await this.svc.piiFields(tx, projectId),
+          this.svc.openRows(
+            await this.svc
+              .selectCases(tx)
+              .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
+          ),
         )
         .filter(match);
       return {

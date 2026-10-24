@@ -251,6 +251,7 @@ export const casesEn = {
     asTable_one: '{{count}} point as a table',
     asTable_other: '{{count}} points as a table',
     coordinates: 'Latitude, longitude',
+    noPii: 'The map locates people, so it is shown only to those allowed to see personal data.',
   },
   import: {
     title: 'Import sample',
@@ -693,6 +694,7 @@ export const casesEs: CasesCatalogue = {
     asTable_one: '{{count}} punto como tabla',
     asTable_other: '{{count}} puntos como tabla',
     coordinates: 'Latitud, longitud',
+    noPii: 'El mapa ubica a las personas, por eso solo lo ven quienes pueden ver datos personales.',
   },
   import: {
     title: 'Importar muestra',

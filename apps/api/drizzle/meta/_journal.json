@@ -295,6 +295,13 @@
       "when": 1793300004000,
       "tag": "0041_state_version",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793300005000,
+      "tag": "0042_bi_persona_per_org",
+      "breakpoints": true
     }
   ]
 }

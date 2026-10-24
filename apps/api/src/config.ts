@@ -157,6 +157,11 @@ const Env = z.object({
   BI_REFRESH_CRON: z.string().trim().min(1).default('40 */6 * * *'),
   /** Days an export's file is kept before it is deleted (the request stays, as expired); 0 keeps them. */
   EXPORT_RETENTION_DAYS: z.coerce.number().int().min(0).default(7),
+  /**
+   * Largest export, as interviews × questions, estimated before anything is read: the file is
+   * built in the worker's memory.
+   */
+  EXPORT_MAX_CELLS: z.coerce.number().int().min(1).default(25_000_000),
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),

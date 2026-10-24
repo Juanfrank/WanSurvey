@@ -232,4 +232,28 @@ describe('paper forms', () => {
     expect(third.body.code).toBe('CASE_CLOSED');
     await doubleEntry(false);
   });
+  it('double entry still works when the first entry was reviewed meanwhile', async () => {
+    await doubleEntry(true);
+    const caseId = await newCase(clerk1.id, 'P0300');
+    const first = (await key(k1, caseId, 41, 1, 'clerk-desk-0001')) as { interviewId: string };
+    // A supervisor opens (or approves) the first entry before the second is keyed.
+    await t.admin`update interviews set status = 'in_review' where id = ${first.interviewId}`;
+    const look = await k2.agent.get(`/api/v1/projects/${project}/papi/lookup?externalId=P0300`);
+    expect(look.body.pass).toBe(2);
+    expect(
+      (await k1.agent.get(`/api/v1/projects/${project}/papi/lookup?externalId=P0300`)).body.code,
+    ).toBe('SAME_CLERK');
+    const second = (await key(k2, caseId, 14, 1, 'clerk-desk-0002')) as { pass: number };
+    expect(second.pass).toBe(2);
+    const open = await supervisor.agent.get(`/api/v1/projects/${project}/papi/mismatches`);
+    expect(open.body).toEqual([
+      expect.objectContaining({
+        externalId: 'P0300',
+        variable: 'AGE',
+        firstValue: 41,
+        secondValue: 14,
+      }),
+    ]);
+    await doubleEntry(false);
+  });
 });

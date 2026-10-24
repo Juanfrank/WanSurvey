@@ -51,10 +51,13 @@ export function CaseMap({
   const qc = useQueryClient();
   const canGeocode = useCan('cases.edit', projectId);
   const canStatus = useCan('cases.read_all', projectId) || canGeocode;
+  // Coordinates locate people: the API gives them only with `pii.view`.
+  const canSee = useCan('pii.view', projectId);
   const [message, setMessage] = useState('');
   const points = useQuery({
     queryKey: ['cases-map', projectId],
     queryFn: () => api<Point[]>(`/projects/${projectId}/cases-map`),
+    enabled: canSee,
   });
   const status = useQuery({
     queryKey: ['geocode-status', projectId],
@@ -207,7 +210,9 @@ export function CaseMap({
           </details>
         </>
       ) : (
-        <p className="text-sm text-slate-600">{t('cases.map.none')}</p>
+        <p className="text-sm text-slate-600" data-testid={canSee ? undefined : 'map-no-pii'}>
+          {t(canSee ? 'cases.map.none' : 'cases.map.noPii')}
+        </p>
       )}
     </section>
   );
