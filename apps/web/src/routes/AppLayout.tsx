@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError, nextRouteFor, type Me } from '../api.js';
+import { api, ApiError, nextRouteFor, switchTenant as openTenant, type Me } from '../api.js';
 import { AccountMenu } from './AccountMenu.js';
 import { adminSectionsFor } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
@@ -71,8 +71,7 @@ export function AppLayout() {
   }, [me.data, me.error, location.pathname, navigate]);
 
   const switchTenant = async (tenantId: string) => {
-    await api('/auth/switch-tenant', { method: 'POST', body: { tenantId } });
-    await queryClient.invalidateQueries();
+    if (await openTenant(tenantId)) await queryClient.invalidateQueries();
   };
   const logout = async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);

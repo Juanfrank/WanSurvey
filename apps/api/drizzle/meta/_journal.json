@@ -274,6 +274,13 @@
       "when": 1793300001000,
       "tag": "0038_login_lockout",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793300002000,
+      "tag": "0039_tenant_by_slug",
+      "breakpoints": true
     }
   ]
 }

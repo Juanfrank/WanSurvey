@@ -29,6 +29,7 @@ import {
 } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isUuid, type Tx, type UserTenant } from '../db/database.js';
+import { SsoConfigs } from './sso-config.js';
 import { memberships, sessions, tenantMembers, userTokens, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 
@@ -95,6 +96,7 @@ export class AuthService {
     private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
+    private readonly ssoConfigs: SsoConfigs,
   ) {}
 
   /**
@@ -174,8 +176,18 @@ export class AuthService {
         message: 'You are not a member of that organisation',
       });
     }
-    const [enforced] = await this.database.ssoEnforcedTenants([target.id]);
+    // Microsoft only: a session from one organisation's directory opens another organisation
+    // only through that one's directory (owners included: there is no password to fall back on).
+    const adOnly = !this.config.PASSWORD_LOGIN;
+    const targetSso = adOnly ? await this.ssoConfigs.forTenant(target.id) : null;
     if (
+      adOnly &&
+      !(targetSso?.enabled && ctx.authMethod === 'sso' && ctx.idpTenant === targetSso.entraTenantId)
+    )
+      throw this.ssoRequired(target);
+    const [enforced] = adOnly ? [] : await this.database.ssoEnforcedTenants([target.id]);
+    if (
+      !adOnly &&
       enforced &&
       !(ctx.authMethod === 'sso' && ctx.idpTenant === enforced.entraTenantId) &&
       !(await this.isOwnerIn(target.id, ctx.userId))
@@ -211,7 +223,9 @@ export class AuthService {
       // in the organisation whose directory performed it.
       mfaAlreadyVerified:
         ctx.mfaState === 'ok' &&
-        (ctx.authMethod === 'password' || (!!enforced && ctx.idpTenant === enforced.entraTenantId)),
+        (ctx.authMethod === 'password' ||
+          (!!enforced && ctx.idpTenant === enforced.entraTenantId) ||
+          (adOnly && ctx.idpTenant === targetSso?.entraTenantId)),
       authMethod: ctx.authMethod,
       idpTenant: ctx.idpTenant,
       action: 'auth.login',
@@ -238,44 +252,69 @@ export class AuthService {
   ) {
     return this.database.withTenant(
       tenantId,
-      async (tx) => {
-        const roles = await tx
-          .select({ role: memberships.role })
-          .from(memberships)
-          .where(eq(memberships.userId, userId));
-        const needs2fa = roles.some((r) => ROLES_REQUIRING_2FA.includes(r.role as Role));
-        const mfaState: AuthContext['mfaState'] = opts.mfaAlreadyVerified
-          ? 'ok'
-          : opts.totpEnabled
-            ? 'pending'
-            : needs2fa
-              ? 'enroll'
-              : 'ok';
-        const token = randomToken();
-        const csrfToken = randomToken(24);
-        await tx.insert(sessions).values({
-          tenantId,
-          userId,
-          tokenHash: sha256Hex(token),
-          csrfToken,
-          mfaState,
-          authMethod: opts.authMethod,
-          idpTenant: opts.idpTenant ?? null,
-          ip: opts.client.ip,
-          userAgent: opts.client.userAgent,
-          expiresAt: new Date(Date.now() + this.config.SESSION_ABSOLUTE_HOURS * 3600_000),
-        });
-        await tx.update(users).set({ lastTenantId: tenantId }).where(eq(users.id, userId));
-        await this.audit.record(tx, tenantId, {
-          action: opts.action,
-          actorUserId: userId,
-          details: { mfaState, method: opts.authMethod },
-          ...opts.client,
-        });
-        return { cookie: `${tenantId}.${token}`, csrfToken, mfaState };
-      },
+      (tx) => this.openSessionIn(tx, tenantId, userId, opts),
       userId,
     );
+  }
+
+  /**
+   * The same, in a transaction already open in the organisation with the account as its user.
+   * `roles` and `lastTenantId`, when the caller read them already, spare two statements.
+   */
+  async openSessionIn(
+    tx: Tx,
+    tenantId: string,
+    userId: string,
+    opts: {
+      totpEnabled: boolean;
+      mfaAlreadyVerified: boolean;
+      authMethod: 'password' | 'sso';
+      idpTenant?: string | null;
+      action: AuditEntry['action'];
+      client: ClientInfo;
+      roles?: string[];
+      lastTenantId?: string | null;
+    },
+  ) {
+    const roles =
+      opts.roles ??
+      (
+        await tx
+          .select({ role: memberships.role })
+          .from(memberships)
+          .where(eq(memberships.userId, userId))
+      ).map((r) => r.role);
+    const needs2fa = roles.some((r) => ROLES_REQUIRING_2FA.includes(r as Role));
+    const mfaState: AuthContext['mfaState'] = opts.mfaAlreadyVerified
+      ? 'ok'
+      : opts.totpEnabled
+        ? 'pending'
+        : needs2fa
+          ? 'enroll'
+          : 'ok';
+    const token = randomToken();
+    const csrfToken = randomToken(24);
+    await tx.insert(sessions).values({
+      tenantId,
+      userId,
+      tokenHash: sha256Hex(token),
+      csrfToken,
+      mfaState,
+      authMethod: opts.authMethod,
+      idpTenant: opts.idpTenant ?? null,
+      ip: opts.client.ip,
+      userAgent: opts.client.userAgent,
+      expiresAt: new Date(Date.now() + this.config.SESSION_ABSOLUTE_HOURS * 3600_000),
+    });
+    if (opts.lastTenantId !== tenantId)
+      await tx.update(users).set({ lastTenantId: tenantId }).where(eq(users.id, userId));
+    await this.audit.record(tx, tenantId, {
+      action: opts.action,
+      actorUserId: userId,
+      details: { mfaState, method: opts.authMethod },
+      ...opts.client,
+    });
+    return { cookie: `${tenantId}.${token}`, csrfToken, mfaState };
   }
 
   private async isOwnerIn(tenantId: string, userId: string): Promise<boolean> {

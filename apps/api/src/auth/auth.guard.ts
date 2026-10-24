@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { roleMatrix, type Permission, type Role } from '@wansurvey/schema';
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq, getTableColumns, sql } from 'drizzle-orm';
 import {
   ALLOW_PENDING_MFA,
   can,
@@ -21,11 +21,45 @@ import {
 import { CSRF_HEADER, SESSION_COOKIE } from '../common/cookies.js';
 import { safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, isUuid } from '../db/database.js';
-import { memberships, sessions, tenantMembers, tenants, users } from '../db/schema.js';
+import { columnsAs, Database, isUuid, Prepared } from '../db/database.js';
+import { sessions, tenants } from '../db/schema.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOUCH_INTERVAL_MS = 60_000;
+
+/**
+ * Everything a request's session needs, in one statement: the session, the account and its
+ * membership here, the person's roles and what each role may do in this organisation. Every
+ * signed-in request runs it (devices sync every few seconds), so it is built once.
+ */
+const sessionByToken = new Prepared<{
+  session: typeof sessions.$inferSelect;
+  email: string;
+  userStatus: string;
+  memberStatus: string;
+  rolePermissions: unknown;
+  grants: { role: string; projectId: string | null }[];
+}>(
+  () => sql`
+    select ${columnsAs(sessions, 's', 'session')}, u.email as "email", u.status as "userStatus",
+           m.status as "memberStatus", t.role_permissions,
+           coalesce((select json_agg(json_build_object('role', g.role, 'projectId', g.project_id))
+                     from memberships g where g.user_id = s.user_id), '[]'::json) as "grants"
+    from sessions s
+    join users u on u.id = s.user_id
+    join tenant_members m on m.user_id = s.user_id
+    join tenants t on t.id = s.tenant_id
+    where s.token_hash = ${sql.placeholder('hash')} and s.revoked_at is null
+    limit 1`,
+  {
+    session: getTableColumns(sessions),
+    email: 'raw',
+    userStatus: 'raw',
+    memberStatus: 'raw',
+    rolePermissions: tenants.rolePermissions,
+    grants: 'raw',
+  },
+);
 
 /** Parses `<tenantId>.<token>` from the session cookie. */
 export function parseSessionCookie(value: unknown): { tenantId: string; token: string } | null {
@@ -106,19 +140,10 @@ export class AuthGuard implements CanActivate {
     const idleMs = this.config.SESSION_IDLE_MINUTES * 60_000;
 
     const auth = await this.database.withTenant(cookie.tenantId, async (tx) => {
-      const [row] = await tx
-        .select({
-          session: sessions,
-          user: { id: users.id, email: users.email, status: users.status },
-          memberStatus: tenantMembers.status,
-        })
-        .from(sessions)
-        .innerJoin(users, eq(users.id, sessions.userId))
-        .innerJoin(tenantMembers, eq(tenantMembers.userId, sessions.userId))
-        .where(and(eq(sessions.tokenHash, sha256Hex(cookie.token)), isNull(sessions.revokedAt)))
-        .limit(1);
+      const [row] = await sessionByToken.run(tx, { hash: sha256Hex(cookie.token) });
       if (!row) return null;
-      const { session, user, memberStatus } = row;
+      const { session, memberStatus } = row;
+      const user = { id: session.userId, email: row.email, status: row.userStatus };
       // The account must be active, and still an active member of this organisation.
       if (
         user.status !== 'active' ||
@@ -132,15 +157,9 @@ export class AuthGuard implements CanActivate {
       if (now.getTime() - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
         await tx.update(sessions).set({ lastSeenAt: now }).where(eq(sessions.id, session.id));
       }
-      const grants = await tx
-        .select({ role: memberships.role, projectId: memberships.projectId })
-        .from(memberships)
-        .where(eq(memberships.userId, user.id));
+      const grants = row.grants;
       // What each role may do here, with the organisation's changes.
-      const [tenant] = await tx
-        .select({ rolePermissions: tenants.rolePermissions })
-        .from(tenants)
-        .where(eq(tenants.id, cookie.tenantId));
+      const tenant = { rolePermissions: row.rolePermissions as never };
       const matrix = roleMatrix(tenant?.rolePermissions);
       return {
         tenantId: cookie.tenantId,

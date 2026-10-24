@@ -1,13 +1,30 @@
 import { Link } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError } from '../api.js';
+import { api, ApiError, ssoStartUrl } from '../api.js';
+import { useAuthMethods } from './LoginPage.js';
 import { AuthShell, Button, ErrorText, Field } from './ui.js';
 
 /** As the server requires (`MIN_PASSWORD_LENGTH`). */
 const MIN = 10;
 
 const tokenFromAddress = () => new URLSearchParams(window.location.search).get('token') ?? '';
+
+/** With password sign-in off: no password to set or reset, only the Microsoft button. */
+function MicrosoftOnly({ title }: { title: string }) {
+  const { t } = useTranslation();
+  return (
+    <AuthShell title={title}>
+      <p className="mb-4 text-sm text-slate-600">{t('login.passwordOff')}</p>
+      <a
+        href={ssoStartUrl()}
+        className="block rounded-md border border-indigo-600 bg-indigo-600 px-4 py-2 text-center text-sm font-semibold text-on-fill hover:border-indigo-500 hover:bg-indigo-500"
+      >
+        {t('login.microsoft')}
+      </a>
+    </AuthShell>
+  );
+}
 
 /**
  * A new password from an e-mailed link: accepting an invitation (`/accept-invitation`), or
@@ -22,6 +39,7 @@ function TokenPasswordPage({ kind }: { kind: 'accept' | 'reset' }) {
   const [done, setDone] = useState(false);
   // Someone who already has an account confirms with it: one field, no rules shown.
   const [existing, setExisting] = useState(false);
+  const passwords = useAuthMethods().data?.password ?? true;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -51,6 +69,7 @@ function TokenPasswordPage({ kind }: { kind: 'accept' | 'reset' }) {
   };
 
   const title = kind === 'accept' ? t('password.acceptTitle') : t('password.resetTitle');
+  if (!passwords) return <MicrosoftOnly title={title} />;
   if (done)
     return (
       <AuthShell title={title}>
@@ -113,6 +132,7 @@ export function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const passwords = useAuthMethods().data?.password ?? true;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -126,6 +146,7 @@ export function ForgotPasswordPage() {
       setBusy(false);
     }
   };
+  if (!passwords) return <MicrosoftOnly title={t('password.forgotTitle')} />;
   return (
     <AuthShell title={t('password.forgotTitle')}>
       {sent ? (

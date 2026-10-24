@@ -43,6 +43,20 @@ param encryptionKey string
 param smtpUrl string = ''
 param mailFrom string = ''
 
+@description('Organisation (slug) whose people sign in with the Microsoft button; its directory is the ENTRA_* below.')
+param ssoDefaultOrg string = ''
+@description('Microsoft Entra directory (tenant) id of the app registration.')
+param entraTenantId string = ''
+@description('Application (client) id of the app registration.')
+param entraClientId string = ''
+@secure()
+@description('Client secret of the app registration, or a Key Vault reference.')
+param entraClientSecret string = ''
+@description('E-mail domains of that directory, comma-separated, e.g. poderjudicial.gob.do.')
+param entraAllowedDomains string = ''
+@description('false: Microsoft sign-in only (no passwords, no password reset).')
+param passwordLogin bool = false
+
 @description('Extra app settings (name: value), e.g. SSO or retention settings.')
 param extraSettings object = {}
 
@@ -82,6 +96,17 @@ resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
   }
 }
 
+// The Microsoft button's directory, only when given (an empty setting is not a valid one).
+var entraSettings = empty(ssoDefaultOrg)
+  ? {}
+  : {
+      SSO_DEFAULT_ORG: ssoDefaultOrg
+      ENTRA_TENANT_ID: entraTenantId
+      ENTRA_CLIENT_ID: entraClientId
+      ENTRA_CLIENT_SECRET: entraClientSecret
+      ENTRA_ALLOWED_DOMAINS: entraAllowedDomains
+    }
+
 // Every container sees every app setting; a container overrides one by pointing a variable
 // at another setting (the API's PORT and each Node process's heap below).
 var settings = union(
@@ -95,6 +120,7 @@ var settings = union(
     MAILER: empty(smtpUrl) ? 'console' : 'smtp'
     SMTP_URL: smtpUrl
     MAIL_FROM: mailFrom
+    PASSWORD_LOGIN: passwordLogin ? 'true' : 'false'
     // nginx → API on the same host; App Service front end → nginx → API.
     API_UPSTREAM: 'http://localhost:3000'
     TRUST_PROXY_HOPS: '2'
@@ -116,6 +142,7 @@ var settings = union(
     // Health check: an instance is taken out of rotation after 5 failed pings (one a minute).
     WEBSITE_HEALTHCHECK_MAXPINGFAILURES: '5'
   },
+  entraSettings,
   extraSettings
 )
 

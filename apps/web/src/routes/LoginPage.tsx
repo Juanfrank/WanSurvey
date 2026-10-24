@@ -1,9 +1,22 @@
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, ApiError, ssoStartUrl, type LoginResponse } from '../api.js';
+import { api, ApiError, ssoStartUrl, type AuthMethods, type LoginResponse } from '../api.js';
 import { AuthShell, Button, ErrorText, Field } from './ui.js';
+
+/**
+ * What the sign-in page offers. Until it is known (or if it cannot be read) the password form
+ * shows, as before; with password sign-in off the server refuses it anyway.
+ */
+export function useAuthMethods() {
+  return useQuery({
+    queryKey: ['auth-methods'],
+    queryFn: () => api<AuthMethods>('/auth/methods'),
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
@@ -19,6 +32,9 @@ export function LoginPage() {
   );
   const [ssoUrl, setSsoUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const methods = useAuthMethods().data;
+  const passwords = methods?.password ?? true;
+  const needsEmail = methods?.microsoftNeedsEmail ?? true;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,12 +65,39 @@ export function LoginPage() {
   };
 
   const microsoft = () => {
-    if (!email.includes('@')) {
-      setError(t('login.microsoftNeedsEmail'));
-      return;
-    }
-    window.location.assign(ssoStartUrl(email));
+    if (email.includes('@')) return window.location.assign(ssoStartUrl(email));
+    if (needsEmail) return setError(t('login.microsoftNeedsEmail'));
+    window.location.assign(ssoStartUrl());
   };
+
+  if (!passwords)
+    return (
+      <AuthShell title={t('login.title')}>
+        <form
+          className="flex flex-col gap-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            microsoft();
+          }}
+        >
+          <ErrorText>{error}</ErrorText>
+          <p className="text-sm text-slate-600">{t('login.microsoftOnly')}</p>
+          {needsEmail ? (
+            <Field
+              id="email"
+              label={t('login.email')}
+              type="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          ) : null}
+          <Button type="submit">{t('login.microsoft')}</Button>
+        </form>
+      </AuthShell>
+    );
 
   return (
     <AuthShell title={t('login.title')}>

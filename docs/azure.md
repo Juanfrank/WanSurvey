@@ -32,8 +32,12 @@ Deploy with:
 az deployment group create -g <group> -f infra/azure/main.bicep \
   -p name=wansurvey acrName=<registry> imageTag=<tag> publicUrl=https://encuestas.example.org \
      databaseUrl='@Microsoft.KeyVault(SecretUri=…)' redisUrl='@Microsoft.KeyVault(SecretUri=…)' \
-     encryptionKey='@Microsoft.KeyVault(SecretUri=…)' smtpUrl=… mailFrom='WanSurvey <encuestas@example.org>'
+     encryptionKey='@Microsoft.KeyVault(SecretUri=…)' smtpUrl=… mailFrom='WanSurvey <encuestas@example.org>' \
+     ssoDefaultOrg=<slug> entraTenantId=<directory id> entraClientId=<client id> \
+     entraClientSecret='@Microsoft.KeyVault(SecretUri=…)' entraAllowedDomains=agency.org
 ```
+
+`passwordLogin` defaults to `false`: sign-in is the Microsoft button alone (`docs/sso-entra.md`, section 4).
 
 The three separate apps of the earlier setup (web, API and worker each on its own Web App) still work: set `API_UPSTREAM` to the API app's address and `TRUST_PROXY_HOPS=3`. Docker Compose on App Service retires on 31 March 2027; sidecars are its replacement, so the single app is the layout to keep.
 
@@ -60,6 +64,9 @@ API_PUBLIC_URL=https://encuestas.example.org
 MAILER=smtp
 SMTP_URL=smtps://<user>:<password>@smtp.example.org:465
 MAIL_FROM=WanSurvey <encuestas@example.org>
+PASSWORD_LOGIN=false               # the Microsoft button only
+SSO_DEFAULT_ORG=<slug>             # with ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET
+ENTRA_ALLOWED_DOMAINS=agency.org   # (secret from Key Vault)
 API_UPSTREAM=http://localhost:3000
 TRUST_PROXY_HOPS=2                 # App Service front end → nginx → API
 API_PORT=3000                      # the api container's PORT

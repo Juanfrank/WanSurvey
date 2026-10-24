@@ -77,6 +77,25 @@ PUT /api/v1/tenant/sso
 
 **Two-factor authentication.** If the ID token's `amr` claim contains `mfa`, WanSurvey does not ask for its own TOTP code. Otherwise its usual rules apply: enrolled users enter a code, and owners and admins must enrol. Use Entra Conditional Access to require MFA for the WanSurvey app.
 
+## 4. Microsoft only, with one button (production)
+
+With `PASSWORD_LOGIN=false` the sign-in page shows only **Ingresar con Microsoft**: no e-mail, no password, no "forgot password" link. The deployment, not an owner in the app, says where the button goes:
+
+```
+PASSWORD_LOGIN=false
+SSO_DEFAULT_ORG=<slug of the organisation>
+ENTRA_TENANT_ID=<Directory (tenant) ID>
+ENTRA_CLIENT_ID=<Application (client) ID>
+ENTRA_CLIENT_SECRET=<secret value, from Key Vault>
+ENTRA_ALLOWED_DOMAINS=agency.org          # comma-separated
+```
+
+- **The button.** `GET /api/v1/auth/methods` answers `{ "password": false, "microsoftNeedsEmail": false }`; the button then opens `sso/start` with no e-mail, which signs in to `SSO_DEFAULT_ORG` through the `ENTRA_*` app registration. With those four set, that organisation's own `PUT /tenant/sso` settings are not used, and no other organisation can claim those domains.
+- **Passwords off.** `POST /auth/login`, `/auth/password/forgot`, `/auth/password/reset` and `/auth/invitations/accept` answer 403 `PASSWORD_LOGIN_DISABLED` with the `ssoStartUrl`; the reset and invitation pages show the Microsoft button. Someone invited joins by signing in with Microsoft (the invitation is accepted then, step 4 above). Owners have no password break-glass route here: keep two owners, and keep the app registration's secret current.
+- **Linking by e-mail.** An account first signs in with Microsoft by its e-mail in an allowed domain, even if it belongs to other organisations too (there is no password to prove it with, and domains are unique to one organisation). The Entra `oid` is linked then; every later sign-in finds the account by `oid`.
+- **One directory per session.** A session opens another of the person's organisations only if that organisation has Microsoft sign-in from the same directory; otherwise `switch-tenant` answers `SSO_REQUIRED` and the app sends the browser to that organisation's own sign-in.
+- **Start of the day.** The settings are read once a minute per process, and a known account signs in with one transaction (find it by `oid`, open the session); see `load/results.md`.
+
 ## Testing against a real tenant
 
 Set these in the API environment:

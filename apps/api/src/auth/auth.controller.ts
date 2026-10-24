@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  Inject,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -38,6 +48,26 @@ export class AuthController {
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
+  /** With password sign-in off (PASSWORD_LOGIN=false), every password route answers this. */
+  private passwordsOff() {
+    if (this.config.PASSWORD_LOGIN) return;
+    throw new ForbiddenException({
+      code: 'PASSWORD_LOGIN_DISABLED',
+      message: 'Sign in with Microsoft',
+      ssoStartUrl: `${this.config.API_PUBLIC_URL}/api/v1/auth/sso/start`,
+    });
+  }
+
+  /** What the sign-in page offers: the password form, and whether Microsoft needs the e-mail. */
+  @Public()
+  @Get('methods')
+  methods() {
+    return {
+      password: this.config.PASSWORD_LOGIN,
+      microsoftNeedsEmail: !this.config.SSO_DEFAULT_ORG,
+    };
+  }
+
   @Public()
   @Throttle(authLimit)
   @Post('login')
@@ -48,6 +78,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    this.passwordsOff();
     const result = await this.auth.login(body, client(req));
     setSessionCookies(res, this.config, result.cookie, result.csrfToken);
     return {
@@ -129,6 +160,7 @@ export class AuthController {
     @Body(new ZodPipe(TokenPasswordBody)) body: z.infer<typeof TokenPasswordBody>,
     @Req() req: Request,
   ) {
+    this.passwordsOff();
     await this.auth.acceptInvitation(body, client(req));
   }
 
@@ -140,6 +172,7 @@ export class AuthController {
     @Body(new ZodPipe(ForgotBody)) body: z.infer<typeof ForgotBody>,
     @Req() req: Request,
   ) {
+    this.passwordsOff();
     await this.auth.forgotPassword(body, client(req));
   }
 
@@ -151,6 +184,7 @@ export class AuthController {
     @Body(new ZodPipe(TokenPasswordBody)) body: z.infer<typeof TokenPasswordBody>,
     @Req() req: Request,
   ) {
+    this.passwordsOff();
     await this.auth.resetPassword(body, client(req));
   }
 }

@@ -50,11 +50,14 @@ const en = {
     or: 'or',
     microsoft: 'Sign in with Microsoft',
     microsoftNeedsEmail: 'Enter your work e-mail first, so we can find your organisation.',
+    microsoftOnly: 'Sign in with your Microsoft work account.',
+    passwordOff: 'Passwords are not used here: sign in with your Microsoft work account.',
     errors: {
       INVALID_CREDENTIALS: 'The e-mail or password is not correct.',
       ACCOUNT_LOCKED:
         'Too many failed attempts. The account is locked for a few minutes; try again later.',
       SSO_REQUIRED: 'Your organisation requires signing in with Microsoft.',
+      PASSWORD_LOGIN_DISABLED: 'Sign in with your Microsoft work account.',
       NOT_A_MEMBER: 'You are not a member of that organisation.',
       generic: 'Sign-in failed. Please try again.',
     },
@@ -240,11 +243,14 @@ const es: Catalogue = {
     or: 'o',
     microsoft: 'Ingresar con Microsoft',
     microsoftNeedsEmail: 'Escriba primero su correo de trabajo para encontrar su organización.',
+    microsoftOnly: 'Ingrese con su cuenta de trabajo de Microsoft.',
+    passwordOff: 'Aquí no se usan contraseñas: ingrese con su cuenta de trabajo de Microsoft.',
     errors: {
       INVALID_CREDENTIALS: 'El correo o la contraseña no son correctos.',
       ACCOUNT_LOCKED:
         'Demasiados intentos fallidos. La cuenta queda bloqueada unos minutos; vuelva a intentarlo más tarde.',
       SSO_REQUIRED: 'Su organización exige ingresar con Microsoft.',
+      PASSWORD_LOGIN_DISABLED: 'Ingrese con su cuenta de trabajo de Microsoft.',
       NOT_A_MEMBER: 'No es miembro de esa organización.',
       generic: 'No se pudo iniciar sesión. Intente de nuevo.',
     },

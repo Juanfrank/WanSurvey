@@ -1,23 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
+import { SsoConfigs } from './sso-config.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, isUuid } from '../db/database.js';
-import {
-  memberships,
-  sessions,
-  tenantMembers,
-  tenantSso,
-  userIdentities,
-  users,
-} from '../db/schema.js';
+import { Database, isUuid, Prepared } from '../db/database.js';
+import { memberships, sessions, tenantMembers, userIdentities, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { parseSessionCookie } from './auth.guard.js';
-import { AuthService, type ClientInfo, type LoginResult } from './auth.service.js';
+import { AuthService, type ClientInfo } from './auth.service.js';
 
 const STATE_TTL_MS = 10 * 60_000;
 
@@ -61,6 +55,38 @@ export function safeReturnTo(value: unknown): string {
   return value.slice(0, 512);
 }
 
+/**
+ * A Microsoft identity already linked, with its account and membership here and its roles, in
+ * one statement; it also sets the account as the transaction's user, for the session that
+ * follows. Read in the organisation's context (row-level security applies).
+ */
+const linkedAccount = new Prepared<{
+  userId: string;
+  userStatus: string;
+  totpEnabled: boolean;
+  lastTenantId: string | null;
+  memberStatus: string;
+  roles: string[];
+}>(
+  () => sql`
+    select ui.user_id as "userId", u.status as "userStatus", u.totp_enabled as "totpEnabled",
+           u.last_tenant_id as "lastTenantId", m.status as "memberStatus",
+           array(select g.role from memberships g where g.user_id = ui.user_id) as "roles",
+           set_config('app.user_id', ui.user_id::text, true) as "_"
+    from user_identities ui
+    join users u on u.id = ui.user_id
+    join tenant_members m on m.user_id = ui.user_id
+    where ui.issuer = ${sql.placeholder('issuer')} and ui.subject = ${sql.placeholder('subject')}`,
+  {
+    userId: 'raw',
+    userStatus: 'raw',
+    totpEnabled: 'raw',
+    lastTenantId: 'raw',
+    memberStatus: 'raw',
+    roles: 'raw',
+  },
+);
+
 const pkceChallenge = (verifier: string) =>
   createHash('sha256').update(verifier).digest('base64url');
 
@@ -77,6 +103,7 @@ export class SsoService {
     private readonly database: Database,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    private readonly configs: SsoConfigs,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
   ) {}
@@ -89,16 +116,28 @@ export class SsoService {
     return `${this.config.ENTRA_AUTHORITY_HOST.replace(/\/$/, '')}/${encodeURIComponent(entraTenantId)}`;
   }
 
-  /** Builds the Microsoft authorize URL and the encrypted state cookie value. */
+  /**
+   * Builds the Microsoft authorize URL and the encrypted state cookie value. The organisation
+   * comes from `org`, or from the e-mail's domain, or else is the default one (SSO_DEFAULT_ORG:
+   * the sign-in button alone).
+   */
   async start(input: { org?: string; email?: string; returnTo?: string }) {
-    let config = null;
+    let tenantId: string | null = null;
     if (input.org) {
-      config = await this.database.ssoConfigBySlug(input.org);
+      tenantId = await this.configs.tenantIdBySlug(input.org);
     } else if (input.email && input.email.includes('@')) {
-      const matches = await this.database.ssoTenantsForDomain(input.email.split('@').pop()!.trim());
-      if (matches.length > 1) throw new SsoError('choose_organisation');
-      config = matches[0] ?? null;
+      const domain = input.email.split('@').pop()!.trim().toLowerCase();
+      tenantId = await this.configs.deploymentTenantForDomain(domain);
+      if (!tenantId) {
+        const matches = await this.database.ssoTenantsForDomain(domain);
+        if (matches.length > 1) throw new SsoError('choose_organisation');
+        tenantId = matches[0]?.tenantId ?? null;
+      }
+    } else {
+      tenantId = await this.configs.defaultTenantId();
+      if (!tenantId) throw new SsoError('choose_organisation');
     }
+    const config = tenantId ? await this.configs.forTenant(tenantId) : null;
     if (!config || !config.enabled)
       throw new SsoError('sso_not_configured', config?.tenantId ?? null);
 
@@ -168,22 +207,22 @@ export class SsoService {
     });
   }
 
-  /** Completes the sign-in: code exchange, token checks, account resolution, session. */
+  /**
+   * Completes the sign-in: code exchange, token checks, account resolution, session.
+   * `signedInUser` is asked only when a Microsoft identity is to be linked to an account.
+   */
   async callback(
     st: SsoState,
     code: string,
     client: ClientInfo,
-    signedInUserId: string | null = null,
-  ): Promise<LoginResult & { returnTo: string }> {
+    signedInUser: () => Promise<string | null> = async () => null,
+  ): Promise<{ cookie: string; csrfToken: string; mfaState: string; returnTo: string }> {
     const fail = (c: string) => new SsoError(c, st.tenantId);
-    const config = await this.database.withTenant(st.tenantId, async (tx) => {
-      const [row] = await tx.select().from(tenantSso).where(eq(tenantSso.tenantId, st.tenantId));
-      return row;
-    });
+    const config = await this.configs.forTenant(st.tenantId);
     if (
       !config ||
       !config.enabled ||
-      !config.clientSecretEnc ||
+      !config.clientSecret ||
       config.entraTenantId !== st.entraTenantId
     ) {
       throw fail('sso_not_configured');
@@ -191,7 +230,7 @@ export class SsoService {
     const claims = await this.redeem(
       config.entraTenantId,
       config.clientId,
-      config.clientSecretEnc,
+      config.clientSecret,
       code,
       st,
     );
@@ -200,6 +239,26 @@ export class SsoService {
 
     const issuer = claims.iss!;
     const subject = claims.oid!;
+    // Trust Microsoft's MFA: skip WanSurvey's TOTP when the token says MFA was performed.
+    const mfa = Array.isArray(claims.amr) && claims.amr.includes('mfa');
+
+    // The usual case, every morning: an identity already linked, to an active account that is
+    // an active member here. One transaction reads it and opens the session.
+    const quick = await this.database.withTenant(st.tenantId, async (tx) => {
+      const [a] = await linkedAccount.run(tx, { issuer, subject });
+      if (!a || a.userStatus !== 'active' || a.memberStatus !== 'active') return null;
+      return this.auth.openSessionIn(tx, st.tenantId, a.userId, {
+        totpEnabled: a.totpEnabled,
+        mfaAlreadyVerified: mfa,
+        authMethod: 'sso',
+        idpTenant: config.entraTenantId,
+        action: 'auth.login',
+        client,
+        roles: a.roles,
+        lastTenantId: a.lastTenantId,
+      });
+    });
+    if (quick) return { ...quick, returnTo: st.returnTo };
     const [identity] = await this.database.db
       .select({ userId: userIdentities.userId })
       .from(userIdentities)
@@ -211,7 +270,16 @@ export class SsoService {
     // to an existing account by e-mail only when that account belongs to this organisation
     // alone, or when its owner is signed in with it in this browser (password and second
     // factor); otherwise they sign in with their password first.
-    if (!identity && existingId && signedInUserId !== existingId) {
+    // With password sign-in off there is no password to prove it with. Linking by e-mail is
+    // then safe on other grounds: an e-mail domain belongs to one organisation only (the
+    // settings refuse a domain another uses), and a session opened through this directory
+    // works in this organisation alone (switching requires each organisation's own directory).
+    if (
+      !identity &&
+      existingId &&
+      this.config.PASSWORD_LOGIN &&
+      (await signedInUser()) !== existingId
+    ) {
       const elsewhere = (await this.database.userTenants(existingId, true)).filter(
         (t) => t.id !== st.tenantId,
       );
@@ -301,29 +369,21 @@ export class SsoService {
 
     const session = await this.auth.openSession(st.tenantId, userId, {
       totpEnabled: outcome.totpEnabled,
-      // Trust Microsoft's MFA: skip WanSurvey's TOTP when the token says MFA was performed.
-      mfaAlreadyVerified: Array.isArray(claims.amr) && claims.amr.includes('mfa'),
+      mfaAlreadyVerified: mfa,
       authMethod: 'sso',
       idpTenant: config.entraTenantId,
       action: 'auth.login',
       client,
     });
     if (outcome.provisioned) await this.notifyAdmins(st.tenantId, email, claims.name ?? email);
-
-    const tenants = (await this.database.userTenants(userId)).map((t) => ({
-      id: t.id,
-      slug: t.slug,
-      name: t.name,
-    }));
-    const tenant = tenants.find((t) => t.id === st.tenantId)!;
-    return { ...session, tenant, tenants, returnTo: st.returnTo };
+    return { ...session, returnTo: st.returnTo };
   }
 
   /** Exchanges the code at the token endpoint and verifies the ID token. */
   private async redeem(
     entraTenantId: string,
     clientId: string,
-    secretEnc: string,
+    clientSecret: string,
     code: string,
     st: SsoState,
   ): Promise<EntraClaims> {
@@ -335,7 +395,7 @@ export class SsoService {
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           client_id: clientId,
-          client_secret: decryptField(secretEnc, this.config.APP_ENCRYPTION_KEY),
+          client_secret: clientSecret,
           grant_type: 'authorization_code',
           code,
           redirect_uri: this.redirectUri,

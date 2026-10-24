@@ -54,6 +54,7 @@ import { CasesController } from './cases/cases.controller.js';
 import { CasesService } from './cases/cases.service.js';
 import { ImportsController } from './cases/imports.controller.js';
 import { SsoController, SsoSettingsController } from './auth/sso.controller.js';
+import { SsoConfigs } from './auth/sso-config.js';
 import { SsoService } from './auth/sso.service.js';
 import { CONFIG, loadConfig } from './config.js';
 import { Database } from './db/database.js';
@@ -188,6 +189,7 @@ export class AppModule {
         AuditService,
         AuthService,
         SsoService,
+        SsoConfigs,
         UsersService,
         CasesService,
         GeoService,

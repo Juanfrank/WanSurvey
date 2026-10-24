@@ -24,6 +24,7 @@ import { CONFIG, loadConfig, type AppConfig } from '../config.js';
 import { Database } from '../db/database.js';
 import { tenantSso } from '../db/schema.js';
 import type { ClientInfo } from './auth.service.js';
+import { SsoConfigs } from './sso-config.js';
 import { SsoError, SsoService } from './sso.service.js';
 
 export const SSO_STATE_COOKIE = 'ws_sso';
@@ -121,11 +122,8 @@ export class SsoController {
       tenantId = st.tenantId;
       if (q.error || !q.code)
         throw new SsoError(q.error ? 'microsoft_error' : 'missing_code', st.tenantId);
-      const result = await this.sso.callback(
-        st,
-        q.code,
-        client(req),
-        await this.sso.signedInUser(req.cookies?.[SESSION_COOKIE]),
+      const result = await this.sso.callback(st, q.code, client(req), () =>
+        this.sso.signedInUser(req.cookies?.[SESSION_COOKIE]),
       );
       res.clearCookie(SSO_STATE_COOKIE, { path: SSO_COOKIE_PATH });
       setSessionCookies(res, this.config, result.cookie, result.csrfToken);
@@ -146,6 +144,7 @@ export class SsoSettingsController {
     private readonly database: Database,
     private readonly audit: AuditService,
     private readonly sso: SsoService,
+    private readonly configs: SsoConfigs,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -168,9 +167,10 @@ export class SsoSettingsController {
     // A domain belongs to one organisation: two would make e-mail sign-in ambiguous, and one
     // could claim another's addresses.
     for (const domain of new Set(body.allowedDomains.map((d) => d.toLowerCase()))) {
-      const taken = (await this.database.ssoTenantsForDomain(domain)).some(
-        (t) => t.tenantId !== ctx.tenantId,
-      );
+      const deployment = await this.configs.deploymentTenantForDomain(domain);
+      const taken =
+        (deployment !== null && deployment !== ctx.tenantId) ||
+        (await this.database.ssoTenantsForDomain(domain)).some((t) => t.tenantId !== ctx.tenantId);
       if (taken)
         throw new ConflictException({
           code: 'DOMAIN_TAKEN',
@@ -202,6 +202,7 @@ export class SsoSettingsController {
         .values({ tenantId: ctx.tenantId, ...values })
         .onConflictDoUpdate({ target: tenantSso.tenantId, set: values })
         .returning();
+      this.configs.invalidate(ctx.tenantId);
       const { clientSecret: _secret, ...audited } = body;
       await this.audit.record(
         tx,

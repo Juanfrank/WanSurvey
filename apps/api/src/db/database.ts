@@ -381,6 +381,12 @@ export class Database implements OnModuleDestroy {
     return rows[0] ?? null;
   }
 
+  /** An organisation's id by slug, before any session (security-definer function). */
+  async tenantIdBySlug(slug: string): Promise<string | null> {
+    const [r] = await this.client<{ id: string | null }[]>`select tenant_id_by_slug(${slug}) as id`;
+    return r?.id ?? null;
+  }
+
   async ssoTenantsForDomain(domain: string): Promise<SsoPublicConfig[]> {
     return this.client<SsoPublicConfig[]>`
       select tenant_id as "tenantId", slug, entra_tenant_id as "entraTenantId", client_id as "clientId", enabled

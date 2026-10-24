@@ -95,8 +95,37 @@ export function nextRouteFor(me: Pick<Me, 'mfaState' | 'access'>): string | null
   return null;
 }
 
-export function ssoStartUrl(email: string, returnTo = '/'): string {
-  return `/api/v1/auth/sso/start?${new URLSearchParams({ email, returnTo }).toString()}`;
+/** Microsoft sign-in; without an e-mail the deployment's organisation (SSO_DEFAULT_ORG). */
+export function ssoStartUrl(email?: string, returnTo = '/'): string {
+  const q = new URLSearchParams(email ? { email, returnTo } : { returnTo });
+  return `/api/v1/auth/sso/start?${q.toString()}`;
+}
+
+/**
+ * Opens another of the person's organisations. One that needs its own Microsoft sign-in (the
+ * session came from another directory) sends the browser there; resolves `false` then.
+ */
+export async function switchTenant(tenantId: string): Promise<boolean> {
+  try {
+    await api('/auth/switch-tenant', { method: 'POST', body: { tenantId } });
+    return true;
+  } catch (err) {
+    if (
+      err instanceof ApiError &&
+      err.code === 'SSO_REQUIRED' &&
+      typeof err.body.ssoStartUrl === 'string'
+    ) {
+      window.location.assign(err.body.ssoStartUrl);
+      return false;
+    }
+    throw err;
+  }
+}
+
+/** What the sign-in page offers (`GET /auth/methods`). */
+export interface AuthMethods {
+  password: boolean;
+  microsoftNeedsEmail: boolean;
 }
 
 /** Multipart upload (sample files); same cookies and CSRF header as `api`. */

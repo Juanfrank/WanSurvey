@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { api } from '../api.js';
+import { switchTenant } from '../api.js';
 import { useMe } from './AppLayout.js';
 import { Button, Card } from './ui.js';
 
@@ -29,11 +29,7 @@ export function WaitingPage() {
                   <Button
                     variant="secondary"
                     onClick={async () => {
-                      await api('/auth/switch-tenant', {
-                        method: 'POST',
-                        body: { tenantId: tn.id },
-                      });
-                      await queryClient.invalidateQueries();
+                      if (await switchTenant(tn.id)) await queryClient.invalidateQueries();
                     }}
                   >
                     {t('waiting.switch')}

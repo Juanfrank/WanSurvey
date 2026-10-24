@@ -50,6 +50,34 @@ const Env = z.object({
   API_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
   /** Microsoft identity platform host; overridable for tests or sovereign clouds. */
   ENTRA_AUTHORITY_HOST: z.string().url().default('https://login.microsoftonline.com'),
+  /**
+   * Sign-in with e-mail and password. Off ('false') where only Microsoft (Entra ID) is used:
+   * the sign-in page shows the Microsoft button alone and the password endpoints refuse.
+   */
+  PASSWORD_LOGIN: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** The organisation (slug) the Microsoft button signs in to when no e-mail is given. */
+  SSO_DEFAULT_ORG: z.string().min(1).max(64).optional(),
+  /**
+   * Microsoft sign-in of SSO_DEFAULT_ORG from the deployment (App Service settings), used
+   * instead of the organisation's own settings: with password sign-in off, nobody could sign
+   * in to configure it otherwise. The secret should come from Key Vault.
+   */
+  ENTRA_TENANT_ID: z.string().min(1).max(100).optional(),
+  ENTRA_CLIENT_ID: z.string().min(1).max(100).optional(),
+  ENTRA_CLIENT_SECRET: z.string().min(1).max(500).optional(),
+  /** E-mail domains, comma-separated, whose people may sign in through ENTRA_TENANT_ID. */
+  ENTRA_ALLOWED_DOMAINS: z
+    .string()
+    .default('')
+    .transform((v) =>
+      v
+        .split(',')
+        .map((d) => d.trim().toLowerCase())
+        .filter(Boolean),
+    ),
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
