@@ -1,5 +1,28 @@
 # Load test results
 
+## 2026-10-27 (ninth run) — one process, no Redis (App Service from a zip)
+
+The layout of `docs/appservice-zip.md`: the API alone (its jobs in the same process, no Redis, no
+worker), pinned to one core like P0v3, `DB_POOL_MAX=12`. 300 interviewers syncing for 2 minutes,
+alone, and while two exports of the load project (176,129 interviews; CSV then SPSS) run in that
+same process.
+
+| 300 interviewers    | Separate worker and Redis (fifth run) | One process, alone | One process, two exports running |
+| ------------------- | ------------------------------------- | ------------------ | -------------------------------- |
+| Sync p95 / p99      | 31 ms                                 | 29 ms / 113 ms     | 78 ms / 139 ms                   |
+| Sign-in p95         | 295–467 ms                            | 140 ms             | 237 ms                           |
+| Failed requests     | 0                                     | 0                  | 0                                |
+| Exports (CSV, SPSS) | —                                     | —                  | 15 s and 23 s, one after another |
+
+**Reading.**
+
+- **Without Redis nothing is lost at this load**: syncs answer as fast as with a separate worker.
+- **Heavy jobs share the core**: while an export runs, sync p95 goes from 29 to 78 ms (p99
+  139 ms), far under the 800 ms target, with no errors. Exports run one at a time
+  (`HEAVY_JOB_CONCURRENCY=1`), so a second one waits instead of doubling the load.
+- Not measured here: reading scanned PDFs during the load (pdf.js on the canvas, page by page;
+  covered for correctness by the OMR tests).
+
 ## 2026-10-24 (eighth run) — exports streamed into Blob Storage
 
 One export of the load project (176,129 submitted interviews, 19 columns) by the worker's own
