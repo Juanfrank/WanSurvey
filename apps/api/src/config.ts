@@ -150,6 +150,8 @@ const Env = z.object({
    */
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(4),
   HEAVY_JOB_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),
+  /** Without Redis: the wait before a failed job's second try (doubled for the third). */
+  JOB_RETRY_MS: z.coerce.number().int().min(0).default(2000),
   /**
    * When the worker refreshes the analysis model (schema bi), as cron in UTC (every 6 hours;
    * nothing runs when no data changed); 'off' never.
@@ -157,6 +159,11 @@ const Env = z.object({
   BI_REFRESH_CRON: z.string().trim().min(1).default('40 */6 * * *'),
   /** Days an export's file is kept before it is deleted (the request stays, as expired); 0 keeps them. */
   EXPORT_RETENTION_DAYS: z.coerce.number().int().min(0).default(7),
+  /**
+   * The built web app (apps/web/dist), served by the API itself when set: where nothing else
+   * serves it (App Service from a zip, without nginx).
+   */
+  WEB_DIST: optionalText(1000),
   /** Largest export file in bytes, counted as it is written (under ZIP's 4 GiB). */
   EXPORT_MAX_BYTES: z.coerce.number().int().min(1).max(2_147_483_647).default(2_000_000_000),
   /**

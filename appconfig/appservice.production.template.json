@@ -10,8 +10,8 @@
     "slotSetting": false
   },
   {
-    "name": "REDIS_URL",
-    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/redis-url/) — rediss://:<key>@<name>.redis.cache.windows.net:6380>",
+    "name": "DATABASE_ADMIN_URL",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-admin-url/) — the owner role, for the migrations applied at start>",
     "slotSetting": false
   },
   {
@@ -95,43 +95,13 @@
     "slotSetting": false
   },
   {
-    "name": "API_UPSTREAM",
-    "value": "http://localhost:3000",
-    "slotSetting": false
-  },
-  {
-    "name": "TRUST_PROXY_HOPS",
-    "value": "2",
-    "slotSetting": false
-  },
-  {
-    "name": "API_PORT",
-    "value": "3000",
-    "slotSetting": false
-  },
-  {
-    "name": "WORKER_HEALTH_PORT",
-    "value": "3001",
-    "slotSetting": false
-  },
-  {
-    "name": "API_NODE_OPTIONS",
-    "value": "--max-old-space-size=1024",
-    "slotSetting": false
-  },
-  {
-    "name": "WORKER_NODE_OPTIONS",
-    "value": "--max-old-space-size=1280",
+    "name": "NODE_OPTIONS",
+    "value": "--max-old-space-size=2048",
     "slotSetting": false
   },
   {
     "name": "DB_POOL_MAX",
-    "value": "9",
-    "slotSetting": false
-  },
-  {
-    "name": "DB_WORKER_POOL_MAX",
-    "value": "5",
+    "value": "12",
     "slotSetting": false
   },
   {
@@ -150,7 +120,22 @@
     "slotSetting": false
   },
   {
-    "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+    "name": "WEB_DIST",
+    "value": "/home/site/wwwroot/public",
+    "slotSetting": false
+  },
+  {
+    "name": "TRUST_PROXY_HOPS",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "WEBSITE_RUN_FROM_PACKAGE",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
     "value": "false",
     "slotSetting": false
   },

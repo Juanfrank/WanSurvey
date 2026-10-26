@@ -1,5 +1,7 @@
 # Running on Azure App Service (Premium v3 P0v3, one app)
 
+> **Deploying without the Azure CLI or containers?** Use [`docs/appservice-zip.md`](appservice-zip.md): one Node process from a zip, one instance, no Redis. What follows (and `infra/azure/main.bicep`) is the container layout, kept as a reference for now.
+
 WanSurvey runs on **one** Azure App Service: a Linux plan **Premium v3 P0v3** with a single Web App holding its three containers as sidecars (web, API, worker), next to Azure Database for PostgreSQL and Azure Cache for Redis. `infra/azure/main.bicep` creates the plan, the app, its containers, the identity that pulls the images and the autoscale rule. Production is planned on SQL Server later (see the last section).
 
 ## Verdict
@@ -100,7 +102,7 @@ WEBSITE_HEALTHCHECK_MAXPINGFAILURES=5
 2. Replace every `<…>` value. Secrets are best as Key Vault references (`@Microsoft.KeyVault(SecretUri=…)`).
 3. Paste the whole array into Advanced edit and save (the app restarts).
 
-Microsoft sign-in takes all of `SSO_DEFAULT_ORG`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` or none (the API refuses to start otherwise); in development, delete the five `SSO_*`/`ENTRA_*` entries to go without. A test (`apps/api/test/appservice-settings.test.ts`) checks that each template, filled in, starts the app, and that production has every setting `main.bicep` sets.
+Microsoft sign-in takes all of `SSO_DEFAULT_ORG`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` or none (the API refuses to start otherwise); in development, delete the five `SSO_*`/`ENTRA_*` entries to go without. A test (`apps/api/test/appservice-settings.test.ts`) checks that each template, filled in, starts the app, and that it holds the zip's settings and none of the containers'.
 
 ## First deployment
 

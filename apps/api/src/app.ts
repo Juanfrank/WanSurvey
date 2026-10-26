@@ -9,6 +9,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule, type AppModuleOptions } from './app.module.js';
 import { loadShedding } from './common/load-shed.js';
+import { compress, isApiPath, serveWeb } from './common/web.js';
 import { plainBodiesOnly } from './common/plain-body.js';
 import { loadConfig } from './config.js';
 
@@ -30,11 +31,17 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
   const server = app.getHttpServer() as Server;
   server.keepAliveTimeout = config.HTTP_KEEPALIVE_MS;
   server.headersTimeout = config.HTTP_KEEPALIVE_MS + 1_000;
+  app.use(compress());
+  // The web app, when the API is its only server (App Service from a zip); before load
+  // shedding, so the app shell always loads.
+  if (config.WEB_DIST) serveWeb(app, config.WEB_DIST, config.NODE_ENV === 'production');
   app.use(loadShedding(config.MAX_CONCURRENT_REQUESTS));
   app.disable('x-powered-by');
   app.use(cookieParser());
   const production = config.NODE_ENV === 'production';
   app.use((req: Request, res: Response, next: NextFunction) => {
+    // The web app's files carry their own headers (common/web.ts).
+    if (!isApiPath(req.path)) return next();
     // API responses are JSON only; a strict CSP and no sniffing are safe defaults.
     // The Swagger UI page (/docs) needs its own scripts and styles.
     if (!req.path.startsWith('/docs')) {

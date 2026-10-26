@@ -16,10 +16,10 @@ RUN pnpm --filter @wansurvey/api... build \
 
 FROM node:22-slim
 ENV NODE_ENV=production
-# pdftoppm, to read scanned paper forms (the worker uses it); tini, so Node is not PID 1:
+# tini, so Node is not PID 1:
 # signals reach it (a clean shutdown drains jobs and connections) and zombies are reaped.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends poppler-utils tini \
+  && apt-get install -y --no-install-recommends tini \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /out ./

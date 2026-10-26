@@ -1,16 +1,17 @@
-import { execFile } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { createCanvas } from '@napi-rs/canvas';
 import jsQRModule from 'jsqr';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { PNG } from 'pngjs';
 import { BUBBLE_R, FIDUCIAL, fiducialCentres, QR_AT, QR_SIZE, type Bubble } from './layout.js';
 
-const run = promisify(execFile);
 // The package is CommonJS: its function is the module itself.
 const jsQR = ((jsQRModule as unknown as { default?: typeof jsQRModule }).default ??
   jsQRModule) as unknown as typeof jsQRModule.default;
+
+/** pdf.js's own copies of the standard PDF fonts (text on a form drawn without them is blank). */
+const FONTS = `${join(dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'standard_fonts')}/`;
 
 /** Scans are read at this resolution: enough for marks, small enough to keep. */
 export const DPI = 150;
@@ -29,65 +30,66 @@ export const MAX_SCAN_PAGES = 300;
 /** The longest side of a scanned page, in points: A3 and a little more. */
 const MAX_PAGE_PTS = 1200;
 
-/** The pages of a PDF as grey images (poppler's pdftoppm). */
+/**
+ * The pages of a PDF as grey images, drawn in this process (pdf.js on a native canvas: no
+ * system tools, so it runs wherever Node does, App Service from a zip included). Page by page:
+ * one canvas at a time is alive.
+ */
 export async function rasterize(pdf: Buffer, dpi = DPI): Promise<PageImage[]> {
-  const dir = await mkdtemp(join(tmpdir(), 'ws-scan-'));
+  const task = getDocument({
+    data: new Uint8Array(pdf),
+    standardFontDataUrl: FONTS,
+    // A scanned form needs no system fonts and nothing fetched.
+    useSystemFonts: false,
+    disableFontFace: true,
+    verbosity: 0,
+  });
+  const doc = await task.promise;
   try {
-    await writeFile(join(dir, 'in.pdf'), pdf);
     // Refuse before rendering: a small file can hold thousands of pages or huge ones.
-    const { stdout } = await run('pdfinfo', [join(dir, 'in.pdf')], { timeout: 60_000 });
-    const pages = Number(/^Pages:\s+(\d+)/m.exec(stdout)?.[1] ?? 0);
+    const pages = doc.numPages;
     if (pages > MAX_SCAN_PAGES)
       throw new Error(`The PDF has ${pages} pages; upload at most ${MAX_SCAN_PAGES} per file`);
     // Every page, not only the first, is at most A3: anything bigger is not a scanned form.
-    const sizes = pages
-      ? (
-          await run('pdfinfo', ['-f', '1', '-l', String(pages), join(dir, 'in.pdf')], {
-            timeout: 60_000,
-            maxBuffer: 1 << 20,
-          })
-        ).stdout
-      : stdout;
-    for (const m of sizes.matchAll(/^Page(?:\s+\d+)? size:\s+([\d.]+) x ([\d.]+) pts/gm))
-      if (Number(m[1]) > MAX_PAGE_PTS || Number(m[2]) > MAX_PAGE_PTS)
+    for (let n = 1; n <= pages; n++) {
+      const [x0, y0, x1, y1] = (await doc.getPage(n)).view as [number, number, number, number];
+      if (Math.abs(x1 - x0) > MAX_PAGE_PTS || Math.abs(y1 - y0) > MAX_PAGE_PTS)
         throw new Error('The PDF pages are larger than A3; scan the forms at their own size');
-    // And never more pixels than that, whatever pdfinfo said (pages are cropped, not drawn).
-    const most = String(Math.ceil((MAX_PAGE_PTS / 72) * dpi));
-    await run(
-      'pdftoppm',
-      [
-        '-r',
-        String(dpi),
-        '-gray',
-        '-png',
-        '-l',
-        String(MAX_SCAN_PAGES),
-        '-W',
-        most,
-        '-H',
-        most,
-        join(dir, 'in.pdf'),
-        join(dir, 'p'),
-      ],
-      {
-        timeout: 10 * 60_000,
-        maxBuffer: 1 << 20,
-      },
-    );
-    const files = (await readdir(dir))
-      .filter((f) => f.startsWith('p') && f.endsWith('.png'))
-      .sort((a, b) => Number(/(\d+)\.png$/.exec(a)![1]) - Number(/(\d+)\.png$/.exec(b)![1]));
+    }
+    // And never more pixels than that, whatever the page says.
+    const most = Math.ceil((MAX_PAGE_PTS / 72) * dpi);
     const out: PageImage[] = [];
-    for (const f of files) {
-      const png = await readFile(join(dir, f));
-      const img = PNG.sync.read(png);
-      const grey = new Uint8Array(img.width * img.height);
-      for (let i = 0; i < grey.length; i++) grey[i] = img.data[i * 4]!;
-      out.push({ width: img.width, height: img.height, grey, png });
+    for (let n = 1; n <= pages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: dpi / 72 });
+      const width = Math.min(most, Math.ceil(viewport.width));
+      const height = Math.min(most, Math.ceil(viewport.height));
+      const canvas = createCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, width, height);
+      await page.render({
+        canvas: canvas as never,
+        canvasContext: ctx as never,
+        viewport,
+      }).promise;
+      const rgba = ctx.getImageData(0, 0, width, height).data;
+      const grey = new Uint8Array(width * height);
+      for (let i = 0; i < grey.length; i++)
+        grey[i] = Math.round(
+          0.299 * rgba[i * 4]! + 0.587 * rgba[i * 4 + 1]! + 0.114 * rgba[i * 4 + 2]!,
+        );
+      // Kept as a grey PNG, as scanned forms were stored before.
+      const png = PNG.sync.write(
+        { width, height, data: Buffer.from(rgba.buffer, rgba.byteOffset, rgba.length) } as PNG,
+        { colorType: 0 },
+      );
+      out.push({ width, height, grey, png });
+      page.cleanup();
     }
     return out;
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await task.destroy();
   }
 }
 

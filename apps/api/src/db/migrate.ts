@@ -18,6 +18,9 @@ export async function runMigrations(adminUrl: string, appUrl: string): Promise<v
 
   const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
   try {
+    // One at a time: two processes starting together (a restart, a slot swap) wait their
+    // turn, and the second finds nothing left to do. Released when the connection ends.
+    await sql`select pg_advisory_lock(hashtext('wansurvey.migrations'))`;
     const [row] = await sql<
       { exists: boolean }[]
     >`select exists(select 1 from pg_roles where rolname = ${role})`;

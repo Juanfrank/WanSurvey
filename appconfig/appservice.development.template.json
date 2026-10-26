@@ -10,8 +10,8 @@
     "slotSetting": false
   },
   {
-    "name": "REDIS_URL",
-    "value": "<rediss://:<key>@<name>.redis.cache.windows.net:6380>",
+    "name": "DATABASE_ADMIN_URL",
+    "value": "<postgres://<admin>:<password>@<server>.postgres.database.azure.com:5432/wansurvey_dev?sslmode=require>",
     "slotSetting": false
   },
   {
@@ -21,12 +21,12 @@
   },
   {
     "name": "PUBLIC_WEB_URL",
-    "value": "<https://encuestas-dev.example.org>",
+    "value": "<https://<app>-dev.azurewebsites.net>",
     "slotSetting": false
   },
   {
     "name": "API_PUBLIC_URL",
-    "value": "<https://encuestas-dev.example.org>",
+    "value": "<https://<app>-dev.azurewebsites.net>",
     "slotSetting": false
   },
   {
@@ -95,43 +95,13 @@
     "slotSetting": false
   },
   {
-    "name": "API_UPSTREAM",
-    "value": "http://localhost:3000",
-    "slotSetting": false
-  },
-  {
-    "name": "TRUST_PROXY_HOPS",
-    "value": "2",
-    "slotSetting": false
-  },
-  {
-    "name": "API_PORT",
-    "value": "3000",
-    "slotSetting": false
-  },
-  {
-    "name": "WORKER_HEALTH_PORT",
-    "value": "3001",
-    "slotSetting": false
-  },
-  {
-    "name": "API_NODE_OPTIONS",
-    "value": "--max-old-space-size=768",
-    "slotSetting": false
-  },
-  {
-    "name": "WORKER_NODE_OPTIONS",
-    "value": "--max-old-space-size=1024",
+    "name": "NODE_OPTIONS",
+    "value": "--max-old-space-size=1536",
     "slotSetting": false
   },
   {
     "name": "DB_POOL_MAX",
-    "value": "5",
-    "slotSetting": false
-  },
-  {
-    "name": "DB_WORKER_POOL_MAX",
-    "value": "3",
+    "value": "6",
     "slotSetting": false
   },
   {
@@ -150,7 +120,22 @@
     "slotSetting": false
   },
   {
-    "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+    "name": "WEB_DIST",
+    "value": "/home/site/wwwroot/public",
+    "slotSetting": false
+  },
+  {
+    "name": "TRUST_PROXY_HOPS",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "WEBSITE_RUN_FROM_PACKAGE",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
     "value": "false",
     "slotSetting": false
   },

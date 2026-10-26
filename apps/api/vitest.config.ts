@@ -15,6 +15,8 @@ const env = {
   LOGIN_RATE_LIMIT: '1000',
   RATE_LIMIT_PER_IP: '100000',
   LOG_LEVEL: 'silent',
+  // Failed jobs are tried again at once (tests drain the queue and wait for the last try).
+  JOB_RETRY_MS: '0',
   // Export files of the tests, kept out of the repository.
   EXPORT_DIR: join(tmpdir(), 'wansurvey-test-exports'),
 };

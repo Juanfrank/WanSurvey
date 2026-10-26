@@ -13,7 +13,7 @@ const template = (env: string) =>
 /** What a person would write in place of each `<…>`: valid values of the right shape. */
 const FILLED: Record<string, string> = {
   DATABASE_URL: 'postgres://wansurvey_app:x@db.example.org:5432/wansurvey?sslmode=require',
-  REDIS_URL: 'rediss://:key@cache.example.org:6380',
+  DATABASE_ADMIN_URL: 'postgres://owner:x@db.example.org:5432/wansurvey?sslmode=require',
   APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   PUBLIC_WEB_URL: 'https://encuestas.example.org',
   API_PUBLIC_URL: 'https://encuestas.example.org',
@@ -31,7 +31,8 @@ const placeholder = (v: string) => v.startsWith('<') && v.endsWith('>');
 
 /**
  * The App Service settings templates in appconfig/ (pasted into "Advanced edit" by hand):
- * filled in, each starts the app in its mode, and production has every setting Bicep sets.
+ * filled in, each starts the app in its mode, as App Service runs it from a zip (one Node
+ * process: no Redis, no nginx, no containers).
  */
 describe('App Service settings templates', () => {
   for (const env of ['development', 'production'] as const)
@@ -54,19 +55,16 @@ describe('App Service settings templates', () => {
       expect(config.PASSWORD_LOGIN).toBe(env === 'development');
     });
 
-  it('production has every setting main.bicep sets', () => {
-    const bicep = readFileSync(join(ROOT, 'infra/azure/main.bicep'), 'utf8');
-    // From each block's first line to its closing line.
-    const block = (start: string, end: string) => {
-      const from = bicep.indexOf(start);
-      return bicep.slice(from, bicep.indexOf(end, from));
-    };
-    const keys = [
-      ...block('var entraSettings', '\n    }').matchAll(/^ {6}([A-Z][A-Z0-9_]+):/gm),
-      ...block('var settings = union(', '\n)').matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm),
-    ].map((m) => m[1]!);
-    expect(keys.length).toBeGreaterThan(20);
-    const names = new Set(template('production').map((s) => s.name));
-    expect([...keys, 'AZURE_CLIENT_ID'].filter((k) => !names.has(k))).toEqual([]);
-  });
+  // What the zip needs, and what only the containers (infra/azure/main.bicep) used.
+  const ZIP = ['WEB_DIST', 'DATABASE_ADMIN_URL', 'NODE_OPTIONS', 'WEBSITE_RUN_FROM_PACKAGE'];
+  const CONTAINERS = ['REDIS_URL', 'API_UPSTREAM', 'API_PORT', 'WORKER_HEALTH_PORT'];
+  for (const env of ['development', 'production'] as const)
+    it(`${env}: the settings of the zip, none of the containers'`, () => {
+      const settings = new Map(template(env).map((s) => [s.name, s.value]));
+      expect(ZIP.filter((k) => !settings.has(k))).toEqual([]);
+      expect(CONTAINERS.filter((k) => settings.has(k))).toEqual([]);
+      expect(settings.get('WEB_DIST')).toBe('/home/site/wwwroot/public');
+      expect(settings.get('TRUST_PROXY_HOPS')).toBe('1');
+      expect(settings.get('SCM_DO_BUILD_DURING_DEPLOYMENT')).toBe('false');
+    });
 });

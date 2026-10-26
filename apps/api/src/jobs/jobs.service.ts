@@ -25,6 +25,25 @@ const HEAVY_QUEUE = 'wansurvey-heavy';
 const HEAVY = new Set(['exports.build', 'papi.scan', 'bi.refresh']);
 /** Failed jobs are kept a week (at most 500) to look into, then dropped. */
 const KEEP_FAILED = { count: 500, age: 7 * 24 * 3600 };
+/** Tries per job, as with BullMQ (`attempts`), and the first wait before trying again. */
+const ATTEMPTS = 3;
+
+/** At most `size` tasks at once, the rest wait their turn in order. */
+class Lanes {
+  private active = 0;
+  private readonly waiting: (() => void)[] = [];
+  constructor(private readonly size: number) {}
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.active >= this.size) await new Promise<void>((go) => this.waiting.push(go));
+    this.active++;
+    try {
+      return await task();
+    } finally {
+      this.active--;
+      this.waiting.shift()?.();
+    }
+  }
+}
 /** Longest wait for Redis to take a job. */
 const ENQUEUE_TIMEOUT_MS = 3000;
 
@@ -72,11 +91,16 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly waiting = new Map<string, () => void>();
   private readonly running = new Set<Promise<unknown>>();
   private seq = 0;
+  /** Inline mode: what BullMQ's workers bound with Redis, light and heavy jobs apart. */
+  private readonly light: Lanes;
+  private readonly heavy: Lanes;
 
   constructor(
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(PROCESS_ROLE) private readonly role: ProcessRole,
   ) {
+    this.light = new Lanes(config.JOB_CONCURRENCY);
+    this.heavy = new Lanes(config.HEAVY_JOB_CONCURRENCY);
     if (config.REDIS_URL) {
       // Workers block on Redis and wait for it to come back; producers fail fast instead, so a
       // request never hangs on an unreachable Redis (BullMQ's advice for queues).
@@ -151,7 +175,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     const fire = () => {
       clearTimeout(timer);
       this.waiting.delete(key);
-      const run = this.run(name, data).finally(() => this.running.delete(run));
+      const run = this.runInline(name, data).finally(() => this.running.delete(run));
       this.running.add(run);
     };
     const timer = setTimeout(fire, opts.delayMs ?? 0);
@@ -169,6 +193,33 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
       if (this.queue) throw e;
       return undefined;
     }
+  }
+
+  /**
+   * Inline mode (one process, no Redis): as BullMQ would run it, within the concurrency of
+   * its kind (one heavy job at a time) and tried up to ATTEMPTS times, waiting longer each
+   * time. A job lost to a restart is picked up by the sweeper or the nightly recompute.
+   */
+  private async runInline(name: string, data: Record<string, unknown>): Promise<unknown> {
+    const lanes = HEAVY.has(name) ? this.heavy : this.light;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await lanes.run(() => this.attempt(name, data));
+      } catch (e) {
+        if (attempt >= ATTEMPTS) {
+          this.logger.error(`Job ${name} failed for good: ${(e as Error).message}`);
+          return undefined;
+        }
+        this.logger.warn(`Job ${name} will be tried again: ${(e as Error).message}`);
+        await new Promise((r) => setTimeout(r, this.config.JOB_RETRY_MS * 2 ** (attempt - 1)));
+      }
+    }
+  }
+
+  private async attempt(name: string, data: Record<string, unknown>) {
+    const handler = this.handlers.get(name);
+    if (!handler) throw new Error(`No handler for job ${name}`);
+    return handler(data);
   }
 
   /** Inline mode: runs waiting jobs now and waits until every job has finished. */

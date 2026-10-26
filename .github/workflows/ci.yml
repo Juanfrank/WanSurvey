@@ -37,8 +37,6 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install pyreadstat==1.2.8 pandas==2.2.3
-      # pdftoppm, to read scanned paper forms in the API tests.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - run: pnpm test
         env:
           TEST_REDIS_URL: redis://localhost:6379/2
@@ -86,3 +84,34 @@ jobs:
         with:
           name: playwright-report
           path: apps/web/playwright-report
+
+  # The zip App Service runs (Linux, Node 22, no containers): built on Linux x64 like App
+  # Service, started from a clean folder against a new database, and kept as an artifact to
+  # upload (Kudu → Zip Push Deploy; see docs/appservice-zip.md).
+  package:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: scripts/package-appservice.sh out
+      - name: Start the package as App Service would
+        run: scripts/smoke-appservice.sh out/wansurvey-appservice.zip
+        env:
+          DATABASE_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wansurvey-appservice-${{ github.sha }}
+          path: out/wansurvey-appservice.zip
+          retention-days: 30

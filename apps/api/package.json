@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist",
+    "drizzle"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -18,6 +22,7 @@
   },
   "dependencies": {
     "@azure/storage-blob": "12.34.0",
+    "@napi-rs/canvas": "1.0.11",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
@@ -29,16 +34,19 @@
     "@wansurvey/logic": "workspace:*",
     "@wansurvey/schema": "workspace:*",
     "bullmq": "5.81.5",
+    "compression": "1.8.2",
     "cookie-parser": "^1.4.7",
     "csv-parse": "7.0.3",
     "drizzle-orm": "0.45.4",
     "exceljs": "4.4.0",
+    "express": "5.2.1",
     "ioredis": "5.11.1",
     "jose": "^6.2.12",
     "jsqr": "1.4.0",
     "nestjs-pino": "^4.4.0",
     "nodemailer": "10.0.16",
     "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.4.299",
     "pino": "^9.7.0",
     "pino-http": "^10.5.0",
     "pngjs": "7.0.0",
@@ -51,6 +59,7 @@
   },
   "devDependencies": {
     "@swc/core": "^1.12.0",
+    "@types/compression": "1.8.1",
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.3",
     "@types/multer": "2.2.0",
