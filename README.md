@@ -61,6 +61,9 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
    # set APP_ENCRYPTION_KEY to the output of: openssl rand -base64 32
    ```
 
+   Other confidential files (production environment files, keys, certificates) go in
+   `appconfig/`: git ignores everything in it but the folder itself.
+
 3. Build, migrate and seed. Migrations create and update the restricted `wansurvey_app` role.
 
    ```bash

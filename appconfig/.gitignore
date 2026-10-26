@@ -1,0 +1,4 @@
+# Confidential settings (environment files, keys, certificates…): kept on this machine only.
+# Everything here is ignored except this file, which keeps the folder in the repository.
+*
+!.gitignore
