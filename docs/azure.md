@@ -87,6 +87,21 @@ WEBSITE_HEALTHCHECK_MAXPINGFAILURES=5
 
 `DATABASE_ADMIN_URL` is only needed where migrations run; keep it off the app.
 
+### Settings by hand (no Bicep)
+
+`appconfig/` has the settings ready for App Service's **Environment variables → Advanced edit**, which takes JSON:
+
+| Template                                         | For                                                                                              |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `appconfig/appservice.development.template.json` | A development app: passwords and Microsoft, e-mail to the log, smaller pools and heaps           |
+| `appconfig/appservice.production.template.json`  | Production: the same settings `main.bicep` sets (Microsoft only, SMTP, Blob Storage, P0v3 sizes) |
+
+1. Copy the template without `.template` (`appservice.production.json`): git ignores everything in `appconfig/` but the templates, so the filled copy never reaches the repository.
+2. Replace every `<…>` value. Secrets are best as Key Vault references (`@Microsoft.KeyVault(SecretUri=…)`).
+3. Paste the whole array into Advanced edit and save (the app restarts).
+
+Microsoft sign-in takes all of `SSO_DEFAULT_ORG`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` or none (the API refuses to start otherwise); in development, delete the five `SSO_*`/`ENTRA_*` entries to go without. A test (`apps/api/test/appservice-settings.test.ts`) checks that each template, filled in, starts the app, and that production has every setting `main.bicep` sets.
+
 ## First deployment
 
 1. Create the database `wansurvey` on the Flexible Server, and the registry, Redis and Key Vault secrets.

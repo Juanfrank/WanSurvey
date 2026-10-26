@@ -1,0 +1,162 @@
+[
+  {
+    "name": "NODE_ENV",
+    "value": "production",
+    "slotSetting": false
+  },
+  {
+    "name": "DATABASE_URL",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-url/) — postgres://wansurvey_app:...@<server>.postgres.database.azure.com:5432/wansurvey?sslmode=require>",
+    "slotSetting": false
+  },
+  {
+    "name": "REDIS_URL",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/redis-url/) — rediss://:<key>@<name>.redis.cache.windows.net:6380>",
+    "slotSetting": false
+  },
+  {
+    "name": "APP_ENCRYPTION_KEY",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/encryption-key/) — 32 bytes, base64>",
+    "slotSetting": false
+  },
+  {
+    "name": "PUBLIC_WEB_URL",
+    "value": "<https://encuestas.example.org>",
+    "slotSetting": false
+  },
+  {
+    "name": "API_PUBLIC_URL",
+    "value": "<https://encuestas.example.org>",
+    "slotSetting": false
+  },
+  {
+    "name": "MAILER",
+    "value": "smtp",
+    "slotSetting": false
+  },
+  {
+    "name": "SMTP_URL",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/smtp-url/) — smtps://user:password@smtp.example.org:465>",
+    "slotSetting": false
+  },
+  {
+    "name": "MAIL_FROM",
+    "value": "<WanSurvey <encuestas@example.org>>",
+    "slotSetting": false
+  },
+  {
+    "name": "EXPORT_STORAGE",
+    "value": "blob",
+    "slotSetting": false
+  },
+  {
+    "name": "EXPORT_BLOB_URL",
+    "value": "<https://<account>.blob.core.windows.net/exports>",
+    "slotSetting": false
+  },
+  {
+    "name": "AZURE_CLIENT_ID",
+    "value": "<client id of the app's user-assigned managed identity>",
+    "slotSetting": false
+  },
+  {
+    "name": "PASSWORD_LOGIN",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "SSO_DEFAULT_ORG",
+    "value": "<organisation slug>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_TENANT_ID",
+    "value": "<directory (tenant) id, a GUID>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_CLIENT_ID",
+    "value": "<application (client) id, a GUID>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_CLIENT_SECRET",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/entra-client-secret/)>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_ALLOWED_DOMAINS",
+    "value": "<example.org>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_ENFORCE",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "API_UPSTREAM",
+    "value": "http://localhost:3000",
+    "slotSetting": false
+  },
+  {
+    "name": "TRUST_PROXY_HOPS",
+    "value": "2",
+    "slotSetting": false
+  },
+  {
+    "name": "API_PORT",
+    "value": "3000",
+    "slotSetting": false
+  },
+  {
+    "name": "WORKER_HEALTH_PORT",
+    "value": "3001",
+    "slotSetting": false
+  },
+  {
+    "name": "API_NODE_OPTIONS",
+    "value": "--max-old-space-size=1024",
+    "slotSetting": false
+  },
+  {
+    "name": "WORKER_NODE_OPTIONS",
+    "value": "--max-old-space-size=1280",
+    "slotSetting": false
+  },
+  {
+    "name": "DB_POOL_MAX",
+    "value": "9",
+    "slotSetting": false
+  },
+  {
+    "name": "DB_WORKER_POOL_MAX",
+    "value": "5",
+    "slotSetting": false
+  },
+  {
+    "name": "JOB_CONCURRENCY",
+    "value": "4",
+    "slotSetting": false
+  },
+  {
+    "name": "HEAVY_JOB_CONCURRENCY",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "MAX_CONCURRENT_REQUESTS",
+    "value": "50",
+    "slotSetting": false
+  },
+  {
+    "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "WEBSITE_HEALTHCHECK_MAXPINGFAILURES",
+    "value": "5",
+    "slotSetting": false
+  }
+]

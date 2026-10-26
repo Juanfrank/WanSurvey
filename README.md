@@ -62,7 +62,8 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
    ```
 
    Other confidential files (production environment files, keys, certificates) go in
-   `appconfig/`: git ignores everything in it but the folder itself.
+   `appconfig/`: git ignores everything in it but the folder itself and the App Service settings
+   templates (development and production; see `docs/azure.md`).
 
 3. Build, migrate and seed. Migrations create and update the restricted `wansurvey_app` role.
 
