@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The zip App Service runs as it is (Linux, Node 22, no containers): the API built, its
+# The zip App Service runs as it is (Linux, Node 24, no containers): the API built, its
 # production dependencies as plain folders (no symlinks: a mounted package cannot hold them),
 # the migrations, and the web app in public/, served by the API (WEB_DIST).
 #   scripts/package-appservice.sh [out-dir]     → <out-dir>/wansurvey-appservice.zip

@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm --filter @wansurvey/web exec playwright install --with-deps chromium
@@ -85,7 +85,7 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
 
-  # The zip App Service runs (Linux, Node 22, no containers): built on Linux x64 like App
+  # The zip App Service runs (Linux, Node 24, no containers): built on Linux x64 like App
   # Service, started from a clean folder against a new database, and kept as an artifact to
   # upload (Kudu → Zip Push Deploy; see docs/appservice-zip.md).
   package:
@@ -104,7 +104,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: scripts/package-appservice.sh out
       - name: Start the package as App Service would
         run: scripts/smoke-appservice.sh out/wansurvey-appservice.zip

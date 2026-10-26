@@ -1,4 +1,4 @@
-/* global __ENV, open */
+/* global __ENV, open, console */
 // Start of a field day: every interviewer signs in with Microsoft within WINDOW seconds
 // (default 120; WINDOW=30 for everyone at once) and opens the app. Each one:
 //   1. GET sso/start                  → redirect to Microsoft (the mock, apps/api/scripts/load-mock-entra.ts)

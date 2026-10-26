@@ -43,7 +43,7 @@ Mac.
 4. **Key Vault** with the secrets (database URLs, encryption key, SMTP, Entra client secret);
    role **Key Vault Secrets User** for the identity.
 5. **App Service plan** Linux **P0v3**, **1 instance** (no autoscale).
-6. **Web App**: publish **Code**, runtime **Node 22 LTS**, Linux, on that plan. Then:
+6. **Web App**: publish **Code**, runtime **Node 24 LTS**, Linux, on that plan. Then:
    - Identity → User assigned → add `wansurvey-id`; Key Vault reference identity: the same.
    - Configuration → General: **Always On** on, HTTP 2.0, minimum TLS 1.2, FTP off, startup
      command `npm start` (or empty: App Service runs `npm start` itself).

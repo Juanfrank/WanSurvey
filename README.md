@@ -40,7 +40,7 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 
 ## Requirements
 
-- Node 22
+- Node 24 (LTS)
 - pnpm 10
 - Postgres 16
 - Redis 7 (unused until the background worker; e-mail runs in-process for now, W5)
