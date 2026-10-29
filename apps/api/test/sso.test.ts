@@ -26,6 +26,8 @@ describe('Microsoft Entra ID sign-in', () => {
     await entra.start();
     process.env.ENTRA_AUTHORITY_HOST = entra.host;
     process.env.PUBLIC_WEB_URL = WEB;
+    // The web app and the API on addresses of their own (Vite and the API in development).
+    process.env.API_PUBLIC_URL = 'http://localhost:3000';
     resetConfigCache();
     t = await bootstrap();
   });
@@ -34,6 +36,7 @@ describe('Microsoft Entra ID sign-in', () => {
     await entra.stop();
     delete process.env.ENTRA_AUTHORITY_HOST;
     delete process.env.PUBLIC_WEB_URL;
+    delete process.env.API_PUBLIC_URL;
     resetConfigCache();
   });
 

@@ -39,7 +39,7 @@ setsid env -i PATH="$PATH" HOME="$DIR" PORT="$PORT" NODE_ENV=production \
   DATABASE_ADMIN_URL="$ADMIN_URL" \
   DATABASE_URL="postgres://wansurvey_app:smoke-password@$HOST/$DB" \
   APP_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
-  PUBLIC_WEB_URL="http://localhost:$PORT" API_PUBLIC_URL="http://localhost:$PORT" \
+  PUBLIC_WEB_URL="http://localhost:$PORT" \
   MAILER=console EXPORT_STORAGE=blob \
   AZURE_STORAGE_CONNECTION_STRING='UseDevelopmentStorage=true' \
   WEB_DIST="$DIR/wwwroot/public" TRUST_PROXY_HOPS=1 LOG_LEVEL=warn \

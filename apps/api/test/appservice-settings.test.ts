@@ -53,7 +53,26 @@ describe('App Service settings templates', () => {
       expect(config.NODE_ENV).toBe(env);
       expect(config.EXPORT_STORAGE).toBe('blob');
       expect(config.PASSWORD_LOGIN).toBe(env === 'development');
+      // The API serves the web app: one address for both.
+      expect(config.API_PUBLIC_URL).toBe(config.PUBLIC_WEB_URL);
     });
+
+  it('API_PUBLIC_URL: PUBLIC_WEB_URL when left out, localhost:3000 locally, or as given', () => {
+    const base = Object.fromEntries(
+      Object.entries(process.env).filter(([k]) => k !== 'API_PUBLIC_URL' && k !== 'PUBLIC_WEB_URL'),
+    ) as NodeJS.ProcessEnv;
+    expect(loadConfig(base).API_PUBLIC_URL).toBe('http://localhost:3000');
+    expect(loadConfig({ ...base, PUBLIC_WEB_URL: 'https://a.example.org' }).API_PUBLIC_URL).toBe(
+      'https://a.example.org',
+    );
+    expect(
+      loadConfig({
+        ...base,
+        PUBLIC_WEB_URL: 'https://a.example.org',
+        API_PUBLIC_URL: 'https://api.example.org',
+      }).API_PUBLIC_URL,
+    ).toBe('https://api.example.org');
+  });
 
   // What the zip needs, and what only the containers (infra/azure/main.bicep) used.
   const ZIP = ['WEB_DIST', 'DATABASE_ADMIN_URL', 'NODE_OPTIONS', 'WEBSITE_RUN_FROM_PACKAGE'];

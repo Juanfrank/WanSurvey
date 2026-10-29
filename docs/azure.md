@@ -150,7 +150,7 @@ What changed from S1 (1 core, 1.75 GB, three apps) to P0v3 (1 vCPU on newer hard
 
 ## Moving to SQL Server later
 
-The data layer is PostgreSQL-specific. Moving to Azure SQL / SQL Server means rewriting it, not changing a connection string:
+Planned, with SQLite for development: see [`docs/roadmap.md`](roadmap.md). The data layer is PostgreSQL-specific. Moving to Azure SQL / SQL Server means rewriting it, not changing a connection string:
 
 | PostgreSQL feature used                                                       | SQL Server counterpart                                                         |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |

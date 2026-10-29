@@ -51,6 +51,48 @@ Mac.
    - Environment variables → **Advanced edit**: paste `appconfig/appservice.production.template.json`
      filled in (see [`docs/azure.md`](azure.md#settings-by-hand-no-bicep)).
 
+## What each setting is
+
+The templates in `appconfig/` hold these (copy one without `.template`, fill in the `<…>`).
+
+**Two database connections, on purpose:**
+
+| Setting              | Connects as                                                     | Used for                                                                                                                                            |
+| -------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`       | `wansurvey_app`, a restricted role                              | Every request and job. Row-level security applies: it sees one organisation at a time, cannot change the schema, and cannot switch the security off |
+| `DATABASE_ADMIN_URL` | The database's owner (on Azure, the admin made with the server) | Only the migrations at start (and seeding demo data). It also creates `wansurvey_app`, with the password written in `DATABASE_URL`                  |
+
+Least privilege: if the app's connection leaked, it could still not read other organisations'
+data or alter tables. Keep both in Key Vault. To keep the owner's password off the app, leave
+`DATABASE_ADMIN_URL` out and run the migrations by hand from the SSH console
+(`DATABASE_ADMIN_URL=… node dist/db/migrate.js`) before each release.
+
+**One public address:**
+
+| Setting          | Used for                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_WEB_URL` | Every link a person opens: invitations, password reset, survey links, shared summaries, the return after Microsoft sign-in    |
+| `API_PUBLIC_URL` | The API's own address, in the Microsoft sign-in links and the redirect URI registered in Entra (`…/api/v1/auth/sso/callback`) |
+
+They differ only when the API has a host of its own (in development, Vite on 5173 and the API on
+3000; the old three-app layout). From the zip the API serves the web app, so `API_PUBLIC_URL` is
+left out and takes `PUBLIC_WEB_URL`.
+
+**The rest:**
+
+- `APP_ENCRYPTION_KEY`: seals personal data and secrets in the database; 32 random bytes in base64,
+  one per environment, never changed once data exists.
+- `NODE_ENV`: `production` turns on the production checks (Blob Storage required, HSTS).
+- `PASSWORD_LOGIN`, `SSO_DEFAULT_ORG`, `ENTRA_*`: sign-in (`docs/sso-entra.md`).
+- `MAILER`, `SMTP_URL`, `MAIL_FROM`: e-mail; `console` writes it to the log instead.
+- `EXPORT_STORAGE`, `EXPORT_BLOB_URL`, `AZURE_CLIENT_ID`: export files in Blob Storage, reached with
+  the managed identity whose client id this is.
+- `NODE_OPTIONS`, `DB_POOL_MAX`, `JOB_CONCURRENCY`, `HEAVY_JOB_CONCURRENCY`,
+  `MAX_CONCURRENT_REQUESTS`: memory and concurrency of the one process.
+- `WEB_DIST`, `TRUST_PROXY_HOPS=1`, `WEBSITE_RUN_FROM_PACKAGE=1`,
+  `SCM_DO_BUILD_DURING_DEPLOYMENT=false`: how the zip runs (the web app's folder, App Service's
+  front end as the one proxy, the zip mounted read-only, no rebuild by Oryx).
+
 ## 3. Deploy a version
 
 1. Web App → **Advanced Tools (Kudu)** → Go → **Tools → Zip Push Deploy**; drop the zip on the

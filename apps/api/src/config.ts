@@ -60,8 +60,12 @@ const Env = z.object({
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'Must be 32 bytes, base64'),
   PUBLIC_WEB_URL: z.string().url().default('http://localhost:5173'),
-  /** Public base URL of this API; Microsoft redirects back to {API_PUBLIC_URL}/api/v1/auth/sso/callback. */
-  API_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
+  /**
+   * Public base URL of this API; Microsoft redirects back to {API_PUBLIC_URL}/api/v1/auth/sso/callback.
+   * Only needed where the API has a host of its own: by default it is PUBLIC_WEB_URL (the API
+   * serves the web app, or sits behind the same address), or http://localhost:3000 locally.
+   */
+  API_PUBLIC_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
   /** Microsoft identity platform host; overridable for tests or sovereign clouds. */
   ENTRA_AUTHORITY_HOST: z.string().url().default('https://login.microsoftonline.com'),
   /**
@@ -191,7 +195,7 @@ const Env = z.object({
   SENTRY_DSN: z.string().optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
 });
-export type AppConfig = z.infer<typeof Env>;
+export type AppConfig = Omit<z.infer<typeof Env>, 'API_PUBLIC_URL'> & { API_PUBLIC_URL: string };
 
 let cached: AppConfig | null = null;
 
@@ -241,8 +245,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       `Invalid configuration:\n${parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n')}`,
     );
   }
-  if (env === process.env) cached = parsed.data;
-  return parsed.data;
+  const config: AppConfig = {
+    ...parsed.data,
+    API_PUBLIC_URL:
+      parsed.data.API_PUBLIC_URL ??
+      (env.PUBLIC_WEB_URL ? parsed.data.PUBLIC_WEB_URL : 'http://localhost:3000'),
+  };
+  if (env === process.env) cached = config;
+  return config;
 }
 
 /** Tests change env between apps; production never calls this. */

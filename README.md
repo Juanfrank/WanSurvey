@@ -61,7 +61,9 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
    # set APP_ENCRYPTION_KEY to the output of: openssl rand -base64 32
    ```
 
-   Deploying to Azure App Service without containers: [`docs/appservice-zip.md`](docs/appservice-zip.md).
+   Deploying to Azure App Service without containers: [`docs/appservice-zip.md`](docs/appservice-zip.md)
+   (what each setting is: [its settings section](docs/appservice-zip.md#what-each-setting-is)).
+   Planned work, such as SQL Server with SQLite for development: [`docs/roadmap.md`](docs/roadmap.md).
 
    Other confidential files (production environment files, keys, certificates) go in
    `appconfig/`: git ignores everything in it but the folder itself and the App Service settings
