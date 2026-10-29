@@ -68,3 +68,26 @@ DELETE`. SQLite gets the schema it needs for test instances, without those guara
 - **Moving the data**: a one-time copy from PostgreSQL to SQL Server, with the history and
   encrypted fields as they are, checked by counts and samples before the switch.
 - **The size of the change**: every migration (45 today) and the data access of every service.
+
+## Microsoft sign-in settings: `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET`, `ENTRA_REDIRECT_URI`
+
+**Status:** pending.
+
+The deployment's Microsoft sign-in is set by these four settings:
+
+| Setting               | Today                                                                |
+| --------------------- | -------------------------------------------------------------------- |
+| `ENTRA_TENANT_ID`     | Exists with this name                                                |
+| `ENTRA_CLIENT_ID`     | Exists with this name                                                |
+| `ENTRA_CLIENT_SECRET` | Exists with this name                                                |
+| `ENTRA_REDIRECT_URI`  | New: today built from `PUBLIC_WEB_URL` + `/api/v1/auth/sso/callback` |
+
+What it takes:
+
+- `ENTRA_REDIRECT_URI` in the configuration, used for the authorize request and the code exchange
+  (`apps/api/src/auth/sso.service.ts`), and shown by `GET /api/v1/tenant/sso`. It is the same
+  value registered in Entra, so the two are compared at a glance.
+- Checked at start: an absolute `https` address (`http` only for `localhost`) ending in
+  `/api/v1/auth/sso/callback`, required together with the other three.
+- The templates in `appconfig/`, `apps/api/.env.example`, `infra/azure/main.bicep`,
+  `docs/sso-entra.md` and `docs/appservice-zip.md` updated; tests for the value and its checks.
