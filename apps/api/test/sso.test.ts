@@ -26,8 +26,6 @@ describe('Microsoft Entra ID sign-in', () => {
     await entra.start();
     process.env.ENTRA_AUTHORITY_HOST = entra.host;
     process.env.PUBLIC_WEB_URL = WEB;
-    // The web app and the API on addresses of their own (Vite and the API in development).
-    process.env.API_PUBLIC_URL = 'http://localhost:3000';
     resetConfigCache();
     t = await bootstrap();
   });
@@ -36,7 +34,6 @@ describe('Microsoft Entra ID sign-in', () => {
     await entra.stop();
     delete process.env.ENTRA_AUTHORITY_HOST;
     delete process.env.PUBLIC_WEB_URL;
-    delete process.env.API_PUBLIC_URL;
     resetConfigCache();
   });
 
@@ -100,7 +97,7 @@ describe('Microsoft Entra ID sign-in', () => {
       client_id: CLIENT_ID,
       response_type: 'code',
       code_challenge_method: 'S256',
-      redirect_uri: 'http://localhost:3000/api/v1/auth/sso/callback',
+      redirect_uri: `${WEB}/api/v1/auth/sso/callback`,
       scope: 'openid profile email',
     });
     const cookie = (start.headers['set-cookie'] as unknown as string[]).find((c) =>
@@ -395,7 +392,7 @@ describe('Microsoft Entra ID sign-in', () => {
       const empty = await a.agent.get('/api/v1/tenant/sso');
       expect(empty.body).toMatchObject({
         configured: false,
-        redirectUri: 'http://localhost:3000/api/v1/auth/sso/callback',
+        redirectUri: `${WEB}/api/v1/auth/sso/callback`,
       });
 
       const put = (body: object) =>

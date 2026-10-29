@@ -67,16 +67,10 @@ data or alter tables. Keep both in Key Vault. To keep the owner's password off t
 `DATABASE_ADMIN_URL` out and run the migrations by hand from the SSH console
 (`DATABASE_ADMIN_URL=… node dist/db/migrate.js`) before each release.
 
-**One public address:**
-
-| Setting          | Used for                                                                                                                      |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `PUBLIC_WEB_URL` | Every link a person opens: invitations, password reset, survey links, shared summaries, the return after Microsoft sign-in    |
-| `API_PUBLIC_URL` | The API's own address, in the Microsoft sign-in links and the redirect URI registered in Entra (`…/api/v1/auth/sso/callback`) |
-
-They differ only when the API has a host of its own (in development, Vite on 5173 and the API on
-3000; the old three-app layout). From the zip the API serves the web app, so `API_PUBLIC_URL` is
-left out and takes `PUBLIC_WEB_URL`.
+**One public address:** `PUBLIC_WEB_URL` is every link a person opens (invitations, password
+reset, survey links, shared summaries) and the Microsoft redirect URI registered in Entra
+(`{PUBLIC_WEB_URL}/api/v1/auth/sso/callback`). The API answers `/api` on that same address: from
+the zip it serves the web app itself; in development Vite passes `/api` on to it.
 
 **The rest:**
 

@@ -63,7 +63,6 @@ DATABASE_URL=postgres://wansurvey_app:<password>@<server>.postgres.database.azur
 APP_ENCRYPTION_KEY=<32 bytes, base64 — from Key Vault: @Microsoft.KeyVault(SecretUri=...)>
 REDIS_URL=rediss://:<key>@<name>.redis.cache.windows.net:6380
 PUBLIC_WEB_URL=https://encuestas.example.org
-API_PUBLIC_URL=https://encuestas.example.org
 MAILER=smtp
 SMTP_URL=smtps://<user>:<password>@smtp.example.org:465
 MAIL_FROM=WanSurvey <encuestas@example.org>
@@ -150,7 +149,7 @@ What changed from S1 (1 core, 1.75 GB, three apps) to P0v3 (1 vCPU on newer hard
 
 ## Moving to SQL Server later
 
-Planned, with SQLite for development: see [`docs/roadmap.md`](roadmap.md). The data layer is PostgreSQL-specific. Moving to Azure SQL / SQL Server means rewriting it, not changing a connection string:
+Planned: SQL Server replaces PostgreSQL, SQLite only for test instances for a while; see [`docs/roadmap.md`](roadmap.md). The data layer is PostgreSQL-specific. Moving to Azure SQL / SQL Server means rewriting it, not changing a connection string:
 
 | PostgreSQL feature used                                                       | SQL Server counterpart                                                         |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |

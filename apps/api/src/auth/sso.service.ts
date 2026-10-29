@@ -109,7 +109,7 @@ export class SsoService {
   ) {}
 
   get redirectUri(): string {
-    return `${this.config.API_PUBLIC_URL}/api/v1/auth/sso/callback`;
+    return `${this.config.PUBLIC_WEB_URL}/api/v1/auth/sso/callback`;
   }
 
   private authority(entraTenantId: string): string {

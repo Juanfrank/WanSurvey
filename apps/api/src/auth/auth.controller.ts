@@ -54,7 +54,7 @@ export class AuthController {
     throw new ForbiddenException({
       code: 'PASSWORD_LOGIN_DISABLED',
       message: 'Sign in with Microsoft',
-      ssoStartUrl: `${this.config.API_PUBLIC_URL}/api/v1/auth/sso/start`,
+      ssoStartUrl: `${this.config.PUBLIC_WEB_URL}/api/v1/auth/sso/start`,
     });
   }
 

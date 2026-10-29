@@ -6,11 +6,11 @@ Each WanSurvey organisation can let its staff sign in with their Microsoft work 
 
 In the Microsoft Entra admin center, go to **App registrations → New registration**:
 
-| Setting                 | Value                                                                                                                                        |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Name                    | `WanSurvey`                                                                                                                                  |
-| Supported account types | _Accounts in this organizational directory only_ (single tenant)                                                                             |
-| Redirect URI            | Platform **Web**, set to the `redirectUri` shown by `GET /api/v1/tenant/sso`, for example `https://api.example.org/api/v1/auth/sso/callback` |
+| Setting                 | Value                                                                                                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name                    | `WanSurvey`                                                                                                                                                                                         |
+| Supported account types | _Accounts in this organizational directory only_ (single tenant)                                                                                                                                    |
+| Redirect URI            | Platform **Web**, set to the `redirectUri` shown by `GET /api/v1/tenant/sso`, for example `https://encuestas.example.org/api/v1/auth/sso/callback` (`PUBLIC_WEB_URL` + `/api/v1/auth/sso/callback`) |
 
 Then, in the new app registration:
 
@@ -105,7 +105,7 @@ ENTRA_ALLOWED_DOMAINS=agency.org          # comma-separated
 
 Set these in the API environment:
 
-- `API_PUBLIC_URL`: the public URL Microsoft redirects to, which must match the registered redirect URI exactly.
+- `PUBLIC_WEB_URL`: the app's address; Microsoft redirects to `{PUBLIC_WEB_URL}/api/v1/auth/sso/callback`, which must match the registered redirect URI exactly.
 - `PUBLIC_WEB_URL`: where the browser lands afterwards.
 
 `ENTRA_AUTHORITY_HOST` defaults to `https://login.microsoftonline.com`. Change it only for sovereign clouds (for example `https://login.microsoftonline.us`) or tests. The automated tests use a local mock of Microsoft's token and key endpoints, so they never reach Microsoft.

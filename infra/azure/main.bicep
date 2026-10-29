@@ -196,7 +196,6 @@ var settings = union(
     REDIS_URL: redisUrl
     APP_ENCRYPTION_KEY: encryptionKey
     PUBLIC_WEB_URL: publicUrl
-    API_PUBLIC_URL: publicUrl
     MAILER: empty(smtpUrl) ? 'console' : 'smtp'
     SMTP_URL: smtpUrl
     MAIL_FROM: mailFrom

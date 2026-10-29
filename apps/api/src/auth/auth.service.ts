@@ -346,7 +346,7 @@ export class AuthService {
     return new ForbiddenException({
       code: 'SSO_REQUIRED',
       message: `${t.name} requires signing in with Microsoft`,
-      ssoStartUrl: `${this.config.API_PUBLIC_URL}/api/v1/auth/sso/start?org=${encodeURIComponent(t.slug)}`,
+      ssoStartUrl: `${this.config.PUBLIC_WEB_URL}/api/v1/auth/sso/start?org=${encodeURIComponent(t.slug)}`,
     });
   }
 
