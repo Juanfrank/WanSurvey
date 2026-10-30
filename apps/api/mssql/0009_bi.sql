@@ -447,13 +447,13 @@ BEGIN
   ELSE IF @v = N'dim_pregunta'
   BEGIN
     DELETE FROM bi.dim_pregunta;
-    SELECT v.id AS version_id, x.[key] AS variable, x.[value] AS def
+    SELECT v.id AS version_id, x.[key] COLLATE DATABASE_DEFAULT AS variable, x.[value] COLLATE DATABASE_DEFAULT AS def
     INTO #vars
     FROM dbo.questionnaire_versions v CROSS APPLY OPENJSON(v.compiled, '$.vars') x;
     SELECT t.version_id, t.variable,
-           (SELECT STRING_AGG(r.[value], N'.') WITHIN GROUP (ORDER BY CAST(r.[key] AS int))
+           (SELECT STRING_AGG(r.[value] COLLATE DATABASE_DEFAULT, N'.') WITHIN GROUP (ORDER BY CAST(r.[key] AS int))
             FROM OPENJSON(t.def, '$.rosterChain') r) AS cadena,
-           (SELECT TOP 1 r.[value] FROM OPENJSON(t.def, '$.rosterChain') r
+           (SELECT TOP 1 r.[value] COLLATE DATABASE_DEFAULT FROM OPENJSON(t.def, '$.rosterChain') r
             ORDER BY CAST(r.[key] AS int) DESC) AS lista,
            JSON_VALUE(t.def, '$.kind') AS kind, JSON_VALUE(t.def, '$.type') AS tipo
     INTO #cadenas
@@ -482,8 +482,8 @@ BEGIN
       SELECT id, '_COMENTARIO', 'text', 'valoracion', N'{"es": "Comentario"}', 'es', N'', NULL, 1000, 0
       FROM dbo.feedback_points
       UNION ALL
-      SELECT p.id, JSON_VALUE(it.[value], '$.id'), JSON_VALUE(it.[value], '$.type'), 'valoracion',
-             JSON_QUERY(it.[value], '$.text'), 'es', N'', NULL, 2 + CAST(it.[key] AS int), 0
+      SELECT p.id, JSON_VALUE(it.[value] COLLATE DATABASE_DEFAULT, '$.id'), JSON_VALUE(it.[value] COLLATE DATABASE_DEFAULT, '$.type'), 'valoracion',
+             JSON_QUERY(it.[value] COLLATE DATABASE_DEFAULT, '$.text'), 'es', N'', NULL, 2 + CAST(it.[key] AS int), 0
       FROM dbo.feedback_points p CROSS APPLY OPENJSON(p.items) it
     ) u;
 
@@ -504,10 +504,10 @@ BEGIN
   ELSE IF @v = N'dim_opcion'
   BEGIN
     DELETE FROM bi.dim_opcion;
-    SELECT v.id AS version_id, x.[key] AS id, x.[value] AS opciones
+    SELECT v.id AS version_id, x.[key] COLLATE DATABASE_DEFAULT AS id, x.[value] COLLATE DATABASE_DEFAULT AS opciones
     INTO #sets
     FROM dbo.questionnaire_versions v CROSS APPLY OPENJSON(v.compiled, '$.questionnaire.answerSets') x;
-    SELECT v.id AS version_id, x.[key] AS clase, x.[value] AS def
+    SELECT v.id AS version_id, x.[key] COLLATE DATABASE_DEFAULT AS clase, x.[value] COLLATE DATABASE_DEFAULT AS def
     INTO #especiales
     FROM dbo.questionnaire_versions v
     CROSS APPLY OPENJSON(v.compiled, '$.questionnaire.settings.specialCodes') x;
@@ -544,12 +544,12 @@ BEGIN
     SELECT e.version_id, e.variable, CAST(p.p AS nvarchar(450)),
       CASE
         WHEN p.p = e.lo AND JSON_QUERY(e.q, '$.scale.minLabel') IS NOT NULL THEN
-          REPLACE((SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key], 'json') + N'":"#P# – '
-             + STRING_ESCAPE(bi.plano(l.[value]), 'json') + N'"', N',') + N'}'
+          REPLACE((SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key] COLLATE DATABASE_DEFAULT, 'json') + N'":"#P# – '
+             + STRING_ESCAPE(bi.plano(l.[value] COLLATE DATABASE_DEFAULT), 'json') + N'"', N',') + N'}'
            FROM OPENJSON(e.q, '$.scale.minLabel') l), N'#P#', CAST(p.p AS nvarchar(20)))
         WHEN p.p = e.hi AND JSON_QUERY(e.q, '$.scale.maxLabel') IS NOT NULL THEN
-          REPLACE((SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key], 'json') + N'":"#P# – '
-             + STRING_ESCAPE(bi.plano(l.[value]), 'json') + N'"', N',') + N'}'
+          REPLACE((SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key] COLLATE DATABASE_DEFAULT, 'json') + N'":"#P# – '
+             + STRING_ESCAPE(bi.plano(l.[value] COLLATE DATABASE_DEFAULT), 'json') + N'"', N',') + N'}'
            FROM OPENJSON(e.q, '$.scale.maxLabel') l), N'#P#', CAST(p.p AS nvarchar(20)))
         ELSE N'{"' + STRING_ESCAPE(ISNULL(e.lang, N'es'), 'json') + N'":"' + CAST(p.p AS nvarchar(20)) + N'"}'
       END,
@@ -709,7 +709,7 @@ BEGIN
     SELECT r.id, r.point_id, N'', a.[key], a.[value], a.[type]
     FROM dbo.feedback_responses r CROSS APPLY OPENJSON(ISNULL(r.answers, N'{}')) a;
 
-    SELECT v.id AS version_id, s.[key] AS clase, JSON_VALUE(s.[value], '$.code') AS codigo
+    SELECT v.id AS version_id, s.[key] COLLATE DATABASE_DEFAULT AS clase, JSON_VALUE(s.[value] COLLATE DATABASE_DEFAULT, '$.code') AS codigo
     INTO #esp
     FROM dbo.questionnaire_versions v
     CROSS APPLY OPENJSON(v.compiled, '$.questionnaire.settings.specialCodes') s;
