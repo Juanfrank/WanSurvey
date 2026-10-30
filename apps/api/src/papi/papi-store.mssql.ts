@@ -170,7 +170,7 @@ export class PapiStore {
       .set({
         status: 'done',
         pages: v.pages,
-        pdf: null,
+        pdf: sql<Buffer>`CAST(NULL AS varbinary(max))`,
         finished_at: sql<Date>`SYSDATETIMEOFFSET()`,
       })
       .where('id', '=', id)

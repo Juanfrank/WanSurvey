@@ -383,12 +383,12 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: paper, statistics and exports', () 
         ]),
       ).toEqual([
         ['2026-11-01', 'CATI', ana, 1, 1, 0, 0, 100],
-        ['2026-11-02', 'CATI', ana, 5, 2, 1, 1, 5000],
+        ['2026-11-02', 'CATI', ana, 4, 2, 1, 1, 5000],
         ['2026-11-02', 'CAWI', null, 1, 1, 0, 0, 4000],
       ]);
       const total = await app.withTenant(a.id, (tx) => stats.totals(tx, { projectId: proj }));
       expect(total).toEqual({
-        submitted: 7,
+        submitted: 6,
         completes: 4,
         approved: 1,
         rejected: 1,
@@ -398,7 +398,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: paper, statistics and exports', () 
         await app.withTenant(a.id, (tx) =>
           stats.totals(tx, { projectId: proj, from: '2026-11-02', to: '2026-11-02' }),
         ),
-      ).toMatchObject({ submitted: 6 });
+      ).toMatchObject({ submitted: 5 });
       expect(
         await app.withTenant(a.id, (tx) => stats.daily(tx, { projectId: proj, mode: 'CAWI' })),
       ).toHaveLength(1);

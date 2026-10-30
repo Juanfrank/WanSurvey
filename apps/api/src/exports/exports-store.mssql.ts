@@ -67,7 +67,7 @@ export class ExportsStore {
         options: JSON.stringify(v.options),
         file_name: null,
         content_type: null,
-        file: null,
+        file: sql<Buffer>`CAST(NULL AS varbinary(max))`,
         storage_key: null,
         size: null,
         rows: null,
