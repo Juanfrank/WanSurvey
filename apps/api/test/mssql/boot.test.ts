@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createApp } from '../../src/app.js';
 import { loadConfig, resetConfigCache } from '../../src/config.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 
@@ -28,6 +27,8 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: the application boots', () => {
       EXPORT_DIR: join(tmpdir(), 'wansurvey-test-exports'),
     });
     resetConfigCache();
+    // Some modules read the configuration when they are imported: after the environment is set.
+    const { createApp } = await import('../../src/app.js');
     app = await createApp();
     await app.init();
   });
