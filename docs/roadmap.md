@@ -98,7 +98,25 @@ module:** a repository interface per module, a PostgreSQL implementation (the ex
 and a SQL Server one (the stores), so the PostgreSQL suite keeps proving the rules while the HTTP
 tests on SQL Server prove the stores.
 
-**Left:** stores for metrics, jobs, library, dashboard, geolocation, privacy and analysis. The
+**The switch, step 3 (done): organisation and projects** (`OrgRepo`, tests over HTTP on SQL Server in
+`apps/api/test/mssql/org-http.test.ts`).
+
+**The switch, step 4 (in progress): the rest, module by module, tests last.** Each module gets a
+repository (a PostgreSQL side with the code it had, a SQL Server side with the stores and direct
+queries); the new HTTP tests on SQL Server are written at the end, with the port of the PostgreSQL
+fixtures. Moved so far (code only; the PostgreSQL suite proves the rules): teams (`TeamsRepo`),
+audit listing, people of the organisation and of a project (`UsersRepo`), the rest of sign-in
+(`AccountTx`: second-factor setup, invitations, password reset, Microsoft sign-in; migration
+`0013_tokens.sql` adds the owner procedures for tokens and identities that run before any
+context), questionnaires, collaboration and the question library (`QuestionnairesRepo`), cases,
+assignment rules and expiry (`CasesRepo`; `CasesService` takes a transaction of either engine, and
+wraps a Drizzle one for modules that have not moved). **Still on PostgreSQL:** sample imports and
+the sampling selector, interviews and CAPI, CATI, review, web surveys (CAWI, dispatcher,
+feedback), paper (PAPI, scans), metrics and goals, the live dashboard, geolocation, privacy,
+analysis and sharing, statistics and the bi service, exports, background jobs (sweeper, claims,
+worker). Production keeps refusing `mssql` until they move.
+
+**Left:** stores for metrics, jobs, dashboard, geolocation and privacy. The
 switch itself goes module by module, each tested over HTTP on SQL Server: the core first (sign-in,
 users, organisations, projects, teams, audit), then questionnaires, cases and sampling, interviews
 and CATI, web surveys, paper, review, statistics and exports. A fixtures helper that works on both
