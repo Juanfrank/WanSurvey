@@ -11,6 +11,9 @@ overrides:
   # One set of Node types: apache-arrow (Blob Storage SDK) and mysql2 (Azurite) ask for newer
   # ones, and two copies split Vite's types.
   '@types/node': 24.19.2
+  # tedious (SQL Server) brings @azure/identity, which brings an MSAL with a high advisory
+  # (GHSA-xcx6-jx8p-x3h5, fixed in 7.1.0, released 2026-10-13). Only SQL logins are used here.
+  '@azure/msal-node': 7.1.0
 auditConfig:
   # The fixes came out on 2026-10-22, under two weeks ago; upgrade from 2026-11-05 and remove
   # these. body-parser: compressed request bodies are refused before parsing (plain-body.ts).

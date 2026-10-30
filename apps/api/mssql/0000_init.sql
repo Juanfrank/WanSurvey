@@ -5,7 +5,7 @@ CREATE TABLE tenants (
   id uniqueidentifier NOT NULL PRIMARY KEY,
   name nvarchar(450) NOT NULL,
   slug nvarchar(450) NOT NULL,
-  plan nvarchar(64) NOT NULL CONSTRAINT tenants_plan_df DEFAULT 'trial',
+  [plan] nvarchar(64) NOT NULL CONSTRAINT tenants_plan_df DEFAULT 'trial',
   settings nvarchar(max) NOT NULL CONSTRAINT tenants_settings_df DEFAULT '{}' CONSTRAINT tenants_settings_json CHECK (ISJSON(settings) = 1),
   branding nvarchar(max) NOT NULL CONSTRAINT tenants_branding_df DEFAULT '{}' CONSTRAINT tenants_branding_json CHECK (ISJSON(branding) = 1),
   created_at datetimeoffset(3) NOT NULL CONSTRAINT tenants_created_df DEFAULT SYSDATETIMEOFFSET()
