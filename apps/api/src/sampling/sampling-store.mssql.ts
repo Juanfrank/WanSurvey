@@ -167,7 +167,7 @@ export class SamplingStore {
         WHERE NOT EXISTS (
           SELECT 1 FROM dbo.frame_units f WITH (UPDLOCK, HOLDLOCK)
           WHERE f.project_id = ${v.projectId}
-            AND ISNULL(f.questionnaire_id, ${NO_QUESTIONNAIRE}) = ISNULL(${v.questionnaireId}, ${NO_QUESTIONNAIRE})
+            AND ISNULL(f.questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier)) = ISNULL(CAST(${v.questionnaireId} AS uniqueidentifier), CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier))
             AND f.external_id = j.ext
         );
         SELECT @@ROWCOUNT AS n`.execute(tx);
@@ -286,7 +286,7 @@ export class SamplingStore {
           AND NOT EXISTS (
             SELECT 1 FROM dbo.cases c WITH (UPDLOCK, HOLDLOCK)
             WHERE c.project_id = f.project_id
-              AND ISNULL(c.questionnaire_id, ${NO_QUESTIONNAIRE}) = ISNULL(f.questionnaire_id, ${NO_QUESTIONNAIRE})
+              AND ISNULL(c.questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier)) = ISNULL(f.questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier))
               AND c.external_id = f.external_id
           );
         INSERT INTO dbo.contacts (id, tenant_id, case_id, type, value, label)
@@ -319,9 +319,9 @@ export class SamplingStore {
   ): Promise<string[]> {
     const res = await sql<{ id: string }>`
       WITH next AS (
-        SELECT TOP (${v.count}) * FROM dbo.frame_units WITH (UPDLOCK, READPAST, ROWLOCK)
+        SELECT TOP (${v.count}) * FROM dbo.frame_units WITH (UPDLOCK, READPAST, ROWLOCK, INDEX(frame_units_reserve_idx))
         WHERE project_id = ${v.projectId}
-          AND ISNULL(questionnaire_id, ${NO_QUESTIONNAIRE}) = ISNULL(${v.questionnaireId}, ${NO_QUESTIONNAIRE})
+          AND ISNULL(questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier)) = ISNULL(CAST(${v.questionnaireId} AS uniqueidentifier), CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier))
           AND role = 'reserve' AND released_at IS NULL
         ORDER BY release_order, id
       )

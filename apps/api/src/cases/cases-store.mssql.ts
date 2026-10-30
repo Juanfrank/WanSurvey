@@ -360,7 +360,7 @@ export class CasesStore {
   ): Promise<string | null> {
     const res = await sql<{ id: string }>`
       WITH next AS (
-        SELECT TOP (1) * FROM dbo.cases WITH (UPDLOCK, READPAST, ROWLOCK)
+        SELECT TOP (1) * FROM dbo.cases WITH (UPDLOCK, READPAST, ROWLOCK, INDEX(cases_pool_idx))
         WHERE project_id = ${v.projectId} AND assigned_to IS NULL AND status = 'fresh'
           ${v.questionnaireId ? sql`AND (questionnaire_id = ${v.questionnaireId} OR questionnaire_id IS NULL)` : sql``}
         ORDER BY priority DESC, id

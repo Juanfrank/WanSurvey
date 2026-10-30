@@ -13,6 +13,10 @@ import { SamplingStore } from '../../src/sampling/sampling-store.mssql.js';
  * from selected units, reserves, goals, and isolation by organisation. Runs only where a SQL
  * Server is given (see isolation.test.ts).
  */
+/** SQL Server says 2627 for a unique constraint and 2601 for a unique index. */
+const isDuplicateKey = (e: unknown) =>
+  [2601, 2627].includes((e as { number?: number }).number ?? 0);
+
 const ADMIN = process.env.MSSQL_ADMIN_URL;
 const APP = process.env.MSSQL_URL;
 
@@ -96,7 +100,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
           cases: [{ externalId: 'new-one' }, { externalId: `big-${stamp}-7` }],
         }),
       ),
-    ).rejects.toMatchObject({ number: 2627 });
+    ).rejects.toSatisfy(isDuplicateKey);
     expect((await app.withTenant(a.id, (tx) => cases.countByStatus(tx, a.project))).fresh).toBe(
       before,
     );
@@ -122,9 +126,9 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
         }),
       );
     await insert(null);
-    await expect(insert(null)).rejects.toMatchObject({ number: 2627 });
+    await expect(insert(null)).rejects.toSatisfy(isDuplicateKey);
     await insert(q1);
-    await expect(insert(q1)).rejects.toMatchObject({ number: 2627 });
+    await expect(insert(q1)).rejects.toSatisfy(isDuplicateKey);
   });
 
   it('keeps a sample field personal once any load says so', async () => {
