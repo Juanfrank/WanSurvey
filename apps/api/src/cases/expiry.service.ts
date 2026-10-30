@@ -1,8 +1,7 @@
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
-import { Database, type Tx } from '../db/database.js';
-import { cases, projects } from '../db/schema.js';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Engine } from '../db/engine.js';
 import { JobsService } from '../jobs/jobs.service.js';
+import { CASES_REPO, type CasesRepo, type CasesTx } from './cases-repo.js';
 import { CasesService } from './cases.service.js';
 
 /**
@@ -15,7 +14,8 @@ export class ExpiryService implements OnModuleInit {
   private readonly logger = new Logger('Expiry');
 
   constructor(
-    private readonly database: Database,
+    private readonly engine: Engine,
+    @Inject(CASES_REPO) private readonly repo: CasesRepo,
     private readonly cases: CasesService,
     private readonly jobs: JobsService,
   ) {}
@@ -27,12 +27,11 @@ export class ExpiryService implements OnModuleInit {
 
   async expireAll(now = new Date()): Promise<number> {
     let n = 0;
-    for (const tenantId of await this.database.allTenantIds()) {
+    for (const tenantId of await this.engine.allTenantIds()) {
       try {
-        n += await this.database.withTenant(tenantId, async (tx) => {
+        n += await this.repo.inTenant(tenantId, async (t) => {
           let m = 0;
-          for (const p of await tx.select({ id: projects.id }).from(projects))
-            m += await this.expireProject(tx, tenantId, p.id, now);
+          for (const id of await t.projectIds()) m += await this.expireProject(t, id, now);
           return m;
         });
       } catch (e) {
@@ -43,34 +42,11 @@ export class ExpiryService implements OnModuleInit {
   }
 
   /** Closes the project's overdue cases; returns how many. */
-  async expireProject(tx: Tx, tenantId: string, projectId: string, now = new Date()) {
-    const days = (await this.cases.settings(tx, projectId)).fieldwork.caseExpiryDays;
+  async expireProject(t: CasesTx, projectId: string, now = new Date()) {
+    const days = (await this.cases.settings(t, projectId)).fieldwork.caseExpiryDays;
     if (!days) return 0;
-    const due = await tx
-      .update(cases)
-      .set({
-        status: 'finalised',
-        disposition: 'EXPIRED',
-        nextContactAt: null,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(cases.projectId, projectId),
-          inArray(cases.status, ['assigned', 'in_progress']),
-          isNotNull(cases.assignedTo),
-          lt(cases.assignedAt, new Date(now.getTime() - days * 86_400_000)),
-          isNull(cases.checkedOutDevice),
-          or(isNull(cases.callLockUntil), lt(cases.callLockUntil, now)),
-          sql`not exists (select 1 from interviews iv where iv.case_id = ${cases.id}
-                and iv.status = 'in_progress')`,
-        ),
-      )
-      .returning({ id: cases.id, assignedTo: cases.assignedTo, assignedAt: cases.assignedAt });
-    await this.cases.events(
-      tx,
-      tenantId,
-      null,
+    const due = await t.expireDue(projectId, now, days);
+    await t.events(
       due.map((c) => ({
         caseId: c.id,
         type: 'expired',

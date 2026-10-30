@@ -201,6 +201,12 @@ export class MssqlDatabase {
     return res.rows[0] ?? null;
   }
 
+  /** Every organisation, for nightly jobs. */
+  async allTenantIds(): Promise<string[]> {
+    const res = await sql<{ tenant_id: string }>`EXEC dbo.all_tenant_ids`.execute(this.db);
+    return res.rows.map((r) => r.tenant_id.toLowerCase());
+  }
+
   /** The account an external identity is linked to, in any organisation. */
   async userByIdentity(issuer: string, subject: string): Promise<string | null> {
     const res = await sql<{ user_id: string }>`

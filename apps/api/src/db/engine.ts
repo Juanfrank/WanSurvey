@@ -35,6 +35,11 @@ export class Engine implements OnModuleDestroy {
     return this.mssql;
   }
 
+  /** Every organisation, for jobs that work across them. */
+  allTenantIds(): Promise<string[]> {
+    return this.mssql ? this.mssql.allTenantIds() : this.postgres.allTenantIds();
+  }
+
   /** Whether the database answers. */
   probe(): Promise<boolean> {
     return this.mssql ? this.mssql.probe() : this.postgres.probe();

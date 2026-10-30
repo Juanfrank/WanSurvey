@@ -60,6 +60,7 @@ import { CatiService } from './cati/cati.service.js';
 import { AssignmentRulesController } from './cases/assignment-rules.controller.js';
 import { CasesController } from './cases/cases.controller.js';
 import { CasesService } from './cases/cases.service.js';
+import { CASES_REPO, MssqlCasesRepo, PgCasesRepo } from './cases/cases-repo.js';
 import { ImportsController } from './cases/imports.controller.js';
 import { SsoController, SsoSettingsController } from './auth/sso.controller.js';
 import { SsoConfigs } from './auth/sso-config.js';
@@ -239,6 +240,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgQuestionnairesRepo, ms: MssqlQuestionnairesRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgQuestionnairesRepo, MssqlQuestionnairesRepo],
+        },
+        PgCasesRepo,
+        MssqlCasesRepo,
+        {
+          provide: CASES_REPO,
+          useFactory: (engine: Engine, pg: PgCasesRepo, ms: MssqlCasesRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgCasesRepo, MssqlCasesRepo],
         },
         AuditService,
         AuthService,

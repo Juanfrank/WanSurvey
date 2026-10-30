@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -13,15 +14,13 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { and, asc, eq, isNull, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
-import { assignments, cases, users } from '../db/schema.js';
+import { CASES_REPO, type CasesRepo } from './cases-repo.js';
 import { compileRule, ruleError } from './case-logic.js';
-import { CasesService, ofQuestionnaire } from './cases.service.js';
+import { CasesService } from './cases.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
 
@@ -48,7 +47,7 @@ const ApplyBody = z.object({
 @Controller('projects/:projectId')
 export class AssignmentRulesController {
   constructor(
-    private readonly database: Database,
+    @Inject(CASES_REPO) private readonly repo: CasesRepo,
     private readonly audit: AuditService,
     private readonly svc: CasesService,
   ) {}
@@ -60,37 +59,9 @@ export class AssignmentRulesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(QuestionnaireQuery)) q: z.infer<typeof QuestionnaireQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const rows = await tx
-        .select({
-          id: assignments.id,
-          userId: assignments.userId,
-          questionnaireId: assignments.questionnaireId,
-          userName: users.name,
-          name: assignments.name,
-          filter: assignments.filter,
-          quota: assignments.quota,
-          active: assignments.active,
-          createdAt: assignments.createdAt,
-        })
-        .from(assignments)
-        .innerJoin(users, eq(users.id, assignments.userId))
-        .where(
-          and(
-            eq(assignments.projectId, projectId),
-            // A questionnaire's rules and the project-wide ones.
-            q.questionnaireId
-              ? or(
-                  eq(assignments.questionnaireId, q.questionnaireId),
-                  isNull(assignments.questionnaireId),
-                )
-              : undefined,
-          ),
-        )
-        .orderBy(asc(assignments.createdAt));
-      const all = this.svc.openRows(
-        await this.svc.selectCases(tx).where(eq(cases.projectId, projectId)),
-      );
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const rows = await t.rules(projectId, { questionnaireId: q.questionnaireId });
+      const all = this.svc.openRows(await t.cases({ projectId }));
       return rows.map((r) => {
         const match = compileRule(r.filter);
         const matching = all
@@ -125,18 +96,14 @@ export class AssignmentRulesController {
   ) {
     const err = body.filter.trim() ? ruleError(body.filter) : null;
     if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
       const match = compileRule(body.filter);
       const all = this.svc
         .forRules(
           ctx,
           projectId,
-          await this.svc.piiFields(tx, projectId),
-          this.svc.openRows(
-            await this.svc
-              .selectCases(tx)
-              .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
-          ),
+          await this.svc.piiFields(t, projectId),
+          this.svc.openRows(await t.cases({ projectId, questionnaireId: body.questionnaireId })),
         )
         .filter(match);
       return {
@@ -156,34 +123,27 @@ export class AssignmentRulesController {
   ) {
     const err = ruleError(body.filter);
     if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
-      await this.svc.assertAssignee(tx, projectId, body.userId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.svc.project(t, projectId);
+      await this.svc.assertAssignee(t, projectId, body.userId);
       const questionnaireId = body.questionnaireId
-        ? await this.svc.questionnaireFor(tx, projectId, body.questionnaireId)
+        ? await this.svc.questionnaireFor(t, projectId, body.questionnaireId)
         : null;
-      const [row] = await tx
-        .insert(assignments)
-        .values({
-          tenantId: ctx.tenantId,
-          projectId,
-          userId: body.userId,
-          questionnaireId,
-          kind: 'rule',
-          name: body.name ?? null,
-          filter: body.filter,
-          quota: body.quota ?? null,
-          active: body.active ?? true,
-          createdBy: ctx.userId,
-        })
-        .returning();
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      const row = await t.createRule({
+        projectId,
+        userId: body.userId,
+        questionnaireId,
+        name: body.name ?? null,
+        filter: body.filter,
+        quota: body.quota ?? null,
+        active: body.active ?? true,
+        createdBy: ctx.userId,
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'assignment.created',
           targetType: 'assignment',
-          targetId: row!.id,
+          targetId: row.id,
           details: {
             projectId,
             userId: body.userId,
@@ -209,17 +169,11 @@ export class AssignmentRulesController {
       const err = ruleError(body.filter);
       if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
     }
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      if (body.userId) await this.svc.assertAssignee(tx, projectId, body.userId);
-      const [row] = await tx
-        .update(assignments)
-        .set(body)
-        .where(and(eq(assignments.id, ruleId), eq(assignments.projectId, projectId)))
-        .returning();
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      if (body.userId) await this.svc.assertAssignee(t, projectId, body.userId);
+      const row = await t.updateRule(projectId, ruleId, body);
       if (!row) throw new NotFoundException('Rule not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'assignment.updated',
           targetType: 'assignment',
@@ -239,15 +193,9 @@ export class AssignmentRulesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('ruleId', ParseUUIDPipe) ruleId: string,
   ): Promise<void> {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx
-        .delete(assignments)
-        .where(and(eq(assignments.id, ruleId), eq(assignments.projectId, projectId)))
-        .returning({ id: assignments.id });
-      if (!row) throw new NotFoundException('Rule not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      if (!(await t.deleteRule(projectId, ruleId))) throw new NotFoundException('Rule not found');
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'assignment.deleted',
           targetType: 'assignment',
@@ -267,16 +215,14 @@ export class AssignmentRulesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(ApplyBody)) body: z.infer<typeof ApplyBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
-      const n = await this.svc.applyRules(tx, ctx, projectId, {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.svc.project(t, projectId);
+      const n = await this.svc.applyRules(t, ctx, projectId, {
         ...(body.ruleId ? { ruleId: body.ruleId } : {}),
         ...(body.caseIds ? { onlyCaseIds: body.caseIds } : {}),
         ...(body.questionnaireId ? { questionnaireId: body.questionnaireId } : {}),
       });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'cases.assigned',
           targetType: 'project',

@@ -276,6 +276,30 @@ export class CasesStore {
       only?: { statuses?: string[]; unassigned?: boolean };
     },
   ): Promise<{ id: string; from: string | null }[]> {
+    const changed = await this.assignRows(tx, v);
+    await this.addEvents(
+      tx,
+      v.tenantId,
+      v.actorUserId,
+      changed.map((c) => ({
+        caseId: c.id,
+        type: v.userId ? 'assigned' : 'unassigned',
+        details: { from: c.from, to: v.userId, via: v.via },
+      })),
+    );
+    return changed;
+  }
+
+  /** The same without the history events (the caller writes them). */
+  async assignRows(
+    tx: MssqlTx,
+    v: {
+      projectId: string;
+      caseIds: string[];
+      userId: string | null;
+      only?: { statuses?: string[]; unassigned?: boolean };
+    },
+  ): Promise<{ id: string; from: string | null }[]> {
     let changed: { id: string; from: string | null }[] = [];
     for (const part of chunks(v.caseIds, ID_CHUNK)) {
       let q = sql<{ id: string; from: string | null }>`
@@ -283,6 +307,7 @@ export class CasesStore {
         WHERE project_id = ${v.projectId} AND id IN (${sql.join(part)})`;
       if (v.only?.statuses?.length) q = sql`${q} AND status IN (${sql.join(v.only.statuses)})`;
       if (v.only?.unassigned) q = sql`${q} AND assigned_to IS NULL`;
+      q = sql`${q} ORDER BY id`;
       const before = (await q.execute(tx)).rows
         .map((r) => ({ id: r.id.toLowerCase(), from: r.from?.toLowerCase() ?? null }))
         .filter((b) => b.from !== v.userId);
@@ -305,16 +330,6 @@ export class CasesStore {
         .execute();
       changed = changed.concat(before);
     }
-    await this.addEvents(
-      tx,
-      v.tenantId,
-      v.actorUserId,
-      changed.map((c) => ({
-        caseId: c.id,
-        type: v.userId ? 'assigned' : 'unassigned',
-        details: { from: c.from, to: v.userId, via: v.via },
-      })),
-    );
     return changed;
   }
 

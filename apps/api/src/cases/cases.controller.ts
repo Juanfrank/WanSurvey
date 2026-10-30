@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -15,39 +16,15 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { MODES } from '@wansurvey/schema';
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  or,
-  sql,
-  type SQL,
-} from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database, type Tx } from '../db/database.js';
-import {
-  caseEvents,
-  cases,
-  contacts,
-  interviewerGoals,
-  projects,
-  sampleFields,
-  users,
-} from '../db/schema.js';
+import { CASES_REPO, type CaseQuery, type CasesRepo, type CasesTx } from './cases-repo.js';
 import { compileRule, maskContact, maskSample, ruleError } from './case-logic.js';
 import { deal, fairWeights, productivity, quotas, type Output } from './distribute.js';
 import { daysBetween, windowsIn, type Frequency } from '../metrics/goal-periods.js';
-import { CasesService, ofQuestionnaire } from './cases.service.js';
+import { CasesService } from './cases.service.js';
 import { words } from './pii.js';
 
 const round = (x: number) => Math.round(x * 1000) / 1000;
@@ -135,7 +112,7 @@ const FieldPatch = z.object({
 @Controller('projects/:projectId')
 export class CasesController {
   constructor(
-    private readonly database: Database,
+    @Inject(CASES_REPO) private readonly repo: CasesRepo,
     private readonly audit: AuditService,
     private readonly svc: CasesService,
   ) {}
@@ -152,48 +129,37 @@ export class CasesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(ListQuery)) q: z.infer<typeof ListQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const settings = await this.svc.settings(tx, projectId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const settings = await this.svc.settings(t, projectId);
       const own = this.svc.restrictedToOwn(ctx, projectId);
-      const base: SQL[] = [eq(cases.projectId, projectId)];
-      if (q.questionnaireId) base.push(ofQuestionnaire(q.questionnaireId)!);
-      if (own) base.push(this.visibleToOwn(ctx, settings.assignmentMode === 'pool'));
-      const conds = [...base];
-      if (q.status) conds.push(eq(cases.status, q.status));
-      if (q.assignedTo === 'none') conds.push(isNull(cases.assignedTo));
-      else if (q.assignedTo === 'me') conds.push(eq(cases.assignedTo, ctx.userId));
-      else if (q.assignedTo) conds.push(eq(cases.assignedTo, q.assignedTo));
-      const pii = await this.svc.piiFields(tx, projectId);
+      const base: CaseQuery = {
+        projectId,
+        questionnaireId: q.questionnaireId,
+        ...(own
+          ? { visibleTo: { userId: ctx.userId, pool: settings.assignmentMode === 'pool' } }
+          : {}),
+      };
+      const pii = await this.svc.piiFields(t, projectId);
       const canSee = this.svc.canSeePii(ctx, projectId);
-      if (q.q) {
-        const term = `%${q.q.replace(/[%_\\]/g, '\\$&')}%`;
+      const conds: CaseQuery = {
+        ...base,
+        status: q.status,
+        assignedTo: q.assignedTo === 'me' ? ctx.userId : q.assignedTo,
         // Personal fields are searchable only by people allowed to see them: sealed ones by
         // whole words, through their keyed hashes (H1).
-        const searchable = canSee
-          ? sql`${cases.sample}::text`
-          : sql`(${cases.sample} - ${sql.raw(`'{${[...pii].map((f) => f.replace(/[^A-Za-z0-9_]/g, '')).join(',')}}'::text[]`)})::text`;
-        const tokens = canSee ? words(q.q).map((w) => this.svc.pii.token(w)) : [];
-        conds.push(
-          or(
-            ilike(cases.externalId, term),
-            sql`${searchable} ilike ${term}`,
-            ...(tokens.length
-              ? [sql`${cases.samplePiiIndex} @> ${sql.param(tokens)}::text[]`]
-              : []),
-          )!,
-        );
-      }
+        search: q.q
+          ? {
+              term: q.q,
+              hiddenFields: canSee ? [] : [...pii],
+              tokens: canSee ? words(q.q).map((w) => this.svc.pii.token(w)) : [],
+            }
+          : undefined,
+      };
       if (q.filter) {
         const err = ruleError(q.filter);
         if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
       }
-      const order =
-        q.sort === 'priority'
-          ? cases.priority
-          : q.sort === 'updatedAt'
-            ? cases.updatedAt
-            : cases.externalId;
-      const by = q.dir === 'desc' ? desc(order) : asc(order);
+      const order = { by: q.sort, dir: q.dir } as const;
 
       let rows;
       let total: number;
@@ -201,63 +167,32 @@ export class CasesController {
         // Rule filters run in the engine, over the already narrowed set.
         const match = compileRule(q.filter);
         const all = this.svc
-          .forRules(
-            ctx,
-            projectId,
-            pii,
-            this.svc.openRows(
-              await this.svc
-                .selectCases(tx)
-                .where(and(...conds))
-                .orderBy(by, asc(cases.id)),
-            ),
-          )
+          .forRules(ctx, projectId, pii, this.svc.openRows(await t.cases(conds, order)))
           .filter(match);
         total = all.length;
         rows = all.slice((q.page - 1) * q.limit, q.page * q.limit);
       } else {
-        const [c] = await tx
-          .select({ n: sql<number>`count(*)::int` })
-          .from(cases)
-          .where(and(...conds));
-        total = c?.n ?? 0;
+        total = await t.countCases(conds);
         rows = this.svc.openRows(
-          await this.svc
-            .selectCases(tx)
-            .where(and(...conds))
-            .orderBy(by, asc(cases.id))
-            .limit(q.limit)
-            .offset((q.page - 1) * q.limit),
+          await t.cases(conds, order, { limit: q.limit, offset: (q.page - 1) * q.limit }),
         );
       }
-      const counts = await tx
-        .select({ status: cases.status, n: sql<number>`count(*)::int` })
-        .from(cases)
-        .where(and(...base))
-        .groupBy(cases.status);
-      // Completed: finished with a complete interview (finalised also covers refusals…).
-      const [done] = await tx
-        .select({ n: sql<number>`count(*)::int` })
-        .from(cases)
-        .where(and(...base, eq(cases.status, 'finalised'), eq(cases.disposition, 'COMPLETE')));
-      // Assigned: held by someone, whatever their state.
-      const [held] = await tx
-        .select({ n: sql<number>`count(*)::int` })
-        .from(cases)
-        .where(and(...base, isNotNull(cases.assignedTo)));
-      const fields = await this.fields(tx, projectId);
+      const { byStatus, completed, held } = await t.caseCounts(base);
+      const fields = await t.fields(projectId);
       // Lists mask personal fields; clear values come from an audited reveal per case, or,
       // for an interviewer's own cases, automatically with the first view recorded.
       const auto = this.svc.autoReveal(ctx, projectId, settings);
       const clear = (r: { assignedTo: string | null }) => auto && r.assignedTo === ctx.userId;
-      if (pii.size) await this.svc.recordAutoViews(tx, ctx, projectId, rows.filter(clear), 'list');
+      if (pii.size) await this.svc.recordAutoViews(t, ctx, projectId, rows.filter(clear), 'list');
       return {
         total,
         page: q.page,
         limit: q.limit,
-        counts: Object.fromEntries(counts.map((c) => [c.status, c.n])),
-        completed: done?.n ?? 0,
-        held: held?.n ?? 0,
+        counts: byStatus,
+        // Completed: finished with a complete interview (finalised also covers refusals…).
+        completed,
+        // Assigned: held by someone, whatever their state.
+        held,
         fields,
         assignmentMode: settings.assignmentMode,
         caseExpiryDays: settings.fieldwork.caseExpiryDays,
@@ -281,12 +216,12 @@ export class CasesController {
     @Param('caseId', ParseUUIDPipe) caseId: string,
     @Query('reveal') reveal?: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const settings = await this.svc.settings(tx, projectId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const settings = await this.svc.settings(t, projectId);
       const pool = settings.assignmentMode === 'pool';
-      const c = await this.loadCase(tx, ctx, projectId, caseId, pool);
+      const c = await this.loadCase(t, ctx, projectId, caseId, pool);
       const canSee = this.svc.canSeePii(ctx, projectId);
-      const pii = await this.svc.piiFields(tx, projectId);
+      const pii = await this.svc.piiFields(t, projectId);
       const revealed = reveal === 'pii' && canSee;
       if (reveal === 'pii' && !canSee)
         throw new ForbiddenException({
@@ -297,11 +232,9 @@ export class CasesController {
       // interviewer holding the case when the project allows it (recorded once).
       const auto = this.svc.autoReveal(ctx, projectId, settings) && c.assignedTo === ctx.userId;
       const show = revealed || auto;
-      if (auto && !revealed) await this.svc.recordAutoViews(tx, ctx, projectId, [c], 'detail');
+      if (auto && !revealed) await this.svc.recordAutoViews(t, ctx, projectId, [c], 'detail');
       if (revealed) {
-        await this.audit.record(
-          tx,
-          ctx.tenantId,
+        await t.audit(
           this.audit.fromContext(ctx, {
             action: 'case.pii_viewed',
             targetType: 'case',
@@ -310,54 +243,21 @@ export class CasesController {
           }),
         );
       }
-      const cs = await tx
-        .select({
-          id: contacts.id,
-          type: contacts.type,
-          value: contacts.value,
-          label: contacts.label,
-          valid: contacts.valid,
-          consent: contacts.consent,
-          lat: contacts.lat,
-          lng: contacts.lng,
-          geocodeQuality: contacts.geocodeQuality,
-        })
-        .from(contacts)
-        .where(eq(contacts.caseId, caseId))
-        .orderBy(asc(contacts.createdAt));
-      const history = await tx
-        .select({
-          type: caseEvents.type,
-          details: caseEvents.details,
-          at: caseEvents.at,
-          actor: users.name,
-        })
-        .from(caseEvents)
-        .leftJoin(users, eq(users.id, caseEvents.actorUserId))
-        .where(eq(caseEvents.caseId, caseId))
-        .orderBy(desc(caseEvents.at))
-        .limit(200);
+      const cs = await t.contacts(caseId);
+      const history = await t.history(caseId);
       const hasPii = pii.size > 0 || cs.length > 0;
       // The same phone or e-mail in other projects, for people who see all cases.
       const elsewhere = can(ctx.memberships, 'cases.read_all', projectId)
         ? await this.svc.elsewhere(
-            tx,
+            t,
             projectId,
             cs.filter((x) => x.type !== 'address'),
           )
         : [];
       const free = !c.assignedTo && c.status === 'fresh';
       // The sample keeps its history: the case this one substitutes, and its own substitute.
-      const [original] = c.substituteFor
-        ? await tx
-            .select({ id: cases.id, externalId: cases.externalId })
-            .from(cases)
-            .where(eq(cases.id, c.substituteFor))
-        : [];
-      const [substitute] = await tx
-        .select({ id: cases.id, externalId: cases.externalId })
-        .from(cases)
-        .where(and(eq(cases.projectId, projectId), eq(cases.substituteFor, caseId)));
+      const original = c.substituteFor ? await t.caseRef(c.substituteFor) : null;
+      const substitute = await t.substituteOf(projectId, caseId);
       return {
         ...c,
         substitutes: original ?? null,
@@ -392,8 +292,8 @@ export class CasesController {
     @Param('caseId', ParseUUIDPipe) caseId: string,
     @Body(new ZodPipe(CasePatch)) body: z.infer<typeof CasePatch>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const before = await this.loadCase(tx, ctx, projectId, caseId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const before = await this.loadCase(t, ctx, projectId, caseId);
       // An expired case, or one closed with its questionnaire, is reopened as a fresh one.
       const reopen =
         body.status === 'fresh' &&
@@ -417,25 +317,23 @@ export class CasesController {
             ? 'assigned'
             : 'fresh'
           : body.status;
-      const [row] = await tx
-        .update(cases)
-        .set({
-          ...(body.priority !== undefined ? { priority: body.priority } : {}),
-          ...(body.modePreference !== undefined ? { modePreference: body.modePreference } : {}),
-          ...(status ? { status } : {}),
-          ...(reopen ? { disposition: null, assignedTo: null, assignedAt: null } : {}),
-          ...(body.sample
-            ? this.svc.pii.seal(
-                { ...(before.sample as Record<string, unknown>), ...body.sample },
-                await this.svc.piiFields(tx, projectId),
-              )
-            : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(cases.id, caseId))
-        .returning({ id: cases.id, status: cases.status, priority: cases.priority });
+      const sealed = body.sample
+        ? this.svc.pii.seal(
+            { ...(before.sample as Record<string, unknown>), ...body.sample },
+            await this.svc.piiFields(t, projectId),
+          )
+        : null;
+      const row = await t.updateCase(caseId, {
+        priority: body.priority,
+        modePreference: body.modePreference,
+        status,
+        reopen,
+        sample: sealed
+          ? { sample: sealed.sample, samplePii: sealed.samplePii, index: sealed.samplePiiIndex }
+          : undefined,
+      });
       const changed = Object.keys(body);
-      await this.svc.events(tx, ctx.tenantId, ctx.userId, [
+      await this.svc.events(t, ctx.tenantId, ctx.userId, [
         {
           caseId,
           type: status && status !== before.status ? 'status_changed' : 'edited',
@@ -445,9 +343,7 @@ export class CasesController {
           },
         },
       ]);
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'case.updated',
           targetType: 'case',
@@ -473,11 +369,9 @@ export class CasesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('caseId', ParseUUIDPipe) caseId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const row = await this.svc.claim(tx, ctx, projectId, caseId);
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await this.svc.claim(t, ctx, projectId, caseId);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'case.claimed',
           targetType: 'case',
@@ -498,12 +392,10 @@ export class CasesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('caseId', ParseUUIDPipe) caseId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const out = await this.svc.release(tx, ctx, projectId, caseId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const out = await this.svc.release(t, ctx, projectId, caseId);
       if (out.released)
-        await this.audit.record(
-          tx,
-          ctx.tenantId,
+        await t.audit(
           this.audit.fromContext(ctx, {
             action: 'case.released',
             targetType: 'case',
@@ -525,8 +417,8 @@ export class CasesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(AssignBody)) body: z.infer<typeof AssignBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.svc.project(t, projectId);
       let ids = body.caseIds;
       if (body.filter !== undefined) {
         const err = ruleError(body.filter || 'true');
@@ -535,48 +427,30 @@ export class CasesController {
         const all = this.svc.forRules(
           ctx,
           projectId,
-          await this.svc.piiFields(tx, projectId),
-          this.svc.openRows(
-            await this.svc
-              .selectCases(tx)
-              .where(and(eq(cases.projectId, projectId), ofQuestionnaire(body.questionnaireId))),
-          ),
+          await this.svc.piiFields(t, projectId),
+          this.svc.openRows(await t.cases({ projectId, questionnaireId: body.questionnaireId })),
         );
         ids = all.filter(match).map((c) => c.id);
       }
       if (body.onlyUnassigned && ids?.length) {
-        const free = new Set<string>();
-        for (let i = 0; i < ids.length; i += 1000) {
-          const rows = await tx
-            .select({ id: cases.id })
-            .from(cases)
-            .where(and(inArray(cases.id, ids.slice(i, i + 1000)), isNull(cases.assignedTo)));
-          rows.forEach((r) => free.add(r.id));
-        }
+        const free = new Set(
+          (await t.among(projectId, ids, { unassigned: true })).map((r) => r.id),
+        );
         ids = ids.filter((id) => free.has(id));
       }
       // Finished or withdrawn cases are not handed out again.
-      const workable = new Set<string>();
-      for (let i = 0; i < (ids ?? []).length; i += 1000) {
-        const rows = await tx
-          .select({ id: cases.id })
-          .from(cases)
-          .where(
-            and(
-              eq(cases.projectId, projectId),
-              inArray(cases.id, ids!.slice(i, i + 1000)),
-              inArray(cases.status, ['fresh', 'assigned', 'in_progress']),
-            ),
-          );
-        rows.forEach((r) => workable.add(r.id));
-      }
-      const n = await this.svc.assign(tx, ctx, projectId, [...workable], body.userId, 'manual', {
+      const workable = new Set(
+        (
+          await t.among(projectId, ids ?? [], {
+            statuses: ['fresh', 'assigned', 'in_progress'],
+          })
+        ).map((r) => r.id),
+      );
+      const n = await this.svc.assign(t, ctx, projectId, [...workable], body.userId, 'manual', {
         statuses: ['fresh', 'assigned', 'in_progress'],
         unassigned: body.onlyUnassigned,
       });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'cases.assigned',
           targetType: 'project',
@@ -602,8 +476,8 @@ export class CasesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(DistributeBody)) body: z.infer<typeof DistributeBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const { rows, free, skipped, movable } = await this.sharePlan(tx, projectId, body);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const { rows, free, skipped, movable } = await this.sharePlan(t, projectId, body);
       return { rows, free, skipped, count: movable.length };
     });
   }
@@ -621,23 +495,21 @@ export class CasesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(DistributeBody)) body: z.infer<typeof DistributeBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const { movable, rows, free, skipped } = await this.sharePlan(tx, projectId, body);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const { movable, rows, free, skipped } = await this.sharePlan(t, projectId, body);
       const hands = deal(movable, new Map(rows.map((r) => [r.userId, r.receive])));
       const perPerson: Record<string, number> = {};
       let changed = 0;
       for (const [userId, ids] of hands) {
         perPerson[userId] = ids.length;
         if (ids.length)
-          changed += await this.svc.assign(tx, ctx, projectId, ids, userId, 'random', {
+          changed += await this.svc.assign(t, ctx, projectId, ids, userId, 'random', {
             statuses: ['fresh', 'assigned'],
             // Planned on the free cases: only those still free.
             unassigned: !body.caseIds,
           });
       }
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'cases.assigned',
           targetType: 'project',
@@ -658,56 +530,21 @@ export class CasesController {
   }
 
   /** The cases a share-out moves and how many each person gets. */
-  private async sharePlan(tx: Tx, projectId: string, body: z.infer<typeof DistributeBody>) {
-    await this.svc.project(tx, projectId);
+  private async sharePlan(t: CasesTx, projectId: string, body: z.infer<typeof DistributeBody>) {
+    await this.svc.project(t, projectId);
     const people = [...new Set(body.userIds)];
-    const caseIds =
-      body.caseIds ??
-      (
-        await tx
-          .select({ id: cases.id })
-          .from(cases)
-          .where(
-            and(
-              eq(cases.projectId, projectId),
-              eq(cases.status, 'fresh'),
-              isNull(cases.assignedTo),
-              ofQuestionnaire(body.questionnaireId),
-            ),
-          )
-      ).map((c) => c.id);
+    const caseIds = body.caseIds ?? (await t.freeCaseIds(projectId, body.questionnaireId));
     const movable: string[] = [];
     // Who holds each movable case now: those do not count in their load.
     const inHand = new Map<string, number>();
-    for (let i = 0; i < caseIds.length; i += 1000) {
-      const rows = await tx
-        .select({ id: cases.id, assignedTo: cases.assignedTo })
-        .from(cases)
-        .where(
-          and(
-            eq(cases.projectId, projectId),
-            inArray(cases.id, caseIds.slice(i, i + 1000)),
-            inArray(cases.status, ['fresh', 'assigned']),
-          ),
-        );
-      for (const r of rows) {
-        movable.push(r.id);
-        if (r.assignedTo) inHand.set(r.assignedTo, (inHand.get(r.assignedTo) ?? 0) + 1);
-      }
+    for (const r of await t.among(projectId, caseIds, { statuses: ['fresh', 'assigned'] })) {
+      movable.push(r.id);
+      if (r.assignedTo) inHand.set(r.assignedTo, (inHand.get(r.assignedTo) ?? 0) + 1);
     }
     const held = new Map(people.map((p) => [p, 0]));
-    const open = await tx
-      .select({ userId: cases.assignedTo, n: sql<number>`count(*)::int` })
-      .from(cases)
-      .where(
-        and(
-          eq(cases.projectId, projectId),
-          inArray(cases.assignedTo, people),
-          inArray(cases.status, ['assigned', 'in_progress']),
-        ),
-      )
-      .groupBy(cases.assignedTo);
-    open.forEach((r) => held.set(r.userId!, r.n - (inHand.get(r.userId!) ?? 0)));
+    (await t.openLoad(projectId, people)).forEach((r) =>
+      held.set(r.userId, r.n - (inHand.get(r.userId) ?? 0)),
+    );
     const base = body.balance ? held : new Map<string, number>();
 
     // The weights.
@@ -717,13 +554,13 @@ export class CasesController {
       weights = new Map(people.map((p) => [p, body.weights![p] ?? 0]));
       people.forEach((p) => source.set(p, 'manual'));
     } else if (body.method === 'capacity') {
-      const goals = await this.goalRates(tx, projectId, people, body.questionnaireId);
+      const goals = await this.goalRates(t, projectId, people, body.questionnaireId);
       weights = goals.weights;
       goals.source.forEach((v, k) => source.set(k, v));
     } else if (body.method === 'performance' || body.method === 'fair') {
       const pace = productivity(
         people,
-        await this.output(tx, projectId, people, body.days, body.questionnaireId),
+        await this.output(t, projectId, people, body.days, body.questionnaireId),
       );
       weights = body.method === 'fair' ? fairWeights(pace) : pace;
       people.forEach((p) => source.set(p, 'output'));
@@ -765,42 +602,13 @@ export class CasesController {
    * all, everyone weighs the same.
    */
   private async goalRates(
-    tx: Tx,
+    t: CasesTx,
     projectId: string,
     people: string[],
     questionnaireId: string | undefined,
   ) {
-    const [p] = await tx
-      .select({ timezone: projects.timezone })
-      .from(projects)
-      .where(eq(projects.id, projectId));
-    const today = (
-      (await tx.execute(
-        sql`select (now() at time zone ${p?.timezone ?? 'UTC'})::date::text as d`,
-      )) as unknown as { d: string }[]
-    )[0]!.d;
-    const goals = await tx
-      .select({
-        userId: interviewerGoals.userId,
-        frequency: interviewerGoals.frequency,
-        startsOn: interviewerGoals.startsOn,
-        endsOn: interviewerGoals.endsOn,
-        target: interviewerGoals.target,
-      })
-      .from(interviewerGoals)
-      .where(
-        and(
-          eq(interviewerGoals.projectId, projectId),
-          lte(interviewerGoals.startsOn, today),
-          gte(interviewerGoals.endsOn, today),
-          questionnaireId
-            ? or(
-                isNull(interviewerGoals.questionnaireId),
-                eq(interviewerGoals.questionnaireId, questionnaireId),
-              )
-            : undefined,
-        ),
-      );
+    const today = await t.projectToday(projectId);
+    const goals = await t.goalsInForce(projectId, today, questionnaireId);
     const pace = (g: (typeof goals)[number]) =>
       (g.target * windowsIn(g.frequency as Frequency, g.startsOn, g.endsOn)) /
       daysBetween(g.startsOn, g.endsOn);
@@ -832,31 +640,13 @@ export class CasesController {
 
   /** Completes and days worked by each person over the last `days` days. */
   private async output(
-    tx: Tx,
+    t: CasesTx,
     projectId: string,
     people: string[],
     days: number,
     questionnaireId: string | undefined,
   ): Promise<Map<string, Output>> {
-    const rows = (await tx.execute(sql`
-      select i.interviewer_id::text as "userId",
-        count(*) filter (where i.disposition = 'COMPLETE'
-          and i.status in ('submitted', 'in_review', 'approved', 'returned'))::int as completes,
-        count(distinct (i.submitted_at at time zone coalesce(p.timezone, 'UTC'))::date)::int as days
-      from interviews i
-      join projects p on p.id = i.project_id
-      join questionnaire_versions v on v.id = i.questionnaire_version_id
-      where i.project_id = ${projectId}
-        -- Second entries of paper forms are checks, not output (as in the metrics).
-        and i.entry_pass = 1
-        and i.interviewer_id in (${sql.join(
-          people.map((x) => sql`${x}::uuid`),
-          sql`, `,
-        )})
-        and i.submitted_at >= now() - make_interval(days => ${days})
-        ${questionnaireId ? sql`and v.questionnaire_id = ${questionnaireId}` : sql``}
-      group by i.interviewer_id
-    `)) as unknown as ({ userId: string } & Output)[];
+    const rows = await t.output(projectId, people, days, questionnaireId);
     return new Map(rows.map((r) => [r.userId, { completes: r.completes, days: r.days }]));
   }
 
@@ -864,14 +654,10 @@ export class CasesController {
   @Get('assignees')
   @RequirePermission('cases.assign', PERM)
   assignees(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.svc.project(tx, projectId);
-      const people = await this.svc.assignees(tx, projectId);
-      const load = await tx
-        .select({ userId: cases.assignedTo, status: cases.status, n: sql<number>`count(*)::int` })
-        .from(cases)
-        .where(eq(cases.projectId, projectId))
-        .groupBy(cases.assignedTo, cases.status);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.svc.project(t, projectId);
+      const people = await this.svc.assignees(t, projectId);
+      const load = await t.workload(projectId);
       return people.map((p) => ({
         ...p,
         workload: Object.fromEntries(
@@ -887,7 +673,7 @@ export class CasesController {
   @Get('sample-fields')
   @RequirePermission(['cases.read_all', 'cases.read_assigned', 'questionnaires.read'], PERM)
   sampleFields(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.fields(tx, projectId));
+    return this.repo.inTenant(ctx.tenantId, (t) => t.fields(projectId));
   }
 
   @Put('sample-fields/:name')
@@ -899,16 +685,10 @@ export class CasesController {
     @Param('name') name: string,
     @Body(new ZodPipe(FieldPatch)) body: z.infer<typeof FieldPatch>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx
-        .update(sampleFields)
-        .set(body)
-        .where(and(eq(sampleFields.projectId, projectId), eq(sampleFields.name, name)))
-        .returning();
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await t.updateField(projectId, name, body);
       if (!row) throw new NotFoundException('Field not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'sample_field.updated',
           targetType: 'project',
@@ -922,35 +702,22 @@ export class CasesController {
 
   // -------------------------------------------------------------------------
 
-  private fields(tx: Tx, projectId: string) {
-    return tx
-      .select({
-        name: sampleFields.name,
-        label: sampleFields.label,
-        type: sampleFields.type,
-        pii: sampleFields.pii,
-      })
-      .from(sampleFields)
-      .where(eq(sampleFields.projectId, projectId))
-      .orderBy(asc(sampleFields.position), asc(sampleFields.name));
-  }
-
-  /** Cases someone without `cases.read_all` may see: theirs, and in pool mode the free ones. */
-  private visibleToOwn(ctx: AuthContext, pool: boolean): SQL {
-    const mine = eq(cases.assignedTo, ctx.userId);
-    return pool ? or(mine, and(isNull(cases.assignedTo), eq(cases.status, 'fresh')))! : mine;
-  }
-
   private async loadCase(
-    tx: Tx,
+    t: CasesTx,
     ctx: AuthContext,
     projectId: string,
     caseId: string,
     pool = false,
   ) {
-    const conds = [eq(cases.id, caseId), eq(cases.projectId, projectId)];
-    if (this.svc.restrictedToOwn(ctx, projectId)) conds.push(this.visibleToOwn(ctx, pool));
-    const [c] = this.svc.openRows(await this.svc.selectCases(tx).where(and(...conds)));
+    const [c] = this.svc.openRows(
+      await t.cases({
+        projectId,
+        ids: [caseId],
+        ...(this.svc.restrictedToOwn(ctx, projectId)
+          ? { visibleTo: { userId: ctx.userId, pool } }
+          : {}),
+      }),
+    );
     if (!c) throw new NotFoundException('Case not found');
     return c;
   }
