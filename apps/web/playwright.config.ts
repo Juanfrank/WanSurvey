@@ -14,7 +14,8 @@ const appUrl =
 function apiEnv(): Record<string, string> {
   return {
     DATABASE_URL: appUrl,
-    DATABASE_ADMIN_URL: adminUrl,
+    // No DATABASE_ADMIN_URL: the API would migrate at start, before global setup has made the
+    // database; global setup migrates it.
     APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
     PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
     LOGIN_RATE_LIMIT: '1000',
