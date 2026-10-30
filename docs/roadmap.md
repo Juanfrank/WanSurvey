@@ -4,7 +4,7 @@ Planned work that is not built yet. Each item says why, what it takes and in wha
 
 ## SQL Server replaces PostgreSQL (SQLite for test instances, for a while)
 
-**Status:** phase 1 started. Done and tested in CI (job `sqlserver`, on a SQL Server 2022
+**Status:** phase 1 well advanced (every vertical but the analysis model). Done and tested in CI (job `sqlserver`, on a SQL Server 2022
 container): the data layer with Kysely and tedious (`apps/api/src/db/mssql/`), the T-SQL
 migrations for organisations, users, projects, memberships, sessions, tokens and the audit log
 (`apps/api/mssql/`), the contained application user, and the isolation by security policy with
@@ -32,8 +32,32 @@ until the switch):
   dropped by the database (`IGNORE_DUP_KEY` unique indexes); the snapshot is written under a row
   lock; the call queue keeps the PostgreSQL order and conditions; one caller has one open call
   (an application lock owned by the transaction). The **expiry of overdue cases**, left out of the
-  cases vertical, is done here. **Left:** review (statuses, comments, mismatches, coding), web
-  links and e-mail (CAWI), paper (PAPI), statistics, exports and the analysis model.
+  cases vertical, is done here.
+
+- **Review** (`mssql/0006`; `src/review/review-store.mssql.ts`): statuses, flags, comments,
+  corrections and coding, with the same counted statuses as PostgreSQL.
+
+- **Web surveys, e-mail and feedback** (`mssql/0007`; `src/cawi/cawi-store.mssql.ts`):
+  templates, waves, invitations (once per case in a wave) with delivery tracking and dispatcher
+  leases, suppressed addresses, open links, feedback points and responses. The lookups that run
+  before any organisation is known (token, slug, link hash) are owner procedures, and
+  `MssqlDatabase.withTenantOf` finds the organisation from them and works in it.
+
+- **Paper, statistics and exports** (`mssql/0008`; `src/papi/`, `src/stats/`, `src/exports/`
+  `*.mssql.ts`): double-entry differences, scanned batches with forms and page images, daily
+  figures, export jobs and summary links. Batches and export jobs are taken once with a shared
+  claim (`src/jobs/claim.mssql.ts`); daily figures are bucketed by the project's local day.
+
+**Left:** the analysis model (`bi`) and the SQL export, then the switch of the controllers.
+
+More from the real SQL Server: `AT TIME ZONE` takes Windows zone names, not IANA, so the local
+day's bounds are worked out in JS (`src/stats/zoned-day.ts`); GUIDs come back in uppercase, so
+compare them lowercased; `datetimeoffset(3)` keeps milliseconds only, so a test that compares
+times round-trips whole seconds; two cascading paths to one table are refused, so the store
+deletes children in order; `file` and `plan` are reserved words (bracket them); an append-only
+event table's single unique index can be `IGNORE_DUP_KEY`; a key that must be unique only when
+present needs a filtered unique index; keyset paging on `(submitted_at, id)` is written as an OR
+because there are no row constructors.
 
 What the tests on a real SQL Server taught, for the verticals to come: an error thrown by a
 trigger or a deadlock ends the transaction and hides the error behind a failed rollback (the data
