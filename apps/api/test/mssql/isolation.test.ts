@@ -131,7 +131,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: isolation by organisation', () => {
     expect(await app.tenantIdBySlug('nobody')).toBeNull();
   });
 
-  it('keeps the audit log append-only', async () => {
+  it('keeps the audit log append-only: no privilege for the application, a trigger for the owner', async () => {
     const id = randomUUID();
     await app.withTenant(a.id, (tx) =>
       tx
@@ -151,10 +151,22 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: isolation by organisation', () => {
       app.withTenant(a.id, (tx) =>
         tx.updateTable('audit_log').set({ action: 'y' }).where('id', '=', id).execute(),
       ),
-    ).rejects.toThrow(/append-only/);
+    ).rejects.toThrow(/permission was denied/i);
     await expect(
       app.withTenant(a.id, (tx) => sql`DELETE FROM audit_log WHERE id = ${id}`.execute(tx)),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/permission was denied/i);
+    // The owner has the privilege, and the trigger still refuses.
+    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    try {
+      await expect(
+        sql`UPDATE audit_log SET action = 'y' WHERE id = ${id}`.execute(owner),
+      ).rejects.toThrow(/append-only/);
+      await expect(sql`DELETE FROM audit_log WHERE id = ${id}`.execute(owner)).rejects.toThrow(
+        /append-only/,
+      );
+    } finally {
+      await owner.destroy();
+    }
   });
 
   it('rejects an invalid organisation id before touching the database', async () => {
