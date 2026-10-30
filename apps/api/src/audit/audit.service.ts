@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { and, desc, eq, gte, lte, type SQL } from 'drizzle-orm';
 import type { AuthContext } from '../common/auth-context.js';
 import { Database, type Tx } from '../db/database.js';
+import { Engine } from '../db/engine.js';
+import { AuditStore } from './audit-store.mssql.js';
 import { auditLog } from '../db/schema.js';
 
 export type AuditAction =
@@ -91,7 +93,12 @@ export interface AuditEntry {
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly database: Database) {}
+  private readonly store = new AuditStore();
+
+  constructor(
+    private readonly database: Database,
+    private readonly engine: Engine,
+  ) {}
 
   /** Appends an entry inside the caller's tenant transaction so it commits with the change. */
   async record(tx: Tx, tenantId: string, entry: AuditEntry): Promise<void> {
@@ -125,6 +132,8 @@ export class AuditService {
       limit: number;
     },
   ) {
+    if (this.engine.kind === 'mssql')
+      return this.engine.sql.withTenant(ctx.tenantId, (tx) => this.store.list(tx, filter));
     return this.database.withTenant(ctx.tenantId, async (tx) => {
       const conds: SQL[] = [];
       if (filter.action) conds.push(eq(auditLog.action, filter.action));
