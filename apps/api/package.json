@@ -16,6 +16,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",
+    "test:mssql": "vitest run --config vitest.mssql.config.ts",
     "start:worker": "node dist/worker.js",
     "dev:worker": "tsx watch src/worker.ts",
     "db:seed-demo": "tsx src/db/seed-demo.ts"
@@ -43,6 +44,7 @@
     "ioredis": "5.11.1",
     "jose": "^6.2.12",
     "jsqr": "1.4.0",
+    "kysely": "0.29.6",
     "nestjs-pino": "^4.4.0",
     "nodemailer": "10.0.16",
     "pdf-lib": "1.17.1",
@@ -54,6 +56,8 @@
     "qrcode": "1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "tarn": "3.1.2",
+    "tedious": "19.2.2",
     "uuidv7": "^1.0.2",
     "zod": "^4.1.0"
   },
