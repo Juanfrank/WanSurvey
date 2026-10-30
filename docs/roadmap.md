@@ -57,7 +57,18 @@ until the switch):
   saves in `bi.zona`. The T-SQL export gives the same sheets and cells as the Excel one.
   Each person carries their teams (`mssql/0010`, `src/teams/teams-store.mssql.ts`).
 
-**Left:** the switch of the controllers from PostgreSQL to these stores (phases 4 and 5).
+- **Identity and the audit log** (`mssql/0011`; `src/audit/audit-store.mssql.ts`): `0000` and `0001`
+  had followed the schema from before multi-organisation accounts, so `0011` brings it to parity
+  with PostgreSQL: accounts are global and an organisation sees a person through its
+  `tenant_members` row; a person changes only their own account (`SESSION_CONTEXT 'user_id'`,
+  `MssqlDatabase.withTenant(…, userId)` and `withUser`); sessions record how the second factor
+  was verified; tokens are global; Entra SSO settings and identity links; project logos; role
+  permissions; and owner procedures for what runs before any context (lookup by e-mail, a
+  person's organisations, lockout after failed attempts, session revocation, SSO lookups).
+
+**Left:** stores for sign-in and sessions, users, organisations, projects, metrics, jobs, library,
+dashboard, geolocation, privacy and analysis; then the switch of the controllers from PostgreSQL
+to the stores (phases 4 and 5).
 
 Lessons from the analysis model: `OPENJSON` returns `key` and `value` in `Latin1_General_BIN2`, so
 mixing them with ordinary columns in a `UNION` or `CASE` fails (cast to `DATABASE_DEFAULT`);
