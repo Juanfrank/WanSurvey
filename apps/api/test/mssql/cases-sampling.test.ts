@@ -48,10 +48,14 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
           owner,
         );
       }
-      for (const [i, id] of [sup, ...people].entries())
-        await sql`INSERT INTO users (id, tenant_id, email, name) VALUES (${id}, ${a.id}, ${`u${i}-${stamp}@example.org`}, ${`U${i}`})`.execute(
+      for (const [i, id] of [sup, ...people].entries()) {
+        await sql`INSERT INTO users (id, email, name) VALUES (${id}, ${`u${i}-${stamp}@example.org`}, ${`U${i}`})`.execute(
           owner,
         );
+        await sql`INSERT INTO tenant_members (id, tenant_id, user_id, status) VALUES (${randomUUID()}, ${a.id}, ${id}, 'active')`.execute(
+          owner,
+        );
+      }
     } finally {
       await owner.destroy();
     }

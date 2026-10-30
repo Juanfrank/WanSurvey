@@ -60,10 +60,14 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: review', () => {
           [ana, 'Ana'],
           [luis, 'Luis'],
         ] as const
-      ).entries())
-        await sql`INSERT INTO users (id, tenant_id, email, name) VALUES (${id}, ${a.id}, ${`r${i}-${stamp}@example.org`}, ${name})`.execute(
+      ).entries()) {
+        await sql`INSERT INTO users (id, email, name) VALUES (${id}, ${`r${i}-${stamp}@example.org`}, ${name})`.execute(
           db,
         );
+        await sql`INSERT INTO tenant_members (id, tenant_id, user_id, status) VALUES (${randomUUID()}, ${a.id}, ${id}, 'active')`.execute(
+          db,
+        );
+      }
     });
     const q = await app.withTenant(a.id, (tx) =>
       questionnaires.create(tx, {

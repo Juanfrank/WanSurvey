@@ -41,12 +41,12 @@ export class TeamsStore {
     });
   }
 
-  /** The ids that are not people of the organisation (it has a membership for them). */
+  /** The ids that are not people of the organisation (they are on its member list). */
   async strangers(tx: MssqlTx, ids: string[]): Promise<string[]> {
     const unique = [...new Set(ids.map((i) => i.toLowerCase()))];
     if (!unique.length) return [];
     const found = await tx
-      .selectFrom('memberships')
+      .selectFrom('tenant_members')
       .select('user_id')
       .where('user_id', 'in', unique)
       .execute();

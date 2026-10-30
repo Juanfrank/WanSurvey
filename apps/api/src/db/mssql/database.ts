@@ -47,11 +47,31 @@ export class MssqlDatabase {
     this.db = createMssqlDb<MssqlSchema>(url, opts);
   }
 
-  async withTenant<T>(tenantId: string, fn: (tx: MssqlTx) => Promise<T>): Promise<T> {
+  /**
+   * `userId`, when given, pins the acting person too (SESSION_CONTEXT 'user_id'), which lets them
+   * change their own global account.
+   */
+  async withTenant<T>(
+    tenantId: string,
+    fn: (tx: MssqlTx) => Promise<T>,
+    userId?: string,
+  ): Promise<T> {
     if (!isUuid(tenantId)) throw new Error('Invalid tenant id');
+    if (userId !== undefined && !isUuid(userId)) throw new Error('Invalid user id');
     return this.run(
       async () => tenantId,
       (tx) => fn(tx),
+      userId,
+    );
+  }
+
+  /** User context only, for account-level changes that belong to no organisation. */
+  async withUser<T>(userId: string, fn: (tx: MssqlTx) => Promise<T>): Promise<T> {
+    if (!isUuid(userId)) throw new Error('Invalid user id');
+    return this.run(
+      async () => null,
+      (tx) => fn(tx),
+      userId,
     );
   }
 
@@ -86,6 +106,7 @@ export class MssqlDatabase {
   private async run<T>(
     prepare: (tx: MssqlTx) => Promise<string | null>,
     fn: (tx: MssqlTx) => Promise<T>,
+    userId?: string,
   ): Promise<T> {
     for (let attempt = 1; ; attempt++) {
       // SQL Server ends the transaction itself on a deadlock or an error thrown by a trigger;
@@ -100,6 +121,10 @@ export class MssqlDatabase {
             await sql`EXEC sp_set_session_context @key = N'tenant_id', @value = ${tenantId}`.execute(
               tx,
             );
+          if (userId)
+            await sql`EXEC sp_set_session_context @key = N'user_id', @value = ${userId}`.execute(
+              tx,
+            );
           try {
             return await fn(tx);
           } catch (e) {
@@ -110,6 +135,10 @@ export class MssqlDatabase {
             await sql`EXEC sp_set_session_context @key = N'tenant_id', @value = NULL`
               .execute(tx)
               .catch(() => undefined);
+            if (userId)
+              await sql`EXEC sp_set_session_context @key = N'user_id', @value = NULL`
+                .execute(tx)
+                .catch(() => undefined);
           }
         });
       } catch (caught) {

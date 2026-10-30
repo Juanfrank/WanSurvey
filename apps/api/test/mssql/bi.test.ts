@@ -125,7 +125,10 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       await sql`INSERT INTO projects (id, tenant_id, name, code, timezone) VALUES (${a.project}, ${a.id}, 'P', ${'P-' + a.slug}, ${TZ})`.execute(
         db,
       );
-      await sql`INSERT INTO users (id, tenant_id, email, name) VALUES (${user}, ${a.id}, ${`u-${stamp}@example.org`}, 'Ana')`.execute(
+      await sql`INSERT INTO users (id, email, name) VALUES (${user}, ${`u-${stamp}@example.org`}, 'Ana')`.execute(
+        db,
+      );
+      await sql`INSERT INTO tenant_members (id, tenant_id, user_id, status) VALUES (${randomUUID()}, ${a.id}, ${user}, 'active')`.execute(
         db,
       );
       await sql`INSERT INTO memberships (id, tenant_id, user_id, role) VALUES (${randomUUID()}, ${a.id}, ${user}, 'interviewer')`.execute(

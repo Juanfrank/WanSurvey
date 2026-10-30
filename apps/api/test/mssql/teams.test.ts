@@ -48,7 +48,10 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: teams', () => {
         [eva, a.id, 'Eva'],
         [outsider, b.id, 'Otra'],
       ].entries()) {
-        await sql`INSERT INTO users (id, tenant_id, email, name) VALUES (${id}, ${tenant}, ${`t${i}-${stamp}@example.org`}, ${name})`.execute(
+        await sql`INSERT INTO users (id, email, name) VALUES (${id}, ${`t${i}-${stamp}@example.org`}, ${name})`.execute(
+          db,
+        );
+        await sql`INSERT INTO tenant_members (id, tenant_id, user_id, status) VALUES (${randomUUID()}, ${tenant}, ${id}, 'active')`.execute(
           db,
         );
         await sql`INSERT INTO memberships (id, tenant_id, user_id, role) VALUES (${randomUUID()}, ${tenant}, ${id}, 'interviewer')`.execute(

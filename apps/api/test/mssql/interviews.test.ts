@@ -55,10 +55,14 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: interviews and CATI', () => {
           db,
         );
       }
-      for (const [i, id] of [me, other].entries())
-        await sql`INSERT INTO users (id, tenant_id, email, name) VALUES (${id}, ${a.id}, ${`i${i}-${stamp}@example.org`}, ${`I${i}`})`.execute(
+      for (const [i, id] of [me, other].entries()) {
+        await sql`INSERT INTO users (id, email, name) VALUES (${id}, ${`i${i}-${stamp}@example.org`}, ${`I${i}`})`.execute(
           db,
         );
+        await sql`INSERT INTO tenant_members (id, tenant_id, user_id, status) VALUES (${randomUUID()}, ${a.id}, ${id}, 'active')`.execute(
+          db,
+        );
+      }
     });
     questionnaireId = await app.withTenant(a.id, (tx) =>
       questionnaires.create(tx, {

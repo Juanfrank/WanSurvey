@@ -61,10 +61,14 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: paper, statistics and exports', () 
           db,
         );
       }
-      for (const [i, id] of [user, ana, luis].entries())
-        await sql`INSERT INTO users (id, tenant_id, email, name) VALUES (${id}, ${a.id}, ${`s${i}-${stamp}@example.org`}, ${`S${i}`})`.execute(
+      for (const [i, id] of [user, ana, luis].entries()) {
+        await sql`INSERT INTO users (id, email, name) VALUES (${id}, ${`s${i}-${stamp}@example.org`}, ${`S${i}`})`.execute(
           db,
         );
+        await sql`INSERT INTO tenant_members (id, tenant_id, user_id, status) VALUES (${randomUUID()}, ${a.id}, ${id}, 'active')`.execute(
+          db,
+        );
+      }
     });
     q = await app.withTenant(a.id, (tx) =>
       questionnaires.create(tx, {

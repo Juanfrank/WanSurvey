@@ -23,17 +23,88 @@ export interface MssqlSchema {
     plan: Generated<string>;
     settings: JsonText;
     branding: JsonText;
+    role_permissions: JsonText;
     created_at: Instant;
   };
   users: {
     id: string;
-    tenant_id: string;
     email: string;
     name: string;
+    first_name: string | null;
+    phone: string | null;
+    languages: JsonText;
     status: Generated<string>;
     password_hash: string | null;
+    totp_secret_enc: string | null;
     totp_enabled: Generated<boolean>;
+    totp_last_step: number | null;
+    failed_logins: Generated<number>;
+    locked_until: InstantOrNull;
+    last_tenant_id: string | null;
     created_at: Instant;
+  };
+  tenant_members: {
+    id: string;
+    tenant_id: string;
+    user_id: string;
+    status: Generated<string>;
+    id_code: string | null;
+    phone_extension: string | null;
+    created_at: Instant;
+    deactivated_at: InstantOrNull;
+  };
+  sessions: {
+    id: string;
+    tenant_id: string;
+    user_id: string;
+    token_hash: string;
+    csrf_token: string;
+    mfa_state: string;
+    mfa_method: string | null;
+    auth_method: Generated<string>;
+    idp_tenant: string | null;
+    ip: string | null;
+    user_agent: string | null;
+    created_at: Instant;
+    last_seen_at: Instant;
+    expires_at: Date | string;
+    revoked_at: InstantOrNull;
+  };
+  user_tokens: {
+    id: string;
+    tenant_id: string | null;
+    user_id: string;
+    purpose: string;
+    token_hash: string;
+    expires_at: Date | string;
+    used_at: InstantOrNull;
+    created_at: Instant;
+  };
+  tenant_sso: {
+    tenant_id: string;
+    provider: Generated<string>;
+    entra_tenant_id: string;
+    client_id: string;
+    client_secret_enc: string | null;
+    enabled: Generated<boolean>;
+    enforce_sso: Generated<boolean>;
+    allowed_domains: JsonText;
+    updated_at: Instant;
+  };
+  user_identities: {
+    id: string;
+    user_id: string;
+    provider: string;
+    issuer: string;
+    subject: string;
+    created_at: Instant;
+  };
+  project_logos: {
+    project_id: string;
+    tenant_id: string;
+    content_type: string;
+    image: Buffer;
+    updated_at: Instant;
   };
   projects: {
     id: string;
@@ -44,6 +115,7 @@ export interface MssqlSchema {
     modes_enabled: JsonText;
     timezone: Generated<string>;
     languages: JsonText;
+    logo_updated_at: InstantOrNull;
     created_at: Instant;
   };
   memberships: {
