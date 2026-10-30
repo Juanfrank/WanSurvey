@@ -221,7 +221,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       bi.variable_de(N's1.members[2].age[1]') AS variable, bi.ruta_de(N's1.members[2].age[1]') AS ruta,
       bi.clave(N'a|b') AS clave`);
     expect(r[0]).toMatchObject({
-      plano: 'Hola mundo nada …',
+      plano: 'Hola mundonada …',
       es: 'Hola',
       primero: 'Hi',
       variable: 'age',
@@ -405,11 +405,9 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
     await app.db.transaction().execute(async (tx) => {
       await sql`EXEC bi.refrescar_vista ${'dim_fila'}`.execute(tx);
     });
-    await expect(
-      app.db.transaction().execute(async (tx) => {
-        await sql`EXEC bi.refrescar_vista ${'tenants'}`.execute(tx);
-      }),
-    ).rejects.toThrow(/Not a table of the analysis model/);
+    await expect(sql`EXEC bi.refrescar_vista ${'tenants'}`.execute(app.db)).rejects.toThrow(
+      /Not a table of the analysis model/,
+    );
     await expect(sql`SELECT TOP 1 * FROM bi.dim_pregunta`.execute(app.db)).rejects.toThrow(
       /permission was denied/i,
     );

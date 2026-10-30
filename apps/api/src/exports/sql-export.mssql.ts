@@ -10,8 +10,10 @@ const ident = (s: string) => `[${s.replace(/]/g, ']]')}]`;
 const comment = (s: string) => s.replace(/[\p{Cc}\u2028\u2029]+/gu, ' ');
 /** Ids are keyed in lower case in the model. */
 const id = (s: string) => lit(s.toLowerCase());
-const iso = (col: string) =>
-  `case when ${col} is null then null else convert(varchar(23), cast(switchoffset(${col}, '+00:00') as datetime2(3)), 126) + 'Z' end`;
+const iso = (col: string) => {
+  const t = `cast(switchoffset(${col}, '+00:00') as datetime2(3))`;
+  return `case when ${col} is null then null else convert(varchar(19), ${t}, 126) + '.' + right('000' + cast(datepart(millisecond, ${t}) as varchar(3)), 3) + 'Z' end`;
+};
 const guid = (col: string) => `lower(convert(varchar(36), ${col}))`;
 
 const META: Record<string, string> = {
