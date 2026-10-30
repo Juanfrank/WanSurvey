@@ -26,6 +26,15 @@ until the switch):
   a free case uses `READPAST` over a filtered index. **Left for the interviews vertical:** the
   expiry of overdue cases, which checks for an open interview in a table not moved yet.
 
+- **Interviews and CATI** (`mssql/0005`; `src/interviews/interviews-store.mssql.ts`,
+  `src/cati/cati-store.mssql.ts`): interviews with their snapshot, device acknowledgements, the
+  append-only answer and paradata history, and call attempts. A change number sent twice is
+  dropped by the database (`IGNORE_DUP_KEY` unique indexes); the snapshot is written under a row
+  lock; the call queue keeps the PostgreSQL order and conditions; one caller has one open call
+  (an application lock owned by the transaction). The **expiry of overdue cases**, left out of the
+  cases vertical, is done here. **Left:** review (statuses, comments, mismatches, coding), web
+  links and e-mail (CAWI), paper (PAPI), statistics, exports and the analysis model.
+
 What the tests on a real SQL Server taught, for the verticals to come: an error thrown by a
 trigger or a deadlock ends the transaction and hides the error behind a failed rollback (the data
 layer now reports the first error, and the deadlock retry works); a password may not contain the
@@ -34,7 +43,11 @@ change; a unique index fails with 2601 and a unique constraint with 2627; `UPDLO
 row an unordered scan reads, so a "take the next row" query needs an index in its order for
 `READPAST` to work; `ISNULL(@parameter, 'literal')` takes the parameter's type and may cut the
 literal, so cast the parameters to the column's type; there is no `ON CONFLICT DO NOTHING`
-(use `NOT EXISTS` under `UPDLOCK, HOLDLOCK`) and statements are limited to 2100 parameters. Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
+(use `NOT EXISTS` under `UPDLOCK, HOLDLOCK`, or `IGNORE_DUP_KEY` on an append-only table's
+only unique index) and statements are limited to 2100 parameters; `ISJSON` refuses plain scalars
+(`5`, `"text"`), so a column that holds any JSON value is not checked with it; an index key is
+limited to 900 bytes (1700 if not clustered), so ids that are text stay short; a unique index on
+a nullable column that must allow many NULLs needs a filter (`WHERE col IS NOT NULL`). Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
 Server later", lists every PostgreSQL feature in use).
 
 **Why:** the organisation's databases are on SQL Server (Azure SQL); a second database engine is a
