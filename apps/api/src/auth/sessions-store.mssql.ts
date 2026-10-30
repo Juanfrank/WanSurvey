@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
+import { instant } from '../db/mssql/instant.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 
 /**
@@ -121,7 +122,7 @@ export class SessionsStore {
         idp_tenant: v.idpTenant,
         ip: v.ip,
         user_agent: v.userAgent,
-        expires_at: v.expiresAt,
+        expires_at: instant(v.expiresAt),
       })
       .execute();
     if (v.lastTenantId?.toLowerCase() !== v.tenantId.toLowerCase())
@@ -134,11 +135,19 @@ export class SessionsStore {
   }
 
   async touch(tx: MssqlTx, id: string, at = new Date()): Promise<void> {
-    await tx.updateTable('sessions').set({ last_seen_at: at }).where('id', '=', id).execute();
+    await tx
+      .updateTable('sessions')
+      .set({ last_seen_at: instant(at) })
+      .where('id', '=', id)
+      .execute();
   }
 
   async revoke(tx: MssqlTx, id: string, at = new Date()): Promise<void> {
-    await tx.updateTable('sessions').set({ revoked_at: at }).where('id', '=', id).execute();
+    await tx
+      .updateTable('sessions')
+      .set({ revoked_at: instant(at) })
+      .where('id', '=', id)
+      .execute();
   }
 
   /** Sets the second-factor state of a session (a code entered, or enrolment done). */
@@ -158,7 +167,7 @@ export class SessionsStore {
   async revokeAllOf(tx: MssqlTx, userId: string, at = new Date()): Promise<number> {
     const res = await tx
       .updateTable('sessions')
-      .set({ revoked_at: at })
+      .set({ revoked_at: instant(at) })
       .where('user_id', '=', userId)
       .where('revoked_at', 'is', null)
       .executeTakeFirst();
@@ -191,7 +200,7 @@ export class SessionsStore {
         user_id: v.userId,
         purpose: v.purpose,
         token_hash: v.tokenHash,
-        expires_at: v.expiresAt,
+        expires_at: instant(v.expiresAt),
       })
       .execute();
   }
@@ -208,7 +217,7 @@ export class SessionsStore {
       .where('token_hash', '=', tokenHash)
       .where('purpose', '=', purpose)
       .where('used_at', 'is', null)
-      .where('expires_at', '>', new Date())
+      .where('expires_at', '>', instant(new Date()))
       .executeTakeFirst();
     return r ? { userId: r.user_id.toLowerCase(), tenantId: lower(r.tenant_id) } : null;
   }
@@ -217,10 +226,10 @@ export class SessionsStore {
   async useToken(tx: MssqlTx, tokenHash: string): Promise<boolean> {
     const res = await tx
       .updateTable('user_tokens')
-      .set({ used_at: new Date() })
+      .set({ used_at: instant(new Date()) })
       .where('token_hash', '=', tokenHash)
       .where('used_at', 'is', null)
-      .where('expires_at', '>', new Date())
+      .where('expires_at', '>', instant(new Date()))
       .executeTakeFirst();
     return Number(res.numUpdatedRows) === 1;
   }
@@ -229,7 +238,7 @@ export class SessionsStore {
   async voidTokens(tx: MssqlTx, userId: string, purpose: string): Promise<void> {
     await tx
       .updateTable('user_tokens')
-      .set({ used_at: new Date() })
+      .set({ used_at: instant(new Date()) })
       .where('user_id', '=', userId)
       .where('purpose', '=', purpose)
       .where('used_at', 'is', null)

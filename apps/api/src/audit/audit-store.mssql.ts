@@ -1,5 +1,5 @@
-import { sql } from 'kysely';
 import { uuidv7 } from 'uuidv7';
+import { instant } from '../db/mssql/instant.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { AuditEntry } from './audit.service.js';
 
@@ -30,12 +30,6 @@ export interface AuditFilter {
   limit: number;
 }
 
-/**
- * An instant to the millisecond: a `Date` parameter travels as `datetime`, which rounds to 3.33 ms
- * and can land a millisecond off the `datetimeoffset(3)` it is compared with.
- */
-const exact = (d: Date) => sql<Date>`CAST(${d.toISOString()} AS datetimeoffset(3))`;
-
 export class AuditStore {
   /** Appends an entry inside the caller's tenant transaction so it commits with the change. */
   async record(tx: MssqlTx, tenantId: string, entry: AuditEntry): Promise<void> {
@@ -61,8 +55,8 @@ export class AuditStore {
     if (filter.action) q = q.where('action', '=', filter.action);
     if (filter.actorUserId) q = q.where('actor_user_id', '=', filter.actorUserId);
     if (filter.targetId) q = q.where('target_id', '=', filter.targetId);
-    if (filter.from) q = q.where('at', '>=', exact(filter.from));
-    if (filter.to) q = q.where('at', '<=', exact(filter.to));
+    if (filter.from) q = q.where('at', '>=', instant(filter.from));
+    if (filter.to) q = q.where('at', '<=', instant(filter.to));
     const rows = await q.orderBy('at', 'desc').orderBy('id', 'desc').top(filter.limit).execute();
     return rows.map((r) => ({
       id: r.id.toLowerCase(),
