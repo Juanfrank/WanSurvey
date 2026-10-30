@@ -55,7 +55,7 @@ until the switch):
   for all). The application can run the procedures and read nothing in `bi`. Local days use the
   UTC offsets of the projects' IANA zones, which the application works out (`zoneOffsets`) and
   saves in `bi.zona`. The T-SQL export gives the same sheets and cells as the Excel one.
-  **Left in this vertical:** teams (not migrated, `equipos` is empty).
+  Each person carries their teams (`mssql/0010`, `src/teams/teams-store.mssql.ts`).
 
 **Left:** the switch of the controllers from PostgreSQL to these stores (phases 4 and 5).
 
