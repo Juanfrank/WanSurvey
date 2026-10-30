@@ -9,7 +9,21 @@ container): the data layer with Kysely and tedious (`apps/api/src/db/mssql/`), t
 migrations for organisations, users, projects, memberships, sessions, tokens and the audit log
 (`apps/api/mssql/`), the contained application user, and the isolation by security policy with
 its tests (`apps/api/test/mssql/`). Everything else still runs on PostgreSQL with Drizzle; the
-rest of the migrations and the services move vertical by vertical. Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
+rest of the migrations and the services move vertical by vertical.
+
+Verticals done on SQL Server (data layer and tests; the controllers still serve from PostgreSQL
+until the switch):
+
+- **Isolation kernel**: organisations, users, projects, memberships, sessions, tokens, audit log.
+- **Questionnaires** (`mssql/0002`, `src/questionnaires/questionnaire-store.mssql.ts`): drafts
+  saved by compare-and-swap, publishing under a row lock, versions immutable by trigger,
+  scenarios, review comments, presence, the library, and state (disable, complete, successor).
+
+What the tests on a real SQL Server taught, for the verticals to come: an error thrown by a
+trigger or a deadlock ends the transaction and hides the error behind a failed rollback (the data
+layer now reports the first error, and the deadlock retry works); a password may not contain the
+user's name; `plan` is a reserved word; `THROW` in an `INSTEAD OF` trigger is the way to refuse a
+change. Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
 Server later", lists every PostgreSQL feature in use).
 
 **Why:** the organisation's databases are on SQL Server (Azure SQL); a second database engine is a
