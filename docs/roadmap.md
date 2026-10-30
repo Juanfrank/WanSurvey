@@ -4,7 +4,12 @@ Planned work that is not built yet. Each item says why, what it takes and in wha
 
 ## SQL Server replaces PostgreSQL (SQLite for test instances, for a while)
 
-**Status:** planned. Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
+**Status:** phase 1 started. Done and tested in CI (job `sqlserver`, on a SQL Server 2022
+container): the data layer with Kysely and tedious (`apps/api/src/db/mssql/`), the T-SQL
+migrations for organisations, users, projects, memberships, sessions, tokens and the audit log
+(`apps/api/mssql/`), the contained application user, and the isolation by security policy with
+its tests (`apps/api/test/mssql/`). Everything else still runs on PostgreSQL with Drizzle; the
+rest of the migrations and the services move vertical by vertical. Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
 Server later", lists every PostgreSQL feature in use).
 
 **Why:** the organisation's databases are on SQL Server (Azure SQL); a second database engine is a
