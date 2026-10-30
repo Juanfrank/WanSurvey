@@ -4,7 +4,7 @@ Planned work that is not built yet. Each item says why, what it takes and in wha
 
 ## SQL Server replaces PostgreSQL (SQLite for test instances, for a while)
 
-**Status:** phase 1 well advanced (every vertical but the analysis model). Done and tested in CI (job `sqlserver`, on a SQL Server 2022
+**Status:** phase 1 well advanced (every vertical, with the analysis model). Done and tested in CI (job `sqlserver`, on a SQL Server 2022
 container): the data layer with Kysely and tedious (`apps/api/src/db/mssql/`), the T-SQL
 migrations for organisations, users, projects, memberships, sessions, tokens and the audit log
 (`apps/api/mssql/`), the contained application user, and the isolation by security policy with
@@ -48,7 +48,25 @@ until the switch):
   figures, export jobs and summary links. Batches and export jobs are taken once with a shared
   claim (`src/jobs/claim.mssql.ts`); daily figures are bucketed by the project's local day.
 
-**Left:** the analysis model (`bi`) and the SQL export, then the switch of the controllers.
+- **Analysis model and SQL export** (`mssql/0009`; `src/stats/bi-store.mssql.ts`,
+  `src/exports/sql-export.mssql.ts`): SQL Server has no materialised views, so the dimension and
+  fact tables of schema `bi` are tables that owner procedures empty and fill again
+  (`bi.refrescar_vista`, one table per transaction, under an application lock; `bi.refrescar`
+  for all). The application can run the procedures and read nothing in `bi`. Local days use the
+  UTC offsets of the projects' IANA zones, which the application works out (`zoneOffsets`) and
+  saves in `bi.zona`. The T-SQL export gives the same sheets and cells as the Excel one.
+  **Left in this vertical:** teams (not migrated, `equipos` is empty).
+
+**Left:** the switch of the controllers from PostgreSQL to these stores (phases 4 and 5).
+
+Lessons from the analysis model: `OPENJSON` returns `key` and `value` in `Latin1_General_BIN2`, so
+mixing them with ordinary columns in a `UNION` or `CASE` fails (cast to `DATABASE_DEFAULT`);
+`JSON_VALUE` and `OPENJSON` raise an error on text that is not JSON, and SQL Server does not
+promise a `WHERE` runs before them, so guard with `CASE WHEN type = … THEN …`; an aggregate may
+not mix a local column with an outer one (error 8124); a recursive CTE over `OPENJSON` walks
+nested rosters; there is no variadic `md5` (keys are `HASHBYTES('MD5', …)` of the parts joined
+with `|`); `THROW` inside a transaction with `XACT_ABORT ON` ends it, so a test that expects the
+message calls the procedure outside a transaction.
 
 More from the real SQL Server: `AT TIME ZONE` takes Windows zone names, not IANA, so the local
 day's bounds are worked out in JS (`src/stats/zoned-day.ts`); GUIDs come back in uppercase, so
