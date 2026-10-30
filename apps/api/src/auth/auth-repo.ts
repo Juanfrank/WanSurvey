@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { roleMatrix, type Role } from '@wansurvey/schema';
-import { eq, getTableColumns, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { AuditService, type AuditEntry } from '../audit/audit.service.js';
 import { AuditStore } from '../audit/audit-store.mssql.js';
+import { PeopleStore } from '../users/people-store.mssql.js';
+import { randomToken, sha256Hex } from '../common/crypto.js';
 import type { AuthContext } from '../common/auth-context.js';
 import {
   columnsAs,
@@ -14,8 +16,17 @@ import {
 } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
-import { memberships, sessions, tenantMembers, tenants, users } from '../db/schema.js';
-import { IdentityStore } from './identity-store.mssql.js';
+import {
+  memberships,
+  sessions,
+  tenantMembers,
+  tenants,
+  tenantSso,
+  userIdentities,
+  userTokens,
+  users,
+} from '../db/schema.js';
+import { IdentityStore, type SsoRow, type SsoValues } from './identity-store.mssql.js';
 import { SessionsStore } from './sessions-store.mssql.js';
 
 /**
@@ -66,8 +77,81 @@ export interface LoadedSession {
   grants: { role: string; projectId: string | null }[];
 }
 
+/** What password, second-factor and one-time-token flows read of an account. */
+export interface Credentials {
+  email: string;
+  status: string;
+  passwordHash: string | null;
+  totpEnabled: boolean;
+  totpSecretEnc: string | null;
+}
+
+/** A Microsoft identity already linked, with its account and membership here and its roles. */
+export interface LinkedAccount {
+  userId: string;
+  userStatus: string;
+  totpEnabled: boolean;
+  lastTenantId: string | null;
+  memberStatus: string;
+  roles: string[];
+}
+
+export type { SsoRow, SsoValues };
+
+export type TokenPurpose = 'invitation' | 'password_reset';
+
+/** The person's own account: what needs only them in context, not an organisation. */
+export interface AccountTx {
+  credentials(userId: string): Promise<Credentials | null>;
+  setTotpSecret(userId: string, secretEnc: string): Promise<void>;
+  /** Turns the second factor on; `step` is the code that proved it (each code works once). */
+  enableTotp(userId: string, step: number): Promise<void>;
+  /** A new password; `activate` also takes a pending account to active. */
+  setPassword(userId: string, passwordHash: string, activate?: boolean): Promise<void>;
+  /** A single-use token; only its hash is stored. Returns the token to send. */
+  issueToken(v: {
+    tenantId: string | null;
+    userId: string;
+    purpose: TokenPurpose;
+    ttlHours: number;
+  }): Promise<string>;
+  /** Uses a live token once: true for the one call that gets it, even when two race. */
+  useToken(raw: string): Promise<boolean>;
+}
+
 /** One organisation's transaction (and, when given, the acting person's). */
-export interface AuthTx {
+export interface AuthTx extends AccountTx {
+  /** An invited member accepts: true when there was an invitation to accept. */
+  activateMember(userId: string): Promise<boolean>;
+
+  // Microsoft sign-in
+  /** The linked identity's account, membership here and roles; null when not linked here. */
+  linked(issuer: string, subject: string): Promise<LinkedAccount | null>;
+  /** The member status of the account in this organisation; null when it is not a member. */
+  memberStatus(userId: string): Promise<string | null>;
+  /** A new active account (first Microsoft sign-in). */
+  createSsoAccount(v: {
+    id: string;
+    email: string;
+    name: string;
+    firstName: string | null;
+  }): Promise<void>;
+  /** Takes a pending account to active (Microsoft has proven who they are). */
+  activateAccount(userId: string): Promise<void>;
+  linkIdentity(userId: string, issuer: string, subject: string): Promise<void>;
+  /** Adds the account to the organisation, active and without roles. */
+  addMember(userId: string): Promise<void>;
+  /** E-mail addresses of the people who administer the organisation. */
+  adminEmails(): Promise<string[]>;
+  /** The account behind a session opened with password and second factor; null when none. */
+  passwordSessionUser(tokenHash: string, now: Date): Promise<string | null>;
+
+  // The organisation's Microsoft sign-in settings
+  ssoSettings(): Promise<SsoRow | null>;
+  /** Takes the lock that serialises changes to the domains (held to the end of the tx). */
+  lockSsoDomains(): Promise<void>;
+  ssoDomainOwners(domain: string): Promise<string[]>;
+  saveSso(v: SsoValues): Promise<SsoRow>;
   roles(userId: string): Promise<string[]>;
   account(userId: string): Promise<Account | null>;
   /** Opens a session; the person's last organisation is set when it differs. */
@@ -93,6 +177,17 @@ export interface AuthRepo {
   failed(userId: string, max: number, lockSeconds: number): Promise<Date | null>;
   succeeded(userId: string): Promise<void>;
   userTenants(userId: string, includeInactive?: boolean): Promise<UserTenant[]>;
+  /** The account an external identity is linked to, in any organisation. */
+  identityUser(issuer: string, subject: string): Promise<string | null>;
+  /** Who a live token belongs to, without using it (the link carries only the token). */
+  peekToken(
+    raw: string,
+    purpose: TokenPurpose,
+  ): Promise<{ userId: string; tenantId: string | null } | null>;
+  /** Works on the person's own account, outside any organisation. */
+  inUser<T>(userId: string, fn: (t: AccountTx) => Promise<T>): Promise<T>;
+  /** Ends the person's live sessions in every organisation. */
+  revokeEverywhere(userId: string): Promise<number>;
   /** Name and e-mail of an account, for what is sent to its owner. */
   contactOf(userId: string): Promise<{ email: string; name: string } | null>;
   /** Works in one organisation, as the person when given. */
@@ -156,6 +251,29 @@ const sessionByToken = new Prepared<{
   },
 );
 
+/**
+ * A Microsoft identity already linked, with its account and membership here and its roles, in
+ * one statement. Read in the organisation's context (row-level security applies).
+ */
+const linkedAccount = new Prepared<LinkedAccount>(
+  () => sql`
+    select ui.user_id as "userId", u.status as "userStatus", u.totp_enabled as "totpEnabled",
+           u.last_tenant_id as "lastTenantId", m.status as "memberStatus",
+           array(select g.role from memberships g where g.user_id = ui.user_id) as "roles"
+    from user_identities ui
+    join users u on u.id = ui.user_id
+    join tenant_members m on m.user_id = ui.user_id
+    where ui.issuer = ${sql.placeholder('issuer')} and ui.subject = ${sql.placeholder('subject')}`,
+  {
+    userId: 'raw',
+    userStatus: 'raw',
+    totpEnabled: 'raw',
+    lastTenantId: 'raw',
+    memberStatus: 'raw',
+    roles: 'raw',
+  },
+);
+
 class PgAuthTx implements AuthTx {
   constructor(
     private readonly tx: Tx,
@@ -188,6 +306,154 @@ class PgAuthTx implements AuthTx {
       idCode: m?.idCode ?? null,
       phoneExtension: m?.phoneExtension ?? null,
     };
+  }
+
+  async credentials(userId: string): Promise<Credentials | null> {
+    const [u] = await this.tx.select().from(users).where(eq(users.id, userId));
+    return u
+      ? {
+          email: u.email,
+          status: u.status,
+          passwordHash: u.passwordHash,
+          totpEnabled: u.totpEnabled,
+          totpSecretEnc: u.totpSecretEnc,
+        }
+      : null;
+  }
+
+  async setTotpSecret(userId: string, secretEnc: string) {
+    await this.tx.update(users).set({ totpSecretEnc: secretEnc }).where(eq(users.id, userId));
+  }
+
+  async enableTotp(userId: string, step: number) {
+    await this.tx
+      .update(users)
+      .set({ totpEnabled: true, totpLastStep: step })
+      .where(eq(users.id, userId));
+  }
+
+  async setPassword(userId: string, passwordHash: string, activate = false) {
+    await this.tx
+      .update(users)
+      .set({ passwordHash, ...(activate ? { status: 'active' } : {}) })
+      .where(eq(users.id, userId));
+  }
+
+  async issueToken(v: Parameters<AccountTx['issueToken']>[0]) {
+    const raw = randomToken();
+    await this.tx.insert(userTokens).values({
+      tenantId: v.tenantId,
+      userId: v.userId,
+      purpose: v.purpose,
+      tokenHash: sha256Hex(raw),
+      expiresAt: new Date(Date.now() + v.ttlHours * 3600_000),
+    });
+    return raw;
+  }
+
+  async useToken(raw: string) {
+    const rows = await this.tx
+      .update(userTokens)
+      .set({ usedAt: new Date() })
+      .where(and(eq(userTokens.tokenHash, sha256Hex(raw)), isNull(userTokens.usedAt)))
+      .returning({ id: userTokens.id });
+    return rows.length === 1;
+  }
+
+  async linked(issuer: string, subject: string): Promise<LinkedAccount | null> {
+    const [a] = await linkedAccount.run(this.tx, { issuer, subject });
+    return a ?? null;
+  }
+
+  async memberStatus(userId: string) {
+    const [m] = await this.tx
+      .select({ status: tenantMembers.status })
+      .from(tenantMembers)
+      .where(eq(tenantMembers.userId, userId));
+    return m?.status ?? null;
+  }
+
+  async createSsoAccount(v: { id: string; email: string; name: string; firstName: string | null }) {
+    await this.tx.insert(users).values({ ...v, status: 'active' });
+  }
+
+  async activateAccount(userId: string) {
+    await this.tx.update(users).set({ status: 'active' }).where(eq(users.id, userId));
+  }
+
+  async linkIdentity(userId: string, issuer: string, subject: string) {
+    await this.tx.insert(userIdentities).values({ userId, provider: 'entra', issuer, subject });
+  }
+
+  async addMember(userId: string) {
+    await this.tx
+      .insert(tenantMembers)
+      .values({ tenantId: this.tenantId, userId, status: 'active' });
+  }
+
+  async adminEmails() {
+    const rows = await this.tx
+      .selectDistinct({ email: users.email })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .where(
+        and(inArray(memberships.role, ['owner', 'admin']), eq(memberships.tenantId, this.tenantId)),
+      );
+    return rows.map((r) => r.email);
+  }
+
+  async passwordSessionUser(tokenHash: string, now: Date) {
+    const [row] = await this.tx
+      .select({ userId: sessions.userId })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.tokenHash, tokenHash),
+          isNull(sessions.revokedAt),
+          eq(sessions.mfaState, 'ok'),
+          eq(sessions.authMethod, 'password'),
+          gt(sessions.expiresAt, now),
+        ),
+      );
+    return row?.userId ?? null;
+  }
+
+  async ssoSettings() {
+    const [row] = await this.tx
+      .select()
+      .from(tenantSso)
+      .where(eq(tenantSso.tenantId, this.tenantId));
+    return row ?? null;
+  }
+
+  async lockSsoDomains() {
+    await this.tx.execute(sql`select pg_advisory_xact_lock(hashtext('sso-domains'))`);
+  }
+
+  async ssoDomainOwners(domain: string) {
+    const owners = (await this.tx.execute(
+      sql`select tenant_id from sso_tenants_for_domain(${domain})`,
+    )) as unknown as { tenant_id: string }[];
+    return owners.map((o) => o.tenant_id);
+  }
+
+  async saveSso(v: SsoValues) {
+    const values = { ...v, updatedAt: new Date() };
+    const [row] = await this.tx
+      .insert(tenantSso)
+      .values({ tenantId: this.tenantId, ...values })
+      .onConflictDoUpdate({ target: tenantSso.tenantId, set: values })
+      .returning();
+    return row!;
+  }
+
+  async activateMember(userId: string) {
+    const rows = await this.tx
+      .update(tenantMembers)
+      .set({ status: 'active' })
+      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.status, 'invited')))
+      .returning({ id: tenantMembers.id });
+    return rows.length === 1;
   }
 
   async openSession(v: NewSession, lastTenantId: string | null) {
@@ -271,17 +537,44 @@ export class PgAuthRepo implements AuthRepo {
     return row ?? null;
   }
 
+  async identityUser(issuer: string, subject: string) {
+    const [row] = await this.database.db
+      .select({ userId: userIdentities.userId })
+      .from(userIdentities)
+      .where(and(eq(userIdentities.issuer, issuer), eq(userIdentities.subject, subject)));
+    return row?.userId ?? null;
+  }
+
+  async peekToken(raw: string, purpose: TokenPurpose) {
+    const [row] = await this.database.db
+      .select({ userId: userTokens.userId, tenantId: userTokens.tenantId })
+      .from(userTokens)
+      .where(
+        and(
+          eq(userTokens.tokenHash, sha256Hex(raw)),
+          eq(userTokens.purpose, purpose),
+          isNull(userTokens.usedAt),
+          gt(userTokens.expiresAt, new Date()),
+        ),
+      );
+    return row ?? null;
+  }
+
+  inUser<T>(userId: string, fn: (t: AccountTx) => Promise<T>) {
+    // Only the account methods are offered here; no organisation is in context.
+    return this.database.withUser(userId, (tx) => fn(new PgAuthTx(tx, '', this.audits)));
+  }
+
+  revokeEverywhere(userId: string) {
+    return this.database.revokeAllSessions(userId);
+  }
+
   inTenant<T>(tenantId: string, fn: (t: AuthTx) => Promise<T>, userId?: string) {
     return this.database.withTenant(
       tenantId,
       (tx) => fn(new PgAuthTx(tx, tenantId, this.audits)),
       userId,
     );
-  }
-
-  /** The same lookup inside a transaction someone else opened (the Microsoft sign-in). */
-  wrap(tx: Tx, tenantId: string): AuthTx {
-    return new PgAuthTx(tx, tenantId, this.audits);
   }
 
   session(tenantId: string, tokenHash: string, now: Date, idleMs: number, touchMs: number) {
@@ -325,8 +618,153 @@ class MssqlAuthTx implements AuthTx {
       sessions: SessionsStore;
       identity: IdentityStore;
       audit: AuditStore;
+      people: PeopleStore;
     },
   ) {}
+
+  async credentials(userId: string): Promise<Credentials | null> {
+    const u = await this.tx
+      .selectFrom('users')
+      .select(['email', 'status', 'password_hash', 'totp_enabled', 'totp_secret_enc'])
+      .where('id', '=', userId)
+      .executeTakeFirst();
+    return u
+      ? {
+          email: u.email,
+          status: u.status,
+          passwordHash: u.password_hash,
+          totpEnabled: !!u.totp_enabled,
+          totpSecretEnc: u.totp_secret_enc,
+        }
+      : null;
+  }
+
+  setTotpSecret(userId: string, secretEnc: string) {
+    return this.stores.people.updateAccount(this.tx, userId, { totpSecretEnc: secretEnc });
+  }
+
+  enableTotp(userId: string, step: number) {
+    return this.stores.people.updateAccount(this.tx, userId, {
+      totpEnabled: true,
+      totpLastStep: step,
+    });
+  }
+
+  setPassword(userId: string, passwordHash: string, activate = false) {
+    return this.stores.people.updateAccount(this.tx, userId, {
+      passwordHash,
+      ...(activate ? { status: 'active' } : {}),
+    });
+  }
+
+  async issueToken(v: Parameters<AccountTx['issueToken']>[0]) {
+    const raw = randomToken();
+    await this.stores.sessions.issueToken(this.tx, {
+      tenantId: v.tenantId,
+      userId: v.userId,
+      purpose: v.purpose,
+      tokenHash: sha256Hex(raw),
+      expiresAt: new Date(Date.now() + v.ttlHours * 3600_000),
+    });
+    return raw;
+  }
+
+  useToken(raw: string) {
+    return this.stores.sessions.useToken(this.tx, sha256Hex(raw));
+  }
+
+  activateMember(userId: string) {
+    return this.stores.people.activateInvited(this.tx, userId);
+  }
+
+  async linked(issuer: string, subject: string): Promise<LinkedAccount | null> {
+    const userId = await this.stores.identity.userByIdentity(this.tx, issuer, subject);
+    if (!userId) return null;
+    const u = await this.tx
+      .selectFrom('users as u')
+      .innerJoin('tenant_members as m', 'm.user_id', 'u.id')
+      .select(['u.status', 'u.totp_enabled', 'u.last_tenant_id', 'm.status as member_status'])
+      .where('u.id', '=', userId)
+      .executeTakeFirst();
+    if (!u) return null;
+    return {
+      userId,
+      userStatus: u.status,
+      totpEnabled: !!u.totp_enabled,
+      lastTenantId: u.last_tenant_id?.toLowerCase() ?? null,
+      memberStatus: u.member_status,
+      roles: await this.roles(userId),
+    };
+  }
+
+  async memberStatus(userId: string) {
+    return (await this.stores.people.member(this.tx, userId))?.status ?? null;
+  }
+
+  async createSsoAccount(v: { id: string; email: string; name: string; firstName: string | null }) {
+    await this.tx
+      .insertInto('users')
+      .values({
+        id: v.id,
+        email: v.email,
+        name: v.name,
+        first_name: v.firstName,
+        status: 'active',
+      })
+      .execute();
+  }
+
+  activateAccount(userId: string) {
+    return this.stores.people.updateAccount(this.tx, userId, { status: 'active' });
+  }
+
+  linkIdentity(userId: string, issuer: string, subject: string) {
+    return this.stores.identity.linkIdentity(this.tx, {
+      userId,
+      provider: 'entra',
+      issuer,
+      subject,
+    });
+  }
+
+  addMember(userId: string) {
+    return this.stores.people.addMember(this.tx, this.tenantId, userId, 'active');
+  }
+
+  async adminEmails() {
+    const rows = await this.tx
+      .selectFrom('memberships as g')
+      .innerJoin('users as u', 'u.id', 'g.user_id')
+      .select('u.email')
+      .distinct()
+      .where('g.tenant_id', '=', this.tenantId)
+      .where('g.role', 'in', ['owner', 'admin'])
+      .execute();
+    return rows.map((r) => r.email);
+  }
+
+  async passwordSessionUser(tokenHash: string, now: Date) {
+    const s = await this.stores.sessions.byToken(this.tx, tokenHash);
+    return s && s.mfaState === 'ok' && s.authMethod === 'password' && s.expiresAt > now
+      ? s.userId
+      : null;
+  }
+
+  ssoSettings() {
+    return this.stores.identity.sso(this.tx, this.tenantId);
+  }
+
+  lockSsoDomains() {
+    return this.stores.identity.lockSsoDomains(this.tx);
+  }
+
+  ssoDomainOwners(domain: string) {
+    return this.stores.identity.domainOwners(this.tx, domain);
+  }
+
+  saveSso(v: SsoValues) {
+    return this.stores.identity.saveSso(this.tx, this.tenantId, v);
+  }
 
   async roles(userId: string) {
     return (
@@ -397,6 +835,7 @@ export class MssqlAuthRepo implements AuthRepo {
     sessions: new SessionsStore(),
     identity: new IdentityStore(),
     audit: new AuditStore(),
+    people: new PeopleStore(),
   };
 
   constructor(private readonly engine: Engine) {}
@@ -439,6 +878,25 @@ export class MssqlAuthRepo implements AuthRepo {
         .executeTakeFirst();
       return u ?? null;
     });
+  }
+
+  async peekToken(raw: string, purpose: TokenPurpose) {
+    const r = await this.db.peekUserToken(sha256Hex(raw), purpose);
+    return r
+      ? { userId: r.user_id.toLowerCase(), tenantId: r.tenant_id?.toLowerCase() ?? null }
+      : null;
+  }
+
+  identityUser(issuer: string, subject: string) {
+    return this.db.userByIdentity(issuer, subject);
+  }
+
+  inUser<T>(userId: string, fn: (t: AccountTx) => Promise<T>) {
+    return this.db.withUser(userId, (tx) => fn(new MssqlAuthTx(tx, '', this.stores)));
+  }
+
+  revokeEverywhere(userId: string) {
+    return this.db.withUser(userId, (tx) => this.stores.sessions.revokeEverywhere(tx, userId));
   }
 
   inTenant<T>(tenantId: string, fn: (t: AuthTx) => Promise<T>, userId?: string) {

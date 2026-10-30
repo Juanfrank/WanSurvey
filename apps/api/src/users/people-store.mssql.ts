@@ -185,6 +185,7 @@ export class PeopleStore {
       passwordHash: string | null;
       totpSecretEnc: string | null;
       totpEnabled: boolean;
+      totpLastStep: number | null;
     }>,
   ): Promise<void> {
     await tx
@@ -198,9 +199,34 @@ export class PeopleStore {
         ...(v.passwordHash !== undefined ? { password_hash: v.passwordHash } : {}),
         ...(v.totpSecretEnc !== undefined ? { totp_secret_enc: v.totpSecretEnc } : {}),
         ...(v.totpEnabled !== undefined ? { totp_enabled: v.totpEnabled } : {}),
+        ...(v.totpLastStep !== undefined ? { totp_last_step: v.totpLastStep } : {}),
       })
       .where('id', '=', userId)
       .execute();
+  }
+
+  /** Adds the account to the organisation as a member (Microsoft first sign-in). */
+  async addMember(
+    tx: MssqlTx,
+    tenantId: string,
+    userId: string,
+    status: 'invited' | 'active',
+  ): Promise<void> {
+    await tx
+      .insertInto('tenant_members')
+      .values({ id: randomUUID(), tenant_id: tenantId, user_id: userId, status })
+      .execute();
+  }
+
+  /** An invited member accepts: true when there was an invitation to accept. */
+  async activateInvited(tx: MssqlTx, userId: string): Promise<boolean> {
+    const res = await tx
+      .updateTable('tenant_members')
+      .set({ status: 'active' })
+      .where('user_id', '=', userId)
+      .where('status', '=', 'invited')
+      .executeTakeFirst();
+    return Number(res.numUpdatedRows) === 1;
   }
 
   /** The member fields only the organisation owns. */

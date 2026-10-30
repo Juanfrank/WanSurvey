@@ -9,7 +9,6 @@ import {
 import { ROLE_RANK, type Role } from '@wansurvey/schema';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
-import { AuthService } from '../auth/auth.service.js';
 import { AUTH_REPO, type AuthRepo } from '../auth/auth-repo.js';
 import { tenantRank, type AuthContext, type MembershipGrant } from '../common/auth-context.js';
 import { sha256Hex } from '../common/crypto.js';
@@ -25,7 +24,6 @@ export class UsersService {
     @Inject(USERS_REPO) private readonly repo: UsersRepo,
     @Inject(AUTH_REPO) private readonly authRepo: AuthRepo,
     private readonly audit: AuditService,
-    private readonly auth: AuthService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
   ) {}

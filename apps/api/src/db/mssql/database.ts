@@ -201,6 +201,23 @@ export class MssqlDatabase {
     return res.rows[0] ?? null;
   }
 
+  /** The account an external identity is linked to, in any organisation. */
+  async userByIdentity(issuer: string, subject: string): Promise<string | null> {
+    const res = await sql<{ user_id: string }>`
+      EXEC dbo.user_by_identity @issuer = ${issuer}, @subject = ${subject}`.execute(this.db);
+    return res.rows[0]?.user_id.toLowerCase() ?? null;
+  }
+
+  /** Who a live one-time token belongs to (the link carries only the token). */
+  async peekUserToken(
+    tokenHash: string,
+    purpose: string,
+  ): Promise<{ user_id: string; tenant_id: string | null } | null> {
+    const res = await sql<{ user_id: string; tenant_id: string | null }>`
+      EXEC dbo.peek_user_token @token_hash = ${tokenHash}, @purpose = ${purpose}`.execute(this.db);
+    return res.rows[0] ?? null;
+  }
+
   /** Until when the account is locked after failed attempts; null when it is not. */
   async accountLockedUntil(userId: string): Promise<Date | null> {
     const res = await sql<{ until: Date | null }>`

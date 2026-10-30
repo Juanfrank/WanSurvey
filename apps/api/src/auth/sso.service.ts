@@ -1,17 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { SsoConfigs, type SsoConfig, type SsoStartConfig } from './sso-config.js';
 import { CONFIG, SSO_CALLBACK_PATH, type AppConfig } from '../config.js';
-import { Database, isUuid, pgCode, Prepared } from '../db/database.js';
-import { memberships, sessions, tenantMembers, userIdentities, users } from '../db/schema.js';
+import { isUniqueViolation, isUuid } from '../db/database.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { parseSessionCookie } from './auth.guard.js';
-import { PgAuthRepo } from './auth-repo.js';
+import { AUTH_REPO, type AuthRepo } from './auth-repo.js';
 import { AuthService, type ClientInfo } from './auth.service.js';
 
 const STATE_TTL_MS = 10 * 60_000;
@@ -56,38 +54,6 @@ export function safeReturnTo(value: unknown): string {
   return value.slice(0, 512);
 }
 
-/**
- * A Microsoft identity already linked, with its account and membership here and its roles, in
- * one statement; it also sets the account as the transaction's user, for the session that
- * follows. Read in the organisation's context (row-level security applies).
- */
-const linkedAccount = new Prepared<{
-  userId: string;
-  userStatus: string;
-  totpEnabled: boolean;
-  lastTenantId: string | null;
-  memberStatus: string;
-  roles: string[];
-}>(
-  () => sql`
-    select ui.user_id as "userId", u.status as "userStatus", u.totp_enabled as "totpEnabled",
-           u.last_tenant_id as "lastTenantId", m.status as "memberStatus",
-           array(select g.role from memberships g where g.user_id = ui.user_id) as "roles",
-           set_config('app.user_id', ui.user_id::text, true) as "_"
-    from user_identities ui
-    join users u on u.id = ui.user_id
-    join tenant_members m on m.user_id = ui.user_id
-    where ui.issuer = ${sql.placeholder('issuer')} and ui.subject = ${sql.placeholder('subject')}`,
-  {
-    userId: 'raw',
-    userStatus: 'raw',
-    totpEnabled: 'raw',
-    lastTenantId: 'raw',
-    memberStatus: 'raw',
-    roles: 'raw',
-  },
-);
-
 const pkceChallenge = (verifier: string) =>
   createHash('sha256').update(verifier).digest('base64url');
 
@@ -101,10 +67,9 @@ export class SsoService {
   private readonly jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
   constructor(
-    private readonly database: Database,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
-    private readonly pgAuth: PgAuthRepo,
+    @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     private readonly configs: SsoConfigs,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
@@ -193,21 +158,9 @@ export class SsoService {
   async signedInUser(cookie: unknown): Promise<string | null> {
     const parsed = parseSessionCookie(cookie);
     if (!parsed) return null;
-    return this.database.withTenant(parsed.tenantId, async (tx) => {
-      const [row] = await tx
-        .select({ userId: sessions.userId })
-        .from(sessions)
-        .where(
-          and(
-            eq(sessions.tokenHash, sha256Hex(parsed.token)),
-            isNull(sessions.revokedAt),
-            eq(sessions.mfaState, 'ok'),
-            eq(sessions.authMethod, 'password'),
-            gt(sessions.expiresAt, new Date()),
-          ),
-        );
-      return row?.userId ?? null;
-    });
+    return this.repo.inTenant(parsed.tenantId, (t) =>
+      t.passwordSessionUser(sha256Hex(parsed.token), new Date()),
+    );
   }
 
   /**
@@ -242,7 +195,7 @@ export class SsoService {
     } catch (e) {
       // Two first sign-ins of one person at once (two tabs, a double click): the one that lost
       // the race to create the account, identity or membership finds them made by the other.
-      if (pgCode(e) !== '23505') throw e;
+      if (!isUniqueViolation(e)) throw e;
       return this.signIn(st, config, claims, client, signedInUser);
     }
   }
@@ -265,29 +218,30 @@ export class SsoService {
     const mfa = Array.isArray(claims.amr) && claims.amr.includes('mfa');
 
     // The usual case, every morning: an identity already linked, to an active account that is
-    // an active member here. One transaction reads it and opens the session.
-    const quick = await this.database.withTenant(st.tenantId, async (tx) => {
-      const [a] = await linkedAccount.run(tx, { issuer, subject });
-      if (!a || a.userStatus !== 'active' || a.memberStatus !== 'active') return null;
-      // Microsoft sign-in still runs on PostgreSQL (docs/roadmap.md).
-      return this.auth.openSessionIn(this.pgAuth.wrap(tx, st.tenantId), st.tenantId, a.userId, {
-        totpEnabled: a.totpEnabled,
-        mfaVerifiedBy: mfa ? 'entra' : null,
-        authMethod: 'sso',
-        idpTenant: config.entraTenantId,
-        action: 'auth.login',
-        client,
-        roles: a.roles,
-        lastTenantId: a.lastTenantId,
-      });
-    });
-    if (quick) return { ...quick, returnTo: st.returnTo };
-    const [identity] = await this.database.db
-      .select({ userId: userIdentities.userId })
-      .from(userIdentities)
-      .where(and(eq(userIdentities.issuer, issuer), eq(userIdentities.subject, subject)));
+    // an active member here.
+    const linked = await this.repo.inTenant(st.tenantId, (t) => t.linked(issuer, subject));
+    if (linked && linked.userStatus === 'active' && linked.memberStatus === 'active') {
+      const quick = await this.repo.inTenant(
+        st.tenantId,
+        (t) =>
+          this.auth.openSessionIn(t, st.tenantId, linked.userId, {
+            totpEnabled: linked.totpEnabled,
+            mfaVerifiedBy: mfa ? 'entra' : null,
+            authMethod: 'sso',
+            idpTenant: config.entraTenantId,
+            action: 'auth.login',
+            client,
+            roles: linked.roles,
+            lastTenantId: linked.lastTenantId,
+          }),
+        linked.userId,
+      );
+      return { ...quick, returnTo: st.returnTo };
+    }
+    const identityUser = await this.repo.identityUser(issuer, subject);
+    const identity = identityUser ? { userId: identityUser } : null;
     if (!identity && !config.allowedDomains.includes(domain)) throw fail('domain_not_allowed');
-    const existingId = identity?.userId ?? (await this.database.userIdByEmail(email));
+    const existingId = identity?.userId ?? (await this.repo.userByEmail(email))?.id ?? null;
     // An e-mail address in a token proves nothing about an account elsewhere: whoever runs
     // this organisation's directory can put any address there (the claim is not verified,
     // and a domain nobody claimed in WanSurvey may still be the address of someone in another
@@ -302,7 +256,7 @@ export class SsoService {
       !config.fromDeployment &&
       (await signedInUser()) !== existingId
     ) {
-      const elsewhere = (await this.database.userTenants(existingId, true)).filter(
+      const elsewhere = (await this.repo.userTenants(existingId, true)).filter(
         (t) => t.id !== st.tenantId,
       );
       if (elsewhere.length)
@@ -310,42 +264,33 @@ export class SsoService {
     }
     const userId = existingId ?? uuidv7();
 
-    const outcome = await this.database.withTenant(
+    const outcome = await this.repo.inTenant(
       st.tenantId,
-      async (tx) => {
+      async (t) => {
         let accountCreated = false;
-        const [member] = existingId
-          ? await tx
-              .select({ status: tenantMembers.status })
-              .from(tenantMembers)
-              .where(eq(tenantMembers.userId, userId))
-          : [];
+        const memberStatus = existingId ? await t.memberStatus(userId) : null;
+        const member = memberStatus === null ? null : { status: memberStatus };
         // An identity linked elsewhere (another organisation on the same directory) joins this
         // one only with an address of its domains, as a new identity would.
         if (!member && !config.allowedDomains.includes(domain)) throw fail('domain_not_allowed');
         if (!existingId) {
-          await tx.insert(users).values({
+          await t.createSsoAccount({
             id: userId,
             email,
             name: claims.name ?? email,
             firstName: claims.given_name ?? null,
-            status: 'active',
           });
           accountCreated = true;
         } else {
-          const [u] = await tx
-            .select({ status: users.status })
-            .from(users)
-            .where(eq(users.id, userId));
+          const u = await t.credentials(userId);
           if (!u || u.status === 'disabled') throw fail('account_disabled');
           // Microsoft has proven who they are, so an invited account without a password is usable.
-          if (u.status === 'pending')
-            await tx.update(users).set({ status: 'active' }).where(eq(users.id, userId));
+          if (u.status === 'pending') await t.activateAccount(userId);
         }
         if (!identity) {
-          await tx.insert(userIdentities).values({ userId, provider: 'entra', issuer, subject });
+          await t.linkIdentity(userId, issuer, subject);
           if (existingId) {
-            await this.audit.record(tx, st.tenantId, {
+            await t.audit({
               action: 'user.identity_linked',
               actorUserId: userId,
               targetType: 'user',
@@ -358,10 +303,8 @@ export class SsoService {
         let provisioned = false;
         if (!member) {
           // First Microsoft sign-in: a member with no role, waiting for an administrator.
-          await tx
-            .insert(tenantMembers)
-            .values({ tenantId: st.tenantId, userId, status: 'active' });
-          await this.audit.record(tx, st.tenantId, {
+          await t.addMember(userId);
+          await t.audit({
             action: 'user.provisioned_sso',
             actorUserId: userId,
             targetType: 'user',
@@ -373,11 +316,8 @@ export class SsoService {
         } else if (member.status === 'deactivated') {
           throw fail('membership_deactivated');
         } else if (member.status === 'invited') {
-          await tx
-            .update(tenantMembers)
-            .set({ status: 'active' })
-            .where(eq(tenantMembers.userId, userId));
-          await this.audit.record(tx, st.tenantId, {
+          await t.activateMember(userId);
+          await t.audit({
             action: 'user.invitation_accepted',
             actorUserId: userId,
             targetType: 'user',
@@ -386,10 +326,7 @@ export class SsoService {
             ...client,
           });
         }
-        const [u] = await tx
-          .select({ totpEnabled: users.totpEnabled })
-          .from(users)
-          .where(eq(users.id, userId));
+        const u = await t.credentials(userId);
         return { provisioned, totpEnabled: u!.totpEnabled };
       },
       userId,
@@ -475,29 +412,21 @@ export class SsoService {
   }
 
   private async notifyAdmins(tenantId: string, email: string, name: string) {
-    const admins = await this.database.withTenant(tenantId, (tx) =>
-      tx
-        .selectDistinct({ email: users.email })
-        .from(memberships)
-        .innerJoin(users, eq(users.id, memberships.userId))
-        .where(
-          and(inArray(memberships.role, ['owner', 'admin']), eq(memberships.tenantId, tenantId)),
-        ),
-    );
+    const admins = await this.repo.inTenant(tenantId, (t) => t.adminEmails());
     for (const a of admins) {
       await this.mailer.send({
-        to: a.email,
+        to: a,
         subject: `${name} is waiting for access to WanSurvey`,
         text: `${name} (${email}) signed in with Microsoft and has no role yet.\nAssign a role in WanSurvey under Users to give them access.`,
-        idempotencyKey: `sso-pending:${tenantId}:${email}:${a.email}`,
+        idempotencyKey: `sso-pending:${tenantId}:${email}:${a}`,
       });
     }
   }
 
   async recordFailure(tenantId: string | null, code: string, client: ClientInfo) {
     if (!tenantId) return;
-    await this.database.withTenant(tenantId, (tx) =>
-      this.audit.record(tx, tenantId, { action: 'auth.sso_failed', details: { code }, ...client }),
+    await this.repo.inTenant(tenantId, (t) =>
+      t.audit({ action: 'auth.sso_failed', details: { code }, ...client }),
     );
   }
 }

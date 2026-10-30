@@ -16,7 +16,6 @@ import {
   type Permission,
   type Role,
 } from '@wansurvey/schema';
-import { and, eq, gt, isNull } from 'drizzle-orm';
 import { AuditService, type AuditEntry } from '../audit/audit.service.js';
 import type { AuthContext, MfaMethod } from '../common/auth-context.js';
 import {
@@ -29,10 +28,9 @@ import {
   totpStep,
 } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, isUuid, type Tx, type UserTenant } from '../db/database.js';
-import { AUTH_REPO, type AuthRepo, type AuthTx } from './auth-repo.js';
+import { isUuid, type UserTenant } from '../db/database.js';
+import { AUTH_REPO, type AuthRepo, type AuthTx, type TokenPurpose } from './auth-repo.js';
 import { SsoConfigs } from './sso-config.js';
-import { sessions, tenantMembers, userTokens, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
@@ -55,8 +53,6 @@ export interface LoginResult {
   tenant: TenantSummary;
   tenants: TenantSummary[];
 }
-
-type TokenPurpose = 'invitation' | 'password_reset';
 
 // A real Argon2id hash, verified when the e-mail is unknown so timing does not reveal accounts.
 let dummyHash: Promise<string> | null = null;
@@ -100,7 +96,6 @@ export class AuthService {
   private readonly logger = new Logger('Auth');
 
   constructor(
-    private readonly database: Database,
     @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
@@ -394,17 +389,14 @@ export class AuthService {
   // --- two-factor (per account, valid in every organisation) ----------------------
 
   async setupTotp(ctx: AuthContext) {
-    return this.database.withTenant(
+    return this.repo.inTenant(
       ctx.tenantId,
-      async (tx) => {
-        const [user] = await tx.select().from(users).where(eq(users.id, ctx.userId));
+      async (t) => {
+        const user = await t.credentials(ctx.userId);
         if (user!.totpEnabled)
           throw new ConflictException('Two-factor authentication is already enabled');
         const secret = generateTotpSecret();
-        await tx
-          .update(users)
-          .set({ totpSecretEnc: encryptField(secret, this.config.APP_ENCRYPTION_KEY) })
-          .where(eq(users.id, ctx.userId));
+        await t.setTotpSecret(ctx.userId, encryptField(secret, this.config.APP_ENCRYPTION_KEY));
         return { secret, otpauthUrl: otpauthUrl(secret, user!.email) };
       },
       ctx.userId,
@@ -412,10 +404,10 @@ export class AuthService {
   }
 
   async enableTotp(ctx: AuthContext, code: string) {
-    await this.database.withTenant(
+    await this.repo.inTenant(
       ctx.tenantId,
-      async (tx) => {
-        const [user] = await tx.select().from(users).where(eq(users.id, ctx.userId));
+      async (t) => {
+        const user = await t.credentials(ctx.userId);
         if (user!.totpEnabled)
           throw new ConflictException('Two-factor authentication is already enabled');
         if (!user!.totpSecretEnc) throw new BadRequestException('Start the setup first');
@@ -423,17 +415,9 @@ export class AuthService {
         const step = totpStep(secret, code);
         if (step === null)
           throw new UnauthorizedException({ code: 'INVALID_CODE', message: 'Invalid code' });
-        await tx
-          .update(users)
-          .set({ totpEnabled: true, totpLastStep: step })
-          .where(eq(users.id, ctx.userId));
-        await tx
-          .update(sessions)
-          .set({ mfaState: 'ok', mfaMethod: 'totp' })
-          .where(eq(sessions.id, ctx.sessionId));
-        await this.audit.record(
-          tx,
-          ctx.tenantId,
+        await t.enableTotp(ctx.userId, step);
+        await t.setMfa(ctx.sessionId, 'ok', 'totp');
+        await t.audit(
           this.audit.fromContext(ctx, {
             action: 'auth.mfa_enabled',
             targetType: 'user',
@@ -501,47 +485,11 @@ export class AuthService {
 
   // --- invitations and password reset -------------------------------------------
 
-  /** Creates a single-use token; only its hash is stored. */
-  async issueToken(
-    tx: Tx,
-    opts: { tenantId: string | null; userId: string; purpose: TokenPurpose; ttlHours: number },
-  ): Promise<string> {
-    const raw = randomToken();
-    await tx.insert(userTokens).values({
-      tenantId: opts.tenantId,
-      userId: opts.userId,
-      purpose: opts.purpose,
-      tokenHash: sha256Hex(raw),
-      expiresAt: new Date(Date.now() + opts.ttlHours * 3600_000),
-    });
-    return raw;
-  }
-
   /** Looks a token up without using it, to learn whose and which organisation's it is. */
   private async peekToken(raw: string, purpose: TokenPurpose) {
-    const [row] = await this.database.db
-      .select({ userId: userTokens.userId, tenantId: userTokens.tenantId })
-      .from(userTokens)
-      .where(
-        and(
-          eq(userTokens.tokenHash, sha256Hex(raw)),
-          eq(userTokens.purpose, purpose),
-          isNull(userTokens.usedAt),
-          gt(userTokens.expiresAt, new Date()),
-        ),
-      );
+    const row = await this.repo.peekToken(raw, purpose);
     if (!row || !isUuid(row.userId)) throw new BadRequestException('Invalid or expired link');
     return row;
-  }
-
-  /** Marks the token used inside the caller's transaction (rolled back if the change fails). */
-  private async consumeToken(tx: Tx, raw: string) {
-    const [row] = await tx
-      .update(userTokens)
-      .set({ usedAt: new Date() })
-      .where(and(eq(userTokens.tokenHash, sha256Hex(raw)), isNull(userTokens.usedAt)))
-      .returning({ id: userTokens.id });
-    if (!row) throw new BadRequestException('Invalid or expired link');
   }
 
   /**
@@ -553,35 +501,29 @@ export class AuthService {
     if (!token.tenantId) throw new BadRequestException('Invalid or expired link');
     const tenantId = token.tenantId;
     const newHash = await hashPassword(input.password);
-    await this.database.withTenant(
+    await this.repo.inTenant(
       tenantId,
-      async (tx) => {
-        await this.consumeToken(tx, input.token);
-        const [user] = await tx.select().from(users).where(eq(users.id, token.userId));
+      async (t) => {
+        if (!(await t.useToken(input.token)))
+          throw new BadRequestException('Invalid or expired link');
+        const user = await t.credentials(token.userId);
         if (!user || user.status === 'disabled')
           throw new BadRequestException('Invalid or expired link');
         if (user.status === 'pending') {
-          await tx
-            .update(users)
-            .set({ passwordHash: newHash, status: 'active' })
-            .where(eq(users.id, user.id));
+          await t.setPassword(token.userId, newHash, true);
         } else if (!(await verifyPassword(user.passwordHash, input.password))) {
           throw new UnauthorizedException({
             code: 'INVALID_CREDENTIALS',
             message: 'Enter the password of your existing account',
           });
         }
-        const [member] = await tx
-          .update(tenantMembers)
-          .set({ status: 'active' })
-          .where(and(eq(tenantMembers.userId, user.id), eq(tenantMembers.status, 'invited')))
-          .returning({ id: tenantMembers.id });
-        if (!member) throw new BadRequestException('Invalid or expired link');
-        await this.audit.record(tx, tenantId, {
+        if (!(await t.activateMember(token.userId)))
+          throw new BadRequestException('Invalid or expired link');
+        await t.audit({
           action: 'user.invitation_accepted',
-          actorUserId: user.id,
+          actorUserId: token.userId,
           targetType: 'user',
-          targetId: user.id,
+          targetId: token.userId,
           ...client,
         });
       },
@@ -590,19 +532,16 @@ export class AuthService {
   }
 
   async forgotPassword(input: { email: string }, client: ClientInfo) {
-    const user = await this.database.authUserByEmail(input.email);
+    const user = await this.repo.userByEmail(input.email);
     if (!user || user.status !== 'active') return;
-    const token = await this.database.withUser(user.id, async (tx) => {
-      const raw = await this.issueToken(tx, {
+    const token = await this.repo.inUser(user.id, async (t) => {
+      const raw = await t.issueToken({
         tenantId: null,
         userId: user.id,
         purpose: 'password_reset',
         ttlHours: 2,
       });
-      const [row] = await tx
-        .select({ email: users.email })
-        .from(users)
-        .where(eq(users.id, user.id));
+      const row = await t.credentials(user.id);
       return { raw, email: row!.email };
     });
     await this.auditEverywhere(user.id, {
@@ -623,13 +562,14 @@ export class AuthService {
   async resetPassword(input: { token: string; password: string }, client: ClientInfo) {
     const token = await this.peekToken(input.token, 'password_reset');
     const passwordHash = await hashPassword(input.password);
-    await this.database.withUser(token.userId, async (tx) => {
-      await this.consumeToken(tx, input.token);
-      const [user] = await tx.select().from(users).where(eq(users.id, token.userId));
+    await this.repo.inUser(token.userId, async (t) => {
+      if (!(await t.useToken(input.token)))
+        throw new BadRequestException('Invalid or expired link');
+      const user = await t.credentials(token.userId);
       if (!user || user.status !== 'active') throw new ForbiddenException('Account is not active');
-      await tx.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+      await t.setPassword(token.userId, passwordHash);
     });
-    await this.database.revokeAllSessions(token.userId);
+    await this.repo.revokeEverywhere(token.userId);
     await this.auditEverywhere(token.userId, {
       action: 'auth.password_reset',
       actorUserId: token.userId,

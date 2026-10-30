@@ -12,7 +12,6 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { eq, sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
@@ -21,8 +20,7 @@ import { SESSION_COOKIE, setSessionCookies } from '../common/cookies.js';
 import { encryptField } from '../common/crypto.js';
 import { ZodPipe } from '../common/zod.js';
 import { CONFIG, loadConfig, type AppConfig } from '../config.js';
-import { Database } from '../db/database.js';
-import { tenantSso } from '../db/schema.js';
+import { AUTH_REPO, type AuthRepo, type SsoRow } from './auth-repo.js';
 import type { ClientInfo } from './auth.service.js';
 import { SsoConfigs } from './sso-config.js';
 import { SsoError, SsoService } from './sso.service.js';
@@ -141,7 +139,7 @@ export class SsoController {
 @Controller('tenant/sso')
 export class SsoSettingsController {
   constructor(
-    private readonly database: Database,
+    @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     private readonly audit: AuditService,
     private readonly sso: SsoService,
     private readonly configs: SsoConfigs,
@@ -164,10 +162,7 @@ export class SsoSettingsController {
         allowedDomains: deployment.allowedDomains,
         redirectUri: this.sso.redirectUri,
       };
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx.select().from(tenantSso).where(eq(tenantSso.tenantId, ctx.tenantId));
-      return this.present(row ?? null);
-    });
+    return this.repo.inTenant(ctx.tenantId, async (t) => this.present(await t.ssoSettings()));
   }
 
   @Put()
@@ -195,44 +190,31 @@ export class SsoSettingsController {
       const deployment = await this.configs.deploymentTenantForDomain(domain);
       if (deployment !== null && deployment !== ctx.tenantId) throw taken(domain);
     }
-    const saved = await this.database.withTenant(ctx.tenantId, async (tx) => {
+    const saved = await this.repo.inTenant(ctx.tenantId, async (t) => {
       // One organisation saves its domains at a time, and checks them once the saves before it
       // have committed: two saving the same domain at once cannot both get it.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sso-domains'))`);
+      await t.lockSsoDomains();
       for (const domain of domains) {
-        const owners = (await tx.execute(
-          sql`select tenant_id from sso_tenants_for_domain(${domain})`,
-        )) as unknown as { tenant_id: string }[];
-        if (owners.some((t) => t.tenant_id !== ctx.tenantId)) throw taken(domain);
+        const owners = await t.ssoDomainOwners(domain);
+        if (owners.some((id) => id !== ctx.tenantId)) throw taken(domain);
       }
-      const [current] = await tx
-        .select()
-        .from(tenantSso)
-        .where(eq(tenantSso.tenantId, ctx.tenantId));
+      const current = await t.ssoSettings();
       const secretEnc = body.clientSecret
         ? encryptField(body.clientSecret, this.config.APP_ENCRYPTION_KEY)
         : (current?.clientSecretEnc ?? null);
       if (body.enabled && !secretEnc) {
         throw new BadRequestException('Add the client secret from the Entra app registration');
       }
-      const values = {
+      const row = await t.saveSso({
         entraTenantId: body.entraTenantId.toLowerCase(),
         clientId: body.clientId.toLowerCase(),
         clientSecretEnc: secretEnc,
         enabled: body.enabled,
         enforceSso: body.enforceSso,
         allowedDomains: domains,
-        updatedAt: new Date(),
-      };
-      const [row] = await tx
-        .insert(tenantSso)
-        .values({ tenantId: ctx.tenantId, ...values })
-        .onConflictDoUpdate({ target: tenantSso.tenantId, set: values })
-        .returning();
+      });
       const { clientSecret: _secret, ...audited } = body;
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'tenant.sso_updated',
           targetType: 'tenant',
@@ -240,14 +222,14 @@ export class SsoSettingsController {
           details: { ...audited, clientSecretChanged: !!body.clientSecret },
         }),
       );
-      return this.present(row!);
+      return this.present(row);
     });
     // Once committed: every process reads the new settings on the next sign-in.
     await this.configs.changed(ctx.tenantId);
     return saved;
   }
 
-  private present(row: typeof tenantSso.$inferSelect | null) {
+  private present(row: SsoRow | null) {
     return {
       configured: !!row,
       managedByDeployment: false,

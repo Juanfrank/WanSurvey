@@ -128,6 +128,19 @@ export function pgCode(e: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * A unique index refused a row (a race to create the same thing): PostgreSQL 23505, SQL Server
+ * 2601 or 2627.
+ */
+export function isUniqueViolation(e: unknown): boolean {
+  if (pgCode(e) === '23505') return true;
+  for (let x = e as { number?: unknown; cause?: unknown } | undefined, i = 0; x && i < 4; i++) {
+    if (x.number === 2601 || x.number === 2627) return true;
+    x = x.cause as typeof x;
+  }
+  return false;
+}
+
 /** The database cannot be reached now (failover, restart, no free connection). */
 const UNAVAILABLE = new Set(['57P01', '57P02', '57P03', '53300']);
 const DRIVER_UNAVAILABLE = new Set([
