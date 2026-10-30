@@ -173,7 +173,13 @@ describe.skipIf(!configured)('SQL Server: organisation and projects over HTTP', 
     );
     expect((await post(none, '/api/v1/projects', { name: 'X', code: 'X-1' })).status).toBe(403);
     expect((await patch(none, tenantRoute, { name: 'Hack' })).status).toBe(403);
-    expect((await none.agent.get(`${tenantRoute}/roles`)).status).toBe(403);
+    // Everyone in the organisation reads it; only whoever manages it changes the roles.
+    expect((await none.agent.get(`${tenantRoute}/roles`)).status).toBe(200);
+    const put = await none.agent
+      .put(`${tenantRoute}/roles`)
+      .set('x-csrf-token', none.csrf)
+      .send({ overrides: {} });
+    expect(put.status).toBe(403);
   });
 
   it('keeps a project’s logo apart from the project, serves it, replaces it and removes it', async () => {
