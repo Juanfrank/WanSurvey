@@ -433,14 +433,18 @@ BEGIN
       UNION ALL
       SELECT n.version_id, n.lang, CAST(c.[value] AS nvarchar(max)),
              CAST(n.ruta + N'.' + RIGHT(N'00000' + c.[key], 5) AS nvarchar(900))
-      FROM nodos n CROSS APPLY OPENJSON(n.nodo, '$.items') c
+      FROM nodos n CROSS APPLY OPENJSON(CASE WHEN ISJSON(n.nodo) = 1 THEN n.nodo ELSE N'{}' END, '$.items') c
     )
     INSERT INTO bi.preguntas_fuente (version_id, lang, variable, q, orden)
-    SELECT version_id, lang, JSON_VALUE(nodo, '$.name'), nodo,
+    SELECT version_id, lang, nombre, nodo,
            ROW_NUMBER() OVER (PARTITION BY version_id ORDER BY ruta)
-    FROM nodos
-    WHERE ISJSON(nodo) = 1 AND JSON_VALUE(nodo, '$.kind') = 'question'
-      AND JSON_VALUE(nodo, '$.name') IS NOT NULL
+    FROM (
+      SELECT version_id, lang, nodo, ruta,
+             CASE WHEN ISJSON(nodo) = 1 THEN JSON_VALUE(nodo, '$.name') END AS nombre,
+             CASE WHEN ISJSON(nodo) = 1 THEN JSON_VALUE(nodo, '$.kind') END AS kind
+      FROM nodos
+    ) n
+    WHERE kind = 'question' AND nombre IS NOT NULL
     OPTION (MAXRECURSION 0);
   END
 
@@ -719,7 +723,7 @@ BEGIN
       variable nvarchar(450), fila nvarchar(450), posicion int, v nvarchar(max), vtipo int);
     INSERT INTO #atomos
     SELECT envio_id, version_id, ruta, variable, NULL, NULL, dato, tipo FROM #planas
-    WHERE tipo IN (1, 2, 3) OR (tipo = 5 AND JSON_VALUE(dato, '$."$special"') IS NOT NULL);
+    WHERE tipo IN (1, 2, 3) OR (tipo = 5 AND CASE WHEN tipo = 5 THEN JSON_VALUE(dato, '$."$special"') END IS NOT NULL);
     INSERT INTO #atomos
     SELECT p.envio_id, p.version_id, p.ruta, p.variable, NULL, CAST(e.[key] AS int) + 1, e.[value], e.[type]
     FROM #planas p CROSS APPLY OPENJSON(CASE WHEN p.tipo = 4 THEN p.dato ELSE N'[]' END) e WHERE p.tipo = 4;
@@ -729,16 +733,18 @@ BEGIN
     INSERT INTO #atomos
     SELECT p.envio_id, p.version_id, p.ruta, p.variable, g.[key], NULL, g.[value], g.[type]
     FROM #planas p CROSS APPLY OPENJSON(CASE WHEN p.tipo = 5 THEN p.dato ELSE N'{}' END) g
-    WHERE p.tipo = 5 AND JSON_VALUE(p.dato, '$."$special"') IS NULL;
+    WHERE p.tipo = 5 AND CASE WHEN p.tipo = 5 THEN JSON_VALUE(p.dato, '$."$special"') END IS NULL;
 
-    ;WITH valores AS (
+    ;WITH conesp AS (
+      SELECT a.*, CASE WHEN a.vtipo = 5 THEN JSON_VALUE(a.v, '$."$special"') END AS sp FROM #atomos a
+    ), valores AS (
       SELECT a.envio_id, a.version_id, a.ruta, a.variable, a.fila, a.posicion,
-             CASE WHEN a.vtipo = 5 AND JSON_VALUE(a.v, '$."$special"') IS NOT NULL THEN s.codigo ELSE a.v END AS valor,
-             CAST(CASE WHEN a.vtipo = 5 AND JSON_VALUE(a.v, '$."$special"') IS NOT NULL THEN 1 ELSE 0 END AS bit) AS especial,
-             CASE WHEN a.vtipo = 5 THEN JSON_VALUE(a.v, '$."$special"') END AS especial_clase
-      FROM #atomos a
-      LEFT JOIN #esp s ON s.version_id = a.version_id AND a.vtipo = 5
-        AND s.clase COLLATE Latin1_General_100_BIN2 = JSON_VALUE(a.v, '$."$special"') COLLATE Latin1_General_100_BIN2
+             CASE WHEN a.sp IS NOT NULL THEN s.codigo ELSE a.v END AS valor,
+             CAST(CASE WHEN a.sp IS NOT NULL THEN 1 ELSE 0 END AS bit) AS especial,
+             a.sp AS especial_clase
+      FROM conesp a
+      LEFT JOIN #esp s ON s.version_id = a.version_id AND a.sp IS NOT NULL
+        AND s.clase COLLATE Latin1_General_100_BIN2 = a.sp COLLATE Latin1_General_100_BIN2
     ), k AS (
       SELECT v.*,
              bi.clave(CONCAT(LOWER(CONVERT(varchar(36), v.envio_id)), N'|', v.variable, N'|', v.ruta, N'|',
