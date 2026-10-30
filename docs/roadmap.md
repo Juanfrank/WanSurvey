@@ -80,8 +80,18 @@ until the switch):
   and column of the PostgreSQL schema exists in the T-SQL migrations. Types, constraints and
   indexes are not compared.
 
-**Left:** stores for metrics, jobs, library, dashboard, geolocation, privacy and analysis; then the
-switch of the controllers from PostgreSQL to the stores (phases 4 and 5).
+**The switch, step 1 (done):** `DB_ENGINE=postgres|mssql` (`src/config.ts`), with `Engine`
+(`src/db/engine.ts`) giving the modules that have moved their SQL Server database. The whole
+application boots on SQL Server (`apps/api/test/mssql/boot.test.ts`), its health check answers from
+SQL Server and its migrations run at start. PostgreSQL's clients connect lazily, so a module that
+has not moved fails only when it is used. Production refuses `mssql` until every module has moved.
+
+**Left:** stores for metrics, jobs, library, dashboard, geolocation, privacy and analysis. The
+switch itself goes module by module, each tested over HTTP on SQL Server: the core first (sign-in,
+users, organisations, projects, teams, audit), then questionnaires, cases and sampling, interviews
+and CATI, web surveys, paper, review, statistics and exports. A fixtures helper that works on both
+engines replaces the raw PostgreSQL SQL the integration tests use today. Then the data copy, load
+measurements and the removal of PostgreSQL (phases 4 and 5).
 
 More lessons: a `Date` parameter travels as `datetime`, which rounds to 3.33 ms, so what is
 written to or compared with a `datetimeoffset(3)` can land a millisecond off: send instants
