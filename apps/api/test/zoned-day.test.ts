@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { dayBounds, dayStart, localDay, nextDay, offsetMinutes } from '../src/stats/zoned-day.js';
+import {
+  dayBounds,
+  dayStart,
+  localDay,
+  nextDay,
+  offsetMinutes,
+  zoneOffsets,
+} from '../src/stats/zoned-day.js';
 
 /** The local days of a project's time zone as UTC instants (statistics on SQL Server use them). */
 describe('zoned days', () => {
@@ -45,5 +52,17 @@ describe('zoned days', () => {
     expect(nextDay('2026-02-28')).toBe('2026-03-01');
     expect(nextDay('2026-12-31')).toBe('2027-01-01');
     expect(nextDay('2028-02-28')).toBe('2028-02-29');
+  });
+});
+
+describe('zoneOffsets', () => {
+  it('gives one offset for a zone without changes and the transitions for one with', () => {
+    const from = new Date('2026-01-01T00:00:00Z');
+    const to = new Date('2026-12-31T00:00:00Z');
+    expect(zoneOffsets('America/Guatemala', from, to)).toEqual([{ start: from, minutes: -360 }]);
+    const ny = zoneOffsets('America/New_York', from, to);
+    expect(ny.map((x) => x.minutes)).toEqual([-300, -240, -300]);
+    expect(ny[1]!.start.toISOString()).toBe('2026-03-08T07:00:00.000Z');
+    expect(ny[2]!.start.toISOString()).toBe('2026-11-01T06:00:00.000Z');
   });
 });

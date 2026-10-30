@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createMssqlDb } from '../../src/db/mssql/connection.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
+import { BiStore } from '../../src/stats/bi-store.mssql.js';
 import { QuestionnaireStore } from '../../src/questionnaires/questionnaire-store.mssql.js';
 
 /**
@@ -413,5 +414,20 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
     await expect(sql`SELECT TOP 1 * FROM bi.fact_respuesta`.execute(app.db)).rejects.toThrow(
       /permission was denied/i,
     );
+  });
+
+  it('refreshes from the application: zones first, only when something changed', async () => {
+    const store = new BiStore();
+    expect(await store.saveZones(app)).toBeGreaterThan(0);
+    expect(await store.refresh(app, true)).toBe(true);
+    expect(await store.refresh(app)).toBe(false);
+    await owner((db) =>
+      sql`UPDATE interviews SET updated_at = SYSDATETIMEOFFSET() WHERE id = ${i2}`.execute(db),
+    );
+    expect(await store.refresh(app)).toBe(true);
+    const days = await rows<{ fecha: string }>(
+      sql`SELECT CONVERT(varchar(10), fecha, 23) AS fecha FROM bi.fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`,
+    );
+    expect(days.map((d) => d.fecha)).toEqual(['2026-11-01', '2026-11-02']);
   });
 });

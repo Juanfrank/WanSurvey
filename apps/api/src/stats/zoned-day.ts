@@ -54,3 +54,38 @@ export function localDay(at: Date, timeZone: string): string {
     .toISOString()
     .slice(0, 10);
 }
+
+/**
+ * The offsets a zone goes through between two instants, as `[start, minutes ahead of UTC]`
+ * pairs: the first starts at `from`, each next one where the clock changes. The analysis model
+ * keeps them (bi.zona) to work out local days in SQL, which cannot read IANA names.
+ */
+export function zoneOffsets(
+  timeZone: string,
+  from: Date,
+  to: Date,
+): { start: Date; minutes: number }[] {
+  const STEP = 6 * 3_600_000;
+  const out = [{ start: from, minutes: offsetMinutes(timeZone, from.getTime()) }];
+  let prev = from.getTime();
+  for (let t = prev + STEP; ; t += STEP) {
+    const at = Math.min(t, to.getTime());
+    const last = out[out.length - 1]!.minutes;
+    if (offsetMinutes(timeZone, at) !== last) {
+      // The change is in (prev, at]: find the minute it happens.
+      let lo = prev;
+      let hi = at;
+      while (hi - lo > 60_000) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (offsetMinutes(timeZone, mid) === last) lo = mid;
+        else hi = mid;
+      }
+      // Clocks change on whole minutes.
+      const start = Math.floor(hi / 60_000) * 60_000;
+      out.push({ start: new Date(start), minutes: offsetMinutes(timeZone, start) });
+    }
+    prev = at;
+    if (at >= to.getTime()) break;
+  }
+  return out;
+}
