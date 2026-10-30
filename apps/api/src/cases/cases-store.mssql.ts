@@ -371,6 +371,36 @@ export class CasesStore {
     return res.rows[0]?.id.toLowerCase() ?? null;
   }
 
+  /**
+   * Closes the project's overdue cases (held longer than `days` since assignment) as EXPIRED and
+   * returns them. Cases downloaded to a device, locked for a call, or with an interview in
+   * progress are left alone.
+   */
+  async expireOverdue(
+    tx: MssqlTx,
+    v: { projectId: string; days: number },
+  ): Promise<{ id: string; assignedTo: string | null; assignedAt: Date }[]> {
+    const res = await sql<{ id: string; assigned_to: string | null; assigned_at: Date }>`
+      UPDATE c SET status = 'finalised', disposition = 'EXPIRED', next_contact_at = NULL,
+        updated_at = SYSDATETIMEOFFSET()
+      OUTPUT inserted.id, inserted.assigned_to, deleted.assigned_at
+      FROM dbo.cases c
+      WHERE c.project_id = ${v.projectId}
+        AND c.status IN ('assigned', 'in_progress')
+        AND c.assigned_to IS NOT NULL
+        AND c.assigned_at < DATEADD(day, ${-v.days}, SYSDATETIMEOFFSET())
+        AND c.checked_out_device IS NULL
+        AND (c.call_lock_until IS NULL OR c.call_lock_until < SYSDATETIMEOFFSET())
+        AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id AND iv.status = 'in_progress')`.execute(
+      tx,
+    );
+    return res.rows.map((r) => ({
+      id: r.id.toLowerCase(),
+      assignedTo: r.assigned_to?.toLowerCase() ?? null,
+      assignedAt: r.assigned_at,
+    }));
+  }
+
   // Assignment rules
 
   async addRule(
