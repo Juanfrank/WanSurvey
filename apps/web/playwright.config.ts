@@ -4,8 +4,6 @@ import { MAIL_DIR } from './e2e/mail.js';
 const API_PORT = 3100;
 const WEB_PORT = 4173;
 const GEO_PORT = 3200;
-const adminUrl =
-  process.env.E2E_DATABASE_ADMIN_URL ?? 'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';
 const redisUrl = process.env.E2E_REDIS_URL ?? 'redis://localhost:6379/1';
 const appUrl =
   process.env.E2E_DATABASE_URL ??

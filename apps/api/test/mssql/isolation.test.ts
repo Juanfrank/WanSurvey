@@ -51,7 +51,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: isolation by organisation', () => {
     await owner.destroy();
   });
   afterAll(async () => {
-    await app.destroy();
+    await app?.destroy();
   });
 
   const project = (tenantId: string, code: string) => ({

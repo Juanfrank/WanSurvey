@@ -75,7 +75,7 @@ jobs:
         run: pnpm --filter @wansurvey/api test:mssql
         env:
           MSSQL_ADMIN_URL: mssql://sa:Wansurvey_Test1%21@localhost:1433/wansurvey_test?trustServerCertificate=true
-          MSSQL_URL: mssql://wansurvey_app:Wansurvey_App1%21@localhost:1433/wansurvey_test?trustServerCertificate=true
+          MSSQL_URL: mssql://wansurvey_app:Tr0ub4dor-Stronger%21@localhost:1433/wansurvey_test?trustServerCertificate=true
 
   e2e:
     runs-on: ubuntu-latest
