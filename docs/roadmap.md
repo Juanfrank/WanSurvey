@@ -116,6 +116,20 @@ feedback), paper (PAPI, scans), metrics and goals, the live dashboard, geolocati
 analysis and sharing, statistics and the bi service, exports, background jobs (sweeper, claims,
 worker). Production keeps refusing `mssql` until they move.
 
+Sample imports and the sampling selector have moved too (`SampleTx` extends `CasesTx`:
+`src/sampling/sampling-repo.ts`; the frame, plans, staged import rows and the cross-case checks).
+
+**Design for the modules that share the interview runtime** (interviews, CAPI, CATI, review, web
+surveys, paper): `InterviewsService` runs submit hooks and contributors with the open
+transaction, so every module that hooks in needs to reach its own operations on the same
+transaction. The plan: a `NativeTx` (`{ kind: 'pg', tx } | { kind: 'mssql', tx }` plus the tenant)
+that each module's repository can wrap into its own `XTx` (`repo.wrap(native)`, as
+`PgCasesRepo.wrap` already does for a Drizzle transaction), and `inTenant` hands out both the
+module's `XTx` and the `NativeTx`. Hooks receive the `NativeTx` and wrap it with their own
+repository. The stores already written for these modules (`interviews-store.mssql.ts`,
+`cati-store.mssql.ts`, `review-store.mssql.ts`, `cawi-store.mssql.ts`, `papi-store.mssql.ts`)
+follow the services one to one, so the SQL Server side of each repository leans on them.
+
 **Left:** stores for metrics, jobs, dashboard, geolocation and privacy. The
 switch itself goes module by module, each tested over HTTP on SQL Server: the core first (sign-in,
 users, organisations, projects, teams, audit), then questionnaires, cases and sampling, interviews
