@@ -46,6 +46,15 @@ export interface MssqlSchema {
     languages: JsonText;
     created_at: Instant;
   };
+  memberships: {
+    id: string;
+    tenant_id: string;
+    user_id: string;
+    role: string;
+    project_id: string | null;
+    scope_key: Generated<string>;
+    created_at: Instant;
+  };
   audit_log: {
     id: string;
     tenant_id: string;
@@ -445,6 +454,18 @@ export interface MssqlSchema {
     slug: string;
     active: Generated<boolean>;
     created_at: Instant;
+  };
+  teams: {
+    id: string;
+    tenant_id: string;
+    name: string;
+    leader_user_id: string | null;
+    created_at: Instant;
+  };
+  team_members: {
+    team_id: string;
+    user_id: string;
+    tenant_id: string;
   };
   feedback_points: {
     id: string;
