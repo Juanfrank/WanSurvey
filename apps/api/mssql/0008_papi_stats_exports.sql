@@ -118,7 +118,7 @@ CREATE TABLE exports (
   file_name nvarchar(450) NULL,
   content_type nvarchar(200) NULL,
   -- Exports made before files went to storage keep theirs here.
-  file varbinary(max) NULL,
+  [file] varbinary(max) NULL,
   -- The file in export storage (Blob Storage, or a directory in development).
   storage_key nvarchar(450) NULL,
   size int NULL,
