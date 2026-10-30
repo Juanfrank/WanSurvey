@@ -1,5 +1,3 @@
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -19,13 +17,6 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: the application boots', () => {
 
   beforeAll(async () => {
     await runMssqlMigrations(ADMIN!, APP!);
-    Object.assign(process.env, {
-      DB_ENGINE: 'mssql',
-      DATABASE_URL: APP,
-      DATABASE_ADMIN_URL: ADMIN,
-      APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-      EXPORT_DIR: join(tmpdir(), 'wansurvey-test-exports'),
-    });
     resetConfigCache();
     // Some modules read the configuration when they are imported: after the environment is set.
     const { createApp } = await import('../../src/app.js');
@@ -34,7 +25,6 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: the application boots', () => {
   });
   afterAll(async () => {
     await app?.close();
-    delete process.env.DB_ENGINE;
     resetConfigCache();
   });
 

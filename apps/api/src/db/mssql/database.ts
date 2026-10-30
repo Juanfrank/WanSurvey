@@ -167,6 +167,62 @@ export class MssqlDatabase {
     return res.rows[0]?.id.toLowerCase() ?? null;
   }
 
+  // Sign-in lookups run before any organisation or person is known, through owner procedures.
+
+  async userByEmail(email: string): Promise<{
+    id: string;
+    password_hash: string | null;
+    status: string;
+    totp_enabled: boolean;
+    last_tenant_id: string | null;
+  } | null> {
+    const res = await sql<{
+      id: string;
+      password_hash: string | null;
+      status: string;
+      totp_enabled: boolean;
+      last_tenant_id: string | null;
+    }>`EXEC dbo.auth_user_by_email @email = ${email}`.execute(this.db);
+    return res.rows[0] ?? null;
+  }
+
+  /** Until when the account is locked after failed attempts; null when it is not. */
+  async accountLockedUntil(userId: string): Promise<Date | null> {
+    const res = await sql<{ until: Date | null }>`
+      EXEC dbo.account_locked_until @user_id = ${userId}`.execute(this.db);
+    return res.rows[0]?.until ? new Date(res.rows[0].until) : null;
+  }
+
+  /** Counts a failed password or code; returns the end of the lock it caused, if any. */
+  async accountFailed(userId: string, max: number, lockSeconds: number): Promise<Date | null> {
+    const res = await sql<{ until: Date | null }>`
+      EXEC dbo.account_failed @user_id = ${userId}, @max = ${max}, @lock_seconds = ${lockSeconds}`.execute(
+      this.db,
+    );
+    return res.rows[0]?.until ? new Date(res.rows[0].until) : null;
+  }
+
+  async accountSucceeded(userId: string): Promise<void> {
+    await sql`EXEC dbo.account_succeeded @user_id = ${userId}`.execute(this.db);
+  }
+
+  /** Organisations the person is an active member of (or every membership). */
+  async userTenants(
+    userId: string,
+    includeInactive = false,
+  ): Promise<{ id: string; slug: string; name: string; memberStatus: string }[]> {
+    const res = await sql<{ id: string; slug: string; name: string; member_status: string }>`
+      EXEC dbo.user_tenants @user_id = ${userId}, @include_inactive = ${includeInactive ? 1 : 0}`.execute(
+      this.db,
+    );
+    return res.rows.map((r) => ({
+      id: r.id.toLowerCase(),
+      slug: r.slug,
+      name: r.name,
+      memberStatus: r.member_status,
+    }));
+  }
+
   /** Whether the database answers. */
   async probe(): Promise<boolean> {
     try {

@@ -30,8 +30,9 @@ import {
 } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, isUuid, type Tx, type UserTenant } from '../db/database.js';
+import { AUTH_REPO, type AuthRepo, type AuthTx } from './auth-repo.js';
 import { SsoConfigs } from './sso-config.js';
-import { memberships, sessions, tenantMembers, userTokens, users } from '../db/schema.js';
+import { sessions, tenantMembers, userTokens, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
@@ -100,6 +101,7 @@ export class AuthService {
 
   constructor(
     private readonly database: Database,
+    @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
@@ -114,11 +116,11 @@ export class AuthService {
     input: { email: string; password: string; tenant?: string },
     client: ClientInfo,
   ): Promise<LoginResult> {
-    const user = await this.database.authUserByEmail(input.email);
+    const user = await this.repo.userByEmail(input.email);
     // A locked account is not tried, so guesses during the lock tell nothing; it answers as a
     // wrong password would, after the same work (an address without an account never locks,
     // so any other answer would tell that one has). Its owner hears of the lock by e-mail.
-    const lockedUntil = user ? await this.database.accountLockedUntil(user.id) : null;
+    const lockedUntil = user ? await this.repo.lockedUntil(user.id) : null;
     const ok = await verifyPassword(lockedUntil ? null : user?.passwordHash, input.password);
     if (!user || !ok || user.status !== 'active') {
       if (user) {
@@ -137,8 +139,8 @@ export class AuthService {
     }
     // With a second factor the count starts again only after the code: otherwise signing in
     // again would reset it between guesses of the code.
-    if (!user.totpEnabled) await this.database.accountSucceeded(user.id);
-    const tenants = await this.database.userTenants(user.id);
+    if (!user.totpEnabled) await this.repo.succeeded(user.id);
+    const tenants = await this.repo.userTenants(user.id);
     if (tenants.length === 0) throw invalidCredentials();
     // Organisations that require Microsoft sign-in accept a password only from their owners.
     const enforced = new Set(
@@ -174,12 +176,12 @@ export class AuthService {
   }
 
   async listTenants(ctx: AuthContext): Promise<TenantSummary[]> {
-    return (await this.database.userTenants(ctx.userId)).map(summary);
+    return (await this.repo.userTenants(ctx.userId)).map(summary);
   }
 
   /** Moves the user to another organisation: the current session ends and a new one starts. */
   async switchTenant(ctx: AuthContext, tenantId: string, client: ClientInfo): Promise<LoginResult> {
-    const tenants = await this.database.userTenants(ctx.userId);
+    const tenants = await this.repo.userTenants(ctx.userId);
     const target = tenants.find((t) => t.id === tenantId);
     if (!target) {
       throw new ForbiddenException({
@@ -205,26 +207,18 @@ export class AuthService {
     ) {
       throw this.ssoRequired(target);
     }
-    const totpEnabled = await this.database.withTenant(
+    const totpEnabled = await this.repo.inTenant(
       ctx.tenantId,
-      async (tx) => {
-        const [user] = await tx
-          .select({ totpEnabled: users.totpEnabled })
-          .from(users)
-          .where(eq(users.id, ctx.userId));
-        await tx
-          .update(sessions)
-          .set({ revokedAt: new Date() })
-          .where(eq(sessions.id, ctx.sessionId));
-        await this.audit.record(
-          tx,
-          ctx.tenantId,
+      async (t) => {
+        const account = await t.account(ctx.userId);
+        await t.revokeSession(ctx.sessionId);
+        await t.audit(
           this.audit.fromContext(ctx, {
             action: 'auth.tenant_switched',
             details: { to: target.id },
           }),
         );
-        return user!.totpEnabled;
+        return account!.totpEnabled;
       },
       ctx.userId,
     );
@@ -267,9 +261,9 @@ export class AuthService {
       client: ClientInfo;
     },
   ) {
-    return this.database.withTenant(
+    return this.repo.inTenant(
       tenantId,
-      (tx) => this.openSessionIn(tx, tenantId, userId, opts),
+      (t) => this.openSessionIn(t, tenantId, userId, opts),
       userId,
     );
   }
@@ -279,7 +273,7 @@ export class AuthService {
    * `roles` and `lastTenantId`, when the caller read them already, spare two statements.
    */
   async openSessionIn(
-    tx: Tx,
+    t: AuthTx,
     tenantId: string,
     userId: string,
     opts: {
@@ -293,14 +287,7 @@ export class AuthService {
       lastTenantId?: string | null;
     },
   ) {
-    const roles =
-      opts.roles ??
-      (
-        await tx
-          .select({ role: memberships.role })
-          .from(memberships)
-          .where(eq(memberships.userId, userId))
-      ).map((r) => r.role);
+    const roles = opts.roles ?? (await t.roles(userId));
     const needs2fa = roles.some((r) => ROLES_REQUIRING_2FA.includes(r as Role));
     const mfaState: AuthContext['mfaState'] = opts.mfaVerifiedBy
       ? 'ok'
@@ -311,22 +298,23 @@ export class AuthService {
           : 'ok';
     const token = randomToken();
     const csrfToken = randomToken(24);
-    await tx.insert(sessions).values({
-      tenantId,
-      userId,
-      tokenHash: sha256Hex(token),
-      csrfToken,
-      mfaState,
-      mfaMethod: opts.mfaVerifiedBy,
-      authMethod: opts.authMethod,
-      idpTenant: opts.idpTenant ?? null,
-      ip: opts.client.ip,
-      userAgent: opts.client.userAgent,
-      expiresAt: new Date(Date.now() + this.config.SESSION_ABSOLUTE_HOURS * 3600_000),
-    });
-    if (opts.lastTenantId !== tenantId)
-      await tx.update(users).set({ lastTenantId: tenantId }).where(eq(users.id, userId));
-    await this.audit.record(tx, tenantId, {
+    await t.openSession(
+      {
+        tenantId,
+        userId,
+        tokenHash: sha256Hex(token),
+        csrfToken,
+        mfaState,
+        mfaMethod: opts.mfaVerifiedBy,
+        authMethod: opts.authMethod,
+        idpTenant: opts.idpTenant ?? null,
+        ip: opts.client.ip,
+        userAgent: opts.client.userAgent,
+        expiresAt: new Date(Date.now() + this.config.SESSION_ABSOLUTE_HOURS * 3600_000),
+      },
+      opts.lastTenantId ?? null,
+    );
+    await t.audit({
       action: opts.action,
       actorUserId: userId,
       details: { mfaState, method: opts.authMethod },
@@ -336,10 +324,8 @@ export class AuthService {
   }
 
   private async isOwnerIn(tenantId: string, userId: string): Promise<boolean> {
-    const roles = await this.database.withTenant(tenantId, (tx) =>
-      tx.select({ role: memberships.role }).from(memberships).where(eq(memberships.userId, userId)),
-    );
-    return roles.some((r) => r.role === 'owner');
+    const roles = await this.repo.inTenant(tenantId, (t) => t.roles(userId));
+    return roles.includes('owner');
   }
 
   private ssoRequired(t: { slug: string; name: string }) {
@@ -352,45 +338,34 @@ export class AuthService {
 
   /** Records an account-level event in every organisation the user belongs to. */
   private async auditEverywhere(userId: string, entry: AuditEntry) {
-    for (const t of await this.database.userTenants(userId, true)) {
-      await this.database.withTenant(t.id, (tx) => this.audit.record(tx, t.id, entry));
+    for (const t of await this.repo.userTenants(userId, true)) {
+      await this.repo.inTenant(t.id, (x) => x.audit(entry));
     }
   }
 
   async logout(ctx: AuthContext): Promise<void> {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      await tx
-        .update(sessions)
-        .set({ revokedAt: new Date() })
-        .where(eq(sessions.id, ctx.sessionId));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
-        this.audit.fromContext(ctx, { action: 'auth.logout' }),
-      );
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      await t.revokeSession(ctx.sessionId);
+      await t.audit(this.audit.fromContext(ctx, { action: 'auth.logout' }));
     });
   }
 
   async me(ctx: AuthContext) {
-    const [user] = await this.database.withTenant(
+    const account = await this.repo.inTenant(
       ctx.tenantId,
-      (tx) =>
-        tx
-          .select({
-            id: users.id,
-            email: users.email,
-            name: users.name,
-            firstName: users.firstName,
-            languages: users.languages,
-            totpEnabled: users.totpEnabled,
-            idCode: tenantMembers.idCode,
-            phoneExtension: tenantMembers.phoneExtension,
-          })
-          .from(users)
-          .innerJoin(tenantMembers, eq(tenantMembers.userId, users.id))
-          .where(eq(users.id, ctx.userId)),
+      (t) => t.account(ctx.userId),
       ctx.userId,
     );
+    const user = account && {
+      id: ctx.userId,
+      email: account.email,
+      name: account.name,
+      firstName: account.firstName,
+      languages: account.languages,
+      totpEnabled: account.totpEnabled,
+      idCode: account.idCode,
+      phoneExtension: account.phoneExtension,
+    };
     const permissions = new Set<Permission>();
     for (const m of ctx.memberships)
       if (m.projectId === null)
@@ -473,31 +448,16 @@ export class AuthService {
   async verifyTotp(ctx: AuthContext, code: string) {
     if (ctx.mfaState !== 'pending')
       throw new BadRequestException('No code is expected for this session');
-    const lockedUntil = await this.database.accountLockedUntil(ctx.userId);
+    const lockedUntil = await this.repo.lockedUntil(ctx.userId);
     if (lockedUntil) throw accountLocked(lockedUntil);
-    const ok = await this.database.withTenant(
+    const ok = await this.repo.inTenant(
       ctx.tenantId,
-      async (tx) => {
-        const [user] = await tx
-          .select()
-          .from(users)
-          .where(eq(users.id, ctx.userId))
-          // One check at a time per account, so a code cannot be used twice in parallel.
-          .for('update');
-        const secret = decryptField(user!.totpSecretEnc!, this.config.APP_ENCRYPTION_KEY);
-        const step = totpStep(secret, code);
-        // Each code works once: a code seen (or stolen) after use is refused.
-        const valid = step !== null && (user!.totpLastStep ?? -1) < step;
-        if (valid) {
-          await tx.update(users).set({ totpLastStep: step }).where(eq(users.id, ctx.userId));
-          await tx
-            .update(sessions)
-            .set({ mfaState: 'ok', mfaMethod: 'totp' })
-            .where(eq(sessions.id, ctx.sessionId));
-        }
-        await this.audit.record(
-          tx,
-          ctx.tenantId,
+      async (t) => {
+        const valid = await t.acceptTotp(ctx.userId, (secretEnc) =>
+          totpStep(decryptField(secretEnc, this.config.APP_ENCRYPTION_KEY), code),
+        );
+        if (valid) await t.setMfa(ctx.sessionId, 'ok', 'totp');
+        await t.audit(
           this.audit.fromContext(ctx, { action: valid ? 'auth.mfa_verified' : 'auth.mfa_failed' }),
         );
         return valid;
@@ -508,7 +468,7 @@ export class AuthService {
       await this.countFailure(ctx.userId);
       throw new UnauthorizedException({ code: 'INVALID_CODE', message: 'Invalid code' });
     }
-    await this.database.accountSucceeded(ctx.userId);
+    await this.repo.succeeded(ctx.userId);
   }
 
   /**
@@ -517,7 +477,7 @@ export class AuthService {
    */
   private async countFailure(userId: string) {
     if (!this.config.LOGIN_LOCK_AFTER) return;
-    const until = await this.database.accountFailed(
+    const until = await this.repo.failed(
       userId,
       this.config.LOGIN_LOCK_AFTER,
       this.config.LOGIN_LOCK_MINUTES * 60,
@@ -529,9 +489,7 @@ export class AuthService {
   }
 
   private async notifyLocked(userId: string, until: Date) {
-    const [row] = await this.database.withUser(userId, (tx) =>
-      tx.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, userId)),
-    );
+    const row = await this.repo.contactOf(userId);
     if (!row) return;
     await this.mailer.send({
       to: row.email,

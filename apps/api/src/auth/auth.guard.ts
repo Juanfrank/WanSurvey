@@ -7,8 +7,7 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { roleMatrix, type Permission, type Role } from '@wansurvey/schema';
-import { eq, getTableColumns, sql } from 'drizzle-orm';
+import type { Permission } from '@wansurvey/schema';
 import {
   ALLOW_PENDING_MFA,
   can,
@@ -21,45 +20,11 @@ import {
 import { CSRF_HEADER, SESSION_COOKIE } from '../common/cookies.js';
 import { safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { columnsAs, Database, isUuid, Prepared } from '../db/database.js';
-import { sessions, tenants } from '../db/schema.js';
+import { isUuid } from '../db/database.js';
+import { AUTH_REPO, grantsOf, type AuthRepo } from './auth-repo.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOUCH_INTERVAL_MS = 60_000;
-
-/**
- * Everything a request's session needs, in one statement: the session, the account and its
- * membership here, the person's roles and what each role may do in this organisation. Every
- * signed-in request runs it (devices sync every few seconds), so it is built once.
- */
-const sessionByToken = new Prepared<{
-  session: typeof sessions.$inferSelect;
-  email: string;
-  userStatus: string;
-  memberStatus: string;
-  rolePermissions: unknown;
-  grants: { role: string; projectId: string | null }[];
-}>(
-  () => sql`
-    select ${columnsAs(sessions, 's', 'session')}, u.email as "email", u.status as "userStatus",
-           m.status as "memberStatus", t.role_permissions,
-           coalesce((select json_agg(json_build_object('role', g.role, 'projectId', g.project_id))
-                     from memberships g where g.user_id = s.user_id), '[]'::json) as "grants"
-    from sessions s
-    join users u on u.id = s.user_id
-    join tenant_members m on m.user_id = s.user_id
-    join tenants t on t.id = s.tenant_id
-    where s.token_hash = ${sql.placeholder('hash')} and s.revoked_at is null
-    limit 1`,
-  {
-    session: getTableColumns(sessions),
-    email: 'raw',
-    userStatus: 'raw',
-    memberStatus: 'raw',
-    rolePermissions: tenants.rolePermissions,
-    grants: 'raw',
-  },
-);
 
 /** Parses `<tenantId>.<token>` from the session cookie. */
 export function parseSessionCookie(value: unknown): { tenantId: string; token: string } | null {
@@ -80,7 +45,7 @@ export function parseSessionCookie(value: unknown): { tenantId: string; token: s
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly database: Database,
+    @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -139,50 +104,27 @@ export class AuthGuard implements CanActivate {
     const now = new Date();
     const idleMs = this.config.SESSION_IDLE_MINUTES * 60_000;
 
-    const auth = await this.database.withTenant(cookie.tenantId, async (tx) => {
-      const [row] = await sessionByToken.run(tx, { hash: sha256Hex(cookie.token) });
-      if (!row) return null;
-      const { session, memberStatus } = row;
-      const user = { id: session.userId, email: row.email, status: row.userStatus };
-      // The account must be active, and still an active member of this organisation.
-      if (
-        user.status !== 'active' ||
-        memberStatus !== 'active' ||
-        session.expiresAt <= now ||
-        now.getTime() - session.lastSeenAt.getTime() > idleMs
-      ) {
-        await tx.update(sessions).set({ revokedAt: now }).where(eq(sessions.id, session.id));
-        return null;
-      }
-      if (now.getTime() - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
-        await tx.update(sessions).set({ lastSeenAt: now }).where(eq(sessions.id, session.id));
-      }
-      const grants = row.grants;
-      // What each role may do here, with the organisation's changes.
-      const tenant = { rolePermissions: row.rolePermissions as never };
-      const matrix = roleMatrix(tenant?.rolePermissions);
-      return {
-        tenantId: cookie.tenantId,
-        userId: user.id,
-        sessionId: session.id,
-        email: user.email,
-        memberships: grants
-          // A role this version no longer knows grants nothing.
-          .filter((g) => g.role in matrix)
-          .map((g) => ({
-            role: g.role as Role,
-            projectId: g.projectId,
-            permissions: matrix[g.role as Role],
-          })),
-        mfaState: session.mfaState as AuthContext['mfaState'],
-        mfaMethod: session.mfaMethod as AuthContext['mfaMethod'],
-        authMethod: session.authMethod as AuthContext['authMethod'],
-        idpTenant: session.idpTenant,
-        csrfToken: session.csrfToken,
-        ip: req.ip ?? null,
-        userAgent: req.headers['user-agent'] ?? null,
-      } satisfies AuthContext;
-    });
+    const session = await this.repo.session(
+      cookie.tenantId,
+      sha256Hex(cookie.token),
+      now,
+      idleMs,
+      TOUCH_INTERVAL_MS,
+    );
+    const auth: AuthContext | null = session && {
+      tenantId: cookie.tenantId,
+      userId: session.userId,
+      sessionId: session.id,
+      email: session.email,
+      memberships: grantsOf(session),
+      mfaState: session.mfaState as AuthContext['mfaState'],
+      mfaMethod: session.mfaMethod as AuthContext['mfaMethod'],
+      authMethod: session.authMethod as AuthContext['authMethod'],
+      idpTenant: session.idpTenant,
+      csrfToken: session.csrfToken,
+      ip: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+    };
     if (!auth)
       throw new UnauthorizedException({
         code: 'SESSION_EXPIRED',

@@ -60,6 +60,7 @@ import { SsoService } from './auth/sso.service.js';
 import { CONFIG, loadConfig } from './config.js';
 import { Database } from './db/database.js';
 import { Engine } from './db/engine.js';
+import { AUTH_REPO, MssqlAuthRepo, PgAuthRepo } from './auth/auth-repo.js';
 import { HealthController } from './health/health.controller.js';
 import {
   ConsoleMailer,
@@ -191,6 +192,14 @@ export class AppModule {
         },
         Database,
         Engine,
+        PgAuthRepo,
+        MssqlAuthRepo,
+        {
+          provide: AUTH_REPO,
+          useFactory: (engine: Engine, pg: PgAuthRepo, ms: MssqlAuthRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgAuthRepo, MssqlAuthRepo],
+        },
         AuditService,
         AuthService,
         SsoService,

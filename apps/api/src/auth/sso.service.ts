@@ -11,6 +11,7 @@ import { Database, isUuid, pgCode, Prepared } from '../db/database.js';
 import { memberships, sessions, tenantMembers, userIdentities, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { parseSessionCookie } from './auth.guard.js';
+import { PgAuthRepo } from './auth-repo.js';
 import { AuthService, type ClientInfo } from './auth.service.js';
 
 const STATE_TTL_MS = 10 * 60_000;
@@ -103,6 +104,7 @@ export class SsoService {
     private readonly database: Database,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    private readonly pgAuth: PgAuthRepo,
     private readonly configs: SsoConfigs,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
@@ -267,7 +269,8 @@ export class SsoService {
     const quick = await this.database.withTenant(st.tenantId, async (tx) => {
       const [a] = await linkedAccount.run(tx, { issuer, subject });
       if (!a || a.userStatus !== 'active' || a.memberStatus !== 'active') return null;
-      return this.auth.openSessionIn(tx, st.tenantId, a.userId, {
+      // Microsoft sign-in still runs on PostgreSQL (docs/roadmap.md).
+      return this.auth.openSessionIn(this.pgAuth.wrap(tx, st.tenantId), st.tenantId, a.userId, {
         totpEnabled: a.totpEnabled,
         mfaVerifiedBy: mfa ? 'entra' : null,
         authMethod: 'sso',
