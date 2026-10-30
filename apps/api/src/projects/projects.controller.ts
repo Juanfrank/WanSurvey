@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -33,13 +34,11 @@ import {
   ShortcutSettings,
   projectSettings,
 } from '@wansurvey/schema';
-import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
-import { projectLogos, projects, tenants } from '../db/schema.js';
+import { ORG_REPO, type OrgRepo } from './org-repo.js';
 
 const LOGO_MAX = 512 * 1024;
 
@@ -99,7 +98,7 @@ const withSettings = <T extends { settings: unknown }>(p: T) => ({
 @Controller('projects')
 export class ProjectsController {
   constructor(
-    private readonly database: Database,
+    @Inject(ORG_REPO) private readonly repo: OrgRepo,
     private readonly audit: AuditService,
   ) {}
 
@@ -107,17 +106,12 @@ export class ProjectsController {
   @Get()
   @RequirePermission('projects.read', { anyProject: true })
   list(@Auth() ctx: AuthContext) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      if (can(ctx.memberships, 'projects.read'))
-        return (await tx.select().from(projects).orderBy(projects.name)).map(withSettings);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      if (can(ctx.memberships, 'projects.read')) return (await t.projects()).map(withSettings);
       const ids = ctx.memberships
         .filter((m) => m.projectId !== null && can([m], 'projects.read', m.projectId))
         .map((m) => m.projectId!);
-      return ids.length
-        ? (
-            await tx.select().from(projects).where(inArray(projects.id, ids)).orderBy(projects.name)
-          ).map(withSettings)
-        : [];
+      return (await t.projects(ids)).map(withSettings);
     });
   }
 
@@ -128,48 +122,38 @@ export class ProjectsController {
     @Auth() ctx: AuthContext,
     @Body(new ZodPipe(ProjectBody)) body: z.infer<typeof ProjectBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [dup] = await tx
-        .select({ id: projects.id })
-        .from(projects)
-        .where(eq(projects.code, body.code));
-      if (dup) throw new ConflictException('A project with this code already exists');
-      const [org] = await tx
-        .select({ settings: tenants.settings })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      if (await t.codeTaken(body.code))
+        throw new ConflictException('A project with this code already exists');
+      const org = await t.tenant();
       const defaults = (org?.settings ?? {}) as {
         defaultLanguage?: string;
         defaultTimezone?: string;
       };
-      const [project] = await tx
-        .insert(projects)
-        .values({
-          tenantId: ctx.tenantId,
-          ...body,
-          timezone: body.timezone ?? defaults.defaultTimezone ?? 'UTC',
-          languages: body.languages ?? [defaults.defaultLanguage ?? 'es'],
-        })
-        .returning();
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      const project = await t.createProject({
+        name: body.name,
+        code: body.code,
+        modesEnabled: body.modesEnabled,
+        timezone: body.timezone ?? defaults.defaultTimezone ?? 'UTC',
+        languages: body.languages ?? [defaults.defaultLanguage ?? 'es'],
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'project.created',
           targetType: 'project',
-          targetId: project!.id,
+          targetId: project.id,
           details: body,
         }),
       );
-      return withSettings(project!);
+      return withSettings(project);
     });
   }
 
   @Get(':id')
   @RequirePermission('projects.read', { projectParam: 'id' })
   get(@Auth() ctx: AuthContext, @Param('id') id: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [project] = await tx.select().from(projects).where(eq(projects.id, id));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const project = await t.project(id);
       if (!project) throw new NotFoundException('Project not found');
       return withSettings(project);
     });
@@ -183,24 +167,10 @@ export class ProjectsController {
     @Param('id') id: string,
     @Body(new ZodPipe(ProjectPatch)) body: z.infer<typeof ProjectPatch>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const { settings, ...fields } = body;
-      const [current] = await tx
-        .select({ settings: projects.settings })
-        .from(projects)
-        .where(eq(projects.id, id));
-      if (!current) throw new NotFoundException('Project not found');
-      const [project] = await tx
-        .update(projects)
-        .set({
-          ...fields,
-          ...(settings ? { settings: { ...projectSettings(current.settings), ...settings } } : {}),
-        })
-        .where(eq(projects.id, id))
-        .returning();
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const project = await t.updateProject(id, body);
+      if (!project) throw new NotFoundException('Project not found');
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'project.updated',
           targetType: 'project',
@@ -208,7 +178,7 @@ export class ProjectsController {
           details: body,
         }),
       );
-      return withSettings(project!);
+      return withSettings(project);
     });
   }
 
@@ -230,25 +200,10 @@ export class ProjectsController {
         code: 'NOT_AN_IMAGE',
         message: 'Use a PNG, JPEG, WebP or GIF image',
       });
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [p] = await tx.select({ id: projects.id }).from(projects).where(eq(projects.id, id));
-      if (!p) throw new NotFoundException('Project not found');
-      const now = new Date();
-      await tx
-        .insert(projectLogos)
-        .values({ projectId: id, tenantId: ctx.tenantId, contentType, image: file.buffer })
-        .onConflictDoUpdate({
-          target: projectLogos.projectId,
-          set: { contentType, image: file.buffer, updatedAt: now },
-        });
-      const [project] = await tx
-        .update(projects)
-        .set({ logoUpdatedAt: now })
-        .where(eq(projects.id, id))
-        .returning();
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const project = await t.setLogo(id, { contentType, image: file.buffer });
+      if (!project) throw new NotFoundException('Project not found');
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'project.updated',
           targetType: 'project',
@@ -256,7 +211,7 @@ export class ProjectsController {
           details: { logo: contentType, size: file.size },
         }),
       );
-      return withSettings(project!);
+      return withSettings(project);
     });
   }
 
@@ -267,13 +222,7 @@ export class ProjectsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
   ) {
-    const logo = await this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [l] = await tx
-        .select({ contentType: projectLogos.contentType, image: projectLogos.image })
-        .from(projectLogos)
-        .where(eq(projectLogos.projectId, id));
-      return l;
-    });
+    const logo = await this.repo.inTenant(ctx.tenantId, (t) => t.logo(id));
     if (!logo) throw new NotFoundException('No logo');
     res.setHeader('Content-Type', logo.contentType);
     res.setHeader('Cache-Control', 'private, max-age=86400');
@@ -284,17 +233,10 @@ export class ProjectsController {
   @Delete(':id/logo')
   @RequirePermission('projects.update', { projectParam: 'id' })
   removeLogo(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await tx.delete(projectLogos).where(eq(projectLogos.projectId, id));
-      const [project] = await tx
-        .update(projects)
-        .set({ logoUpdatedAt: null })
-        .where(eq(projects.id, id))
-        .returning();
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const project = await t.removeLogo(id);
       if (!project) throw new NotFoundException('Project not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'project.updated',
           targetType: 'project',

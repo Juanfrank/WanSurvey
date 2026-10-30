@@ -1,6 +1,5 @@
-import { Body, Controller, Get, Patch, Put } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Patch, Put } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { eq } from 'drizzle-orm';
 import {
   CUSTOM_ROLES,
   PERMISSIONS,
@@ -15,8 +14,7 @@ import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
-import { tenants } from '../db/schema.js';
+import { ORG_REPO, type OrgRepo } from '../projects/org-repo.js';
 
 /** Organisation-wide defaults; keys left out of a PATCH keep their value. */
 export const TenantSettings = z
@@ -54,17 +52,14 @@ const sameSet = (a: readonly Permission[], b: readonly Permission[]) =>
 @Controller('tenant')
 export class TenantsController {
   constructor(
-    private readonly database: Database,
+    @Inject(ORG_REPO) private readonly repo: OrgRepo,
     private readonly audit: AuditService,
   ) {}
 
   @Get()
   @RequirePermission('tenant.read')
   get(@Auth() ctx: AuthContext) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, ctx.tenantId));
-      return tenant;
-    });
+    return this.repo.inTenant(ctx.tenantId, (t) => t.tenant());
   }
 
   @Patch()
@@ -74,24 +69,9 @@ export class TenantsController {
     @Auth() ctx: AuthContext,
     @Body(new ZodPipe(TenantPatch)) body: z.infer<typeof TenantPatch>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [current] = await tx
-        .select({ settings: tenants.settings })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId));
-      const [tenant] = await tx
-        .update(tenants)
-        .set({
-          ...body,
-          ...(body.settings
-            ? { settings: { ...((current?.settings as object) ?? {}), ...body.settings } }
-            : {}),
-        })
-        .where(eq(tenants.id, ctx.tenantId))
-        .returning();
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const tenant = await t.updateTenant(body);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'tenant.updated',
           targetType: 'tenant',
@@ -107,11 +87,8 @@ export class TenantsController {
   @Get('roles')
   @RequirePermission('tenant.read')
   roles(@Auth() ctx: AuthContext) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [tenant] = await tx
-        .select({ rolePermissions: tenants.rolePermissions })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const tenant = await t.tenant();
       const matrix = roleMatrix(tenant?.rolePermissions);
       return {
         roles: ROLES.map((role) => ({
@@ -143,20 +120,14 @@ export class TenantsController {
         matrix[r],
       ]),
     );
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [current] = await tx
-        .select({ rolePermissions: tenants.rolePermissions })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId));
-      await tx.update(tenants).set({ rolePermissions: kept }).where(eq(tenants.id, ctx.tenantId));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      const before = await t.setRolePermissions(kept);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'tenant.roles_updated',
           targetType: 'tenant',
           targetId: ctx.tenantId,
-          details: { before: current?.rolePermissions ?? {}, after: kept },
+          details: { before, after: kept },
         }),
       );
     });
