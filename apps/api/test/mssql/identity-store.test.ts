@@ -20,6 +20,8 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: sign-in identity', () => {
   let app: MssqlDatabase;
   const store = new IdentityStore();
   const stamp = Date.now().toString(36);
+  const org = `acme-${stamp}.org`;
+  const com = `acme-${stamp}.com`;
   const a = { id: randomUUID(), slug: `da-${stamp}` };
   const b = { id: randomUUID(), slug: `db-${stamp}` };
   const ana = randomUUID();
@@ -98,7 +100,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: sign-in identity', () => {
         clientSecretEnc: 'enc-1',
         enabled: true,
         enforceSso: false,
-        allowedDomains: ['acme.org'],
+        allowedDomains: [org],
       }),
     );
     expect(first).toMatchObject({
@@ -107,27 +109,29 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: sign-in identity', () => {
       clientSecretEnc: 'enc-1',
       enabled: true,
       enforceSso: false,
-      allowedDomains: ['acme.org'],
+      allowedDomains: [org],
     });
     const second = await app.withTenant(a.id, (tx) =>
       store.saveSso(tx, a.id, {
         ...first,
         clientSecretEnc: null,
         enforceSso: true,
-        allowedDomains: ['acme.org', 'acme.com'],
+        allowedDomains: [org, com],
       }),
     );
     expect(second).toMatchObject({
       clientSecretEnc: null,
       enforceSso: true,
-      allowedDomains: ['acme.org', 'acme.com'],
+      allowedDomains: [org, com],
     });
     expect(second.updatedAt.getTime()).toBeGreaterThanOrEqual(first.updatedAt.getTime());
     expect(await app.withTenant(b.id, (tx) => store.sso(tx, a.id))).toBeNull();
   });
 
   it('tells who claims a domain, and lets one organisation save its domains at a time', async () => {
-    expect(await app.withTenant(b.id, (tx) => store.domainOwners(tx, 'ACME.org'))).toEqual([a.id]);
+    expect(await app.withTenant(b.id, (tx) => store.domainOwners(tx, org.toUpperCase()))).toEqual([
+      a.id,
+    ]);
     expect(await app.withTenant(b.id, (tx) => store.domainOwners(tx, 'free.org'))).toEqual([]);
     // The second organisation waits for the first to commit, then sees its domain taken.
     const order: string[] = [];
