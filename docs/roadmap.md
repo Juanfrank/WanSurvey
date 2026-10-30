@@ -66,9 +66,22 @@ until the switch):
   permissions; and owner procedures for what runs before any context (lookup by e-mail, a
   person's organisations, lockout after failed attempts, session revocation, SSO lookups).
 
-**Left:** stores for sign-in and sessions, users, organisations, projects, metrics, jobs, library,
-dashboard, geolocation, privacy and analysis; then the switch of the controllers from PostgreSQL
-to the stores (phases 4 and 5).
+- **Sessions, people, organisations and projects** (`src/auth/sessions-store.mssql.ts`,
+  `src/users/people-store.mssql.ts`, `src/projects/projects-store.mssql.ts`, `mssql/0012`): a
+  session found by its token with the person's standing and roles; one-time tokens that work once
+  even when two race; invitations that create or link a global account; roles replaced as a set;
+  the organisation's settings and role changes; projects with settings merged on update and logos
+  kept apart from the project row.
+
+**Left:** stores for the sign-in service itself (password, second factor, SSO), metrics, jobs,
+library, dashboard, geolocation, privacy and analysis; then the switch of the controllers from
+PostgreSQL to the stores (phases 4 and 5).
+
+More lessons: a `Date` parameter travels as `datetime`, which rounds to 3.33 ms, so what is
+written to or compared with a `datetimeoffset(3)` can land a millisecond off: send instants
+through `instant()` (`src/db/mssql/instant.ts`). Auditing the first migrations against the
+PostgreSQL schema found the kernel behind it (accounts per organisation, no `projects.settings`):
+compare each new T-SQL table with `src/db/schema.ts`, not with the first migration it came from.
 
 Lessons from the analysis model: `OPENJSON` returns `key` and `value` in `Latin1_General_BIN2`, so
 mixing them with ordinary columns in a `UNION` or `CASE` fails (cast to `DATABASE_DEFAULT`);
