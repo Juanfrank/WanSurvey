@@ -345,4 +345,33 @@ export interface MssqlSchema {
     note: string | null;
     interview_id: string | null;
   };
+  review_comments: {
+    id: string;
+    tenant_id: string;
+    interview_id: string;
+    variable: string | null;
+    body: string;
+    author_id: string;
+    created_at: Instant;
+    resolved_at: InstantOrNull;
+  };
+  open_codes: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    variable: string;
+    code: number;
+    label: string;
+    created_at: Instant;
+  };
+  coded_texts: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    variable: string;
+    text: string;
+    code: number;
+    coded_by: string | null;
+    coded_at: Instant;
+  };
 }
