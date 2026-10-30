@@ -19,11 +19,22 @@ until the switch):
   saved by compare-and-swap, publishing under a row lock, versions immutable by trigger,
   scenarios, review comments, presence, the library, and state (disable, complete, successor).
 
+- **Cases and sampling** (`mssql/0003`, `0004`; `src/cases/cases-store.mssql.ts`,
+  `src/sampling/sampling-store.mssql.ts`): sample fields, cases with contacts and an append-only
+  history, imports, assignment rules, the sampling plan and frame, cases made from selected units,
+  reserves and interviewer goals. Bulk loads go through one JSON parameter and `OPENJSON`; claiming
+  a free case uses `READPAST` over a filtered index. **Left for the interviews vertical:** the
+  expiry of overdue cases, which checks for an open interview in a table not moved yet.
+
 What the tests on a real SQL Server taught, for the verticals to come: an error thrown by a
 trigger or a deadlock ends the transaction and hides the error behind a failed rollback (the data
 layer now reports the first error, and the deadlock retry works); a password may not contain the
 user's name; `plan` is a reserved word; `THROW` in an `INSTEAD OF` trigger is the way to refuse a
-change. Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
+change; a unique index fails with 2601 and a unique constraint with 2627; `UPDLOCK` locks every
+row an unordered scan reads, so a "take the next row" query needs an index in its order for
+`READPAST` to work; `ISNULL(@parameter, 'literal')` takes the parameter's type and may cut the
+literal, so cast the parameters to the column's type; there is no `ON CONFLICT DO NOTHING`
+(use `NOT EXISTS` under `UPDLOCK, HOLDLOCK`) and statements are limited to 2100 parameters. Today the app runs on PostgreSQL only (`docs/azure.md`, "Moving to SQL
 Server later", lists every PostgreSQL feature in use).
 
 **Why:** the organisation's databases are on SQL Server (Azure SQL); a second database engine is a
