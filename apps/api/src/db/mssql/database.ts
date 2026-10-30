@@ -6,6 +6,16 @@ import type { MssqlSchema } from './schema.js';
 
 export type MssqlTx = Transaction<MssqlSchema>;
 
+/** Lookups by a public key (link token, slug) that find the organisation before any context. */
+export type PublicLookup =
+  'invitation_by_token' | 'open_link_by_slug' | 'feedback_point_by_slug' | 'share_link_by_hash';
+const LOOKUP_PARAM: Record<PublicLookup, string> = {
+  invitation_by_token: 'hash',
+  open_link_by_slug: 'slug',
+  feedback_point_by_slug: 'slug',
+  share_link_by_hash: 'hash',
+};
+
 /** Deadlock victim: the transaction rolled back entirely, so it can simply run again. */
 const DEADLOCK = 1205;
 /** The lock wait exceeded LOCK_TIMEOUT. */
@@ -39,6 +49,44 @@ export class MssqlDatabase {
 
   async withTenant<T>(tenantId: string, fn: (tx: MssqlTx) => Promise<T>): Promise<T> {
     if (!isUuid(tenantId)) throw new Error('Invalid tenant id');
+    return this.run(
+      async () => tenantId,
+      (tx) => fn(tx),
+    );
+  }
+
+  /**
+   * Finds a link's organisation and works in it in one transaction: the lookup (a procedure that
+   * runs as the owner) and the context are set before anything else, as on PostgreSQL. `fn` gets
+   * null when nothing matches (and no context is set then, so it sees nothing).
+   */
+  async withTenantOf<T>(
+    lookup: PublicLookup,
+    key: string,
+    fn: (tx: MssqlTx, found: { id: string; tenantId: string } | null) => Promise<T>,
+  ): Promise<T> {
+    let found: { id: string; tenantId: string } | null = null;
+    return this.run(
+      async (tx) => {
+        const res = await sql<{
+          id: string;
+          tenant_id: string;
+        }>`EXEC ${sql.raw(`dbo.${lookup}`)} ${sql.raw(`@${LOOKUP_PARAM[lookup]}`)} = ${key}`.execute(
+          tx,
+        );
+        const r = res.rows[0];
+        found = r ? { id: r.id.toLowerCase(), tenantId: r.tenant_id.toLowerCase() } : null;
+        return found?.tenantId ?? null;
+      },
+      (tx) => fn(tx, found),
+    );
+  }
+
+  /** The shared transaction: limits, then the context `prepare` decides, cleared at the end. */
+  private async run<T>(
+    prepare: (tx: MssqlTx) => Promise<string | null>,
+    fn: (tx: MssqlTx) => Promise<T>,
+  ): Promise<T> {
     for (let attempt = 1; ; attempt++) {
       // SQL Server ends the transaction itself on a deadlock or an error thrown by a trigger;
       // Kysely's own rollback then fails ("no corresponding BEGIN TRANSACTION") and hides the
@@ -47,9 +95,11 @@ export class MssqlDatabase {
       try {
         return await this.db.transaction().execute(async (tx) => {
           await sql`SET LOCK_TIMEOUT ${sql.lit(this.limits.lockTimeoutMs)}`.execute(tx);
-          await sql`EXEC sp_set_session_context @key = N'tenant_id', @value = ${tenantId}`.execute(
-            tx,
-          );
+          const tenantId = await prepare(tx);
+          if (tenantId)
+            await sql`EXEC sp_set_session_context @key = N'tenant_id', @value = ${tenantId}`.execute(
+              tx,
+            );
           try {
             return await fn(tx);
           } catch (e) {
