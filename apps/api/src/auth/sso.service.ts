@@ -6,7 +6,7 @@ import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { SsoConfigs, type SsoConfig, type SsoStartConfig } from './sso-config.js';
-import { CONFIG, type AppConfig } from '../config.js';
+import { CONFIG, SSO_CALLBACK_PATH, type AppConfig } from '../config.js';
 import { Database, isUuid, pgCode, Prepared } from '../db/database.js';
 import { memberships, sessions, tenantMembers, userIdentities, users } from '../db/schema.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
@@ -109,7 +109,7 @@ export class SsoService {
   ) {}
 
   get redirectUri(): string {
-    return `${this.config.PUBLIC_WEB_URL}/api/v1/auth/sso/callback`;
+    return this.config.ENTRA_REDIRECT_URI ?? `${this.config.PUBLIC_WEB_URL}${SSO_CALLBACK_PATH}`;
   }
 
   private authority(entraTenantId: string): string {

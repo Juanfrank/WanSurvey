@@ -69,7 +69,7 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 
 ## Monitoring
 
-- `/health` for liveness and database reachability.
+- `/health` for liveness and database reachability; with `HEALTH_ALLOWED_IPS` set it answers only those addresses (`docs/appservice-zip.md`).
 - Logs are JSON (pino); cookies and CSRF tokens are redacted.
 - Watch: API 5xx rate, p95 latency of `/interviews/sync` and `/public/s/*/submit`, Redis queue length (`bull:wansurvey:wait`), failed jobs, Postgres connections and replication lag.
 

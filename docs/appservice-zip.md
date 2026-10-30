@@ -47,7 +47,7 @@ Mac.
    - Identity → User assigned → add `wansurvey-id`; Key Vault reference identity: the same.
    - Configuration → General: **Always On** on, HTTP 2.0, minimum TLS 1.2, FTP off, startup
      command `npm start` (or empty: App Service runs `npm start` itself).
-   - Health check: path `/health`.
+   - Health check: path `/health`, with `HEALTH_ALLOWED_IPS` set (see below).
    - Environment variables → **Advanced edit**: paste `appconfig/appservice.production.template.json`
      filled in (see [`docs/azure.md`](azure.md#settings-by-hand-no-bicep)).
 
@@ -69,15 +69,34 @@ data or alter tables. Keep both in Key Vault. To keep the owner's password off t
 
 **One public address:** `PUBLIC_WEB_URL` is every link a person opens (invitations, password
 reset, survey links, shared summaries) and the Microsoft redirect URI registered in Entra
-(`{PUBLIC_WEB_URL}/api/v1/auth/sso/callback`). The API answers `/api` on that same address: from
+(`ENTRA_REDIRECT_URI`, normally `{PUBLIC_WEB_URL}/api/v1/auth/sso/callback`). The API answers `/api` on that same address: from
 the zip it serves the web app itself; in development Vite passes `/api` on to it.
+
+**`/health` only for the platform:** `HEALTH_ALLOWED_IPS` lists the addresses that may call it,
+single IPs and CIDR ranges separated by commas (`169.254.0.0/16,127.0.0.1,::1`). Anyone else gets
+the 404 of a route that does not exist; empty lets everyone in. The address is the one the proxy
+saw: App Service's front end adds the caller to `X-Forwarded-For` (with its port, which is
+removed), so a client cannot pass as another by sending that header. A refused call is logged
+(`health: address not in HEALTH_ALLOWED_IPS`, with the address).
+
+- **Can the range include Azure's own check?** Not as a published range. Microsoft documents no
+  source address for App Service's health check, and no service tag covers it; the check runs from
+  inside the platform. What is seen in practice, not documented, is internal link-local
+  addresses (`169.254.x.x`, the range that also shows as the caller in other platform requests),
+  so `169.254.0.0/16` is the starting value; the platform could change it. Check it on your
+  instance: set the list, look in **Log stream** for the refused address within a minute, and
+  narrow the range to what appears. A wrong list takes the instance out of rotation (after
+  `WEBSITE_HEALTHCHECK_MAXPINGFAILURES` failed pings) and, if it lasts an hour, App Service
+  replaces it: set the list in a staging slot or while watching the log.
+- Monitoring from outside (Application Insights availability, a load balancer) goes in the list by
+  its own addresses, or uses another route.
 
 **The rest:**
 
 - `APP_ENCRYPTION_KEY`: seals personal data and secrets in the database; 32 random bytes in base64,
   one per environment, never changed once data exists.
 - `NODE_ENV`: `production` turns on the production checks (Blob Storage required, HSTS).
-- `PASSWORD_LOGIN`, `SSO_DEFAULT_ORG`, `ENTRA_*`: sign-in (`docs/sso-entra.md`).
+- `PASSWORD_LOGIN`, `SSO_DEFAULT_ORG`, `ENTRA_*` (tenant, client, secret and `ENTRA_REDIRECT_URI`): sign-in (`docs/sso-entra.md`).
 - `MAILER`, `SMTP_URL`, `MAIL_FROM`: e-mail; `console` writes it to the log instead.
 - `EXPORT_STORAGE`, `EXPORT_BLOB_URL`, `AZURE_CLIENT_ID`: export files in Blob Storage, reached with
   the managed identity whose client id this is.

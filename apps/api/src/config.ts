@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 /** An optional setting; empty counts as not set (App Service keeps empty settings). */
@@ -13,6 +14,35 @@ const optionalGuid = (message: string) =>
       .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, message)
       .optional(),
   );
+
+export const SSO_CALLBACK_PATH = '/api/v1/auth/sso/callback';
+
+/**
+ * Who may call /health: IP addresses and CIDR ranges, comma-separated ("10.0.0.0/8,::1").
+ * Empty: everyone.
+ */
+const ipList = z
+  .string()
+  .default('')
+  .transform((v) =>
+    v
+      .split(',')
+      .map((e) => e.trim())
+      .filter(Boolean),
+  )
+  .superRefine((list, ctx) => {
+    for (const entry of list) {
+      const [addr, bits, extra] = entry.split('/');
+      const family = isIP(addr ?? '');
+      const max = family === 4 ? 32 : 128;
+      const ok =
+        family !== 0 &&
+        extra === undefined &&
+        (bits === undefined || (/^\d{1,3}$/.test(bits) && Number(bits) <= max));
+      if (!ok)
+        ctx.addIssue({ code: 'custom', message: `Not an IP address or CIDR range: ${entry}` });
+    }
+  });
 
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -86,6 +116,23 @@ const Env = z.object({
   ENTRA_CLIENT_ID: optionalGuid('Application (client) ID, a GUID'),
   ENTRA_CLIENT_SECRET: optionalText(500),
   /**
+   * The redirect URI registered in the Entra app, exactly: {public address}/api/v1/auth/sso/callback.
+   * Without the deployment's Microsoft sign-in, organisations' own directories use
+   * PUBLIC_WEB_URL + that path.
+   */
+  ENTRA_REDIRECT_URI: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z
+      .string()
+      .url()
+      .refine((v) => v.endsWith(SSO_CALLBACK_PATH), `Must end with ${SSO_CALLBACK_PATH}`)
+      .refine(
+        (v) => v.startsWith('https://') || /^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(v),
+        'Must be https (http only for localhost)',
+      )
+      .optional(),
+  ),
+  /**
    * With password sign-in on, 'true' requires Microsoft for SSO_DEFAULT_ORG (owners keep their
    * password, as with an organisation's enforceSso). With it off, Microsoft is the only way anyway.
    */
@@ -145,6 +192,8 @@ const Env = z.object({
    * restart a container that does not answer HTTP.
    */
   WORKER_HEALTH_PORT: z.coerce.number().int().positive().optional(),
+  /** IPs and CIDR ranges allowed to call /health (404 for the rest); empty: everyone. */
+  HEALTH_ALLOWED_IPS: ipList,
   /** Proxies in front of the API (load balancer, nginx…), for the client address. */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
   /**
@@ -223,11 +272,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ENTRA_TENANT_ID: d.ENTRA_TENANT_ID,
       ENTRA_CLIENT_ID: d.ENTRA_CLIENT_ID,
       ENTRA_CLIENT_SECRET: d.ENTRA_CLIENT_SECRET,
+      ENTRA_REDIRECT_URI: d.ENTRA_REDIRECT_URI,
     };
     const missing = Object.entries(deployment)
       .filter(([, v]) => !v)
       .map(([k]) => k);
-    if (missing.length && missing.length < 4)
+    if (missing.length && missing.length < Object.keys(deployment).length)
       throw new Error(
         `Invalid configuration:\n  ${missing.join(', ')}: required with ${Object.keys(deployment)
           .filter((k) => !missing.includes(k))
@@ -236,7 +286,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     // Without passwords and without the deployment's directory nobody could sign in.
     if (!d.PASSWORD_LOGIN && missing.length)
       throw new Error(
-        'Invalid configuration:\n  PASSWORD_LOGIN=false: requires SSO_DEFAULT_ORG, ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET',
+        'Invalid configuration:\n  PASSWORD_LOGIN=false: requires SSO_DEFAULT_ORG, ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET and ENTRA_REDIRECT_URI',
       );
   }
   if (!parsed.success) {

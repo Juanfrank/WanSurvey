@@ -80,6 +80,11 @@
     "slotSetting": false
   },
   {
+    "name": "ENTRA_REDIRECT_URI",
+    "value": "<https://encuestas.example.org/api/v1/auth/sso/callback — the redirect URI registered in Entra>",
+    "slotSetting": false
+  },
+  {
     "name": "ENTRA_ALLOWED_DOMAINS",
     "value": "<example.org>",
     "slotSetting": false
@@ -122,6 +127,11 @@
   {
     "name": "TRUST_PROXY_HOPS",
     "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "HEALTH_ALLOWED_IPS",
+    "value": "<IPs and CIDR ranges allowed to call /health, comma-separated; see docs/appservice-zip.md>",
     "slotSetting": false
   },
   {

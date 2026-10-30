@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule, type AppModuleOptions } from './app.module.js';
+import { healthAccess } from './common/health-access.js';
 import { loadShedding } from './common/load-shed.js';
 import { compress, isApiPath, serveWeb } from './common/web.js';
 import { plainBodiesOnly } from './common/plain-body.js';
@@ -26,6 +27,7 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
   app.useLogger(app.get(Logger));
   const config = loadConfig();
   app.set('trust proxy', config.TRUST_PROXY_HOPS);
+  app.use(healthAccess(config.HEALTH_ALLOWED_IPS));
   // Keep-alive longer than the load balancer's idle timeout (and headers a little longer
   // still), so the balancer never sends a request down a connection the API just closed.
   const server = app.getHttpServer() as Server;

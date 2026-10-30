@@ -24,7 +24,9 @@ const FILLED: Record<string, string> = {
   ENTRA_TENANT_ID: '00000000-0000-0000-0000-000000000002',
   ENTRA_CLIENT_ID: '00000000-0000-0000-0000-000000000003',
   ENTRA_CLIENT_SECRET: 'secret',
+  ENTRA_REDIRECT_URI: 'https://encuestas.example.org/api/v1/auth/sso/callback',
   ENTRA_ALLOWED_DOMAINS: 'example.org',
+  HEALTH_ALLOWED_IPS: '169.254.0.0/16,127.0.0.1',
 };
 const placeholder = (v: string) => v.startsWith('<') && v.endsWith('>');
 

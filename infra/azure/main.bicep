@@ -183,6 +183,7 @@ var entraSettings = empty(ssoDefaultOrg)
       ENTRA_TENANT_ID: entraTenantId
       ENTRA_CLIENT_ID: entraClientId
       ENTRA_CLIENT_SECRET: entraClientSecret
+      ENTRA_REDIRECT_URI: '${publicUrl}/api/v1/auth/sso/callback'
       ENTRA_ALLOWED_DOMAINS: entraAllowedDomains
       ENTRA_ENFORCE: entraEnforce ? 'true' : 'false'
     }

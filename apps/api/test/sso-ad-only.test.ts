@@ -31,6 +31,7 @@ describe('Microsoft-only sign-in', () => {
       ENTRA_TENANT_ID: entraTenantId,
       ENTRA_CLIENT_ID: CLIENT_ID,
       ENTRA_CLIENT_SECRET: 'deploy-secret',
+      ENTRA_REDIRECT_URI: 'http://localhost:5173/api/v1/auth/sso/callback',
       ENTRA_ALLOWED_DOMAINS: 'court.gov',
     });
     resetConfigCache();
@@ -48,6 +49,7 @@ describe('Microsoft-only sign-in', () => {
       'ENTRA_TENANT_ID',
       'ENTRA_CLIENT_ID',
       'ENTRA_CLIENT_SECRET',
+      'ENTRA_REDIRECT_URI',
       'ENTRA_ALLOWED_DOMAINS',
     ])
       delete process.env[k];
@@ -267,6 +269,7 @@ describe.each([false, true])(
         ENTRA_TENANT_ID: randomUUID(),
         ENTRA_CLIENT_ID: CLIENT_ID,
         ENTRA_CLIENT_SECRET: 'deploy-secret',
+        ENTRA_REDIRECT_URI: 'http://localhost:5173/api/v1/auth/sso/callback',
         ENTRA_ALLOWED_DOMAINS: 'court.gov',
         ENTRA_ENFORCE: String(enforce),
       });
@@ -283,6 +286,7 @@ describe.each([false, true])(
         'ENTRA_TENANT_ID',
         'ENTRA_CLIENT_ID',
         'ENTRA_CLIENT_SECRET',
+        'ENTRA_REDIRECT_URI',
         'ENTRA_ALLOWED_DOMAINS',
         'ENTRA_ENFORCE',
       ])
@@ -319,6 +323,7 @@ describe('configuration of Microsoft-only sign-in', () => {
     ENTRA_TENANT_ID: randomUUID(),
     ENTRA_CLIENT_ID: CLIENT_ID,
     ENTRA_CLIENT_SECRET: 'x',
+    ENTRA_REDIRECT_URI: 'http://localhost:5173/api/v1/auth/sso/callback',
   };
 
   it('refuses to start without passwords and without the deployment’s directory', () => {
@@ -345,10 +350,29 @@ describe('configuration of Microsoft-only sign-in', () => {
       ENTRA_TENANT_ID: '',
       ENTRA_CLIENT_ID: '',
       ENTRA_CLIENT_SECRET: '',
+      ENTRA_REDIRECT_URI: '',
     };
     expect(loadConfig({ ...base(), ...empty }).ENTRA_CLIENT_SECRET).toBeUndefined();
     expect(() => loadConfig({ ...base(), ...deployment, ENTRA_CLIENT_SECRET: '' })).toThrow(
       /ENTRA_CLIENT_SECRET: required with/,
     );
+  });
+
+  it('takes the redirect URI with the rest of the directory, https and ending at the callback', () => {
+    expect(() => loadConfig({ ...base(), ...deployment, ENTRA_REDIRECT_URI: '' })).toThrow(
+      /ENTRA_REDIRECT_URI: required with/,
+    );
+    for (const bad of [
+      'https://app.example.org/auth/callback',
+      'http://app.example.org/api/v1/auth/sso/callback',
+      'not a url',
+    ])
+      expect(() => loadConfig({ ...base(), ...deployment, ENTRA_REDIRECT_URI: bad })).toThrow(
+        /ENTRA_REDIRECT_URI/,
+      );
+    const ok = 'https://app.example.org/api/v1/auth/sso/callback';
+    expect(
+      loadConfig({ ...base(), ...deployment, ENTRA_REDIRECT_URI: ok }).ENTRA_REDIRECT_URI,
+    ).toBe(ok);
   });
 });

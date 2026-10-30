@@ -56,7 +56,7 @@
   },
   {
     "name": "SSO_DEFAULT_ORG",
-    "value": "<organisation slug, or delete the five SSO/ENTRA settings>",
+    "value": "<organisation slug, or delete the SSO_DEFAULT_ORG and five ENTRA_* settings except ENTRA_AUTHORITY_HOST>",
     "slotSetting": false
   },
   {
@@ -72,6 +72,11 @@
   {
     "name": "ENTRA_CLIENT_SECRET",
     "value": "<client secret, or @Microsoft.KeyVault(SecretUri=...)>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_REDIRECT_URI",
+    "value": "http://localhost:5173/api/v1/auth/sso/callback",
     "slotSetting": false
   },
   {
@@ -122,6 +127,11 @@
   {
     "name": "TRUST_PROXY_HOPS",
     "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "HEALTH_ALLOWED_IPS",
+    "value": "",
     "slotSetting": false
   },
   {
