@@ -513,7 +513,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: interviews and CATI', () => {
       expect(
         (await app.withTenant(a.id, (tx) => cati.openAttempt(tx, a.project, me)))!.id.toLowerCase(),
       ).toBe(attempt);
-      const callbackAt = new Date(Date.now() + 3_600_000);
+      const callbackAt = new Date(Math.floor((Date.now() + 3_600_000) / 1000) * 1000);
       await app.withTenant(a.id, async (tx) => {
         await cati.lockAttempt(tx, attempt);
         await cati.closeAttempt(tx, attempt, {

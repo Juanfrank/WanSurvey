@@ -517,11 +517,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: paper, statistics and exports', () 
       const keys = await app.withTenant(a.id, (tx) =>
         exportsStore.purge(tx, { projectId: proj, before: new Date(Date.now() - 8 * 86_400_000) }),
       );
-      expect(keys).toEqual(
-        [`k/${old}`.toUpperCase().replace('K/', 'k/')].map((k) =>
-          keys.find((x) => x.toLowerCase() === k.toLowerCase())!,
-        ),
-      );
+      expect(keys.map((k) => k.toLowerCase())).toEqual([`k/${old}`]);
       expect(
         (await app.withTenant(a.id, (tx) => exportsStore.list(tx, proj))).map((e) =>
           e.id.toLowerCase(),

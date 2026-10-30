@@ -300,7 +300,8 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: web surveys, e-mail and feedback', 
     const inv = await app.withTenant(a.id, (tx) =>
       tx.selectFrom('invitations').select(['id', 'case_id']).where('wave_id', '=', wave).execute(),
     );
-    const of = (caseId: string) => inv.find((i) => i.case_id?.toLowerCase() === caseId)!.id;
+    const of = (caseId: string) =>
+      inv.find((i) => i.case_id?.toLowerCase() === caseId)!.id.toLowerCase();
     await app.withTenant(a.id, (tx) => cawi.markCompleted(tx, of(done!), randomUUID()));
     await owner((db) =>
       sql`UPDATE cases SET status = 'finalised' WHERE id = ${finishedCase}`.execute(db),
