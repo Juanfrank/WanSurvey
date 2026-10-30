@@ -389,7 +389,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: interviews and CATI', () => {
     ) => {
       const id = await newCase(name, {
         priority: over.priority ?? 0,
-        contacts: over.phone === false ? [{ type: 'email', value: 'x@example.org' }] : undefined,
+        ...(over.phone === false ? { contacts: [{ type: 'email', value: 'x@example.org' }] } : {}),
       });
       const assignedTo = over.assignedTo === undefined ? me : over.assignedTo;
       await owner((db) =>
