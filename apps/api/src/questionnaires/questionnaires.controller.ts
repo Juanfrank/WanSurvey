@@ -6,6 +6,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseIntPipe,
@@ -19,28 +20,17 @@ import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { analyze } from '@wansurvey/logic';
 import { Mode, Questionnaire, Scenario, VersionMapping } from '@wansurvey/schema';
-import { and, desc, eq, gte, inArray, isNull, max, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
-import { Database, type Tx } from '../db/database.js';
 import {
-  auditLog,
-  caseEvents,
-  cases,
-  invitations,
-  openLinks,
-  projects,
-  questionnaireComments,
-  questionnairePresence,
-  questionnaireScenarios,
-  questionnaireVersions,
-  questionnaires,
-  users,
-  waves,
-} from '../db/schema.js';
-import { checkDraft, type PreviousVersion } from './publish-checks.js';
+  QUESTIONNAIRES_REPO,
+  type QuestionnaireView,
+  type QuestionnairesRepo,
+  type QuestionnairesTx,
+} from './questionnaires-repo.js';
+import { checkDraft } from './publish-checks.js';
 import { QUESTIONNAIRE_STATES } from './state.js';
 
 const Definition = z.record(z.string(), z.unknown());
@@ -96,47 +86,17 @@ const PERM = { projectParam: 'projectId' } as const;
 @Controller(BASE)
 export class QuestionnairesController {
   constructor(
-    private readonly database: Database,
+    @Inject(QUESTIONNAIRES_REPO) private readonly repo: QuestionnairesRepo,
     private readonly audit: AuditService,
   ) {}
 
   @Get()
   @RequirePermission('questionnaires.read', PERM)
   list(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.project(tx, projectId);
-      const rows = await tx
-        .select({
-          id: questionnaires.id,
-          name: questionnaires.name,
-          draftRevision: questionnaires.draftRevision,
-          updatedAt: questionnaires.updatedAt,
-          createdAt: questionnaires.createdAt,
-          state: questionnaires.state,
-          stateChangedAt: questionnaires.stateChangedAt,
-          successorId: questionnaires.successorId,
-          modes: sql<string[] | null>`${questionnaires.draft} -> 'modes'`,
-        })
-        .from(questionnaires)
-        .where(eq(questionnaires.projectId, projectId))
-        .orderBy(questionnaires.name);
-      const versions = rows.length
-        ? await tx
-            .select({
-              questionnaireId: questionnaireVersions.questionnaireId,
-              version: questionnaireVersions.version,
-              status: questionnaireVersions.status,
-              publishedAt: questionnaireVersions.publishedAt,
-            })
-            .from(questionnaireVersions)
-            .where(
-              inArray(
-                questionnaireVersions.questionnaireId,
-                rows.map((r) => r.id),
-              ),
-            )
-            .orderBy(desc(questionnaireVersions.version))
-        : [];
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.project(t, projectId);
+      const rows = await t.list(projectId);
+      const versions = await t.versionsOf(rows.map((r) => r.id));
       return rows.map((r) => {
         const own = versions.filter((v) => v.questionnaireId === r.id);
         return {
@@ -159,8 +119,8 @@ export class QuestionnairesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(CreateBody)) body: z.infer<typeof CreateBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const project = await this.project(tx, projectId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const project = await this.project(t, projectId);
       const outside = project.modesEnabled.length
         ? body.modes.filter((m) => !project.modesEnabled.includes(m))
         : [];
@@ -178,19 +138,9 @@ export class QuestionnairesController {
         definition = structuredClone(sample.questionnaire) as Record<string, unknown>;
       } else if (src.kind === 'version') {
         // A copy of a version of any questionnaire in the same project.
-        const [v] = await tx
-          .select({ definition: questionnaireVersions.definition })
-          .from(questionnaireVersions)
-          .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
-          .where(
-            and(
-              eq(questionnaireVersions.questionnaireId, src.questionnaireId),
-              eq(questionnaireVersions.version, src.version),
-              eq(questionnaires.projectId, projectId),
-            ),
-          );
-        if (!v) throw new NotFoundException('Version not found');
-        definition = v.definition as Record<string, unknown>;
+        const found = await t.versionDefinition(projectId, src.questionnaireId, src.version);
+        if (!found) throw new NotFoundException('Version not found');
+        definition = found;
       } else if (src.kind === 'json') {
         definition = src.definition;
       } else {
@@ -198,27 +148,21 @@ export class QuestionnairesController {
       }
       // The chosen modes replace those of a sample, a copied version or a file.
       definition = { ...definition, modes: body.modes };
-      const [row] = await tx
-        .insert(questionnaires)
-        .values({
-          tenantId: ctx.tenantId,
-          projectId,
-          name: body.name,
-          draft: definition,
-          updatedBy: ctx.userId,
-        })
-        .returning({ id: questionnaires.id });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      const id = await t.create({
+        projectId,
+        name: body.name,
+        draft: definition,
+        userId: ctx.userId,
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'questionnaire.created',
           targetType: 'questionnaire',
-          targetId: row!.id,
+          targetId: id,
           details: { projectId, name: body.name, source: src.kind },
         }),
       );
-      return this.load(tx, projectId, row!.id);
+      return this.load(t, projectId, id);
     });
   }
 
@@ -229,7 +173,7 @@ export class QuestionnairesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('qid', ParseUUIDPipe) qid: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.load(tx, projectId, qid));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.load(t, projectId, qid));
   }
 
   /** Renames a questionnaire (its draft and versions are unchanged). */
@@ -242,16 +186,10 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Body(new ZodPipe(RenameBody)) body: z.infer<typeof RenameBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx
-        .update(questionnaires)
-        .set({ name: body.name, updatedAt: new Date(), updatedBy: ctx.userId })
-        .where(and(eq(questionnaires.id, qid), eq(questionnaires.projectId, projectId)))
-        .returning({ id: questionnaires.id, name: questionnaires.name });
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await t.rename(projectId, qid, body.name, ctx.userId);
       if (!row) throw new NotFoundException('Questionnaire not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'questionnaire.renamed',
           targetType: 'questionnaire',
@@ -275,38 +213,15 @@ export class QuestionnairesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('qid', ParseUUIDPipe) qid: string,
   ): Promise<void> {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      const current = await this.lockDraft(tx, projectId, qid);
-      const used = async (table: typeof waves | typeof invitations | typeof openLinks) =>
-        (
-          await tx
-            .select({ n: sql<number>`count(*)::int` })
-            .from(table)
-            .where(eq(table.questionnaireId, qid))
-        )[0]!.n > 0;
-      const [versions] = await tx
-        .select({ n: sql<number>`count(*)::int` })
-        .from(questionnaireVersions)
-        .where(eq(questionnaireVersions.questionnaireId, qid));
-      if (
-        versions!.n > 0 ||
-        (await used(waves)) ||
-        (await used(invitations)) ||
-        (await used(openLinks))
-      )
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      const current = await this.lockDraft(t, projectId, qid);
+      if (await t.inUse(qid))
         throw new ConflictException({
           code: 'IN_USE',
           message: 'The questionnaire has been published or used for web surveys',
         });
-      await tx
-        .delete(questionnaireScenarios)
-        .where(eq(questionnaireScenarios.questionnaireId, qid));
-      await tx.delete(questionnaireComments).where(eq(questionnaireComments.questionnaireId, qid));
-      await tx.delete(questionnairePresence).where(eq(questionnairePresence.questionnaireId, qid));
-      await tx.delete(questionnaires).where(eq(questionnaires.id, qid));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.remove(qid);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'questionnaire.deleted',
           targetType: 'questionnaire',
@@ -330,51 +245,34 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Body(new ZodPipe(DraftBody)) body: z.infer<typeof DraftBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const current = await this.lockDraft(tx, projectId, qid);
-      if (current.draftRevision !== body.baseRevision) throw await this.conflict(tx, current);
-      const [row] = await tx
-        .update(questionnaires)
-        .set({
-          draft: body.definition,
-          draftRevision: current.draftRevision + 1,
-          updatedBy: ctx.userId,
-          updatedAt: new Date(),
-          ...(body.name ? { name: body.name } : {}),
-        })
-        .where(eq(questionnaires.id, qid))
-        .returning({
-          draftRevision: questionnaires.draftRevision,
-          updatedAt: questionnaires.updatedAt,
-        });
-      const [recent] = await tx
-        .select({ id: auditLog.id })
-        .from(auditLog)
-        .where(
-          and(
-            eq(auditLog.action, 'questionnaire.draft_saved'),
-            eq(auditLog.targetId, qid),
-            eq(auditLog.actorUserId, ctx.userId),
-            gte(auditLog.at, new Date(Date.now() - DRAFT_AUDIT_WINDOW_MS)),
-          ),
-        )
-        .limit(1);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const current = await this.lockDraft(t, projectId, qid);
+      if (current.draftRevision !== body.baseRevision) throw await this.conflict(t, current);
+      const row = await t.saveDraft(qid, {
+        draft: body.definition,
+        revision: current.draftRevision + 1,
+        userId: ctx.userId,
+        name: body.name,
+      });
+      const recent = await t.savedDraftSince(
+        qid,
+        ctx.userId,
+        new Date(Date.now() - DRAFT_AUDIT_WINDOW_MS),
+      );
       if (!recent || (body.name && body.name !== current.name)) {
-        await this.audit.record(
-          tx,
-          ctx.tenantId,
+        await t.audit(
           this.audit.fromContext(ctx, {
             action: 'questionnaire.draft_saved',
             targetType: 'questionnaire',
             targetId: qid,
             details: {
-              revision: row!.draftRevision,
+              revision: row.draftRevision,
               ...(body.name && body.name !== current.name ? { name: body.name } : {}),
             },
           }),
         );
       }
-      return { ...row!, diagnostics: diagnosticsOf(body.definition) };
+      return { ...row, diagnostics: diagnosticsOf(body.definition) };
     });
   }
 
@@ -385,22 +283,9 @@ export class QuestionnairesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('qid', ParseUUIDPipe) qid: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.questionnaire(tx, projectId, qid);
-      return tx
-        .select({
-          version: questionnaireVersions.version,
-          status: questionnaireVersions.status,
-          hash: questionnaireVersions.hash,
-          hasMapping: sql<boolean>`${questionnaireVersions.mapping} is not null`,
-          publishedAt: questionnaireVersions.publishedAt,
-          publishedBy: users.name,
-          retiredAt: questionnaireVersions.retiredAt,
-        })
-        .from(questionnaireVersions)
-        .leftJoin(users, eq(users.id, questionnaireVersions.publishedBy))
-        .where(eq(questionnaireVersions.questionnaireId, qid))
-        .orderBy(desc(questionnaireVersions.version));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.questionnaire(t, projectId, qid);
+      return t.versions(qid);
     });
   }
 
@@ -412,17 +297,9 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Param('version', ParseIntPipe) version: number,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.questionnaire(tx, projectId, qid);
-      const [v] = await tx
-        .select()
-        .from(questionnaireVersions)
-        .where(
-          and(
-            eq(questionnaireVersions.questionnaireId, qid),
-            eq(questionnaireVersions.version, version),
-          ),
-        );
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.questionnaire(t, projectId, qid);
+      const v = await t.version(qid, version);
       if (!v) throw new NotFoundException('Version not found');
       return v;
     });
@@ -439,12 +316,12 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Body(new ZodPipe(CheckBody)) body: z.infer<typeof CheckBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const q = await this.questionnaire(tx, projectId, qid);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.questionnaire(t, projectId, qid);
       const { check } = checkDraft(
         q.draft,
-        await this.scenarioRows(tx, qid),
-        await this.previous(tx, qid),
+        await t.scenarios(qid),
+        await t.previous(qid),
         body.mapping,
       );
       return { ...check, draftRevision: q.draftRevision };
@@ -460,14 +337,14 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Body(new ZodPipe(PublishBody)) body: z.infer<typeof PublishBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
       // The row lock serialises publishes (and saves) of this questionnaire.
-      const q = await this.lockDraft(tx, projectId, qid);
-      if (q.draftRevision !== body.baseRevision) throw await this.conflict(tx, q);
-      const previous = await this.previous(tx, qid);
+      const q = await this.lockDraft(t, projectId, qid);
+      if (q.draftRevision !== body.baseRevision) throw await this.conflict(t, q);
+      const previous = await t.previous(qid);
       const { check, questionnaire, compiled } = checkDraft(
         q.draft,
-        await this.scenarioRows(tx, qid),
+        await t.scenarios(qid),
         previous,
         body.mapping,
       );
@@ -485,27 +362,15 @@ export class QuestionnairesController {
         });
       }
       const version = (previous?.version ?? 0) + 1;
-      const [row] = await tx
-        .insert(questionnaireVersions)
-        .values({
-          tenantId: ctx.tenantId,
-          questionnaireId: qid,
-          version,
-          definition: questionnaire,
-          compiled,
-          hash: compiled.hash,
-          mapping: check.breaking.length ? (body.mapping ?? null) : null,
-          publishedBy: ctx.userId,
-        })
-        .returning({
-          version: questionnaireVersions.version,
-          status: questionnaireVersions.status,
-          hash: questionnaireVersions.hash,
-          publishedAt: questionnaireVersions.publishedAt,
-        });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      const row = await t.publish({
+        questionnaireId: qid,
+        version,
+        definition: questionnaire,
+        compiled,
+        mapping: check.breaking.length ? (body.mapping ?? null) : null,
+        userId: ctx.userId,
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'questionnaire.published',
           targetType: 'questionnaire',
@@ -531,27 +396,11 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Param('version', ParseIntPipe) version: number,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.questionnaire(tx, projectId, qid);
-      const [row] = await tx
-        .update(questionnaireVersions)
-        .set({ status: 'retired', retiredAt: new Date() })
-        .where(
-          and(
-            eq(questionnaireVersions.questionnaireId, qid),
-            eq(questionnaireVersions.version, version),
-            eq(questionnaireVersions.status, 'published'),
-          ),
-        )
-        .returning({
-          version: questionnaireVersions.version,
-          status: questionnaireVersions.status,
-          retiredAt: questionnaireVersions.retiredAt,
-        });
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.questionnaire(t, projectId, qid);
+      const row = await t.retire(qid, version);
       if (!row) throw new NotFoundException('No published version with that number');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'questionnaire.version_retired',
           targetType: 'questionnaire',
@@ -578,67 +427,21 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Body(new ZodPipe(StateBody)) body: z.infer<typeof StateBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const before = await this.questionnaire(tx, projectId, qid);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const before = await this.questionnaire(t, projectId, qid);
       const successorId = body.state === 'completed' ? body.successorId : null;
       if (successorId) {
-        const [next] = await tx
-          .select({ id: questionnaires.id, state: questionnaires.state })
-          .from(questionnaires)
-          .where(and(eq(questionnaires.id, successorId), eq(questionnaires.projectId, projectId)));
+        const next = await t.sibling(projectId, successorId);
         if (!next || next.id === qid || next.state !== 'active')
           throw new BadRequestException({
             code: 'BAD_SUCCESSOR',
             message: 'The continuation must be another active questionnaire of the project',
           });
       }
-      const now = new Date();
-      const [row] = await tx
-        .update(questionnaires)
-        .set({ state: body.state, successorId, stateChangedAt: now })
-        .where(eq(questionnaires.id, qid))
-        .returning({
-          id: questionnaires.id,
-          state: questionnaires.state,
-          successorId: questionnaires.successorId,
-          stateChangedAt: questionnaires.stateChangedAt,
-        });
+      const row = await t.setState(qid, body.state, successorId);
       // Completing closes what is still pending; what is being interviewed is left to finish.
-      let closed = 0;
-      if (body.state === 'completed') {
-        const done = await tx
-          .update(cases)
-          .set({
-            status: 'finalised',
-            disposition: 'FIELDWORK_CLOSED',
-            nextContactAt: null,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(cases.questionnaireId, qid),
-              inArray(cases.status, ['fresh', 'assigned']),
-              isNull(cases.checkedOutDevice),
-              sql`not exists (select 1 from interviews iv where iv.case_id = ${cases.id}
-                    and iv.status = 'in_progress')`,
-            ),
-          )
-          .returning({ id: cases.id });
-        closed = done.length;
-        if (done.length)
-          await tx.insert(caseEvents).values(
-            done.map((c) => ({
-              tenantId: ctx.tenantId,
-              caseId: c.id,
-              actorUserId: ctx.userId,
-              type: 'closed',
-              details: { questionnaireId: qid, reason: 'questionnaire_completed' },
-            })),
-          );
-      }
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      const closed = body.state === 'completed' ? await t.closePendingCases(qid, ctx.userId) : 0;
+      await t.audit(
         this.audit.fromContext(ctx, {
           action:
             body.state === 'disabled'
@@ -651,7 +454,7 @@ export class QuestionnairesController {
           details: { from: before.state, successorId, casesClosed: closed },
         }),
       );
-      return { ...row!, casesClosed: closed };
+      return { ...row, casesClosed: closed };
     });
   }
 
@@ -662,18 +465,9 @@ export class QuestionnairesController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('qid', ParseUUIDPipe) qid: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.questionnaire(tx, projectId, qid);
-      return tx
-        .select({
-          id: questionnaireScenarios.id,
-          name: questionnaireScenarios.name,
-          scenario: questionnaireScenarios.scenario,
-          updatedAt: questionnaireScenarios.updatedAt,
-        })
-        .from(questionnaireScenarios)
-        .where(eq(questionnaireScenarios.questionnaireId, qid))
-        .orderBy(questionnaireScenarios.name);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.questionnaire(t, projectId, qid);
+      return t.scenarios(qid);
     });
   }
 
@@ -687,29 +481,15 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Body(new ZodPipe(ScenarioBody)) body: z.infer<typeof ScenarioBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.questionnaire(tx, projectId, qid);
-      const [row] = await tx
-        .insert(questionnaireScenarios)
-        .values({
-          tenantId: ctx.tenantId,
-          questionnaireId: qid,
-          name: body.scenario.name,
-          scenario: body.scenario,
-          createdBy: ctx.userId,
-        })
-        .onConflictDoUpdate({
-          target: [questionnaireScenarios.questionnaireId, questionnaireScenarios.name],
-          set: { scenario: body.scenario, updatedAt: new Date() },
-        })
-        .returning({
-          id: questionnaireScenarios.id,
-          name: questionnaireScenarios.name,
-          updatedAt: questionnaireScenarios.updatedAt,
-        });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.questionnaire(t, projectId, qid);
+      const row = await t.saveScenario({
+        questionnaireId: qid,
+        name: body.scenario.name,
+        scenario: body.scenario,
+        userId: ctx.userId,
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'questionnaire.scenario_saved',
           targetType: 'questionnaire',
@@ -730,23 +510,16 @@ export class QuestionnairesController {
     @Param('qid', ParseUUIDPipe) qid: string,
     @Param('sid', ParseUUIDPipe) sid: string,
   ): Promise<void> {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.questionnaire(tx, projectId, qid);
-      const [row] = await tx
-        .delete(questionnaireScenarios)
-        .where(
-          and(eq(questionnaireScenarios.id, sid), eq(questionnaireScenarios.questionnaireId, qid)),
-        )
-        .returning({ name: questionnaireScenarios.name });
-      if (!row) throw new NotFoundException('Scenario not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.questionnaire(t, projectId, qid);
+      const name = await t.deleteScenario(qid, sid);
+      if (name === null) throw new NotFoundException('Scenario not found');
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'questionnaire.scenario_deleted',
           targetType: 'questionnaire',
           targetId: qid,
-          details: { scenario: row.name },
+          details: { scenario: name },
         }),
       );
     });
@@ -754,60 +527,38 @@ export class QuestionnairesController {
 
   // -------------------------------------------------------------------------
 
-  private async project(tx: Tx, projectId: string) {
-    const [p] = await tx
-      .select({
-        id: projects.id,
-        languages: projects.languages,
-        modesEnabled: projects.modesEnabled,
-      })
-      .from(projects)
-      .where(eq(projects.id, projectId));
+  private async project(t: QuestionnairesTx, projectId: string) {
+    const p = await t.project(projectId);
     if (!p) throw new NotFoundException('Project not found');
     return p;
   }
 
-  private async questionnaire(tx: Tx, projectId: string, qid: string) {
-    const [q] = await tx
-      .select()
-      .from(questionnaires)
-      .where(and(eq(questionnaires.id, qid), eq(questionnaires.projectId, projectId)));
+  private async questionnaire(t: QuestionnairesTx, projectId: string, qid: string) {
+    const q = await t.get(projectId, qid);
     if (!q) throw new NotFoundException('Questionnaire not found');
     return q;
   }
 
-  private async lockDraft(tx: Tx, projectId: string, qid: string) {
-    const [q] = await tx
-      .select()
-      .from(questionnaires)
-      .where(and(eq(questionnaires.id, qid), eq(questionnaires.projectId, projectId)))
-      .for('update');
+  private async lockDraft(t: QuestionnairesTx, projectId: string, qid: string) {
+    const q = await t.lock(projectId, qid);
     if (!q) throw new NotFoundException('Questionnaire not found');
     return q;
   }
 
-  private async conflict(tx: Tx, current: typeof questionnaires.$inferSelect) {
-    const [who] = current.updatedBy
-      ? await tx.select({ name: users.name }).from(users).where(eq(users.id, current.updatedBy))
-      : [];
+  private async conflict(t: QuestionnairesTx, current: QuestionnaireView) {
+    const who = current.updatedBy ? await t.userName(current.updatedBy) : null;
     return new ConflictException({
       code: 'DRAFT_CONFLICT',
       message: 'Someone else saved this questionnaire in the meantime',
       currentRevision: current.draftRevision,
-      updatedBy: who?.name ?? null,
+      updatedBy: who,
       updatedAt: current.updatedAt,
     });
   }
 
-  private async load(tx: Tx, projectId: string, qid: string) {
-    const q = await this.questionnaire(tx, projectId, qid);
-    const [who] = q.updatedBy
-      ? await tx.select({ name: users.name }).from(users).where(eq(users.id, q.updatedBy))
-      : [];
-    const [latest] = await tx
-      .select({ version: max(questionnaireVersions.version) })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.questionnaireId, qid));
+  private async load(t: QuestionnairesTx, projectId: string, qid: string) {
+    const q = await this.questionnaire(t, projectId, qid);
+    const who = q.updatedBy ? await t.userName(q.updatedBy) : null;
     return {
       id: q.id,
       projectId: q.projectId,
@@ -815,35 +566,9 @@ export class QuestionnairesController {
       draft: q.draft,
       draftRevision: q.draftRevision,
       updatedAt: q.updatedAt,
-      updatedBy: who?.name ?? null,
-      latestVersion: latest?.version ?? null,
+      updatedBy: who,
+      latestVersion: await t.latestVersion(qid),
     };
-  }
-
-  private scenarioRows(tx: Tx, qid: string) {
-    return tx
-      .select({
-        id: questionnaireScenarios.id,
-        name: questionnaireScenarios.name,
-        scenario: questionnaireScenarios.scenario,
-      })
-      .from(questionnaireScenarios)
-      .where(eq(questionnaireScenarios.questionnaireId, qid))
-      .orderBy(questionnaireScenarios.name);
-  }
-
-  private async previous(tx: Tx, qid: string): Promise<PreviousVersion | null> {
-    const [v] = await tx
-      .select({
-        version: questionnaireVersions.version,
-        definition: questionnaireVersions.definition,
-        hash: questionnaireVersions.hash,
-      })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.questionnaireId, qid))
-      .orderBy(desc(questionnaireVersions.version))
-      .limit(1);
-    return v ?? null;
   }
 }
 

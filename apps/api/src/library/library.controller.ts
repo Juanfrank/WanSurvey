@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -13,13 +14,14 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { AnswerOption, ContainerItemSchema, LanguageCode } from '@wansurvey/schema';
-import { and, arrayContains, asc, eq, ilike, or, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
-import { libraryItems, users } from '../db/schema.js';
+import {
+  QUESTIONNAIRES_REPO,
+  type QuestionnairesRepo,
+} from '../questionnaires/questionnaires-repo.js';
 
 const ANY = { anyProject: true } as const;
 
@@ -50,63 +52,34 @@ const ListQuery = z.object({
 @Controller('library')
 export class LibraryController {
   constructor(
-    private readonly database: Database,
+    @Inject(QUESTIONNAIRES_REPO) private readonly repo: QuestionnairesRepo,
     private readonly audit: AuditService,
   ) {}
 
   @Get()
   @RequirePermission('questionnaires.read', ANY)
   list(@Auth() ctx: AuthContext, @Query(new ZodPipe(ListQuery)) q: z.infer<typeof ListQuery>) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const conds: SQL[] = [];
-      if (q.q) {
-        const term = `%${q.q.replace(/[%_\\]/g, '\\$&')}%`;
-        conds.push(or(ilike(libraryItems.name, term), ilike(libraryItems.description, term))!);
-      }
-      if (q.tag) conds.push(arrayContains(libraryItems.tags, [q.tag]));
-      return tx
-        .select({
-          id: libraryItems.id,
-          name: libraryItems.name,
-          description: libraryItems.description,
-          tags: libraryItems.tags,
-          languages: libraryItems.languages,
-          content: libraryItems.content,
-          createdBy: users.name,
-          updatedAt: libraryItems.updatedAt,
-        })
-        .from(libraryItems)
-        .leftJoin(users, eq(users.id, libraryItems.createdBy))
-        .where(conds.length ? and(...conds) : undefined)
-        .orderBy(asc(libraryItems.name))
-        .limit(200);
-    });
+    return this.repo.inTenant(ctx.tenantId, (t) => t.libraryList({ text: q.q, tag: q.tag }));
   }
 
   @Post()
   @RequirePermission('questionnaires.edit', ANY)
   @ApiBody({ schema: z.toJSONSchema(ItemBody, { io: 'input' }) as object })
   create(@Auth() ctx: AuthContext, @Body(new ZodPipe(ItemBody)) body: z.infer<typeof ItemBody>) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx
-        .insert(libraryItems)
-        .values({
-          tenantId: ctx.tenantId,
-          name: body.name,
-          description: body.description ?? null,
-          tags: body.tags,
-          languages: body.languages,
-          content: body.content,
-          createdBy: ctx.userId,
-        })
-        .returning();
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await t.libraryCreate({
+        name: body.name,
+        description: body.description ?? null,
+        tags: body.tags,
+        languages: body.languages,
+        content: body.content,
+        userId: ctx.userId,
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'library_item.created',
           targetType: 'library_item',
-          targetId: row!.id,
+          targetId: row.id,
           details: { name: body.name, item: body.content.node.id },
         }),
       );
@@ -122,12 +95,8 @@ export class LibraryController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(ItemPatch)) body: z.infer<typeof ItemPatch>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx
-        .update(libraryItems)
-        .set({ ...body, updatedAt: new Date() })
-        .where(eq(libraryItems.id, id))
-        .returning();
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await t.libraryUpdate(id, body);
       if (!row) throw new NotFoundException('Library item not found');
       return row;
     });
@@ -137,15 +106,10 @@ export class LibraryController {
   @HttpCode(204)
   @RequirePermission('questionnaires.edit', ANY)
   async remove(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx
-        .delete(libraryItems)
-        .where(eq(libraryItems.id, id))
-        .returning({ id: libraryItems.id, name: libraryItems.name });
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await t.libraryDelete(id);
       if (!row) throw new NotFoundException('Library item not found');
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'library_item.deleted',
           targetType: 'library_item',

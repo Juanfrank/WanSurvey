@@ -30,6 +30,11 @@ import { ScansService } from './papi/scans.service.js';
 import { AnalysisController, PublicShareController } from './analysis/analysis.controller.js';
 import { GoalsController } from './metrics/goals.controller.js';
 import { MssqlUsersRepo, PgUsersRepo, USERS_REPO } from './users/users-repo.js';
+import {
+  MssqlQuestionnairesRepo,
+  PgQuestionnairesRepo,
+  QUESTIONNAIRES_REPO,
+} from './questionnaires/questionnaires-repo.js';
 import { TeamsController } from './teams/teams.controller.js';
 import { MssqlTeamsRepo, PgTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
 import { ProjectPeopleController } from './projects/project-people.controller.js';
@@ -226,6 +231,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgUsersRepo, ms: MssqlUsersRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgUsersRepo, MssqlUsersRepo],
+        },
+        PgQuestionnairesRepo,
+        MssqlQuestionnairesRepo,
+        {
+          provide: QUESTIONNAIRES_REPO,
+          useFactory: (engine: Engine, pg: PgQuestionnairesRepo, ms: MssqlQuestionnairesRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgQuestionnairesRepo, MssqlQuestionnairesRepo],
         },
         AuditService,
         AuthService,
