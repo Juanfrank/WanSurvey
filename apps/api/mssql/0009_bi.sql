@@ -544,13 +544,13 @@ BEGIN
     SELECT e.version_id, e.variable, CAST(p.p AS nvarchar(450)),
       CASE
         WHEN p.p = e.lo AND JSON_QUERY(e.q, '$.scale.minLabel') IS NOT NULL THEN
-          (SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key], 'json') + N'":"'
-             + STRING_ESCAPE(CAST(p.p AS nvarchar(20)) + N' – ' + bi.plano(l.[value]), 'json') + N'"', N',') + N'}'
-           FROM OPENJSON(e.q, '$.scale.minLabel') l)
+          REPLACE((SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key], 'json') + N'":"#P# – '
+             + STRING_ESCAPE(bi.plano(l.[value]), 'json') + N'"', N',') + N'}'
+           FROM OPENJSON(e.q, '$.scale.minLabel') l), N'#P#', CAST(p.p AS nvarchar(20)))
         WHEN p.p = e.hi AND JSON_QUERY(e.q, '$.scale.maxLabel') IS NOT NULL THEN
-          (SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key], 'json') + N'":"'
-             + STRING_ESCAPE(CAST(p.p AS nvarchar(20)) + N' – ' + bi.plano(l.[value]), 'json') + N'"', N',') + N'}'
-           FROM OPENJSON(e.q, '$.scale.maxLabel') l)
+          REPLACE((SELECT N'{' + STRING_AGG(N'"' + STRING_ESCAPE(l.[key], 'json') + N'":"#P# – '
+             + STRING_ESCAPE(bi.plano(l.[value]), 'json') + N'"', N',') + N'}'
+           FROM OPENJSON(e.q, '$.scale.maxLabel') l), N'#P#', CAST(p.p AS nvarchar(20)))
         ELSE N'{"' + STRING_ESCAPE(ISNULL(e.lang, N'es'), 'json') + N'":"' + CAST(p.p AS nvarchar(20)) + N'"}'
       END,
       e.lang, 0, p.p
