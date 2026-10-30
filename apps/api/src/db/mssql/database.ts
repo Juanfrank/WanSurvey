@@ -10,6 +10,8 @@ export type MssqlTx = Transaction<MssqlSchema>;
 const DEADLOCK = 1205;
 /** The lock wait exceeded LOCK_TIMEOUT. */
 const LOCK_TIMEOUT = 1222;
+/** ROLLBACK without a transaction: SQL Server had already ended it. */
+const NO_TRANSACTION = 3903;
 const ATTEMPTS = 3;
 
 export interface MssqlLimits {
@@ -38,6 +40,10 @@ export class MssqlDatabase {
   async withTenant<T>(tenantId: string, fn: (tx: MssqlTx) => Promise<T>): Promise<T> {
     if (!isUuid(tenantId)) throw new Error('Invalid tenant id');
     for (let attempt = 1; ; attempt++) {
+      // SQL Server ends the transaction itself on a deadlock or an error thrown by a trigger;
+      // Kysely's own rollback then fails ("no corresponding BEGIN TRANSACTION") and hides the
+      // real error. Keep the first error and report it.
+      let original: unknown;
       try {
         return await this.db.transaction().execute(async (tx) => {
           await sql`SET LOCK_TIMEOUT ${sql.lit(this.limits.lockTimeoutMs)}`.execute(tx);
@@ -46,6 +52,9 @@ export class MssqlDatabase {
           );
           try {
             return await fn(tx);
+          } catch (e) {
+            original = e;
+            throw e;
           } finally {
             // Before the commit or rollback, on the same connection.
             await sql`EXEC sp_set_session_context @key = N'tenant_id', @value = NULL`
@@ -53,7 +62,9 @@ export class MssqlDatabase {
               .catch(() => undefined);
           }
         });
-      } catch (e) {
+      } catch (caught) {
+        const e =
+          original !== undefined && mssqlNumber(caught) === NO_TRANSACTION ? original : caught;
         const n = mssqlNumber(e);
         if (n === DEADLOCK && attempt < ATTEMPTS) {
           await new Promise((ok) => setTimeout(ok, 20 * attempt + Math.random() * 50));

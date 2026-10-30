@@ -119,7 +119,9 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: questionnaires', () => {
     expect(versions.map((v) => v.version)).toEqual([3, 2, 1]);
     const latest = await app.withTenant(a.id, (tx) => store.latestVersion(tx, id));
     expect(latest).toMatchObject({ version: 3, status: 'published' });
-    expect(latest!.definition).toEqual(draft('d3'));
+    // The versions are numbered in the order the lock was won; each keeps its own content.
+    const callOfVersion3 = published.findIndex((p) => p.version === 3) + 1;
+    expect(latest!.definition).toEqual(draft(`d${callOfVersion3}`));
   });
 
   it('keeps published versions immutable: only published to retired, nothing deleted', async () => {
