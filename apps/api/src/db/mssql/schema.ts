@@ -62,8 +62,10 @@ export interface MssqlSchema {
     action: string;
     target_type: string | null;
     target_id: string | null;
+    ip: string | null;
+    user_agent: string | null;
     details: JsonText;
-    at: Instant;
+    at: Generated<Date>;
   };
   questionnaires: {
     id: string;
