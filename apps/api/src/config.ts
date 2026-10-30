@@ -47,6 +47,12 @@ const ipList = z
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(3000),
+  /**
+   * The database engine. PostgreSQL serves production until the switch (docs/roadmap.md); with
+   * `mssql`, DATABASE_URL and DATABASE_ADMIN_URL are `mssql://…` URLs, and the modules that have
+   * moved use SQL Server (the rest still need PostgreSQL and are not usable yet).
+   */
+  DB_ENGINE: z.enum(['postgres', 'mssql']).default('postgres'),
   /** Connection as the restricted application role (RLS enforced). */
   DATABASE_URL: z.string().url(),
   /** Owner/superuser connection, used only for migrations and seeding. */
@@ -259,6 +265,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('Invalid configuration:\n  SMTP_URL: required when MAILER=smtp');
   if (parsed.success) {
     const d = parsed.data;
+    // Not every module has moved to SQL Server yet: refuse it where real data would be kept.
+    if (d.DB_ENGINE === 'mssql' && d.NODE_ENV === 'production')
+      throw new Error(
+        'Invalid configuration:\n  DB_ENGINE: mssql is not ready for production (modules still on PostgreSQL)',
+      );
+    if ((d.DB_ENGINE === 'mssql') !== /^mssql:/.test(d.DATABASE_URL))
+      throw new Error(
+        'Invalid configuration:\n  DATABASE_URL: must be an mssql:// URL with DB_ENGINE=mssql, and a postgres:// one otherwise',
+      );
     // The API and the worker run in separate containers: only Blob Storage is shared.
     if (d.NODE_ENV === 'production' && d.EXPORT_STORAGE !== 'blob')
       throw new Error('Invalid configuration:\n  EXPORT_STORAGE: must be blob in production');

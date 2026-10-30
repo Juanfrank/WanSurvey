@@ -214,14 +214,17 @@ export class Database implements OnModuleDestroy {
     const worker = role === 'worker';
     // A bounded pool per process. Idle connections are released and old ones renewed, so a
     // pooler or a failover never leaves the app holding dead connections.
-    this.probeClient = postgres(config.DATABASE_URL, {
+    // With SQL Server as the engine the PostgreSQL clients are never used (they connect lazily).
+    const url =
+      config.DB_ENGINE === 'mssql' ? 'postgres://unused@127.0.0.1:1/unused' : config.DATABASE_URL;
+    this.probeClient = postgres(url, {
       max: 1,
       idle_timeout: 60,
       connect_timeout: 5,
       prepare: false,
       onnotice: () => {},
     });
-    this.client = postgres(config.DATABASE_URL, {
+    this.client = postgres(url, {
       max: worker ? config.DB_WORKER_POOL_MAX : config.DB_POOL_MAX,
       idle_timeout: config.DB_IDLE_TIMEOUT_S,
       max_lifetime: config.DB_MAX_LIFETIME_S,

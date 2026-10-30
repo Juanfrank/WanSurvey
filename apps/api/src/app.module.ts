@@ -59,6 +59,7 @@ import { SsoConfigs } from './auth/sso-config.js';
 import { SsoService } from './auth/sso.service.js';
 import { CONFIG, loadConfig } from './config.js';
 import { Database } from './db/database.js';
+import { Engine } from './db/engine.js';
 import { HealthController } from './health/health.controller.js';
 import {
   ConsoleMailer,
@@ -189,6 +190,7 @@ export class AppModule {
                   : new ConsoleMailer(config.NODE_ENV !== 'production')),
         },
         Database,
+        Engine,
         AuditService,
         AuthService,
         SsoService,
