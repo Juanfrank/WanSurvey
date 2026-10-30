@@ -4,6 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createMssqlDb } from '../../src/db/mssql/connection.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
+import type { Column, Table } from '@wansurvey/exporters';
+import { sqlExportMssql } from '../../src/exports/sql-export.mssql.js';
 import { BiStore } from '../../src/stats/bi-store.mssql.js';
 import { QuestionnaireStore } from '../../src/questionnaires/questionnaire-store.mssql.js';
 
@@ -429,5 +431,117 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       sql`SELECT CONVERT(varchar(10), fecha, 23) AS fecha FROM bi.fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`,
     );
     expect(days.map((d) => d.fecha)).toEqual(['2026-11-01', '2026-11-02']);
+  });
+
+  describe('SQL export (T-SQL)', () => {
+    const col = (
+      name: string,
+      source: Column['source'],
+      type: Column['type'] = 'numeric',
+    ): Column => ({ name, label: name, type, source }) as Column;
+    const main: Table = {
+      name: 'data',
+      rows: [],
+      columns: [
+        col('interview_id', { kind: 'meta', field: 'interview_id' }, 'string'),
+        col('interviewer', { kind: 'meta', field: 'interviewer' }, 'string'),
+        col('submitted_at', { kind: 'meta', field: 'submitted_at' }, 'string'),
+        col('P1', { kind: 'answer', variable: 'P1', read: 'code' }),
+        col('P2_a', { kind: 'answer', variable: 'P2', read: 'dummy', code: 'a' }),
+        col('P2_b', { kind: 'answer', variable: 'P2', read: 'dummy', code: 'b' }),
+        col('G_r1', { kind: 'answer', variable: 'G', read: 'grid', row: 'r1' }),
+        col('L', { kind: 'answer', variable: 'L', read: 'coded' }),
+        col('NOM_1', { kind: 'answer', variable: 'NOM', read: 'text', path: [1] }, 'string'),
+        col('back_moves', { kind: 'paradata', field: 'back_moves' }),
+        col('flags', { kind: 'paradata', field: 'flags' }, 'string'),
+      ],
+    };
+    const roster: Table = {
+      name: 'members',
+      rows: [],
+      columns: [
+        col('interview_id', { kind: 'meta', field: 'interview_id' }, 'string'),
+        col('members_row', { kind: 'roster_row', level: 1 }),
+        col('NOM', { kind: 'answer', variable: 'NOM', read: 'text' }, 'string'),
+      ],
+    };
+    const sheets = (labels: 'codes' | 'labels') =>
+      sqlExportMssql({
+        name: 'Encuesta',
+        projectId: a.project,
+        questionnaireId: q,
+        versionId,
+        language: 'es',
+        opts: {
+          format: 'sql',
+          labels,
+          rosters: 'wide',
+          paradata: true,
+          approvedOnly: false,
+        },
+        main,
+        rosters: [roster],
+      })
+        .split(/^-- Hoja/m)
+        .slice(1);
+    const run = async (text: string) =>
+      await rows<Record<string, unknown>>(
+        sql.raw(text.slice(text.indexOf('\n') + 1)) as RawBuilder<Record<string, unknown>>,
+      );
+    const plain = (r: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(r).map(([k, v]) => [
+          k,
+          v === null
+            ? null
+            : v instanceof Date
+              ? v
+              : typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))
+                ? Number(v)
+                : v,
+        ]),
+      );
+
+    it('gives the Excel sheet with codes: one row per submission, in order', async () => {
+      const r = (await run(sheets('codes')[0]!)).map(plain);
+      expect(r).toHaveLength(2);
+      expect(r[0]).toMatchObject({
+        interview_id: i1,
+        interviewer: 'Ana',
+        submitted_at: '2026-11-02T03:00:00.000Z',
+        P1: 2,
+        P2_a: 1,
+        P2_b: 1,
+        G_r1: 1,
+        L: 3,
+        NOM_1: 'Ana',
+        back_moves: 1,
+        flags: 'alone speeding',
+      });
+      expect(r[1]).toMatchObject({
+        interview_id: i2,
+        P1: -97,
+        P2_a: 0,
+        P2_b: 0,
+        G_r1: null,
+        L: 1,
+        NOM_1: null,
+        back_moves: 0,
+      });
+    });
+
+    it('writes labels instead of codes, with Sí/No for ticked options and special answers named', async () => {
+      const r = (await run(sheets('labels')[0]!)) as Record<string, unknown>[];
+      expect(r[0]).toMatchObject({ P1: 'Alto', P2_a: 'Sí', P2_b: 'Sí', G_r1: 'Sí' });
+      expect(r[1]).toMatchObject({ P1: 'No sabe', P2_a: 'No', P2_b: 'No' });
+    });
+
+    it('gives a roster as its own sheet, one row per member in order', async () => {
+      const r = (await run(sheets('codes')[1]!)).map(plain);
+      expect(r.map((x) => [x.interview_id, x.members_row, x.NOM])).toEqual([
+        [i1, 1, 'Ana'],
+        [i1, 2, 'Luis'],
+      ]);
+    });
   });
 });
