@@ -7,47 +7,23 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ROLE_RANK, type Role } from '@wansurvey/schema';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { AuthService } from '../auth/auth.service.js';
+import { AUTH_REPO, type AuthRepo } from '../auth/auth-repo.js';
 import { tenantRank, type AuthContext, type MembershipGrant } from '../common/auth-context.js';
 import { sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, type Tx } from '../db/database.js';
-import {
-  memberships,
-  projects,
-  sessions,
-  tenantMembers,
-  tenants,
-  userTokens,
-  users,
-} from '../db/schema.js';
+import { USERS_REPO, type UsersRepo, type UsersTx } from './users-repo.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 
 const INVITATION_TTL_HOURS = 7 * 24;
 
-/** A member as seen by their organisation: global identity plus this organisation's fields. */
-const memberColumns = {
-  id: users.id,
-  email: users.email,
-  name: users.name,
-  firstName: users.firstName,
-  phone: users.phone,
-  languages: users.languages,
-  totpEnabled: users.totpEnabled,
-  status: tenantMembers.status,
-  idCode: tenantMembers.idCode,
-  phoneExtension: tenantMembers.phoneExtension,
-  createdAt: tenantMembers.createdAt,
-  deactivatedAt: tenantMembers.deactivatedAt,
-};
-
 @Injectable()
 export class UsersService {
   constructor(
-    private readonly database: Database,
+    @Inject(USERS_REPO) private readonly repo: UsersRepo,
+    @Inject(AUTH_REPO) private readonly authRepo: AuthRepo,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
     @Inject(CONFIG) private readonly config: AppConfig,
@@ -55,13 +31,9 @@ export class UsersService {
   ) {}
 
   async list(ctx: AuthContext) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const rows = await tx
-        .select(memberColumns)
-        .from(tenantMembers)
-        .innerJoin(users, eq(users.id, tenantMembers.userId))
-        .orderBy(users.name);
-      const grants = await tx.select().from(memberships);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const rows = await t.members();
+      const grants = await t.grants();
       return rows.map((u) => ({
         ...u,
         memberships: grants
@@ -84,14 +56,11 @@ export class UsersService {
     }
   }
 
-  private async assertProjectsExist(tx: Tx, grants: MembershipGrant[]) {
+  private async assertProjectsExist(t: UsersTx, grants: MembershipGrant[]) {
     const ids = [...new Set(grants.map((g) => g.projectId).filter((p): p is string => p !== null))];
     if (!ids.length) return;
-    const found = await tx
-      .select({ id: projects.id })
-      .from(projects)
-      .where(inArray(projects.id, ids));
-    if (found.length !== ids.length) throw new BadRequestException('Unknown project');
+    if ((await t.existingProjects(ids)).length !== ids.length)
+      throw new BadRequestException('Unknown project');
   }
 
   async invite(
@@ -107,45 +76,24 @@ export class UsersService {
   ) {
     this.assertCanGrant(ctx, input.memberships);
     // Accounts are global: an e-mail that already has one is linked, not duplicated.
-    const existingId = await this.database.userIdByEmail(input.email);
+    const existingId = (await this.authRepo.userByEmail(input.email))?.id ?? null;
     const userId = existingId ?? uuidv7();
-    const result = await this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.assertProjectsExist(tx, input.memberships);
-      if (existingId) {
-        const [member] = await tx
-          .select({ id: tenantMembers.id })
-          .from(tenantMembers)
-          .where(eq(tenantMembers.userId, existingId));
-        if (member) throw new ConflictException('This person is already a member');
-      } else {
-        // No RETURNING: the new row only becomes visible once the membership below exists.
-        await tx.insert(users).values({
-          id: userId,
-          email: input.email,
-          name: input.name,
-          firstName: input.firstName ?? null,
-          languages: input.languages ?? [],
-          status: 'pending',
-        });
-      }
-      await tx.insert(tenantMembers).values({
-        tenantId: ctx.tenantId,
+    const result = await this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.assertProjectsExist(t, input.memberships);
+      if (existingId && (await t.isMember(existingId)))
+        throw new ConflictException('This person is already a member');
+      await t.invite({
         userId,
-        status: 'invited',
-        idCode: input.idCode ?? null,
+        email: input.email,
+        name: input.name,
+        firstName: input.firstName,
+        idCode: input.idCode,
+        languages: input.languages,
+        grants: input.memberships,
+        existing: !!existingId,
       });
-      await tx
-        .insert(memberships)
-        .values(input.memberships.map((m) => ({ tenantId: ctx.tenantId, userId, ...m })));
-      const token = await this.auth.issueToken(tx, {
-        tenantId: ctx.tenantId,
-        userId,
-        purpose: 'invitation',
-        ttlHours: INVITATION_TTL_HOURS,
-      });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      const token = await t.issueInvitation(userId, INVITATION_TTL_HOURS);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.invited',
           targetType: 'user',
@@ -157,23 +105,11 @@ export class UsersService {
           },
         }),
       );
-      const [member] = await tx
-        .select(memberColumns)
-        .from(tenantMembers)
-        .innerJoin(users, eq(users.id, tenantMembers.userId))
-        .where(eq(tenantMembers.userId, userId));
-      return { member: member!, token, org: await this.slug(tx, ctx.tenantId) };
+      const member = await t.member(userId);
+      return { member: member!, token, org: await t.slug() };
     });
     await this.sendInvitation(result.member, result.token, !!existingId, result.org);
     return { ...result.member, existingAccount: !!existingId, memberships: input.memberships };
-  }
-
-  private async slug(tx: Tx, tenantId: string): Promise<string> {
-    const [t] = await tx
-      .select({ slug: tenants.slug })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId));
-    return t!.slug;
   }
 
   private async sendInvitation(
@@ -214,44 +150,24 @@ export class UsersService {
    * expired or been lost); earlier links stop working.
    */
   async resendInvitation(ctx: AuthContext, userId: string) {
-    const result = await this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.loadTarget(tx, ctx, userId);
-      const [member] = await tx
-        .select({ ...memberColumns, userStatus: users.status })
-        .from(tenantMembers)
-        .innerJoin(users, eq(users.id, tenantMembers.userId))
-        .where(eq(tenantMembers.userId, userId));
+    const result = await this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.loadTarget(t, ctx, userId);
+      const member = await t.member(userId);
       if (member!.status !== 'invited')
         throw new ConflictException({
           code: 'NOT_INVITED',
           message: 'This person has already accepted their invitation',
         });
-      await tx
-        .update(userTokens)
-        .set({ usedAt: new Date() })
-        .where(
-          and(
-            eq(userTokens.userId, userId),
-            eq(userTokens.purpose, 'invitation'),
-            isNull(userTokens.usedAt),
-          ),
-        );
-      const token = await this.auth.issueToken(tx, {
-        tenantId: ctx.tenantId,
-        userId,
-        purpose: 'invitation',
-        ttlHours: INVITATION_TTL_HOURS,
-      });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.voidInvitations(userId);
+      const token = await t.issueInvitation(userId, INVITATION_TTL_HOURS);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.invitation_resent',
           targetType: 'user',
           targetId: userId,
         }),
       );
-      return { member: member!, token, org: await this.slug(tx, ctx.tenantId) };
+      return { member: member!, token, org: await t.slug() };
     });
     await this.sendInvitation(
       result.member,
@@ -263,22 +179,13 @@ export class UsersService {
 
   /** Gives a deactivated member their access back (still invited if they never accepted). */
   async reactivate(ctx: AuthContext, userId: string) {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.loadTarget(tx, ctx, userId);
-      const [row] = await tx
-        .select({ status: tenantMembers.status, userStatus: users.status })
-        .from(tenantMembers)
-        .innerJoin(users, eq(users.id, tenantMembers.userId))
-        .where(eq(tenantMembers.userId, userId));
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.loadTarget(t, ctx, userId);
+      const row = await t.member(userId);
       if (row!.status !== 'deactivated')
         throw new ConflictException({ code: 'NOT_DEACTIVATED', message: 'This person is active' });
-      await tx
-        .update(tenantMembers)
-        .set({ status: row!.userStatus === 'pending' ? 'invited' : 'active', deactivatedAt: null })
-        .where(eq(tenantMembers.userId, userId));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.setMemberStatus(userId, row!.userStatus === 'pending' ? 'invited' : 'active');
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.reactivated',
           targetType: 'user',
@@ -291,17 +198,11 @@ export class UsersService {
   async setMemberships(ctx: AuthContext, userId: string, grants: MembershipGrant[]) {
     if (userId === ctx.userId) throw new ForbiddenException('You cannot change your own roles');
     this.assertCanGrant(ctx, grants);
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const before = await this.loadTarget(tx, ctx, userId);
-      await this.assertProjectsExist(tx, grants);
-      await tx.delete(memberships).where(eq(memberships.userId, userId));
-      if (grants.length)
-        await tx
-          .insert(memberships)
-          .values(grants.map((g) => ({ tenantId: ctx.tenantId, userId, ...g })));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const before = await this.loadTarget(t, ctx, userId);
+      await this.assertProjectsExist(t, grants);
+      await t.setGrants(userId, grants);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.role_changed',
           targetType: 'user',
@@ -315,18 +216,13 @@ export class UsersService {
 
   async deactivate(ctx: AuthContext, userId: string) {
     if (userId === ctx.userId) throw new ForbiddenException('You cannot deactivate yourself');
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.loadTarget(tx, ctx, userId);
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.loadTarget(t, ctx, userId);
       // Only this organisation's membership ends; the account and its history are kept, so
       // historic interviews stay attributable and other organisations are unaffected.
-      await tx
-        .update(tenantMembers)
-        .set({ status: 'deactivated', deactivatedAt: new Date() })
-        .where(eq(tenantMembers.userId, userId));
-      await this.revokeSessions(tx, userId);
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.setMemberStatus(userId, 'deactivated');
+      await t.revokeSessions(userId);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.deactivated',
           targetType: 'user',
@@ -337,12 +233,10 @@ export class UsersService {
   }
 
   async forceLogout(ctx: AuthContext, userId: string) {
-    await this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.loadTarget(tx, ctx, userId);
-      const n = await this.revokeSessions(tx, userId);
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+    await this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.loadTarget(t, ctx, userId);
+      const n = await t.revokeSessions(userId);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.forced_logout',
           targetType: 'user',
@@ -354,18 +248,16 @@ export class UsersService {
   }
 
   /** Loads the target's grants and refuses to act on someone who outranks the actor. */
-  private async loadTarget(tx: Tx, ctx: AuthContext, userId: string): Promise<MembershipGrant[]> {
-    const [member] = await tx
-      .select({ id: tenantMembers.id })
-      .from(tenantMembers)
-      .where(eq(tenantMembers.userId, userId));
-    if (!member) throw new NotFoundException('User not found');
-    const grants = (await tx.select().from(memberships).where(eq(memberships.userId, userId))).map(
-      (g) => ({
-        role: g.role as Role,
-        projectId: g.projectId,
-      }),
-    );
+  private async loadTarget(
+    t: UsersTx,
+    ctx: AuthContext,
+    userId: string,
+  ): Promise<MembershipGrant[]> {
+    if (!(await t.isMember(userId))) throw new NotFoundException('User not found');
+    const grants = (await t.grants(userId)).map((g) => ({
+      role: g.role as Role,
+      projectId: g.projectId,
+    }));
     if (
       tenantRank(grants) > tenantRank(ctx.memberships) ||
       (grants.some((g) => g.role === 'owner') && tenantRank(ctx.memberships) < ROLE_RANK.owner)
@@ -373,14 +265,5 @@ export class UsersService {
       throw new ForbiddenException('You cannot manage this user');
     }
     return grants;
-  }
-
-  private async revokeSessions(tx: Tx, userId: string): Promise<number> {
-    const rows = await tx
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
-      .returning({ id: sessions.id });
-    return rows.length;
   }
 }

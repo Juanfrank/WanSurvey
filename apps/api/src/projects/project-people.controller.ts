@@ -3,6 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -10,7 +11,6 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { ROLE_RANK, ROLES, Role } from '@wansurvey/schema';
-import { and, asc, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import {
@@ -21,8 +21,8 @@ import {
   type AuthContext,
 } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database, type Tx } from '../db/database.js';
-import { memberships, projects, tenantMembers, users } from '../db/schema.js';
+import { USERS_REPO, type UsersRepo } from '../users/users-repo.js';
+import { ORG_REPO, type OrgRepo } from './org-repo.js';
 
 /** A person has at most one role per project; null takes them out of it. */
 const PeopleBody = z.object({ role: Role.nullable() });
@@ -36,7 +36,8 @@ const PeopleBody = z.object({ role: Role.nullable() });
 @Controller('projects/:projectId/people')
 export class ProjectPeopleController {
   constructor(
-    private readonly database: Database,
+    @Inject(USERS_REPO) private readonly repo: UsersRepo,
+    @Inject(ORG_REPO) private readonly org: OrgRepo,
     private readonly audit: AuditService,
   ) {}
 
@@ -54,20 +55,10 @@ export class ProjectPeopleController {
   @Get()
   @RequirePermission(['users.read', 'projects.update'], { projectParam: 'projectId' })
   list(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.project(tx, projectId);
-      const people = await tx
-        .select({
-          id: users.id,
-          name: users.name,
-          email: users.email,
-          status: tenantMembers.status,
-        })
-        .from(tenantMembers)
-        .innerJoin(users, eq(users.id, tenantMembers.userId))
-        .where(ne(tenantMembers.status, 'deactivated'))
-        .orderBy(asc(users.name));
-      const grants = await tx.select().from(memberships);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.project(projectId, ctx);
+      const people = (await t.members()).filter((m) => m.status !== 'deactivated');
+      const grants = await t.grants();
       const members = people
         .map((p) => {
           const mine = grants.filter((g) => g.userId === p.id);
@@ -106,14 +97,10 @@ export class ProjectPeopleController {
     if (role && !grantable.includes(role))
       throw new ForbiddenException(`You cannot grant the ${role} role`);
     const admin = can(ctx.memberships, 'users.manage');
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.project(tx, projectId);
-      const [member] = await tx
-        .select({ id: tenantMembers.id })
-        .from(tenantMembers)
-        .where(eq(tenantMembers.userId, userId));
-      if (!member) throw new NotFoundException('User not found');
-      const all = await tx.select().from(memberships).where(eq(memberships.userId, userId));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.project(projectId, ctx);
+      if (!(await t.isMember(userId))) throw new NotFoundException('User not found');
+      const all = await t.grants(userId);
       const held = all.map((g) => ({ role: g.role as Role, projectId: g.projectId }));
       // Nobody acts on someone who outranks them; a project manager only on people at most
       // supervisor in the organisation.
@@ -127,14 +114,8 @@ export class ProjectPeopleController {
       // Nor take away a role in the project they could not have given.
       if (before && !grantable.includes(before))
         throw new ForbiddenException('You cannot manage this user');
-      await tx
-        .delete(memberships)
-        .where(and(eq(memberships.userId, userId), eq(memberships.projectId, projectId)));
-      if (role)
-        await tx.insert(memberships).values({ tenantId: ctx.tenantId, userId, role, projectId });
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.setProjectRole(userId, projectId, role);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.role_changed',
           targetType: 'user',
@@ -146,11 +127,8 @@ export class ProjectPeopleController {
     });
   }
 
-  private async project(tx: Tx, projectId: string) {
-    const [p] = await tx
-      .select({ id: projects.id })
-      .from(projects)
-      .where(eq(projects.id, projectId));
+  private async project(projectId: string, ctx: AuthContext) {
+    const p = await this.org.inTenant(ctx.tenantId, (o) => o.project(projectId));
     if (!p) throw new NotFoundException('Project not found');
   }
 }
