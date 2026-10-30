@@ -73,9 +73,15 @@ until the switch):
   the organisation's settings and role changes; projects with settings merged on update and logos
   kept apart from the project row.
 
-**Left:** stores for the sign-in service itself (password, second factor, SSO), metrics, jobs,
-library, dashboard, geolocation, privacy and analysis; then the switch of the controllers from
-PostgreSQL to the stores (phases 4 and 5).
+- **Sign-in service** (`src/auth/identity-store.mssql.ts`): second-factor codes that work once even
+  when two race, links to an external identity, and an organisation's Microsoft sign-in with its
+  domains claimed one organisation at a time.
+- **Schema parity** (`apps/api/test/schema-parity.test.ts`, runs without a database): every table
+  and column of the PostgreSQL schema exists in the T-SQL migrations. Types, constraints and
+  indexes are not compared.
+
+**Left:** stores for metrics, jobs, library, dashboard, geolocation, privacy and analysis; then the
+switch of the controllers from PostgreSQL to the stores (phases 4 and 5).
 
 More lessons: a `Date` parameter travels as `datetime`, which rounds to 3.33 ms, so what is
 written to or compared with a `datetimeoffset(3)` can land a millisecond off: send instants
