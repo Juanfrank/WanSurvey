@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     include: ['test/mssql/**/*.test.ts'],
+    globalSetup: ['./test/mssql/global-setup.ts'],
     fileParallelism: false,
     testTimeout: 60_000,
     hookTimeout: 120_000,

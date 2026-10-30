@@ -5,23 +5,6 @@ import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { createMssqlDb } from '../../src/db/mssql/connection.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 
-/** The test database, made through `master` when the server does not have it yet. */
-async function ensureDatabase(adminUrl: string): Promise<void> {
-  const url = new URL(adminUrl);
-  const name = decodeURIComponent(url.pathname.slice(1));
-  url.pathname = '/master';
-  const master = createMssqlDb<Record<string, never>>(url.toString(), { max: 1 });
-  try {
-    await sql
-      .raw(
-        `IF DB_ID(N'${name.replace(/'/g, "''")}') IS NULL CREATE DATABASE [${name.replace(/]/g, ']]')}]`,
-      )
-      .execute(master);
-  } finally {
-    await master.destroy();
-  }
-}
-
 /**
  * Organisation isolation on SQL Server (mssql/0001: security policy on SESSION_CONTEXT). Runs
  * only where a SQL Server is given: MSSQL_ADMIN_URL (an owner of an empty database such as
@@ -37,7 +20,6 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: isolation by organisation', () => {
   const b = { id: randomUUID(), slug: `b-${Date.now().toString(36)}` };
 
   beforeAll(async () => {
-    await ensureDatabase(ADMIN!);
     await runMssqlMigrations(ADMIN!, APP!);
     // Twice: the second finds nothing left to do.
     await runMssqlMigrations(ADMIN!, APP!);
