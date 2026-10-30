@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,15 +15,19 @@ import {
   type FrameUnit,
 } from '@wansurvey/logic';
 import { SamplingPlanInput } from '@wansurvey/schema/sampling';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { randomToken } from '../common/crypto.js';
-import { Database, type Tx } from '../db/database.js';
-import { cases, contacts, frameUnits, samplingPlans } from '../db/schema.js';
+import {
+  SAMPLE_REPO,
+  type PlanView,
+  type SampleRepo,
+  type SampleTx,
+  type UnitView,
+} from './sampling-repo.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
-import { chunks, CasesService, ofQuestionnaire } from '../cases/cases.service.js';
+import { chunks, CasesService } from '../cases/cases.service.js';
 import { CrossChecker } from './cross-check.js';
 
 export const ReleaseBody = z.object({
@@ -48,18 +53,9 @@ export const FieldCasesBody = z.object({
   cell: z.string().trim().max(200).optional(),
 });
 
-type Plan = typeof samplingPlans.$inferSelect;
+type Plan = PlanView;
 type Q = string | null;
-
-/** Plans and frames belong to one questionnaire (or to the project when it has none yet). */
-const sameQ = (
-  col:
-    | typeof samplingPlans.questionnaireId
-    | typeof frameUnits.questionnaireId
-    | typeof cases.questionnaireId,
-  q: Q,
-) => (q ? eq(col, q) : isNull(col));
-type Unit = typeof frameUnits.$inferSelect;
+type Unit = UnitView;
 
 /**
  * The sampling selector (S1): the frame of units, the plan, the selection with its
@@ -69,12 +65,12 @@ type Unit = typeof frameUnits.$inferSelect;
 @Injectable()
 export class SamplingService {
   constructor(
-    private readonly database: Database,
+    @Inject(SAMPLE_REPO) private readonly repo: SampleRepo,
     private readonly casesService: CasesService,
     private readonly audit: AuditService,
   ) {}
 
-  private input(plan: Plan | undefined): SamplingPlanInput {
+  private input(plan: Plan | null | undefined): SamplingPlanInput {
     return SamplingPlanInput.parse(
       plan
         ? {
@@ -91,25 +87,17 @@ export class SamplingService {
     );
   }
 
-  private async plan(tx: Tx, projectId: string, q: Q) {
-    const [p] = await tx
-      .select()
-      .from(samplingPlans)
-      .where(and(eq(samplingPlans.projectId, projectId), sameQ(samplingPlans.questionnaireId, q)));
-    return p;
+  private plan(t: SampleTx, projectId: string, q: Q, lock = false) {
+    return t.plan(projectId, q, lock);
   }
 
-  private async units(tx: Tx, projectId: string, q: Q) {
-    return tx
-      .select()
-      .from(frameUnits)
-      .where(and(eq(frameUnits.projectId, projectId), sameQ(frameUnits.questionnaireId, q)))
-      .orderBy(asc(frameUnits.externalId));
+  private units(t: SampleTx, projectId: string, q: Q) {
+    return t.units(projectId, q);
   }
 
   /** The plan's cross-case checks against cases already answered (null when there are none). */
-  private checker(tx: Tx, projectId: string, input: SamplingPlanInput) {
-    return CrossChecker.load(tx, this.casesService.pii, projectId, input.crossChecks);
+  private checker(t: SampleTx, projectId: string, input: SamplingPlanInput) {
+    return CrossChecker.load(t, this.casesService.pii, projectId, input.crossChecks);
   }
 
   /**
@@ -185,19 +173,15 @@ export class SamplingService {
 
   /** The plan, its sizes and checks, the frame in numbers and what has been selected. */
   get(tenantId: string, projectId: string, questionnaireId?: string) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const plan = await this.plan(tx, projectId, q);
+    return this.repo.inTenant(tenantId, async (t) => {
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const plan = await this.plan(t, projectId, q);
       const input = this.input(plan);
-      const units = await this.units(tx, projectId, q);
-      const screened = this.screen(input, units, await this.checker(tx, projectId, input));
+      const units = await this.units(t, projectId, q);
+      const screened = this.screen(input, units, await this.checker(t, projectId, input));
       const stats = this.stats(input, screened);
       const crossChecked = screened.filter((s) => s.out === 'cross_check').length;
-      const roles = await tx
-        .select({ role: cases.selectionRole, n: sql<number>`count(*)::int` })
-        .from(cases)
-        .where(and(eq(cases.projectId, projectId), ofQuestionnaire(q)))
-        .groupBy(cases.selectionRole);
+      const roles = await t.selectionRoles(projectId, q);
       const reservesLeft = units.filter((u) => u.role === 'reserve' && !u.caseId).length;
       // Never selected: what a further batch can draw from.
       const unitsLeft = units.filter((u) => !u.role && !u.caseId && u.eligible !== false).length;
@@ -231,35 +215,27 @@ export class SamplingService {
       const err = rule?.trim() ? ruleError(rule) : null;
       if (err) throw new BadRequestException({ code: 'BAD_RULE', message: err });
     }
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.casesService.project(tx, projectId);
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const current = await this.plan(tx, projectId, q);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.casesService.project(t, projectId);
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const current = await this.plan(t, projectId, q);
       if (current?.status === 'selected') {
-        await tx
-          .update(samplingPlans)
-          .set({
-            quotas: body.quotas,
-            substitution: body.substitution,
-            // Later units (batches, additions) are checked with the current rules.
-            crossChecks: body.crossChecks,
-            updatedAt: new Date(),
-            updatedBy: ctx.userId,
-          })
-          .where(eq(samplingPlans.id, current.id));
+        await t.updatePlan(current.id, {
+          quotas: body.quotas,
+          substitution: body.substitution,
+          // Later units (batches, additions) are checked with the current rules.
+          crossChecks: body.crossChecks,
+          updatedBy: ctx.userId,
+        });
       } else if (current) {
-        await tx
-          .update(samplingPlans)
-          .set({ ...body, updatedAt: new Date(), updatedBy: ctx.userId })
-          .where(eq(samplingPlans.id, current.id));
+        await t.updatePlan(current.id, { ...body, updatedBy: ctx.userId });
       } else {
-        await tx.insert(samplingPlans).values({
-          tenantId: ctx.tenantId,
+        await t.insertPlan({
           projectId,
           questionnaireId: q,
-          ...body,
+          body,
           seed: randomToken(8),
-          updatedBy: ctx.userId,
+          userId: ctx.userId,
         });
       }
       return { ok: true };
@@ -268,25 +244,25 @@ export class SamplingService {
 
   /** Runs the selection without keeping it: sizes, per stratum, π range and warnings. */
   preview(tenantId: string, projectId: string, questionnaireId?: string) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const plan = await this.plan(tx, projectId, q);
+    return this.repo.inTenant(tenantId, async (t) => {
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const plan = await this.plan(t, projectId, q);
       const input = this.input(plan);
-      const run = await this.run(tx, projectId, q, input, plan?.seed ?? 'preview');
+      const run = await this.run(t, projectId, q, input, plan?.seed ?? 'preview');
       return run.summary;
     });
   }
 
   private async run(
-    tx: Tx,
+    t: SampleTx,
     projectId: string,
     q: Q,
     input: SamplingPlanInput,
     seed: string,
     batch?: { units: Unit[]; count: number },
   ) {
-    const units = batch?.units ?? (await this.units(tx, projectId, q));
-    const screened = this.screen(input, units, await this.checker(tx, projectId, input));
+    const units = batch?.units ?? (await this.units(t, projectId, q));
+    const screened = this.screen(input, units, await this.checker(t, projectId, input));
     const stats = this.stats(input, screened);
     const sizes = planSizes(input, stats.eligible || undefined);
     const errors = batch ? [] : planChecks(input, stats).filter((c) => c.severity === 'error');
@@ -327,18 +303,14 @@ export class SamplingService {
    * release order. Probabilities and base weights go on units and cases (decision 5).
    */
   select(ctx: AuthContext, projectId: string, questionnaireId?: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const [plan] = await tx
-        .select()
-        .from(samplingPlans)
-        .where(and(eq(samplingPlans.projectId, projectId), sameQ(samplingPlans.questionnaireId, q)))
-        .for('update');
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const plan = await this.plan(t, projectId, q, true);
       if (!plan) throw new NotFoundException('Save the plan first');
       if (plan.status === 'selected')
         throw new ConflictException({ code: 'SAMPLE_SELECTED', message: 'Already selected' });
       const input = this.input(plan);
-      const run = await this.run(tx, projectId, q, input, plan.seed);
+      const run = await this.run(t, projectId, q, input, plan.seed);
       if (run.errors.length)
         throw new ConflictException({
           code: 'PLAN_NOT_READY',
@@ -351,27 +323,22 @@ export class SamplingService {
           message: 'Units are captured in the field: create field cases instead',
         });
       // Screening is recorded on every unit.
-      for (const s of run.screened)
-        if (s.out)
-          await tx
-            .update(frameUnits)
-            .set({ eligible: s.out !== 'ineligible', exclusion: s.out })
-            .where(eq(frameUnits.id, s.unit.id));
+      await t.markUnits(
+        run.screened
+          .filter((s) => s.out)
+          .map((s) => ({ id: s.unit.id, eligible: s.out !== 'ineligible', exclusion: s.out! })),
+      );
       const byId = new Map(run.screened.map((s) => [s.unit.id, s.unit]));
       const prob = (p: number) => (run.probability ? p : null);
       for (const r of run.result.reserve)
-        await tx
-          .update(frameUnits)
-          .set({
-            role: 'reserve',
-            releaseOrder: r.order,
-            inclusionProb: prob(r.prob),
-            baseWeight: run.probability ? baseWeight(r.prob) : null,
-            stratum: r.stratum,
-          })
-          .where(eq(frameUnits.id, r.id));
+        await t.setReserve(r.id, {
+          releaseOrder: r.order,
+          prob: prob(r.prob),
+          weight: run.probability ? baseWeight(r.prob) : null,
+          stratum: r.stratum,
+        });
       const created = await this.makeCases(
-        tx,
+        t,
         ctx,
         projectId,
         q,
@@ -383,13 +350,8 @@ export class SamplingService {
         })),
       );
       const result = { ...run.summary, created: created.length };
-      await tx
-        .update(samplingPlans)
-        .set({ status: 'selected', selectedAt: new Date(), selectedBy: ctx.userId, result })
-        .where(eq(samplingPlans.id, plan.id));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.updatePlan(plan.id, { result, selectedBy: ctx.userId });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'sampling.selected',
           targetType: 'project',
@@ -412,20 +374,19 @@ export class SamplingService {
    * become cases at once ("main", probability 1 in a census, none otherwise); the rest stay in
    * the frame with the reason.
    */
-  async addUnits(tx: Tx, ctx: AuthContext, projectId: string, q: Q, unitIds: string[]) {
+  async addUnits(t: SampleTx, ctx: AuthContext, projectId: string, q: Q, unitIds: string[]) {
     if (!unitIds.length) return 0;
-    const input = this.input(await this.plan(tx, projectId, q));
-    const units = await tx.select().from(frameUnits).where(inArray(frameUnits.id, unitIds));
-    const screened = this.screen(input, units, await this.checker(tx, projectId, input));
-    for (const s of screened)
-      if (s.out)
-        await tx
-          .update(frameUnits)
-          .set({ eligible: s.out !== 'ineligible', exclusion: s.out })
-          .where(eq(frameUnits.id, s.unit.id));
+    const input = this.input(await this.plan(t, projectId, q));
+    const units = await t.unitsByIds(unitIds);
+    const screened = this.screen(input, units, await this.checker(t, projectId, input));
+    await t.markUnits(
+      screened
+        .filter((s) => s.out)
+        .map((s) => ({ id: s.unit.id, eligible: s.out !== 'ineligible', exclusion: s.out! })),
+    );
     const census = input.design.family === 'census';
     const created = await this.makeCases(
-      tx,
+      t,
       ctx,
       projectId,
       q,
@@ -443,7 +404,7 @@ export class SamplingService {
 
   /** Cases from frame units, with their contacts, role, probability and base weight. */
   private async makeCases(
-    tx: Tx,
+    t: SampleTx,
     ctx: AuthContext,
     projectId: string,
     q: Q,
@@ -455,61 +416,51 @@ export class SamplingService {
       substituteFor?: string;
     }[],
   ) {
-    const pii = await this.casesService.piiFields(tx, projectId);
+    const pii = await this.casesService.piiFields(t, projectId);
     const created: string[] = [];
     for (const part of chunks(rows)) {
       if (!part.length) continue;
-      const ins = await tx
-        .insert(cases)
-        .values(
-          part.map((r) => ({
-            tenantId: ctx.tenantId,
-            projectId,
-            questionnaireId: q,
-            externalId: r.unit.externalId,
-            ...this.casesService.pii.seal(this.casesService.pii.read(r.unit), pii),
-            importId: r.unit.importId,
-            frameUnitId: r.unit.id,
-            selectionRole: r.role,
-            substituteFor: r.substituteFor ?? null,
-            inclusionProb: r.prob,
-            baseWeight: r.prob ? baseWeight(r.prob) : null,
-          })),
-        )
-        .onConflictDoNothing({ target: [cases.projectId, cases.questionnaireId, cases.externalId] })
-        .returning({ id: cases.id, externalId: cases.externalId, frameUnitId: cases.frameUnitId });
+      const ins = await t.insertCases(
+        projectId,
+        part.map((r) => ({
+          externalId: r.unit.externalId,
+          questionnaireId: q,
+          ...this.casesService.pii.seal(this.casesService.pii.read(r.unit), pii),
+          importId: r.unit.importId,
+          frameUnitId: r.unit.id,
+          selectionRole: r.role,
+          substituteFor: r.substituteFor ?? null,
+          inclusionProb: r.prob,
+          baseWeight: r.prob ? baseWeight(r.prob) : null,
+        })),
+      );
       const byUnit = new Map(ins.map((x) => [x.frameUnitId!, x.id]));
-      const contactRows = part.flatMap((r) =>
-        byUnit.has(r.unit.id)
-          ? (r.unit.contacts as { type: string; value: string; label: string | null }[]).map(
-              (c) => ({
-                tenantId: ctx.tenantId,
+      await t.insertContacts(
+        part.flatMap((r) =>
+          byUnit.has(r.unit.id)
+            ? r.unit.contacts.map((c) => ({
                 caseId: byUnit.get(r.unit.id)!,
                 type: c.type,
                 value: c.value,
                 label: c.label,
-              }),
-            )
-          : [],
+              }))
+            : [],
+        ),
       );
-      for (const c of chunks(contactRows)) if (c.length) await tx.insert(contacts).values(c);
       for (const r of part) {
         const caseId = byUnit.get(r.unit.id);
         if (!caseId) continue;
-        await tx
-          .update(frameUnits)
-          .set({
-            role: r.role === 'substitute' ? 'reserve' : r.role,
-            caseId,
-            releasedAt: r.role === 'main' ? null : new Date(),
-            inclusionProb: r.prob,
-            baseWeight: r.prob ? baseWeight(r.prob) : null,
-            stratum: r.stratum,
-          })
-          .where(eq(frameUnits.id, r.unit.id));
+        await t.linkUnit(r.unit.id, {
+          role: r.role === 'substitute' ? 'reserve' : r.role,
+          caseId,
+          released: r.role !== 'main',
+          prob: r.prob,
+          weight: r.prob ? baseWeight(r.prob) : null,
+          stratum: r.stratum,
+        });
       }
       await this.casesService.events(
-        tx,
+        t,
         ctx.tenantId,
         ctx.userId,
         part
@@ -527,9 +478,9 @@ export class SamplingService {
       );
       created.push(...ins.map((x) => x.id));
     }
-    const pool = (await this.casesService.settings(tx, projectId)).assignmentMode === 'pool';
+    const pool = (await this.casesService.settings(t, projectId)).assignmentMode === 'pool';
     if (created.length && !pool)
-      await this.casesService.applyRules(tx, ctx, projectId, {
+      await this.casesService.applyRules(t, ctx, projectId, {
         onlyCaseIds: created,
         questionnaireId: q,
       });
@@ -547,13 +498,9 @@ export class SamplingService {
     body: z.infer<typeof BatchBody>,
     questionnaireId?: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const [plan] = await tx
-        .select()
-        .from(samplingPlans)
-        .where(and(eq(samplingPlans.projectId, projectId), sameQ(samplingPlans.questionnaireId, q)))
-        .for('update');
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const plan = await this.plan(t, projectId, q, true);
       if (plan?.status !== 'selected')
         throw new ConflictException({ code: 'NOT_SELECTED', message: 'Select the sample first' });
       const input = this.input(plan);
@@ -562,26 +509,25 @@ export class SamplingService {
           code: 'BATCH_DESIGN',
           message: 'Batches are for simple, systematic and stratified samples; use reserves',
         });
-      const free = (await this.units(tx, projectId, q)).filter((u) => !u.role && !u.caseId);
+      const free = (await this.units(t, projectId, q)).filter((u) => !u.role && !u.caseId);
       const previous = ((plan.result as { batches?: unknown[] } | null)?.batches ?? []) as {
         n: number;
       }[];
       const n = previous.length + 2;
-      const run = await this.run(tx, projectId, q, input, `${plan.seed}:batch${n}`, {
+      const run = await this.run(t, projectId, q, input, `${plan.seed}:batch${n}`, {
         units: free,
         count: body.count,
       });
       if (!run.result.main.length)
         throw new ConflictException({ code: 'NO_UNITS', message: 'No eligible units left' });
-      for (const s of run.screened)
-        if (s.out)
-          await tx
-            .update(frameUnits)
-            .set({ eligible: s.out !== 'ineligible', exclusion: s.out })
-            .where(eq(frameUnits.id, s.unit.id));
+      await t.markUnits(
+        run.screened
+          .filter((s) => s.out)
+          .map((s) => ({ id: s.unit.id, eligible: s.out !== 'ineligible', exclusion: s.out! })),
+      );
       const byId = new Map(run.screened.map((s) => [s.unit.id, s.unit]));
       const created = await this.makeCases(
-        tx,
+        t,
         ctx,
         projectId,
         q,
@@ -592,7 +538,7 @@ export class SamplingService {
           stratum: m.stratum,
         })),
       );
-      await this.reweigh(tx, projectId, q, input, [
+      await this.reweigh(t, projectId, q, input, [
         ...new Set(run.result.main.map((m) => m.stratum)),
       ]);
       const entry = {
@@ -602,18 +548,13 @@ export class SamplingService {
         by: ctx.userId,
         reason: body.reason,
       };
-      await tx
-        .update(samplingPlans)
-        .set({
-          result: {
-            ...((plan.result as Record<string, unknown> | null) ?? {}),
-            batches: [...previous, entry],
-          },
-        })
-        .where(eq(samplingPlans.id, plan.id));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.updatePlan(plan.id, {
+        result: {
+          ...((plan.result as Record<string, unknown> | null) ?? {}),
+          batches: [...previous, entry],
+        },
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'sampling.batch_added',
           targetType: 'project',
@@ -636,42 +577,30 @@ export class SamplingService {
     body: z.infer<typeof ReleaseBody>,
     questionnaireId?: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const plan = await this.plan(tx, projectId, q);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const plan = await this.plan(t, projectId, q);
       if (plan?.status !== 'selected')
         throw new ConflictException({ code: 'NOT_SELECTED', message: 'Select the sample first' });
-      const next = await tx
-        .select()
-        .from(frameUnits)
-        .where(
-          and(
-            eq(frameUnits.projectId, projectId),
-            sameQ(frameUnits.questionnaireId, q),
-            eq(frameUnits.role, 'reserve'),
-            isNull(frameUnits.caseId),
-            ...(body.stratum !== undefined && body.stratum !== null
-              ? [eq(frameUnits.stratum, body.stratum)]
-              : []),
-          ),
-        )
-        .orderBy(asc(frameUnits.releaseOrder), asc(frameUnits.externalId))
-        .limit(body.count);
+      const next = await t.reserves(projectId, q, {
+        limit: body.count,
+        ...(body.stratum !== undefined && body.stratum !== null
+          ? { stratum: { value: body.stratum } }
+          : {}),
+      });
       if (!next.length)
         throw new ConflictException({ code: 'NO_RESERVES', message: 'No reserves left' });
       const created = await this.makeCases(
-        tx,
+        t,
         ctx,
         projectId,
         q,
         next.map((u) => ({ unit: u, role: 'reserve', prob: u.inclusionProb, stratum: u.stratum })),
       );
-      await this.reweigh(tx, projectId, q, this.input(plan), [
+      await this.reweigh(t, projectId, q, this.input(plan), [
         ...new Set(next.map((u) => u.stratum)),
       ]);
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'sampling.reserves_released',
           targetType: 'project',
@@ -685,7 +614,7 @@ export class SamplingService {
 
   /** Equal-probability designs: π of a stratum = units with a case / eligible units in it. */
   private async reweigh(
-    tx: Tx,
+    t: SampleTx,
     projectId: string,
     q: Q,
     input: SamplingPlanInput,
@@ -694,11 +623,11 @@ export class SamplingService {
     const m = input.design.method;
     if (input.design.family !== 'probability' || !['srs', 'systematic', 'stratified'].includes(m))
       return;
-    const checker = await this.checker(tx, projectId, input);
+    const checker = await this.checker(t, projectId, input);
     // N of each stratum: eligible units of the frame in it (stratum is set at selection on
     // selected units only, so for N the frame is read by the stratum variable). The frame is
     // read and screened once, then counted per stratum.
-    const screened = this.screen(input, await this.units(tx, projectId, q), checker).filter(
+    const screened = this.screen(input, await this.units(t, projectId, q), checker).filter(
       (s) => !s.out,
     );
     const sizes = new Map<string, number>();
@@ -707,39 +636,21 @@ export class SamplingService {
       sizes.set(k, (sizes.get(k) ?? 0) + 1);
     }
     for (const stratum of strata) {
-      const inStratum = await tx
-        .select({
-          id: frameUnits.id,
-          caseId: frameUnits.caseId,
-          eligible: frameUnits.eligible,
-          exclusion: frameUnits.exclusion,
-        })
-        .from(frameUnits)
-        .where(
-          and(
-            eq(frameUnits.projectId, projectId),
-            sameQ(frameUnits.questionnaireId, q),
-            // Units without a stratum value make a stratum of their own (null), not all units.
-            m !== 'stratified'
-              ? sql`true`
-              : stratum === null
-                ? isNull(frameUnits.stratum)
-                : eq(frameUnits.stratum, stratum),
-          ),
-        );
+      const inStratum = await t.stratumUnits(
+        projectId,
+        q,
+        m === 'stratified' ? { value: stratum } : null,
+      );
       const N = sizes.get(m === 'stratified' ? (stratum ?? '') : '') ?? 0;
       const taken = inStratum.filter((u) => u.caseId);
       if (!N || !taken.length) continue;
       const p = taken.length / N;
-      const ids = taken.map((u) => u.id);
-      await tx
-        .update(frameUnits)
-        .set({ inclusionProb: p, baseWeight: baseWeight(p) })
-        .where(inArray(frameUnits.id, ids));
-      await tx
-        .update(cases)
-        .set({ inclusionProb: p, baseWeight: baseWeight(p) })
-        .where(and(eq(cases.projectId, projectId), inArray(cases.frameUnitId, ids)));
+      await t.reweigh(
+        projectId,
+        taken.map((u) => u.id),
+        p,
+        baseWeight(p),
+      );
     }
   }
 
@@ -748,16 +659,12 @@ export class SamplingService {
    * next reserve of the same stratum, or the next reserve). The original keeps its result.
    */
   substitute(ctx: AuthContext, projectId: string, caseId: string, reason: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [original] = await tx
-        .select()
-        .from(cases)
-        .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)))
-        .for('update');
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const original = await t.lockCase(projectId, caseId);
       if (!original) throw new NotFoundException('Case not found');
       // The substitute comes from the plan of the case's own questionnaire.
       const q = original.questionnaireId;
-      const plan = await this.plan(tx, projectId, q);
+      const plan = await this.plan(t, projectId, q);
       const input = this.input(plan);
       if (plan?.status !== 'selected' || !input.substitution.allowed)
         throw new ConflictException({
@@ -769,37 +676,18 @@ export class SamplingService {
           code: 'NOT_SUBSTITUTABLE',
           message: 'Only cases closed with a result the plan lists can be substituted',
         });
-      const [already] = await tx
-        .select({ id: cases.id })
-        .from(cases)
-        .where(and(eq(cases.projectId, projectId), eq(cases.substituteFor, caseId)));
-      if (already) throw new ConflictException({ code: 'ALREADY_SUBSTITUTED', message: 'Done' });
-      const [unit] = original.frameUnitId
-        ? await tx.select().from(frameUnits).where(eq(frameUnits.id, original.frameUnitId))
-        : [];
-      const [next] = await tx
-        .select()
-        .from(frameUnits)
-        .where(
-          and(
-            eq(frameUnits.projectId, projectId),
-            sameQ(frameUnits.questionnaireId, q),
-            eq(frameUnits.role, 'reserve'),
-            isNull(frameUnits.caseId),
-            ...(input.substitution.rule === 'sameStratum' && unit
-              ? [
-                  unit.stratum === null
-                    ? isNull(frameUnits.stratum)
-                    : eq(frameUnits.stratum, unit.stratum),
-                ]
-              : []),
-          ),
-        )
-        .orderBy(asc(frameUnits.releaseOrder), asc(frameUnits.externalId))
-        .limit(1);
+      if (await t.hasSubstitute(projectId, caseId))
+        throw new ConflictException({ code: 'ALREADY_SUBSTITUTED', message: 'Done' });
+      const unit = original.frameUnitId ? await t.unit(original.frameUnitId) : null;
+      const [next] = await t.reserves(projectId, q, {
+        limit: 1,
+        ...(input.substitution.rule === 'sameStratum' && unit
+          ? { stratum: { value: unit.stratum } }
+          : {}),
+      });
       if (!next)
         throw new ConflictException({ code: 'NO_RESERVES', message: 'No reserve fits the rule' });
-      const [created] = await this.makeCases(tx, ctx, projectId, q, [
+      const [created] = await this.makeCases(t, ctx, projectId, q, [
         {
           unit: next,
           role: 'substitute',
@@ -808,12 +696,10 @@ export class SamplingService {
           substituteFor: caseId,
         },
       ]);
-      await this.casesService.events(tx, ctx.tenantId, ctx.userId, [
+      await this.casesService.events(t, ctx.tenantId, ctx.userId, [
         { caseId, type: 'substituted', details: { by: created, reason } },
       ]);
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'sampling.substituted',
           targetType: 'case',
@@ -832,47 +718,35 @@ export class SamplingService {
     body: z.infer<typeof FieldCasesBody>,
     questionnaireId?: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const plan = await this.plan(tx, projectId, q);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const plan = await this.plan(t, projectId, q);
       const input = this.input(plan);
       if (input.design.family === 'probability' && input.source.kind !== 'field')
         throw new ConflictException({
           code: 'NOT_FIELD',
           message: 'Field cases are for captured units, not probability samples from a frame',
         });
-      const existing = new Set(
-        (
-          await tx
-            .select({ externalId: cases.externalId })
-            .from(cases)
-            .where(and(eq(cases.projectId, projectId), sameQ(cases.questionnaireId, q)))
-        ).map((c) => c.externalId),
-      );
+      const existing = await t.caseExternalIds(projectId, q);
       const ids: string[] = [];
       for (let i = 1; ids.length < body.count && i < body.count + existing.size + 10_000; i++) {
         const id = `${body.prefix}-${String(i).padStart(4, '0')}`;
         if (!existing.has(id)) ids.push(id);
       }
-      const created: string[] = [];
-      for (const part of chunks(ids)) {
-        const ins = await tx
-          .insert(cases)
-          .values(
-            part.map((externalId) => ({
-              tenantId: ctx.tenantId,
-              projectId,
-              questionnaireId: q,
-              externalId,
-              sample: body.cell ? { cell: body.cell } : {},
-              selectionRole: 'field',
-            })),
-          )
-          .returning({ id: cases.id });
-        created.push(...ins.map((x) => x.id));
-      }
+      const created = (
+        await t.insertCases(
+          projectId,
+          ids.map((externalId) => ({
+            externalId,
+            questionnaireId: q,
+            sample: body.cell ? { cell: body.cell } : {},
+            samplePii: null,
+            selectionRole: 'field',
+          })),
+        )
+      ).map((x) => x.id);
       await this.casesService.events(
-        tx,
+        t,
         ctx.tenantId,
         ctx.userId,
         created.map((caseId) => ({
@@ -881,9 +755,9 @@ export class SamplingService {
           details: { cell: body.cell ?? null },
         })),
       );
-      const pool = (await this.casesService.settings(tx, projectId)).assignmentMode === 'pool';
+      const pool = (await this.casesService.settings(t, projectId)).assignmentMode === 'pool';
       if (created.length && !pool)
-        await this.casesService.applyRules(tx, ctx, projectId, {
+        await this.casesService.applyRules(t, ctx, projectId, {
           onlyCaseIds: created,
           questionnaireId: q,
         });
@@ -893,16 +767,12 @@ export class SamplingService {
 
   /** Empties the frame before anything is selected (to load a corrected list). */
   clearFrame(ctx: AuthContext, projectId: string, questionnaireId?: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const q = await this.casesService.questionnaireFor(tx, projectId, questionnaireId);
-      const plan = await this.plan(tx, projectId, q);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+      const plan = await this.plan(t, projectId, q);
       if (plan?.status === 'selected')
         throw new ConflictException({ code: 'SAMPLE_SELECTED', message: 'Already selected' });
-      const r = await tx
-        .delete(frameUnits)
-        .where(and(eq(frameUnits.projectId, projectId), sameQ(frameUnits.questionnaireId, q)))
-        .returning({ id: frameUnits.id });
-      return { removed: r.length };
+      return { removed: await t.clearFrame(projectId, q) };
     });
   }
 }

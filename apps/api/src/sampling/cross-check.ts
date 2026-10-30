@@ -1,9 +1,6 @@
 import type { CrossCheck } from '@wansurvey/schema/sampling';
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { Tx } from '../db/database.js';
-import { cases, contacts } from '../db/schema.js';
+import type { SampleTx } from './sampling-repo.js';
 import { words, type PiiCipher } from '../cases/pii.js';
-import { chunks } from '../cases/cases.service.js';
 
 /** A unit or row to check: its sample (personal fields in clear) and its contacts. */
 export interface Candidate {
@@ -56,7 +53,7 @@ export class CrossChecker {
   ) {}
 
   static async load(
-    tx: Tx,
+    t: SampleTx,
     pii: PiiCipher,
     projectId: string,
     rules: CrossCheck[],
@@ -65,34 +62,11 @@ export class CrossChecker {
     if (!rules.length) return null;
     const loaded = [];
     for (const rule of rules) {
-      const since = new Date(now.getTime() - rule.withinDays * 86_400_000).toISOString();
-      const results = sql.raw(
-        `array[${rule.results.map((r) => `'${r.replace(/[^A-Z_]/g, '')}'`).join(',')}]::text[]`,
-      );
-      const rows = await tx
-        .select({ id: cases.id, sample: cases.sample, samplePiiIndex: cases.samplePiiIndex })
-        .from(cases)
-        .where(
-          and(
-            rule.scope === 'project' ? eq(cases.projectId, projectId) : undefined,
-            sql`(exists (select 1 from interviews i where i.case_id = ${cases.id}
-                  and i.disposition = any(${results})
-                  and i.status not in ('in_progress', 'rejected')
-                  and i.submitted_at >= ${since}::timestamptz)
-                or (${cases.status} = 'finalised' and ${cases.disposition} = any(${results})
-                  and ${cases.updatedAt} >= ${since}::timestamptz))`,
-          ),
-        );
-      const cs: { caseId: string; type: string; value: string }[] = [];
-      if (rule.fields.some((f) => CONTACT_FIELDS.has(f)))
-        for (const part of chunks(rows.map((r) => r.id)))
-          if (part.length)
-            cs.push(
-              ...(await tx
-                .select({ caseId: contacts.caseId, type: contacts.type, value: contacts.value })
-                .from(contacts)
-                .where(inArray(contacts.caseId, part))),
-            );
+      const since = new Date(now.getTime() - rule.withinDays * 86_400_000);
+      const rows = await t.recentCases(projectId, rule.scope, rule.results, since);
+      const cs = rule.fields.some((f) => CONTACT_FIELDS.has(f))
+        ? await t.contactsOfCases(rows.map((r) => r.id))
+        : [];
       loaded.push({ rule, recent: new Recent(rows, cs) });
     }
     return new CrossChecker(loaded, pii);

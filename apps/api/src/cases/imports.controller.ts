@@ -22,22 +22,17 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { safeCell } from '@wansurvey/exporters';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CONFIG, loadConfig, type AppConfig } from '../config.js';
-import { Database, type Tx } from '../db/database.js';
 import {
-  cases,
-  contacts,
-  frameUnits,
-  sampleFields,
-  sampleImportRows,
-  sampleImports,
-  samplingPlans,
-} from '../db/schema.js';
+  SAMPLE_REPO,
+  type ImportView,
+  type SampleRepo,
+  type SampleTx,
+} from '../sampling/sampling-repo.js';
 import { chunks, CasesService } from './cases.service.js';
 import { SamplingService } from '../sampling/sampling.service.js';
 import { CrossChecker } from '../sampling/cross-check.js';
@@ -51,23 +46,11 @@ const PERM = { projectParam: 'projectId' } as const;
 const STAGING_HOURS = 24;
 const ListQuery = z.object({ questionnaireId: z.uuid().optional() });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** Cases and frame units of a questionnaire (or of the project when it has none yet). */
-const sameQ = (
-  col: typeof cases.questionnaireId | typeof frameUnits.questionnaireId,
-  q: string | null,
-) => (q ? eq(col, q) : isNull(col));
-
 interface UploadedSample {
   originalname: string;
   size: number;
   buffer: Buffer;
 }
-
-/** Frame units keep the sealed sample, without the search index of cases. */
-const frameSample = (s: { sample: Record<string, unknown>; samplePii: string | null }) => ({
-  sample: s.sample,
-  samplePii: s.samplePii,
-});
 
 /**
  * Sample import (spec §8.1, §13 slice 5): upload a CSV/XLSX file, map its columns, validate,
@@ -77,7 +60,7 @@ const frameSample = (s: { sample: Record<string, unknown>; samplePii: string | n
 @Controller('projects/:projectId/imports')
 export class ImportsController {
   constructor(
-    private readonly database: Database,
+    @Inject(SAMPLE_REPO) private readonly repo: SampleRepo,
     private readonly audit: AuditService,
     private readonly casesService: CasesService,
     private readonly sampling: SamplingService,
@@ -114,73 +97,45 @@ export class ImportsController {
       throw e;
     }
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.casesService.project(tx, projectId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.casesService.project(t, projectId);
       // The cases (or frame) of one questionnaire; without one, the project's first.
       const wanted = typeof body?.questionnaireId === 'string' ? body.questionnaireId : '';
       if (wanted && !UUID.test(wanted)) throw new BadRequestException('Invalid questionnaireId');
       const questionnaireId = await this.casesService.questionnaireFor(
-        tx,
+        t,
         projectId,
         wanted || null,
       );
-      await this.cleanupStaging(tx);
-      const [dup] = await tx
-        .select({ id: sampleImports.id, committedAt: sampleImports.committedAt })
-        .from(sampleImports)
-        .where(
-          and(
-            eq(sampleImports.projectId, projectId),
-            questionnaireId
-              ? eq(sampleImports.questionnaireId, questionnaireId)
-              : isNull(sampleImports.questionnaireId),
-            eq(sampleImports.sha256, sha256),
-            eq(sampleImports.status, 'committed'),
-          ),
-        )
-        .limit(1);
-      const [row] = await tx
-        .insert(sampleImports)
-        .values({
-          tenantId: ctx.tenantId,
-          projectId,
-          questionnaireId,
-          fileName: file.originalname,
-          size: file.size,
-          sha256,
-          headers: parsed.headers,
-          rows: parsed.rows.length,
-          // Units for the sampling frame (S1) rather than cases straight away.
-          target: body?.target === 'frame' ? 'frame' : 'cases',
-          sourceLabel:
-            typeof body?.sourceLabel === 'string' && body.sourceLabel.trim()
-              ? body.sourceLabel.trim().slice(0, 100)
-              : null,
-          uploadedBy: ctx.userId,
-        })
-        .returning({ id: sampleImports.id });
-      for (const [i, part] of chunks(parsed.rows).entries()) {
-        await tx.insert(sampleImportRows).values(
-          part.map((data, j) => ({
-            tenantId: ctx.tenantId,
-            importId: row!.id,
-            rowNo: i * 1000 + j + 1,
-            data,
-          })),
-        );
-      }
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.abandonStale(new Date(Date.now() - STAGING_HOURS * 3600_000));
+      const dup = await t.committedImport(projectId, questionnaireId, sha256);
+      const id = await t.createImport({
+        projectId,
+        questionnaireId,
+        fileName: file.originalname,
+        size: file.size,
+        sha256,
+        headers: parsed.headers,
+        rows: parsed.rows.length,
+        // Units for the sampling frame (S1) rather than cases straight away.
+        target: body?.target === 'frame' ? 'frame' : 'cases',
+        sourceLabel:
+          typeof body?.sourceLabel === 'string' && body.sourceLabel.trim()
+            ? body.sourceLabel.trim().slice(0, 100)
+            : null,
+        uploadedBy: ctx.userId,
+      });
+      await t.stageRows(id, parsed.rows);
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'cases.import_uploaded',
           targetType: 'project',
           targetId: projectId,
-          details: { importId: row!.id, file: file.originalname, rows: parsed.rows.length },
+          details: { importId: id, file: file.originalname, rows: parsed.rows.length },
         }),
       );
       return {
-        id: row!.id,
+        id,
         fileName: file.originalname,
         headers: parsed.headers,
         rows: parsed.rows.length,
@@ -189,7 +144,7 @@ export class ImportsController {
         encoding: parsed.encoding ?? null,
         delimiter: parsed.delimiter ?? null,
         suggested: suggestMapping(parsed.headers, parsed.rows.slice(0, 50)),
-        duplicateOf: dup?.id ?? null,
+        duplicateOf: dup ?? null,
       };
     });
   }
@@ -201,27 +156,7 @@ export class ImportsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(ListQuery)) q: z.infer<typeof ListQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      tx
-        .select({
-          id: sampleImports.id,
-          fileName: sampleImports.fileName,
-          rows: sampleImports.rows,
-          status: sampleImports.status,
-          report: sampleImports.report,
-          createdAt: sampleImports.createdAt,
-          committedAt: sampleImports.committedAt,
-        })
-        .from(sampleImports)
-        .where(
-          and(
-            eq(sampleImports.projectId, projectId),
-            q.questionnaireId ? eq(sampleImports.questionnaireId, q.questionnaireId) : undefined,
-          ),
-        )
-        .orderBy(desc(sampleImports.createdAt))
-        .limit(50),
-    );
+    return this.repo.inTenant(ctx.tenantId, (t) => t.listImports(projectId, q.questionnaireId));
   }
 
   @Get(':importId')
@@ -231,15 +166,9 @@ export class ImportsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('importId', ParseUUIDPipe) importId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const imp = await this.load(tx, projectId, importId);
-      const preview = await tx
-        .select({ data: sampleImportRows.data })
-        .from(sampleImportRows)
-        .where(eq(sampleImportRows.importId, importId))
-        .orderBy(asc(sampleImportRows.rowNo))
-        .limit(20);
-      return { ...imp, preview: preview.map((p) => p.data) };
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const imp = await this.load(t, projectId, importId);
+      return { ...imp, preview: await t.stagedRows(importId, 20) };
     });
   }
 
@@ -253,24 +182,21 @@ export class ImportsController {
     @Param('importId', ParseUUIDPipe) importId: string,
     @Body(new ZodPipe(ImportMapping)) mapping: ImportMapping,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const imp = await this.load(tx, projectId, importId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const imp = await this.load(t, projectId, importId);
       if (imp.status === 'committed')
         throw new ConflictException('This import is already committed');
       const headers = imp.headers as string[];
       this.checkMapping(mapping, headers.length);
       const { report } = await this.validate(
-        tx,
+        t,
         projectId,
         imp.questionnaireId,
         importId,
         headers,
         mapping,
       );
-      await tx
-        .update(sampleImports)
-        .set({ mapping, report, status: 'validated' })
-        .where(eq(sampleImports.id, importId));
+      await t.updateImport(importId, { mapping, report, status: 'validated' });
       return report;
     });
   }
@@ -283,12 +209,8 @@ export class ImportsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('importId', ParseUUIDPipe) importId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [imp] = await tx
-        .select()
-        .from(sampleImports)
-        .where(and(eq(sampleImports.id, importId), eq(sampleImports.projectId, projectId)))
-        .for('update');
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const imp = await t.importRow(projectId, importId, true);
       if (!imp) throw new NotFoundException('Import not found');
       if (imp.status === 'committed')
         throw new ConflictException('This import is already committed');
@@ -300,14 +222,7 @@ export class ImportsController {
       const mapping = ImportMapping.parse(imp.mapping);
       const headers = imp.headers as string[];
       const q = imp.questionnaireId;
-      const { report, prepared } = await this.validate(
-        tx,
-        projectId,
-        q,
-        importId,
-        headers,
-        mapping,
-      );
+      const { report, prepared } = await this.validate(t, projectId, q, importId, headers, mapping);
       if (report.invalid && !mapping.skipInvalid) {
         throw new UnprocessableEntityException({
           code: 'INVALID_ROWS',
@@ -316,95 +231,75 @@ export class ImportsController {
         });
       }
 
-      await this.upsertFields(tx, ctx.tenantId, projectId, mapping);
+      await t.upsertFields(
+        projectId,
+        mapping.columns.flatMap((c) =>
+          c.kind === 'sample' ? [{ field: c.field, type: c.type, pii: c.pii }] : [],
+        ),
+      );
       if (imp.target === 'frame')
-        return this.commitFrame(tx, ctx, projectId, imp, mapping, report, prepared);
+        return this.commitFrame(t, ctx, projectId, imp, mapping, report, prepared);
       const rows = prepared.filter((r) => r.valid);
       const fresh = rows.filter((r) => !r.exists && !r.crossChecked);
       const updates = mapping.existing === 'update' ? rows.filter((r) => r.exists) : [];
       const created: string[] = [];
       // Personal fields are sealed (H1); the field list is the one just saved.
-      const pii = await this.casesService.piiFields(tx, projectId);
+      const pii = await this.casesService.piiFields(t, projectId);
       for (const part of chunks(fresh)) {
-        const ins = await tx
-          .insert(cases)
-          .values(
-            part.map((r) => ({
-              tenantId: ctx.tenantId,
-              projectId,
-              questionnaireId: q,
-              externalId: r.externalId,
-              ...this.casesService.pii.seal(r.sample, pii),
-              priority: r.priority ?? 0,
-              modePreference: r.modePreference ?? null,
-              importId,
-            })),
-          )
-          .returning({ id: cases.id, externalId: cases.externalId });
+        const ins = await t.insertCases(
+          projectId,
+          part.map((r) => ({
+            externalId: r.externalId,
+            questionnaireId: q,
+            ...this.casesService.pii.seal(r.sample, pii),
+            priority: r.priority ?? 0,
+            modePreference: r.modePreference ?? null,
+            importId,
+          })),
+        );
         const byExt = new Map(ins.map((x) => [x.externalId, x.id]));
-        await this.insertContacts(tx, ctx.tenantId, part, byExt);
+        await this.insertContacts(t, part, byExt);
         created.push(...ins.map((x) => x.id));
       }
       const updated: string[] = [];
       for (const part of chunks(updates)) {
-        const existing = await tx
-          .select({
-            id: cases.id,
-            externalId: cases.externalId,
-            sample: cases.sample,
-            samplePii: cases.samplePii,
-          })
-          .from(cases)
-          .where(
-            and(
-              eq(cases.projectId, projectId),
-              sameQ(cases.questionnaireId, q),
-              inArray(
-                cases.externalId,
-                part.map((r) => r.externalId),
-              ),
-            ),
-          );
+        const existing = await t.casesByExternal(
+          projectId,
+          q,
+          part.map((r) => r.externalId),
+        );
         const byExt = new Map(existing.map((x) => [x.externalId, x]));
         for (const r of part) {
           const old = byExt.get(r.externalId)!;
           const id = old.id;
-          await tx
-            .update(cases)
-            .set({
-              ...this.casesService.pii.seal(
-                { ...this.casesService.pii.read(old), ...r.sample },
-                pii,
-              ),
-              ...(r.priority !== undefined ? { priority: r.priority } : {}),
-              ...(r.modePreference ? { modePreference: r.modePreference } : {}),
-              updatedAt: new Date(),
-            })
-            .where(eq(cases.id, id));
-          if (r.contacts.length) await tx.delete(contacts).where(eq(contacts.caseId, id));
+          await t.updateFromImport(id, {
+            ...this.casesService.pii.seal({ ...this.casesService.pii.read(old), ...r.sample }, pii),
+            ...(r.priority !== undefined ? { priority: r.priority } : {}),
+            ...(r.modePreference ? { modePreference: r.modePreference } : {}),
+          });
+          if (r.contacts.length) await t.deleteContactsOf(id);
         }
         await this.insertContacts(
-          tx,
-          ctx.tenantId,
+          t,
           part.filter((r) => r.contacts.length),
           new Map([...byExt].map(([k, v]) => [k, v.id])),
         );
         updated.push(...existing.map((x) => x.id));
       }
-      await this.casesService.events(tx, ctx.tenantId, ctx.userId, [
+      await this.casesService.events(t, ctx.tenantId, ctx.userId, [
         ...created.map((caseId) => ({ caseId, type: 'imported', details: { importId } })),
         ...updated.map((caseId) => ({ caseId, type: 'updated_by_import', details: { importId } })),
       ]);
       // In pool mode interviewers claim cases themselves; rules only run when asked.
-      const pool = (await this.casesService.settings(tx, projectId)).assignmentMode === 'pool';
+      const pool = (await this.casesService.settings(t, projectId)).assignmentMode === 'pool';
       const assigned =
         created.length && !pool
-          ? await this.casesService.applyRules(tx, ctx, projectId, {
+          ? await this.casesService.applyRules(t, ctx, projectId, {
               onlyCaseIds: created,
               questionnaireId: q,
             })
           : 0;
-      await tx.delete(sampleImportRows).where(eq(sampleImportRows.importId, importId));
+      await t.deleteStaged(importId);
       const summary = {
         created: created.length,
         updated: updated.length,
@@ -413,13 +308,12 @@ export class ImportsController {
         crossChecked: rows.filter((r) => r.crossChecked && !r.exists).length,
         assigned,
       };
-      await tx
-        .update(sampleImports)
-        .set({ status: 'committed', committedAt: new Date(), report: { ...report, summary } })
-        .where(eq(sampleImports.id, importId));
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+      await t.updateImport(importId, {
+        status: 'committed',
+        committedAt: new Date(),
+        report: { ...report, summary },
+      });
+      await t.audit(
         this.audit.fromContext(ctx, {
           action: 'cases.imported',
           targetType: 'project',
@@ -440,12 +334,12 @@ export class ImportsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('importId', ParseUUIDPipe) importId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const imp = await this.load(tx, projectId, importId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const imp = await this.load(t, projectId, importId);
       if (!imp.mapping) throw new ConflictException('Map and validate the file first');
       const mapping = ImportMapping.parse(imp.mapping);
       const { report } = await this.validate(
-        tx,
+        t,
         projectId,
         imp.questionnaireId,
         importId,
@@ -463,11 +357,8 @@ export class ImportsController {
 
   // -------------------------------------------------------------------------
 
-  private async load(tx: Tx, projectId: string, importId: string) {
-    const [imp] = await tx
-      .select()
-      .from(sampleImports)
-      .where(and(eq(sampleImports.id, importId), eq(sampleImports.projectId, projectId)));
+  private async load(t: SampleTx, projectId: string, importId: string) {
+    const imp = await t.importRow(projectId, importId);
     if (!imp) throw new NotFoundException('Import not found');
     return imp;
   }
@@ -485,17 +376,8 @@ export class ImportsController {
     if (dup) throw new BadRequestException(`Field ${dup} is mapped twice`);
   }
 
-  private async stagedRows(tx: Tx, importId: string): Promise<string[][]> {
-    const rows = await tx
-      .select({ data: sampleImportRows.data })
-      .from(sampleImportRows)
-      .where(eq(sampleImportRows.importId, importId))
-      .orderBy(asc(sampleImportRows.rowNo));
-    return rows.map((r) => r.data as string[]);
-  }
-
   private async validate(
-    tx: Tx,
+    t: SampleTx,
     projectId: string,
     q: string | null,
     importId: string,
@@ -503,26 +385,15 @@ export class ImportsController {
     mapping: ImportMapping,
     maxExamples = 5,
   ) {
-    const rows = await this.stagedRows(tx, importId);
+    const rows = await t.stagedRows(importId);
     const idCol = mapping.columns.findIndex((c) => c.kind === 'externalId');
     const ids = [...new Set(rows.map((r) => r[idCol] ?? '').filter(Boolean))];
     const existing = new Set<string>();
-    for (const part of chunks(ids)) {
-      const found = await tx
-        .select({ externalId: cases.externalId })
-        .from(cases)
-        .where(
-          and(
-            eq(cases.projectId, projectId),
-            sameQ(cases.questionnaireId, q),
-            inArray(cases.externalId, part),
-          ),
-        );
-      found.forEach((f) => existing.add(f.externalId));
-    }
+    for (const part of chunks(ids))
+      (await t.casesByExternal(projectId, q, part)).forEach((f) => existing.add(f.externalId));
     const result = validateRows(headers, rows, mapping, existing, maxExamples);
-    await this.flagElsewhere(tx, projectId, result, maxExamples);
-    await this.flagCrossChecks(tx, projectId, q, result, maxExamples);
+    await this.flagElsewhere(t, projectId, result, maxExamples);
+    await this.flagCrossChecks(t, projectId, q, result, maxExamples);
     return result;
   }
 
@@ -532,23 +403,15 @@ export class ImportsController {
    * in the frame and the selection leaves them out with that reason.
    */
   private async flagCrossChecks(
-    tx: Tx,
+    t: SampleTx,
     projectId: string,
     q: string | null,
     { report, prepared }: ReturnType<typeof validateRows>,
     maxExamples: number,
   ) {
-    const [plan] = await tx
-      .select({ crossChecks: samplingPlans.crossChecks })
-      .from(samplingPlans)
-      .where(
-        and(
-          eq(samplingPlans.projectId, projectId),
-          q ? eq(samplingPlans.questionnaireId, q) : isNull(samplingPlans.questionnaireId),
-        ),
-      );
+    const plan = await t.plan(projectId, q);
     const rules = CrossCheckList.parse(plan?.crossChecks ?? []);
-    const checker = await CrossChecker.load(tx, this.casesService.pii, projectId, rules);
+    const checker = await CrossChecker.load(t, this.casesService.pii, projectId, rules);
     if (!checker) return;
     const hit = prepared.filter((r) => r.valid && checker.check(r) !== null);
     if (!hit.length) return;
@@ -571,7 +434,7 @@ export class ImportsController {
    * on a case of another project, with project names and counts only (no personal values).
    */
   private async flagElsewhere(
-    tx: Tx,
+    t: SampleTx,
     projectId: string,
     { report, prepared }: ReturnType<typeof validateRows>,
     maxExamples: number,
@@ -584,7 +447,7 @@ export class ImportsController {
           .map((c) => ({ key: String(r.rowNo), type: c.type, value: c.value })),
       );
     if (!items.length) return;
-    const found = await this.casesService.matchesElsewhere(tx, projectId, items);
+    const found = await this.casesService.matchesElsewhere(t, projectId, items);
     if (!found.size) return;
     const perProject = new Map<string, { projectId: string; name: string; rows: number }>();
     for (const projects of found.values())
@@ -615,24 +478,16 @@ export class ImportsController {
    * Existing units are updated when the mapping says so; nothing is selected here.
    */
   private async commitFrame(
-    tx: Tx,
+    t: SampleTx,
     ctx: AuthContext,
     projectId: string,
-    imp: typeof sampleImports.$inferSelect,
+    imp: ImportView,
     mapping: ImportMapping,
     report: { invalid: number },
     prepared: PreparedRow[],
   ) {
     const q = imp.questionnaireId;
-    const [plan] = await tx
-      .select({ status: samplingPlans.status, design: samplingPlans.design })
-      .from(samplingPlans)
-      .where(
-        and(
-          eq(samplingPlans.projectId, projectId),
-          q ? eq(samplingPlans.questionnaireId, q) : isNull(samplingPlans.questionnaireId),
-        ),
-      );
+    const plan = await t.plan(projectId, q);
     // Once selected, units already in the frame never change (decision 6). New units are
     // added: a census or a non-probability design takes them in as cases at once ("added");
     // a probability sample keeps them for a later batch.
@@ -640,60 +495,47 @@ export class ImportsController {
     const probability = (plan?.design as { family?: string } | undefined)?.family === 'probability';
     const adding = selected && !probability;
     const rows = prepared.filter((r) => r.valid);
-    const pii = await this.casesService.piiFields(tx, projectId);
-    const existing = new Set(
-      (
-        await tx
-          .select({ externalId: frameUnits.externalId })
-          .from(frameUnits)
-          .where(and(eq(frameUnits.projectId, projectId), sameQ(frameUnits.questionnaireId, q)))
-      ).map((x) => x.externalId),
-    );
+    const pii = await this.casesService.piiFields(t, projectId);
+    const existing = await t.frameExternalIds(projectId, q);
     let created = 0;
     let updated = 0;
     const added: string[] = [];
     for (const part of chunks(rows)) {
       const fresh = part.filter((r) => !existing.has(r.externalId));
       if (fresh.length) {
-        const ins = await tx
-          .insert(frameUnits)
-          .values(
-            fresh.map((r) => ({
-              tenantId: ctx.tenantId,
+        const ids = await t.insertUnits(
+          fresh.map((r) => {
+            const sealed = this.casesService.pii.seal(r.sample, pii);
+            return {
               projectId,
               questionnaireId: q,
               externalId: r.externalId,
               sourceLabel: imp.sourceLabel,
-              ...frameSample(this.casesService.pii.seal(r.sample, pii)),
+              // Frame units keep the sealed sample, without the search index of cases.
+              sample: sealed.sample,
+              samplePii: sealed.samplePii,
               contacts: r.contacts,
               importId: imp.id,
-            })),
-          )
-          .returning({ id: frameUnits.id });
-        added.push(...ins.map((x) => x.id));
+            };
+          }),
+        );
+        added.push(...ids);
         created += fresh.length;
       }
       if (mapping.existing === 'update' && !selected)
         for (const r of part.filter((x) => existing.has(x.externalId))) {
-          await tx
-            .update(frameUnits)
-            .set({
-              ...frameSample(this.casesService.pii.seal(r.sample, pii)),
-              contacts: r.contacts,
-              sourceLabel: imp.sourceLabel,
-            })
-            .where(
-              and(
-                eq(frameUnits.projectId, projectId),
-                sameQ(frameUnits.questionnaireId, q),
-                eq(frameUnits.externalId, r.externalId),
-              ),
-            );
+          const sealed = this.casesService.pii.seal(r.sample, pii);
+          await t.updateUnit(projectId, q, r.externalId, {
+            sample: sealed.sample,
+            samplePii: sealed.samplePii,
+            contacts: r.contacts,
+            sourceLabel: imp.sourceLabel,
+          });
           updated++;
         }
     }
-    await tx.delete(sampleImportRows).where(eq(sampleImportRows.importId, imp.id));
-    const addedCases = adding ? await this.sampling.addUnits(tx, ctx, projectId, q, added) : 0;
+    await t.deleteStaged(imp.id);
+    const addedCases = adding ? await this.sampling.addUnits(t, ctx, projectId, q, added) : 0;
     const summary = {
       created,
       updated,
@@ -702,13 +544,12 @@ export class ImportsController {
       frame: true,
       ...(adding ? { added: addedCases } : {}),
     };
-    await tx
-      .update(sampleImports)
-      .set({ status: 'committed', committedAt: new Date(), report: { ...report, summary } })
-      .where(eq(sampleImports.id, imp.id));
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+    await t.updateImport(imp.id, {
+      status: 'committed',
+      committedAt: new Date(),
+      report: { ...report, summary },
+    });
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'cases.imported',
         targetType: 'project',
@@ -720,58 +561,19 @@ export class ImportsController {
   }
 
   private async insertContacts(
-    tx: Tx,
-    tenantId: string,
+    t: SampleTx,
     rows: PreparedRow[],
     idByExternal: Map<string, string>,
   ) {
-    const values = rows.flatMap((r) =>
-      r.contacts.map((c) => ({
-        tenantId,
-        caseId: idByExternal.get(r.externalId)!,
-        type: c.type,
-        value: c.value,
-        label: c.label,
-      })),
-    );
-    for (const part of chunks(values)) if (part.length) await tx.insert(contacts).values(part);
-  }
-
-  private async upsertFields(tx: Tx, tenantId: string, projectId: string, mapping: ImportMapping) {
-    let position = 0;
-    for (const c of mapping.columns) {
-      if (c.kind !== 'sample') continue;
-      await tx
-        .insert(sampleFields)
-        .values({
-          tenantId,
-          projectId,
-          name: c.field,
+    await t.insertContacts(
+      rows.flatMap((r) =>
+        r.contacts.map((c) => ({
+          caseId: idByExternal.get(r.externalId)!,
           type: c.type,
-          pii: c.pii,
-          position: position++,
-        })
-        .onConflictDoUpdate({
-          target: [sampleFields.projectId, sampleFields.name],
-          set: { type: c.type, pii: sql`${sampleFields.pii} or ${c.pii}` },
-        });
-    }
-  }
-
-  /** Staging rows of imports that were never committed are dropped after a day. */
-  private async cleanupStaging(tx: Tx) {
-    const stale = await tx
-      .select({ id: sampleImports.id })
-      .from(sampleImports)
-      .where(
-        and(
-          ne(sampleImports.status, 'committed'),
-          lt(sampleImports.createdAt, new Date(Date.now() - STAGING_HOURS * 3600_000)),
-        ),
-      );
-    if (!stale.length) return;
-    const ids = stale.map((s) => s.id);
-    await tx.delete(sampleImportRows).where(inArray(sampleImportRows.importId, ids));
-    await tx.update(sampleImports).set({ status: 'failed' }).where(inArray(sampleImports.id, ids));
+          value: c.value,
+          label: c.label,
+        })),
+      ),
+    );
   }
 }

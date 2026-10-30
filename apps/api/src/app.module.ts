@@ -35,6 +35,7 @@ import {
   PgQuestionnairesRepo,
   QUESTIONNAIRES_REPO,
 } from './questionnaires/questionnaires-repo.js';
+import { MssqlSampleRepo, PgSampleRepo, SAMPLE_REPO } from './sampling/sampling-repo.js';
 import { TeamsController } from './teams/teams.controller.js';
 import { MssqlTeamsRepo, PgTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
 import { ProjectPeopleController } from './projects/project-people.controller.js';
@@ -248,6 +249,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgCasesRepo, ms: MssqlCasesRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgCasesRepo, MssqlCasesRepo],
+        },
+        PgSampleRepo,
+        MssqlSampleRepo,
+        {
+          provide: SAMPLE_REPO,
+          useFactory: (engine: Engine, pg: PgSampleRepo, ms: MssqlSampleRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgSampleRepo, MssqlSampleRepo],
         },
         AuditService,
         AuthService,

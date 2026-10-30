@@ -291,6 +291,31 @@ export interface MssqlSchema {
     created_by: string | null;
     created_at: Instant;
   };
+  sample_imports: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    questionnaire_id: string | null;
+    file_name: string;
+    size: number;
+    sha256: string;
+    headers: JsonText;
+    mapping: string | null;
+    status: Generated<string>;
+    report: string | null;
+    rows: Generated<number>;
+    target: Generated<string>;
+    source_label: string | null;
+    uploaded_by: string | null;
+    created_at: Instant;
+    committed_at: InstantOrNull;
+  };
+  sample_import_rows: {
+    tenant_id: string;
+    import_id: string;
+    row_no: number;
+    data: JsonText;
+  };
   sampling_plans: {
     id: string;
     tenant_id: string;
