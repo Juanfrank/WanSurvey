@@ -1,9 +1,11 @@
-import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Optional, type OnModuleDestroy } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { decryptField } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database, type SsoPublicConfig } from '../db/database.js';
+import { Engine } from '../db/engine.js';
 import { tenantSso } from '../db/schema.js';
+import { IdentityStore } from './identity-store.mssql.js';
 import { BUS, type Bus } from '../jobs/bus.js';
 
 /** An organisation's Microsoft sign-in, ready to use (the secret decrypted). */
@@ -57,6 +59,7 @@ export class SsoConfigs implements OnModuleDestroy {
     private readonly database: Database,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(BUS) private readonly bus: Bus,
+    @Optional() private readonly engine?: Engine,
   ) {
     this.unsubscribe = bus.subscribe(CHANNEL, (m) => {
       if (typeof m.tenantId === 'string') this.forget(m.tenantId);
@@ -83,6 +86,13 @@ export class SsoConfigs implements OnModuleDestroy {
       : null;
   }
 
+  /** SQL Server's side of the lookups, when that is the engine. */
+  private get mssql() {
+    return this.engine?.kind === 'mssql' ? this.engine.sql : null;
+  }
+
+  private readonly identity = new IdentityStore();
+
   private fresh<T>(hit: Cached<T> | undefined): hit is Cached<T> {
     return !!hit && Date.now() - hit.at < TTL_MS;
   }
@@ -105,7 +115,9 @@ export class SsoConfigs implements OnModuleDestroy {
   /** An organisation's id by slug. */
   tenantIdBySlug(slug: string): Promise<string | null> {
     const key = slug.toLowerCase();
-    return this.remember(this.idBySlug, key, () => this.database.tenantIdBySlug(key));
+    return this.remember(this.idBySlug, key, () =>
+      (this.mssql ?? this.database).tenantIdBySlug(key),
+    );
   }
 
   /** The default organisation's id, when SSO_DEFAULT_ORG is set. */
@@ -139,14 +151,16 @@ export class SsoConfigs implements OnModuleDestroy {
   async startBySlug(slug: string): Promise<SsoStartConfig | null> {
     const key = slug.toLowerCase();
     if (this.deployment?.slug === key) return this.deploymentSettings();
-    return this.remember(this.startSlugs, key, () => this.database.ssoConfigBySlug(key));
+    return this.remember(this.startSlugs, key, () =>
+      (this.mssql ?? this.database).ssoConfigBySlug(key),
+    );
   }
 
   /** What starting a sign-in for an e-mail domain needs, or 'ambiguous'. */
   async startByDomain(domain: string): Promise<SsoStartConfig | 'ambiguous' | null> {
     const d = domain.toLowerCase();
     if (this.deployment?.allowedDomains.includes(d)) return this.deploymentSettings();
-    const matches = await this.database.ssoTenantsForDomain(d);
+    const matches = await (this.mssql ?? this.database).ssoTenantsForDomain(d);
     if (matches.length > 1) return 'ambiguous';
     return matches[0] ?? null;
   }
@@ -169,10 +183,12 @@ export class SsoConfigs implements OnModuleDestroy {
     const hit = this.byTenant.get(tenantId);
     if (this.fresh(hit)) return hit.value;
     const began = this.generation;
-    const row = await this.database.withTenant(tenantId, async (tx) => {
-      const [r] = await tx.select().from(tenantSso).where(eq(tenantSso.tenantId, tenantId));
-      return r;
-    });
+    const row = this.mssql
+      ? await this.mssql.withTenant(tenantId, (tx) => this.identity.sso(tx, tenantId))
+      : await this.database.withTenant(tenantId, async (tx) => {
+          const [r] = await tx.select().from(tenantSso).where(eq(tenantSso.tenantId, tenantId));
+          return r;
+        });
     const value: SsoConfig | null = row
       ? {
           tenantId,
@@ -193,7 +209,7 @@ export class SsoConfigs implements OnModuleDestroy {
 
   /** Which of these organisations require Microsoft sign-in, and through which directory. */
   async enforced(tenantIds: string[]): Promise<{ tenantId: string; entraTenantId: string }[]> {
-    const rows = await this.database.ssoEnforcedTenants(tenantIds);
+    const rows = await (this.mssql ?? this.database).ssoEnforcedTenants(tenantIds);
     const d = this.deployment;
     const own = d ? await this.tenantIdBySlug(d.slug) : null;
     if (!d || !own || !tenantIds.includes(own)) return rows;

@@ -36,6 +36,21 @@ export interface MssqlLimits {
  * reused: it is set first thing in every transaction and cleared before it ends, so a
  * connection never carries one organisation's context into another's work.
  */
+interface SsoRow {
+  tenant_id: string;
+  slug: string;
+  entra_tenant_id: string;
+  client_id: string;
+  enabled: boolean;
+}
+const ssoPublic = (r: SsoRow) => ({
+  tenantId: r.tenant_id.toLowerCase(),
+  slug: r.slug,
+  entraTenantId: r.entra_tenant_id,
+  clientId: r.client_id,
+  enabled: !!r.enabled,
+});
+
 export class MssqlDatabase {
   readonly db: Kysely<MssqlSchema>;
 
@@ -221,6 +236,32 @@ export class MssqlDatabase {
       name: r.name,
       memberStatus: r.member_status,
     }));
+  }
+
+  /** Which of the organisations require Microsoft sign-in, and through which directory. */
+  async ssoEnforcedTenants(
+    tenantIds: string[],
+  ): Promise<{ tenantId: string; entraTenantId: string }[]> {
+    if (tenantIds.length === 0) return [];
+    const res = await sql<{ tenant_id: string; entra_tenant_id: string }>`
+      EXEC dbo.sso_enforced_tenants @tenant_ids = ${JSON.stringify(tenantIds)}`.execute(this.db);
+    return res.rows.map((r) => ({
+      tenantId: r.tenant_id.toLowerCase(),
+      entraTenantId: r.entra_tenant_id,
+    }));
+  }
+
+  /** Public Microsoft settings of an organisation by slug (never the secret). */
+  async ssoConfigBySlug(slug: string) {
+    const res = await sql<SsoRow>`EXEC dbo.sso_config_by_slug @slug = ${slug}`.execute(this.db);
+    return res.rows[0] ? ssoPublic(res.rows[0]) : null;
+  }
+
+  async ssoTenantsForDomain(domain: string) {
+    const res = await sql<SsoRow>`EXEC dbo.sso_tenants_for_domain @domain = ${domain}`.execute(
+      this.db,
+    );
+    return res.rows.map(ssoPublic);
   }
 
   /** Whether the database answers. */

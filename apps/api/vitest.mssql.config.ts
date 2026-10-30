@@ -16,7 +16,7 @@ export default defineConfig({
     // the configuration when they are imported need these before anything is.
     env: {
       NODE_ENV: 'test',
-      LOG_LEVEL: 'silent',
+      LOG_LEVEL: 'error',
       DB_ENGINE: 'mssql',
       DATABASE_URL: process.env.MSSQL_URL ?? '',
       DATABASE_ADMIN_URL: process.env.MSSQL_ADMIN_URL ?? '',
