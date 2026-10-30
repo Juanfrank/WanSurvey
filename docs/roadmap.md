@@ -86,6 +86,18 @@ application boots on SQL Server (`apps/api/test/mssql/boot.test.ts`), its health
 SQL Server and its migrations run at start. PostgreSQL's clients connect lazily, so a module that
 has not moved fails only when it is used. Production refuses `mssql` until every module has moved.
 
+**The switch, step 2 (done): sign-in and the session guard.** `AuthRepo`
+(`src/auth/auth-repo.ts`) holds what `AuthService` and `AuthGuard` need from the database, with a
+PostgreSQL side (the code they had) and a SQL Server side (the stores), so the business rules are
+written once; `SsoConfigs` asks SQL Server when it is the engine. Over HTTP on SQL Server
+(`apps/api/test/mssql/auth-http.test.ts`, with the harness in `test/mssql/harness.ts`): sign-in,
+`/me`, sign-out with CSRF, the second factor (each code once), lockout, idle and deactivated ends,
+and switching organisation. Not yet on SQL Server in that module: setting up the second factor,
+password change and reset, invitations and Microsoft sign-in. **This pattern is the one for every
+module:** a repository interface per module, a PostgreSQL implementation (the existing code, moved)
+and a SQL Server one (the stores), so the PostgreSQL suite keeps proving the rules while the HTTP
+tests on SQL Server prove the stores.
+
 **Left:** stores for metrics, jobs, library, dashboard, geolocation, privacy and analysis. The
 switch itself goes module by module, each tested over HTTP on SQL Server: the core first (sign-in,
 users, organisations, projects, teams, audit), then questionnaires, cases and sampling, interviews
