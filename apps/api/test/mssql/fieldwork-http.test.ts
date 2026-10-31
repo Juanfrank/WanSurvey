@@ -356,6 +356,6 @@ describe.skipIf(!configured)('SQL Server: interviews over HTTP', () => {
       mode: 'CAPI',
       deviceId: device,
     });
-    expect(none.status).toBe(409);
+    expect(none.body.code).toBe('NO_PUBLISHED_VERSION');
   });
 });
