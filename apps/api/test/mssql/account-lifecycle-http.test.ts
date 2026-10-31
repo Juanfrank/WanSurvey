@@ -217,7 +217,7 @@ describe.skipIf(!configured)('SQL Server: account lifecycle over HTTP', () => {
       // Explicit organisation, then the last-used one is the default.
       const first = await login(t, user, other.slug);
       expect(first.tenantId.toLowerCase()).toBe(other.id);
-      const s = await login(t, user, tenant.slug);
+      const s = await login(t, user);
       expect(s.tenantId.toLowerCase()).toBe(other.id);
 
       const tenants = await s.agent.get('/api/v1/auth/tenants');
