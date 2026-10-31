@@ -64,6 +64,7 @@ export class CatiStore {
         CASE WHEN c.attempts = 0 THEN 1 ELSE 0 END DESC,
         c.priority DESC,
         c.last_attempt_at ASC,
+        c.created_at,
         c.id`.execute(tx);
     return res.rows.map((r) => ({ ...r, id: r.id.toLowerCase() }));
   }

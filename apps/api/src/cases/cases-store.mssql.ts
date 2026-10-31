@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { uuidv7 } from 'uuidv7';
 import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
@@ -109,8 +110,9 @@ export class CasesStore {
   ): Promise<string[]> {
     const ids: string[] = [];
     for (const part of chunks(v.cases, 2000)) {
+      // Time-ordered ids, as on PostgreSQL: ties in the call queue go to the older case.
       const rows = part.map((c) => ({
-        id: randomUUID(),
+        id: uuidv7(),
         qid: c.questionnaireId ?? null,
         ext: c.externalId,
         sample: JSON.stringify(c.sample ?? {}),

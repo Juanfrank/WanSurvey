@@ -518,7 +518,7 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
 
   async callable(projectId: string, caseId: string, lock: boolean) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases ${ksql.raw(lock ? 'WITH (UPDLOCK, ROWLOCK)' : '')} c
+      SELECT * FROM dbo.cases c ${ksql.raw(lock ? 'WITH (UPDLOCK, ROWLOCK)' : '')}
       WHERE c.id = ${caseId} AND c.project_id = ${projectId}
         AND c.status IN ('fresh', 'assigned', 'in_progress')
         AND (c.mode_preference IS NULL OR c.mode_preference = 'CATI')

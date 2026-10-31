@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { household } from '@wansurvey/fixtures';
 import { compile } from '@wansurvey/logic';
 import { Questionnaire } from '@wansurvey/schema';
+import { uuidv7 } from 'uuidv7';
 import { sql } from 'kysely';
 import type { MssqlTestApp, Session } from './harness.js';
 
@@ -48,7 +49,7 @@ export async function newCase(
     externalId?: string;
   } = {},
 ): Promise<string> {
-  const id = randomUUID();
+  const id = uuidv7();
   const status = opts.status ?? (opts.holder ? 'assigned' : 'fresh');
   await sql`INSERT INTO cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, status, assigned_to)
             VALUES (${id}, ${tenantId}, ${projectId}, ${opts.questionnaireId ?? null},
