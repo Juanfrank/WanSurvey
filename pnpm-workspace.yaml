@@ -17,10 +17,10 @@ overrides:
   # Advisories fixed on 2026-10-14 (qs) and 2026-10-18 (seroval), both over two weeks old.
   qs: 6.16.1
   seroval: 1.6.11
-auditConfig:
-  # The fixes came out on 2026-10-22, under two weeks ago; upgrade from 2026-11-05 and remove
-  # these. body-parser: compressed request bodies are refused before parsing (plain-body.ts).
-  # multer: only an asynchronous fileFilter is affected, and none is used.
-  ignoreGhsas:
-    - GHSA-27r3-jxmh-p828
-    - GHSA-q7qp-rjg7-q26m
+  # Fixes for advisories, taken before they are two weeks old because the advisories are high:
+  # body-parser 2.4.0 and multer 2.5.0 (2026-10-22, both reached through @nestjs/platform-express),
+  # follow-redirects 1.16.2 (2026-10-25, through Azurite), uuid 11.1.1 (through ExcelJS and Azurite).
+  body-parser: 2.4.0
+  multer: 2.5.0
+  follow-redirects: 1.16.2
+  uuid: 11.1.1
