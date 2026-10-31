@@ -53,7 +53,10 @@ export class PapiService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.runtime.onSubmitted((tx, row, _disposition, writer) => this.afterSubmit(tx, row, writer));
+    this.runtime.onSubmitted(async (t, row, _disposition, writer) => {
+      if (row.mode !== 'PAPI') return;
+      await this.afterSubmit(t.native(), row, writer);
+    });
   }
 
   /** Forms to print: the questionnaire version and, per case, the cover data (P1, P2). */

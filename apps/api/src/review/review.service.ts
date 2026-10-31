@@ -165,7 +165,10 @@ export class ReviewService implements OnModuleInit {
 
   onModuleInit() {
     // The flags are written by the submission's own update.
-    this.runtime.onSubmitting((tx, row) => this.flags(tx, row));
+    this.runtime.onSubmitting(async (t, row) => {
+      const tx = t.pg();
+      return tx ? this.flags(tx, row) : {};
+    });
   }
 
   /** Flags and the sample, computed at each submission (R2, R3). */

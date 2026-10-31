@@ -122,9 +122,9 @@ export class CawiService implements OnModuleInit {
 
   onModuleInit() {
     // A finished web interview completes its invitation.
-    this.runtime.onSubmitted(async (tx, row) => {
+    this.runtime.onSubmitted(async (t, row) => {
       if (row.mode !== 'CAWI') return;
-      await completeInvitation.run(tx, { interview: row.id });
+      await completeInvitation.run(t.native(), { interview: row.id });
     });
   }
 

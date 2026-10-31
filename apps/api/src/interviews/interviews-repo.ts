@@ -64,7 +64,9 @@ export interface FinishSync {
 }
 
 export interface InterviewsTx extends CasesTx {
-  /** The Drizzle transaction, for modules not yet moved (throws on SQL Server). */
+  /** The Drizzle transaction, for modules not yet moved (null on SQL Server). */
+  pg(): Tx | null;
+  /** The same, where a module that has not moved needs it (throws on SQL Server). */
   native(): Tx;
 
   // Cases
@@ -279,6 +281,10 @@ export class PgInterviewsTx extends PgCasesTx implements InterviewsTx {
     audits: AuditService,
   ) {
     super(itx, tenant, audits);
+  }
+
+  pg() {
+    return this.itx;
   }
 
   native() {
@@ -740,6 +746,10 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
     private readonly istore: InterviewsStore,
   ) {
     super(itx, tenant, cstore);
+  }
+
+  pg(): Tx | null {
+    return null;
   }
 
   native(): Tx {

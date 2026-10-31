@@ -89,8 +89,9 @@ export class CatiService implements OnModuleInit {
 
   onModuleInit() {
     // Submitting a telephone interview closes its call with the interview's disposition.
-    this.runtime.onSubmitted(async (tx, row, disposition) => {
+    this.runtime.onSubmitted(async (t, row, disposition) => {
       if (row.mode !== 'CATI' || !row.caseId) return;
+      const tx = t.native();
       await tx
         .update(callAttempts)
         .set({ disposition, endedAt: new Date() })

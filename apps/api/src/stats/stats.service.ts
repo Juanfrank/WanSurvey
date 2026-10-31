@@ -52,9 +52,10 @@ export class StatsService implements OnModuleInit {
     );
     this.jobs.register('stats.nightly', () => this.recomputeAll());
     this.jobs.schedule('stats.nightly', { cron: '0 2 * * *' });
-    this.interviews.onSubmitted((tx, row) =>
-      this.touched(tx, row.tenantId, row.projectId, new Date()),
-    );
+    this.interviews.onSubmitted(async (t, row) => {
+      const tx = t.pg();
+      if (tx) await this.touched(tx, row.tenantId, row.projectId, new Date());
+    });
   }
 
   /** Called inside the transaction that changed an interview; the refresh runs after it. */

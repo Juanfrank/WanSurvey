@@ -64,12 +64,12 @@ export interface Writer {
 
 /** Runs inside the submitting transaction, after the interview is marked submitted. */
 export type SubmitContributor = (
-  tx: Tx,
+  t: InterviewsTx,
   row: InterviewRow,
 ) => Promise<Partial<Pick<InterviewRow, 'flags' | 'sampled'>>>;
 
 export type SubmitHook = (
-  tx: Tx,
+  t: InterviewsTx,
   row: InterviewRow,
   disposition: string,
   writer: Writer,
@@ -374,9 +374,9 @@ export class InterviewsService {
         offPathAnswers: check.offPathAnswers.slice(0, 50),
       });
     const disposition = status.disposition ?? 'COMPLETE';
-    // Modules not yet moved hook in with a Drizzle transaction.
+    // Modules not yet moved hook in through `t.pg()`.
     const extra = {};
-    for (const c of this.contributors) Object.assign(extra, await c(t.native(), row));
+    for (const c of this.contributors) Object.assign(extra, await c(t, row));
     const done = await t.markSubmitted(row.id, {
       extra,
       disposition,
@@ -389,7 +389,7 @@ export class InterviewsService {
         disposition,
       });
     }
-    for (const hook of this.hooks) await hook(t.native(), done, disposition, writer);
+    for (const hook of this.hooks) await hook(t, done, disposition, writer);
     if (writer.ctx)
       await t.audit(
         this.audit.fromContext(writer.ctx, {
