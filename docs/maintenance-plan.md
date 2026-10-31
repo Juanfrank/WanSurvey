@@ -54,3 +54,25 @@ intentional. End state: `pnpm lint` prints no warnings; then make warnings fail 
    `docs/data-copy.md` links, and the `mssql/` migrations (never delete: they are history).
 5. Remove in small commits by area (API, web, packages), gate after each. When done, add a `knip`
    script and a CI step so it stays clean.
+
+## Results of the first run (31 October 2026)
+
+Run with `knip@6.41.0` and the entry points above; nothing was deleted.
+
+- **Compiler (`noUnusedLocals`, `noUnusedParameters`)**: done and now permanent in
+  `tsconfig.base.json`. It removed eight unused constructor properties and four unused parameters.
+- **Unused files (3), all false positives**: `apps/api/src/db/mssql/raw.ts` is imported by the browser
+  tests from the built `dist`; `packages/schema/src/feedback.ts` and `sampling.ts` are package
+  entry points (`exports` in its `package.json`). Add them as entries in `knip.json` before using it
+  in CI.
+- **Unused devDependencies (6), to check one by one before removing**: `azurite` (started by
+  `test/support/azurite.ts`), `tailwindcss` (used by the build's PostCSS configuration),
+  `@wansurvey/api` in `apps/web` (the browser tests import its `dist`), `@types/multer`,
+  `@wansurvey/fixtures` in `packages/exporters`, `axe-core` in `packages/renderer`. Probably only
+  the last three are real.
+- **Unused exports (108)**: mostly the `export` keyword on things used only inside their file
+  (the `Mssql*Tx` classes, helpers like `distribute`, `shuffle`, `hotp`), or exported for tests. Not
+  dead code; removing the keyword is optional tidiness, not a priority. The few that look like real
+  leftovers: `sqlNumber` in `db/common.ts`, `COUNTED` re-exported from `stats/stats.service.ts`,
+  `EXPORT_MAX_ATTEMPTS`, `SCAN_STUCK_MS`.
+- **Unlisted binaries**: `pdftotext` and `pdftoppm` (system tools of the browser tests, installed in CI).
