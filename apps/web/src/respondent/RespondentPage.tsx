@@ -176,12 +176,18 @@ export function RespondentPage() {
     if (!navigator.onLine) return setSave('offline');
     setSave('saving');
     try {
-      await r.syncer.flush([payload.interview.id], { force: true });
-      // Answered meanwhile on another device: show the survey as the server has it now.
-      if (r.syncer.problems.get(payload.interview.id) === 'STALE_STATE')
-        return window.location.reload();
-      const local = await r.store.get(payload.interview.id);
-      setSave(local && local.seq > local.acked ? 'offline' : 'saved');
+      // A send already under way answers for what it read before a later change was written;
+      // if anything is still unacknowledged, send again rather than call it offline.
+      let pending = true;
+      for (let attempt = 0; attempt < 3 && pending; attempt++) {
+        await r.syncer.flush([payload.interview.id], { force: true });
+        // Answered meanwhile on another device: show the survey as the server has it now.
+        if (r.syncer.problems.get(payload.interview.id) === 'STALE_STATE')
+          return window.location.reload();
+        const local = await r.store.get(payload.interview.id);
+        pending = !!local && local.seq > local.acked;
+      }
+      setSave(pending ? 'offline' : 'saved');
     } catch {
       setSave('offline');
     }
