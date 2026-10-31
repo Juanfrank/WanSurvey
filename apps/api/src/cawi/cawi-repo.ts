@@ -218,6 +218,8 @@ export interface CawiTx extends InterviewsTx {
   setInterviewContext(id: string, context: unknown): Promise<void>;
   /** The case's sample for piping, as stored. */
   casePiping(caseId: string): Promise<{ sample: unknown; samplePii: string | null } | null>;
+  /** A fresh or assigned case goes in progress (any other status stays). */
+  startCase(caseId: string): Promise<void>;
   /** Ties the interview to the invitation and stamps its start. */
   startInvitation(id: string, interviewId: string): Promise<void>;
   completeInvitation(interviewId: string): Promise<void>;
@@ -741,6 +743,13 @@ export class PgCawiTx extends PgInterviewsTx implements CawiTx {
       .from(cases)
       .where(eq(cases.id, caseId));
     return c ?? null;
+  }
+
+  async startCase(caseId: string) {
+    await this.ctx
+      .update(cases)
+      .set({ status: 'in_progress', updatedAt: new Date() })
+      .where(and(eq(cases.id, caseId), inArray(cases.status, ['fresh', 'assigned'])));
   }
 
   async startInvitation(id: string, interviewId: string) {
@@ -1330,6 +1339,15 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
       .where('id', '=', caseId)
       .executeTakeFirst();
     return c ? { sample: parse(c.sample), samplePii: c.sample_pii } : null;
+  }
+
+  async startCase(caseId: string) {
+    await this.mctx
+      .updateTable('cases')
+      .set({ status: 'in_progress', updated_at: ksql<Date>`SYSDATETIMEOFFSET()` })
+      .where('id', '=', caseId)
+      .where('status', 'in', ['fresh', 'assigned'])
+      .execute();
   }
 
   async startInvitation(id: string, interviewId: string) {

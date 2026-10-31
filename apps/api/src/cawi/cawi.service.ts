@@ -840,7 +840,7 @@ export class CawiService implements OnModuleInit {
     // The interview and the start time in one update of the invitation.
     await tx.startInvitation(inv.id, row.id);
     if (inv.caseId) {
-      await tx.setCaseInProgress(inv.caseId);
+      await tx.startCase(inv.caseId);
       await this.cases.events(tx, inv.tenantId, null, [
         {
           caseId: inv.caseId,

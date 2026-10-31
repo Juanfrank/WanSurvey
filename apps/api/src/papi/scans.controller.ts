@@ -4,6 +4,7 @@ import {
   Get,
   Header,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -16,13 +17,11 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { and, eq } from 'drizzle-orm';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { Auth, can, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
-import { interviews, papiScanBatches, papiScanPages } from '../db/schema.js';
+import { PAPI_REPO, type PapiRepo } from './papi-repo.js';
 import { FormsQuery } from './papi.service.js';
 import { ScansService } from './scans.service.js';
 
@@ -36,7 +35,7 @@ const KEYERS = ['dataentry.key', 'cases.read_all'] as const;
 @Controller()
 export class ScansController {
   constructor(
-    private readonly database: Database,
+    @Inject(PAPI_REPO) private readonly repo: PapiRepo,
     private readonly scans: ScansService,
   ) {}
 
@@ -49,8 +48,8 @@ export class ScansController {
     @Query(new ZodPipe(FormsQuery)) q: z.infer<typeof FormsQuery>,
     @Res() res: Response,
   ) {
-    const out = await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.scans.formsPdf(tx, ctx, projectId, q),
+    const out = await this.repo.inTenant(ctx.tenantId, (t) =>
+      this.scans.formsPdf(t, ctx, projectId, q),
     );
     const name = out.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'forms';
     res.setHeader('Content-Type', 'application/pdf');
@@ -87,7 +86,7 @@ export class ScansController {
   @Get('projects/:projectId/papi/scans')
   @RequirePermission([...KEYERS], PERM)
   list(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.scans.list(tx, projectId));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.scans.list(t, projectId));
   }
 
   /** A scanned page's image (to show where a question is on paper). */
@@ -101,15 +100,9 @@ export class ScansController {
     @Param('pageId', ParseUUIDPipe) pageId: string,
     @Res() res: Response,
   ) {
-    const image = await this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [p] = await tx
-        .select({ id: papiScanPages.id })
-        .from(papiScanPages)
-        .innerJoin(papiScanBatches, eq(papiScanBatches.id, papiScanPages.batchId))
-        .where(and(eq(papiScanPages.id, pageId), eq(papiScanBatches.projectId, projectId)));
-      if (!p) throw new NotFoundException('Page not found');
-      return this.scans.pageImage(tx, pageId);
-    });
+    const image = await this.repo.inTenant(ctx.tenantId, (t) =>
+      this.scans.pageImage(t, projectId, pageId),
+    );
     res.end(image);
   }
 
@@ -122,9 +115,7 @@ export class ScansController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('formId', ParseUUIDPipe) formId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.scans.claim(tx, ctx, projectId, formId),
-    );
+    return this.repo.inTenant(ctx.tenantId, (t) => this.scans.claim(t, ctx, projectId, formId));
   }
 
   /** For an interview read from a scan: per question its reason and where it is on paper. */
@@ -133,8 +124,8 @@ export class ScansController {
     anyProject: true,
   })
   forInterview(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [row] = await tx.select().from(interviews).where(eq(interviews.id, id));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await t.interview(id);
       if (
         !row ||
         !(
@@ -144,7 +135,7 @@ export class ScansController {
         )
       )
         throw new NotFoundException('Interview not found');
-      return { projectId: row.projectId, ...(await this.scans.forInterview(tx, id)) };
+      return { projectId: row.projectId, ...(await this.scans.forInterview(t, id)) };
     });
   }
 }

@@ -26,6 +26,7 @@ import {
 import { DeviceId, StartBody, SubmitBody, SyncBody } from './schemas.js';
 
 const TakeoverBody = z.object({ deviceId: DeviceId });
+import { PAPI_REPO, type PapiRepo } from '../papi/papi-repo.js';
 import { PapiService } from '../papi/papi.service.js';
 import { EDITABLE, InterviewsService, personalVariables } from './interviews.service.js';
 
@@ -48,6 +49,7 @@ export class InterviewsController {
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
     private readonly papi: PapiService,
+    @Inject(PAPI_REPO) private readonly papiRepo: PapiRepo,
   ) {}
 
   /** Starts an interview on a case, or resumes the one in progress. Idempotent on `id`. */
@@ -72,9 +74,9 @@ export class InterviewsController {
       let entryPass: number | undefined;
       if (body.mode === 'PAPI') {
         const open = await t.openInterview(body.caseId);
-        // Paper entry has not moved to SQL Server yet.
         entryPass =
-          open?.entryPass ?? (await this.papi.nextPass(t.native(), ctx, projectId, body.caseId));
+          open?.entryPass ??
+          (await this.papi.nextPass(this.papiRepo.extend(t), ctx, projectId, body.caseId));
       }
       const row = await this.runtime.start(t, ctx, projectId, body, { entryPass });
       return this.runtime.payload(t, row, body.deviceId);

@@ -1,20 +1,20 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
 import { stableStringify, type CompiledQuestionnaire } from '@wansurvey/logic';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { compileRule, maskSample, ruleError } from '../cases/case-logic.js';
-import { CasesService, ofQuestionnaire } from '../cases/cases.service.js';
+import { CasesService } from '../cases/cases.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
-import type { Tx } from '../db/database.js';
-import { cases, entryMismatches, interviewAnswerEvents, interviews, users } from '../db/schema.js';
-import { InterviewsService, type InterviewRow } from '../interviews/interviews.service.js';
+import type { InterviewRow } from '../interviews/interviews-repo.js';
+import { InterviewsService } from '../interviews/interviews.service.js';
+import { PAPI_REPO, type PapiRepo, type PapiTx } from './papi-repo.js';
 
 /**
  * Entries that were keyed and sent, whatever review made of them since (a rejected one is
@@ -47,6 +47,7 @@ const REVIEW_DEVICE = 'review';
 @Injectable()
 export class PapiService implements OnModuleInit {
   constructor(
+    @Inject(PAPI_REPO) private readonly repo: PapiRepo,
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
     private readonly audit: AuditService,
@@ -55,12 +56,12 @@ export class PapiService implements OnModuleInit {
   onModuleInit() {
     this.runtime.onSubmitted(async (t, row, _disposition, writer) => {
       if (row.mode !== 'PAPI') return;
-      await this.afterSubmit(t.native(), row, writer);
+      await this.afterSubmit(this.repo.extend(t), row, writer);
     });
   }
 
   /** Forms to print: the questionnaire version and, per case, the cover data (P1, P2). */
-  async forms(tx: Tx, ctx: AuthContext, projectId: string, q: z.infer<typeof FormsQuery>) {
+  async forms(tx: PapiTx, ctx: AuthContext, projectId: string, q: z.infer<typeof FormsQuery>) {
     if (q.filter) {
       const err = ruleError(q.filter);
       if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
@@ -73,12 +74,6 @@ export class PapiService implements OnModuleInit {
     const all = can(ctx.memberships, 'cases.read_all', projectId);
     const settings = await this.cases.settings(tx, projectId);
     const pii = await this.cases.piiFields(tx, projectId);
-    const conds = [eq(cases.projectId, projectId)];
-    if (!all) conds.push(eq(cases.assignedTo, ctx.userId));
-    if (q.caseIds?.length) conds.push(inArray(cases.id, q.caseIds));
-    // Each questionnaire prints its own cases.
-    const ofQ = ofQuestionnaire(chosen?.id);
-    if (ofQ) conds.push(ofQ);
     // Filtered as the forms show the cases: without `pii.view`, personal fields masked.
     const rows = this.cases
       .forRules(
@@ -86,20 +81,11 @@ export class PapiService implements OnModuleInit {
         projectId,
         pii,
         (
-          await tx
-            .select({
-              id: cases.id,
-              externalId: cases.externalId,
-              sample: cases.sample,
-              samplePii: cases.samplePii,
-              status: cases.status,
-              priority: cases.priority,
-              modePreference: cases.modePreference,
-              assignedTo: cases.assignedTo,
-            })
-            .from(cases)
-            .where(and(...conds))
-            .orderBy(asc(cases.externalId))
+          await tx.formCases(projectId, {
+            userId: all ? null : ctx.userId,
+            ...(q.caseIds?.length ? { caseIds: q.caseIds } : {}),
+            questionnaireId: chosen.id,
+          })
         ).map((r) => ({ ...r, sample: this.cases.pii.read(r) })),
       )
       .filter(compileRule(q.filter))
@@ -123,22 +109,13 @@ export class PapiService implements OnModuleInit {
     };
   }
 
-  /** The PAPI interviews of a case, newest first. */
-  private async paperInterviews(tx: Tx, caseId: string) {
-    return tx
-      .select()
-      .from(interviews)
-      .where(and(eq(interviews.caseId, caseId), eq(interviews.mode, 'PAPI')))
-      .orderBy(desc(interviews.startedAt));
-  }
-
   /**
    * Which entry of a case a clerk keys next (P3): the first, the second (by someone else,
    * when the project keys twice), or none.
    */
-  async nextPass(tx: Tx, ctx: AuthContext, projectId: string, caseId: string) {
+  async nextPass(tx: PapiTx, ctx: AuthContext, projectId: string, caseId: string) {
     const settings = await this.cases.settings(tx, projectId);
-    const done = (await this.paperInterviews(tx, caseId)).filter((i) => KEYED.includes(i.status));
+    const done = (await tx.paperInterviews(caseId)).filter((i) => KEYED.includes(i.status));
     const first = done.find((i) => i.entryPass === 1);
     if (!first) return 1;
     if (!settings.papi.doubleEntry || done.some((i) => i.entryPass === 2))
@@ -152,18 +129,10 @@ export class PapiService implements OnModuleInit {
   }
 
   /** Finds a case by the id on the form (typed or scanned from the QR code). */
-  async lookup(tx: Tx, ctx: AuthContext, projectId: string, externalId: string) {
-    const [c] = await tx
-      .select({
-        id: cases.id,
-        externalId: cases.externalId,
-        status: cases.status,
-        assignedTo: cases.assignedTo,
-      })
-      .from(cases)
-      .where(and(eq(cases.projectId, projectId), eq(cases.externalId, externalId.trim())));
+  async lookup(tx: PapiTx, ctx: AuthContext, projectId: string, externalId: string) {
+    const c = await tx.caseByExternalId(projectId, externalId.trim());
     if (!c) throw new NotFoundException({ code: 'NOT_FOUND', message: 'No case with this id' });
-    const open = (await this.paperInterviews(tx, c.id)).find((i) => i.status === 'in_progress');
+    const open = (await tx.paperInterviews(c.id)).find((i) => i.status === 'in_progress');
     if (open)
       return {
         caseId: c.id,
@@ -183,7 +152,7 @@ export class PapiService implements OnModuleInit {
    * the case stays open until every difference is resolved.
    */
   private async afterSubmit(
-    tx: Tx,
+    tx: PapiTx,
     row: InterviewRow,
     writer: { tenantId: string; userId: string | null },
   ) {
@@ -191,11 +160,7 @@ export class PapiService implements OnModuleInit {
     if (row.mode !== 'PAPI' || !row.caseId || row.submissions > 1) return;
     const settings = await this.cases.settings(tx, row.projectId);
     if (!settings.papi.doubleEntry) return;
-    const reopen = () =>
-      tx
-        .update(cases)
-        .set({ status: 'in_progress', disposition: null, updatedAt: new Date() })
-        .where(eq(cases.id, row.caseId!));
+    const reopen = () => tx.reopenCase(row.caseId!);
     if (row.entryPass === 1) {
       await reopen();
       await this.cases.events(tx, writer.tenantId, writer.userId, [
@@ -203,17 +168,7 @@ export class PapiService implements OnModuleInit {
       ]);
       return;
     }
-    const [first] = await tx
-      .select()
-      .from(interviews)
-      .where(
-        and(
-          eq(interviews.caseId, row.caseId),
-          eq(interviews.mode, 'PAPI'),
-          eq(interviews.entryPass, 1),
-          inArray(interviews.status, KEYED),
-        ),
-      );
+    const first = await tx.firstEntry(row.caseId, KEYED);
     if (!first) return;
     const a = (first.answers ?? {}) as Record<string, unknown>;
     const b = (row.answers ?? {}) as Record<string, unknown>;
@@ -221,9 +176,8 @@ export class PapiService implements OnModuleInit {
       .filter((k) => stableStringify(a[k] ?? null) !== stableStringify(b[k] ?? null))
       .sort();
     if (differ.length) {
-      await tx.insert(entryMismatches).values(
+      await tx.insertMismatches(
         differ.map((variable) => ({
-          tenantId: writer.tenantId,
           projectId: row.projectId,
           caseId: row.caseId!,
           firstInterviewId: first.id,
@@ -244,34 +198,8 @@ export class PapiService implements OnModuleInit {
     ]);
   }
 
-  async mismatches(tx: Tx, projectId: string, status: 'open' | 'resolved' | 'all') {
-    return tx
-      .select({
-        id: entryMismatches.id,
-        caseId: entryMismatches.caseId,
-        externalId: cases.externalId,
-        variable: entryMismatches.variable,
-        firstValue: entryMismatches.firstValue,
-        secondValue: entryMismatches.secondValue,
-        status: entryMismatches.status,
-        resolvedValue: entryMismatches.resolvedValue,
-        resolvedBy: users.name,
-        resolvedAt: entryMismatches.resolvedAt,
-        firstInterviewId: entryMismatches.firstInterviewId,
-        questionnaireVersionId: interviews.questionnaireVersionId,
-      })
-      .from(entryMismatches)
-      .innerJoin(cases, eq(cases.id, entryMismatches.caseId))
-      .innerJoin(interviews, eq(interviews.id, entryMismatches.firstInterviewId))
-      .leftJoin(users, eq(users.id, entryMismatches.resolvedBy))
-      .where(
-        and(
-          eq(entryMismatches.projectId, projectId),
-          status === 'all' ? sql`true` : eq(entryMismatches.status, status),
-        ),
-      )
-      .orderBy(asc(cases.externalId), asc(entryMismatches.variable))
-      .limit(1000);
+  mismatches(tx: PapiTx, projectId: string, status: 'open' | 'resolved' | 'all') {
+    return tx.mismatches(projectId, status);
   }
 
   /**
@@ -279,69 +207,36 @@ export class PapiService implements OnModuleInit {
    * as a reviewer's change; when no difference remains, the case is finished.
    */
   async resolve(
-    tx: Tx,
+    tx: PapiTx,
     ctx: AuthContext,
     projectId: string,
     id: string,
     choice: 'first' | 'second',
   ) {
-    const [m] = await tx
-      .select()
-      .from(entryMismatches)
-      .where(and(eq(entryMismatches.id, id), eq(entryMismatches.projectId, projectId)))
-      .for('update');
+    const m = await tx.lockMismatch(projectId, id);
     if (!m) throw new NotFoundException('Difference not found');
     if (m.status !== 'open')
       throw new ConflictException({ code: 'RESOLVED', message: 'Already resolved' });
     const value = choice === 'first' ? m.firstValue : m.secondValue;
     const now = new Date();
-    await tx
-      .update(entryMismatches)
-      .set({ status: 'resolved', resolvedValue: value, resolvedBy: ctx.userId, resolvedAt: now })
-      .where(eq(entryMismatches.id, m.id));
+    await tx.resolveMismatch(m.id, { value, by: ctx.userId, at: now });
     if (choice === 'second') {
-      const path = `{${m.variable}}`;
-      const statePath = `{answers,${m.variable}}`;
-      await tx
-        .update(interviews)
-        .set({
-          answers:
-            value === null
-              ? sql`${interviews.answers} - ${m.variable}`
-              : sql`jsonb_set(${interviews.answers}, ${path}::text[], ${JSON.stringify(value)}::jsonb, true)`,
-          state:
-            value === null
-              ? sql`jsonb_set(${interviews.state}, '{answers}', (${interviews.state} -> 'answers') - ${m.variable}, true)`
-              : sql`jsonb_set(${interviews.state}, ${statePath}::text[], ${JSON.stringify(value)}::jsonb, true)`,
-          updatedAt: now,
-        })
-        .where(eq(interviews.id, m.firstInterviewId));
-      const [{ next }] = (await tx
-        .select({ next: sql<number>`coalesce(max(${interviewAnswerEvents.seq}), 0)::int + 1` })
-        .from(interviewAnswerEvents)
-        .where(
-          and(
-            eq(interviewAnswerEvents.interviewId, m.firstInterviewId),
-            eq(interviewAnswerEvents.deviceId, REVIEW_DEVICE),
-          ),
-        )) as [{ next: number }];
-      await tx.insert(interviewAnswerEvents).values({
-        tenantId: ctx.tenantId,
-        interviewId: m.firstInterviewId,
-        deviceId: REVIEW_DEVICE,
-        seq: next,
-        variable: m.variable,
-        oldValue: m.firstValue,
-        newValue: value,
-        at: now,
-        byUserId: ctx.userId,
-        source: 'reviewer',
-        reason: 'double_entry',
-      });
+      await tx.overwriteAnswer(m.firstInterviewId, m.variable, value, now);
+      const next = await tx.nextEventSeq(m.firstInterviewId, REVIEW_DEVICE);
+      await tx.insertAnswerEvents(m.firstInterviewId, REVIEW_DEVICE, [
+        {
+          seq: next,
+          variable: m.variable,
+          oldValue: m.firstValue,
+          newValue: value,
+          at: now,
+          byUserId: ctx.userId,
+          source: 'reviewer',
+          reason: 'double_entry',
+        },
+      ]);
     }
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+    await tx.audit(
       this.audit.fromContext(ctx, {
         action: 'entry.resolved',
         targetType: 'case',
@@ -349,25 +244,10 @@ export class PapiService implements OnModuleInit {
         details: { variable: m.variable, choice },
       }),
     );
-    const [left] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(entryMismatches)
-      .where(
-        and(
-          eq(entryMismatches.secondInterviewId, m.secondInterviewId),
-          eq(entryMismatches.status, 'open'),
-        ),
-      );
     let finished = false;
-    if (!left!.n) {
-      const [first] = await tx
-        .select({ disposition: interviews.disposition })
-        .from(interviews)
-        .where(eq(interviews.id, m.firstInterviewId));
-      await tx
-        .update(cases)
-        .set({ status: 'finalised', disposition: first?.disposition ?? 'COMPLETE', updatedAt: now })
-        .where(eq(cases.id, m.caseId));
+    if (!(await tx.openMismatches(m.secondInterviewId))) {
+      const first = await tx.interview(m.firstInterviewId);
+      await tx.finaliseCase(m.caseId, first?.disposition ?? 'COMPLETE');
       await this.cases.events(tx, ctx.tenantId, ctx.userId, [
         { caseId: m.caseId, type: 'entries_resolved', details: { first: m.firstInterviewId } },
       ]);

@@ -1,9 +1,19 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
+import { PAPI_REPO, type PapiRepo } from './papi-repo.js';
 import { FormsQuery, PapiService, ResolveBody } from './papi.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -16,7 +26,7 @@ const MismatchQuery = z.object({ status: z.enum(['open', 'resolved', 'all']).def
 @Controller('projects/:projectId/papi')
 export class PapiController {
   constructor(
-    private readonly database: Database,
+    @Inject(PAPI_REPO) private readonly repo: PapiRepo,
     private readonly papi: PapiService,
   ) {}
 
@@ -28,7 +38,7 @@ export class PapiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(FormsQuery)) q: z.infer<typeof FormsQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.papi.forms(tx, ctx, projectId, q));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.papi.forms(t, ctx, projectId, q));
   }
 
   /** Finds the case of a form by its id, and which entry is next. */
@@ -39,8 +49,8 @@ export class PapiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(LookupQuery)) q: z.infer<typeof LookupQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.papi.lookup(tx, ctx, projectId, q.externalId),
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.papi.lookup(t, ctx, projectId, q.externalId),
     );
   }
 
@@ -51,9 +61,7 @@ export class PapiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(MismatchQuery)) q: z.infer<typeof MismatchQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.papi.mismatches(tx, projectId, q.status),
-    );
+    return this.repo.inTenant(ctx.tenantId, (t) => this.papi.mismatches(t, projectId, q.status));
   }
 
   @Post('mismatches/:id/resolve')
@@ -66,8 +74,8 @@ export class PapiController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(ResolveBody)) body: z.infer<typeof ResolveBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.papi.resolve(tx, ctx, projectId, id, body.choice),
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.papi.resolve(t, ctx, projectId, id, body.choice),
     );
   }
 }

@@ -54,6 +54,7 @@ import { EXPORTS_REPO, MssqlExportsRepo, PgExportsRepo } from './exports/exports
 import { MssqlSweepRepo, PgSweepRepo, SWEEP_REPO } from './jobs/sweep-repo.js';
 import { CAWI_REPO, MssqlCawiRepo, PgCawiRepo } from './cawi/cawi-repo.js';
 import { FEEDBACK_REPO, MssqlFeedbackRepo, PgFeedbackRepo } from './feedback/feedback-repo.js';
+import { MssqlPapiRepo, PAPI_REPO, PgPapiRepo } from './papi/papi-repo.js';
 import { AnalysisService } from './analysis/analysis.service.js';
 import { DatasetService } from './analysis/dataset.service.js';
 import { ShareService } from './analysis/share.service.js';
@@ -352,6 +353,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgFeedbackRepo, ms: MssqlFeedbackRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgFeedbackRepo, MssqlFeedbackRepo],
+        },
+        PgPapiRepo,
+        MssqlPapiRepo,
+        {
+          provide: PAPI_REPO,
+          useFactory: (engine: Engine, pg: PgPapiRepo, ms: MssqlPapiRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgPapiRepo, MssqlPapiRepo],
         },
         PgExportsRepo,
         MssqlExportsRepo,

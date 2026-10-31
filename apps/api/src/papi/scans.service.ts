@@ -1,33 +1,16 @@
-import { Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import {
   createInterview,
   type CompiledQuestionnaire,
   type InterviewSession,
 } from '@wansurvey/logic';
 import type { AnswerValue, SpecialKind } from '@wansurvey/schema';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
-import { claimable } from '../jobs/claims.js';
-import { Database, type Tx } from '../db/database.js';
-import {
-  cases,
-  interviewDevices,
-  interviews,
-  papiScanBatches,
-  papiScanForms,
-  papiScanPages,
-  questionnaireVersions,
-  questionnaires,
-  users,
-} from '../db/schema.js';
-import {
-  InterviewsService,
-  type InterviewRow,
-  type Writer,
-} from '../interviews/interviews.service.js';
+import type { CaseFull } from '../interviews/interviews-repo.js';
+import { InterviewsService, type Writer } from '../interviews/interviews.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { interpret, type IssueKind } from './omr/interpret.js';
 import {
@@ -41,6 +24,7 @@ import {
 } from './omr/layout.js';
 import { measurer, scanFormsPdf } from './omr/pdf.js';
 import { fill, findCode, locate, rasterize, type Affine, type PageImage } from './omr/read.js';
+import { PAPI_REPO, type PapiRepo, type PapiTx } from './papi-repo.js';
 import { PapiService, type FormsQuery } from './papi.service.js';
 import type { z } from 'zod';
 
@@ -90,7 +74,7 @@ export class ScansService implements OnModuleInit {
   private layouts = new Map<string, FormLayout>();
 
   constructor(
-    private readonly database: Database,
+    @Inject(PAPI_REPO) private readonly repo: PapiRepo,
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
     private readonly papi: PapiService,
@@ -115,17 +99,9 @@ export class ScansService implements OnModuleInit {
   }
 
   /** The machine-readable forms of the chosen cases, as one PDF. */
-  async formsPdf(tx: Tx, ctx: AuthContext, projectId: string, q: z.infer<typeof FormsQuery>) {
+  async formsPdf(tx: PapiTx, ctx: AuthContext, projectId: string, q: z.infer<typeof FormsQuery>) {
     const f = await this.papi.forms(tx, ctx, projectId, q);
-    const [v] = await tx
-      .select({ id: questionnaireVersions.id })
-      .from(questionnaireVersions)
-      .where(
-        and(
-          eq(questionnaireVersions.questionnaireId, f.questionnaire.id),
-          eq(questionnaireVersions.version, f.version),
-        ),
-      );
+    const v = { id: (await tx.versionIdOf(f.questionnaire.id, f.version))! };
     const lang = f.compiled.questionnaire.defaultLanguage;
     const w = wordsFor(lang, f.compiled);
     const layout = await this.layout(v!.id, f.compiled, lang);
@@ -149,24 +125,18 @@ export class ScansService implements OnModuleInit {
     projectId: string,
     files: { originalname: string; buffer: Buffer }[],
   ) {
-    const ids = await this.database.withTenant(ctx.tenantId, async (tx) => {
+    const ids = await this.repo.inTenant(ctx.tenantId, async (tx) => {
       const out: string[] = [];
-      for (const f of files) {
-        const [b] = await tx
-          .insert(papiScanBatches)
-          .values({
-            tenantId: ctx.tenantId,
+      for (const f of files)
+        out.push(
+          await tx.insertBatch({
             projectId,
             uploadedBy: ctx.userId,
             fileName: f.originalname.slice(0, 200),
             pdf: f.buffer,
-          })
-          .returning({ id: papiScanBatches.id });
-        out.push(b!.id);
-      }
-      await this.audit.record(
-        tx,
-        ctx.tenantId,
+          }),
+        );
+      await tx.audit(
         this.audit.fromContext(ctx, {
           action: 'papi.scans_uploaded',
           targetType: 'project',
@@ -184,37 +154,19 @@ export class ScansService implements OnModuleInit {
 
   /** Reads one uploaded PDF: splits it into forms, reads the marks and makes the interviews. */
   async process(tenantId: string, batchId: string) {
-    const batch = await this.database.withTenant(tenantId, async (tx) => {
-      // Taken once: a queued batch, or one whose worker was lost (running for too long).
-      const [b] = await tx
-        .update(papiScanBatches)
-        .set({
-          status: 'running',
-          startedAt: new Date(),
-          attempts: sql`${papiScanBatches.attempts} + 1`,
-        })
-        .where(and(eq(papiScanBatches.id, batchId), claimable(papiScanBatches)))
-        .returning();
-      return b;
-    });
+    // Taken once: a queued batch, or one whose worker was lost (running for too long).
+    const batch = await this.repo.inTenant(tenantId, (tx) => tx.claimBatch(batchId));
     if (!batch?.pdf) return;
     let images: PageImage[];
     try {
       images = await rasterize(batch.pdf);
     } catch (e) {
-      await this.database.withTenant(tenantId, (tx) =>
-        tx
-          .update(papiScanBatches)
-          .set({
-            status: 'failed',
-            error: e instanceof Error ? e.message.slice(0, 500) : 'unreadable',
-            finishedAt: new Date(),
-          })
-          .where(eq(papiScanBatches.id, batchId)),
+      await this.repo.inTenant(tenantId, (tx) =>
+        tx.failBatch(batchId, e instanceof Error ? e.message.slice(0, 500) : 'unreadable'),
       );
       return;
     }
-    await this.database.withTenant(tenantId, async (tx) => {
+    await this.repo.inTenant(tenantId, async (tx) => {
       // Each page: its code, then where the form sits on it.
       type Found = {
         n: number;
@@ -245,14 +197,8 @@ export class ScansService implements OnModuleInit {
       const pageRows = new Map<Found, string | null>();
       for (const [key, pages] of groups) {
         const [caseId, versionId, lang] = key.split('|') as [string, string, string];
-        const [c] = await tx
-          .select()
-          .from(cases)
-          .where(and(eq(cases.id, caseId), eq(cases.projectId, batch.projectId)));
-        const [v] = await tx
-          .select()
-          .from(questionnaireVersions)
-          .where(eq(questionnaireVersions.id, versionId));
+        const c = await tx.caseInProject(batch.projectId, caseId);
+        const v = await tx.versionRow(versionId);
         if (!c || !v) {
           for (const p of pages) p.problem = c ? 'unknown_version' : 'unknown_case';
           continue;
@@ -260,9 +206,8 @@ export class ScansService implements OnModuleInit {
         const formId = await this.readForm(tx, batch, c, v, lang, pages);
         for (const p of pages) pageRows.set(p, formId);
       }
-      for (const f of found)
-        await tx.insert(papiScanPages).values({
-          tenantId,
+      await tx.insertPages(
+        found.map((f) => ({
           batchId,
           formId: pageRows.get(f) ?? null,
           pageNo: f.n,
@@ -272,11 +217,9 @@ export class ScansService implements OnModuleInit {
           width: f.img.width,
           height: f.img.height,
           image: f.img.png,
-        });
-      await tx
-        .update(papiScanBatches)
-        .set({ status: 'done', pages: images.length, pdf: null, finishedAt: new Date() })
-        .where(eq(papiScanBatches.id, batchId));
+        })),
+      );
+      await tx.finishBatch(batchId, images.length);
     });
   }
 
@@ -286,10 +229,10 @@ export class ScansService implements OnModuleInit {
    * nothing to check are submitted; the rest wait for the second round.
    */
   private async readForm(
-    tx: Tx,
-    batch: typeof papiScanBatches.$inferSelect,
-    c: typeof cases.$inferSelect,
-    v: typeof questionnaireVersions.$inferSelect,
+    tx: PapiTx,
+    batch: { id: string; tenantId: string; projectId: string; uploadedBy: string | null },
+    c: CaseFull,
+    v: { id: string; version: number; compiled: unknown },
     lang: string,
     pages: { img: PageImage; t: Affine | null; code: ReturnType<typeof parsePageCode> }[],
   ) {
@@ -321,7 +264,6 @@ export class ScansService implements OnModuleInit {
     }
     const base = {
       id: formId,
-      tenantId: batch.tenantId,
       projectId: batch.projectId,
       batchId: batch.id,
       caseId: c.id,
@@ -331,18 +273,12 @@ export class ScansService implements OnModuleInit {
       pagesFound: [...byPage.keys()].sort((a, b) => a - b),
     };
     // A form already keyed, or being keyed, is not read twice.
-    const [taken] = await tx
-      .select({ id: interviews.id })
-      .from(interviews)
-      .where(
-        and(
-          eq(interviews.caseId, c.id),
-          inArray(interviews.status, ['in_progress', 'submitted', 'in_review', 'approved']),
-        ),
-      )
-      .limit(1);
-    if (taken || c.status === 'finalised' || c.status === 'withdrawn') {
-      await tx.insert(papiScanForms).values({ ...base, status: 'duplicate', issues });
+    if (
+      (await tx.hasTakenInterview(c.id)) ||
+      c.status === 'finalised' ||
+      c.status === 'withdrawn'
+    ) {
+      await tx.insertForm({ ...base, status: 'duplicate', issues });
       return formId;
     }
 
@@ -350,26 +286,19 @@ export class ScansService implements OnModuleInit {
     const interviewId = uuidv7();
     const deviceId = `scan-${formId}`;
     const context = await this.runtime.caseContext(tx, null, batch.projectId, c, false);
-    const [row] = (await tx
-      .insert(interviews)
-      .values({
-        id: interviewId,
-        tenantId: batch.tenantId,
-        projectId: batch.projectId,
-        caseId: c.id,
-        questionnaireVersionId: v.id,
-        mode: 'PAPI',
-        interviewerId: batch.uploadedBy,
-        language: lang,
-        context,
-        deviceId,
-        entryPass: 1,
-      })
-      .returning()) as [InterviewRow];
-    await tx
-      .update(cases)
-      .set({ status: 'in_progress', updatedAt: new Date() })
-      .where(eq(cases.id, c.id));
+    const row = await tx.insertInterview({
+      id: interviewId,
+      projectId: batch.projectId,
+      caseId: c.id,
+      questionnaireVersionId: v.id,
+      mode: 'PAPI',
+      interviewerId: batch.uploadedBy,
+      language: lang,
+      context,
+      deviceId,
+      entryPass: 1,
+    });
+    await tx.setCaseInProgress(c.id);
     await this.cases.events(tx, batch.tenantId, batch.uploadedBy, [
       {
         caseId: c.id,
@@ -377,10 +306,7 @@ export class ScansService implements OnModuleInit {
         details: { interviewId, mode: 'PAPI', version: v.version, pass: 1, via: 'scan' },
       },
     ]);
-    await tx
-      .insert(interviewDevices)
-      .values({ tenantId: batch.tenantId, interviewId, deviceId })
-      .onConflictDoNothing();
+    await tx.ensureDevice(interviewId, deviceId);
 
     const session = createInterview(compiled, this.runtime.engineOptions(row));
     issues.push(...this.apply(session, answers));
@@ -421,10 +347,7 @@ export class ScansService implements OnModuleInit {
     const open = issues.filter((i) => i.kind === 'off_path' || path.has(i.name));
     let status = 'review';
     if (!open.length && session.status().state !== 'in_progress') {
-      const [fresh] = (await tx
-        .select()
-        .from(interviews)
-        .where(eq(interviews.id, interviewId))) as [InterviewRow];
+      const fresh = (await tx.interview(interviewId))!;
       await this.runtime.submit(
         tx,
         fresh,
@@ -433,12 +356,7 @@ export class ScansService implements OnModuleInit {
       );
       status = 'done';
     }
-    await tx.insert(papiScanForms).values({
-      ...base,
-      interviewId,
-      status,
-      issues: open,
-    });
+    await tx.insertForm({ ...base, interviewId, status, issues: open });
     return formId;
   }
 
@@ -483,51 +401,12 @@ export class ScansService implements OnModuleInit {
   // ------------------------------------------------------------------------------------------
 
   /** The batches of a project, newest first, with their forms. */
-  async list(tx: Tx, projectId: string) {
-    const batches = await tx
-      .select({
-        id: papiScanBatches.id,
-        fileName: papiScanBatches.fileName,
-        status: papiScanBatches.status,
-        pages: papiScanBatches.pages,
-        error: papiScanBatches.error,
-        createdAt: papiScanBatches.createdAt,
-        uploadedBy: users.name,
-      })
-      .from(papiScanBatches)
-      .leftJoin(users, eq(users.id, papiScanBatches.uploadedBy))
-      .where(eq(papiScanBatches.projectId, projectId))
-      .orderBy(desc(papiScanBatches.createdAt))
-      .limit(50);
+  async list(tx: PapiTx, projectId: string) {
+    const batches = await tx.batches(projectId);
     if (!batches.length) return [];
     const ids = batches.map((b) => b.id);
-    const forms = await tx
-      .select({
-        id: papiScanForms.id,
-        batchId: papiScanForms.batchId,
-        caseId: papiScanForms.caseId,
-        externalId: cases.externalId,
-        interviewId: papiScanForms.interviewId,
-        status: papiScanForms.status,
-        pagesExpected: papiScanForms.pagesExpected,
-        pagesFound: papiScanForms.pagesFound,
-        issues: papiScanForms.issues,
-        interviewStatus: interviews.status,
-      })
-      .from(papiScanForms)
-      .innerJoin(cases, eq(cases.id, papiScanForms.caseId))
-      .leftJoin(interviews, eq(interviews.id, papiScanForms.interviewId))
-      .where(inArray(papiScanForms.batchId, ids))
-      .orderBy(asc(cases.externalId));
-    const stray = await tx
-      .select({
-        batchId: papiScanPages.batchId,
-        pageNo: papiScanPages.pageNo,
-        problem: papiScanPages.problem,
-      })
-      .from(papiScanPages)
-      .where(and(inArray(papiScanPages.batchId, ids), sql`${papiScanPages.problem} is not null`))
-      .orderBy(asc(papiScanPages.pageNo));
+    const forms = await tx.scanForms(ids);
+    const stray = await tx.strayPages(ids);
     return batches.map((b) => ({
       ...b,
       forms: forms
@@ -548,28 +427,12 @@ export class ScansService implements OnModuleInit {
    * What the second round needs for an interview read from a scan: per question its reason
    * and where it is on the scanned page (as fractions of the page), and the pages.
    */
-  async forInterview(tx: Tx, interviewId: string) {
-    const [form] = await tx
-      .select()
-      .from(papiScanForms)
-      .where(eq(papiScanForms.interviewId, interviewId));
+  async forInterview(tx: PapiTx, interviewId: string) {
+    const form = await tx.formOfInterview(interviewId);
     if (!form) throw new NotFoundException('Not read from a scan');
-    const [v] = await tx
-      .select()
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.id, form.questionnaireVersionId));
+    const v = await tx.versionRow(form.questionnaireVersionId);
     const layout = await this.layout(v!.id, v!.compiled as CompiledQuestionnaire, form.lang);
-    const pages = await tx
-      .select({
-        id: papiScanPages.id,
-        formPage: papiScanPages.formPage,
-        transform: papiScanPages.transform,
-        width: papiScanPages.width,
-        height: papiScanPages.height,
-      })
-      .from(papiScanPages)
-      .where(eq(papiScanPages.formId, form.id))
-      .orderBy(asc(papiScanPages.formPage));
+    const pages = await tx.formPages(form.id);
     const issues = form.issues as ScanIssue[];
     const at = (r: { page: number; x: number; y: number; w: number; h: number }) => {
       const p = pages.find((x) => x.formPage === r.page);
@@ -621,44 +484,27 @@ export class ScansService implements OnModuleInit {
   }
 
   /** A scanned page's image. */
-  async pageImage(tx: Tx, pageId: string) {
-    const [p] = await tx
-      .select({ image: papiScanPages.image })
-      .from(papiScanPages)
-      .where(eq(papiScanPages.id, pageId));
-    if (!p) throw new NotFoundException('Page not found');
-    return p.image;
+  async pageImage(tx: PapiTx, projectId: string, pageId: string) {
+    const image = await tx.pageImage(projectId, pageId);
+    if (!image) throw new NotFoundException('Page not found');
+    return image;
   }
 
   /**
    * Takes a form's interview to do its second round: the person keying it becomes its holder
    * (of the case too), so it opens on their screen like any other keyed form.
    */
-  async claim(tx: Tx, ctx: AuthContext, projectId: string, formId: string) {
-    const [form] = await tx
-      .select()
-      .from(papiScanForms)
-      .where(and(eq(papiScanForms.id, formId), eq(papiScanForms.projectId, projectId)));
+  async claim(tx: PapiTx, ctx: AuthContext, projectId: string, formId: string) {
+    const form = await tx.formOf(projectId, formId);
     if (!form?.interviewId) throw new NotFoundException('Form not found');
-    const [row] = await tx
-      .update(interviews)
-      .set({ interviewerId: ctx.userId, updatedAt: new Date() })
-      .where(and(eq(interviews.id, form.interviewId), eq(interviews.status, 'in_progress')))
-      .returning({ id: interviews.id });
-    if (!row) throw new NotFoundException('This form is already finished');
-    await tx
-      .update(cases)
-      .set({ assignedTo: ctx.userId, updatedAt: new Date() })
-      .where(eq(cases.id, form.caseId));
-    return { interviewId: row.id };
+    const id = await tx.claimInterview(form.interviewId, ctx.userId);
+    if (!id) throw new NotFoundException('This form is already finished');
+    await tx.assignCase(form.caseId, ctx.userId);
+    return { interviewId: id };
   }
 
   /** A questionnaire's name for file names. */
-  async questionnaireName(tx: Tx, id: string) {
-    const [q] = await tx
-      .select({ name: questionnaires.name })
-      .from(questionnaires)
-      .where(eq(questionnaires.id, id));
-    return q?.name ?? 'forms';
+  async questionnaireName(tx: PapiTx, id: string) {
+    return (await tx.questionnaireName(id)) ?? 'forms';
   }
 }
