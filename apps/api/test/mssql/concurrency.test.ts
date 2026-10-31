@@ -75,6 +75,18 @@ describe.skipIf(!configured)('SQL Server: the database under concurrent use', ()
     expect(Date.now() - started).toBeLessThan(5000);
   });
 
+  it('hands every connection back to the pool, so a small pool serves any number of transactions', async () => {
+    const small = new MssqlDatabase(process.env.MSSQL_URL!, { max: 2, lockTimeoutMs: 1000 });
+    try {
+      for (let i = 0; i < 20; i++)
+        await small.withTenant(tenant.id, async (tx) => {
+          await sql`SELECT 1 AS one`.execute(tx);
+        });
+    } finally {
+      await small.destroy();
+    }
+  }, 30_000);
+
   it('pins the lock time limit and the tenant for the transaction only', async () => {
     const config = loadConfig();
     const inside = await db.withTenant(tenant.id, async (tx) => {

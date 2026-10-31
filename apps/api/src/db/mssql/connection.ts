@@ -60,24 +60,20 @@ class LockTimeoutDialect extends MssqlDialect {
   override createDriver(): Driver {
     const driver = super.createDriver();
     const prefix = `SET LOCK_TIMEOUT ${Math.trunc(this.lockTimeoutMs)}; `;
-    const timed = (c: DatabaseConnection): DatabaseConnection =>
-      new Proxy(c, {
-        get(target, prop) {
-          if (prop === 'executeQuery')
-            return (q: Parameters<DatabaseConnection['executeQuery']>[0]) =>
-              target.executeQuery({ ...q, sql: prefix + q.sql });
-          const v = Reflect.get(target, prop, target) as unknown;
-          return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
-        },
-      });
-    return new Proxy(driver, {
-      get(target, prop) {
-        if (prop === 'acquireConnection')
-          return async () => timed(await target.acquireConnection());
-        const v = Reflect.get(target, prop, target) as unknown;
-        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
-      },
-    });
+    const acquire = driver.acquireConnection.bind(driver);
+    const patched = new WeakSet<DatabaseConnection>();
+    // The pooled connection itself is changed, not wrapped: the pool gets back the very object it
+    // handed out (a wrapper would never be released, and the pool would run dry).
+    driver.acquireConnection = async () => {
+      const connection = await acquire();
+      if (!patched.has(connection)) {
+        patched.add(connection);
+        const execute = connection.executeQuery.bind(connection);
+        connection.executeQuery = (q) => execute({ ...q, sql: prefix + q.sql });
+      }
+      return connection;
+    };
+    return driver;
   }
 }
 
