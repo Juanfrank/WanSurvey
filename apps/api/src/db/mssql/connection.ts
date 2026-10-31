@@ -1,4 +1,4 @@
-import { Kysely, MssqlDialect } from 'kysely';
+import { Kysely, MssqlDialect, type DatabaseConnection, type Driver } from 'kysely';
 import * as Tarn from 'tarn';
 import * as Tedious from 'tedious';
 
@@ -8,6 +8,13 @@ export interface MssqlOptions {
   /** A statement running longer than this fails (ms); 0: no limit. */
   requestTimeoutMs?: number;
   connectTimeoutMs?: number;
+  /**
+   * How long a statement may wait for a lock (ms). Every statement is sent with
+   * `SET LOCK_TIMEOUT n;` in front: Kysely runs each one through `sp_executesql`, where a SET
+   * does not outlast the statement, so setting it once on the connection would do nothing. Not for
+   * the migrations, whose DDL must open its batch.
+   */
+  lockTimeoutMs?: number;
 }
 
 /**
@@ -41,10 +48,47 @@ export function parseMssqlUrl(url: string): Tedious.ConnectionConfiguration {
 }
 
 /** A Kysely instance on SQL Server (tedious), pooled with tarn. */
+/** A dialect whose statements carry the lock time limit (see `MssqlOptions.lockTimeoutMs`). */
+class LockTimeoutDialect extends MssqlDialect {
+  constructor(
+    config: ConstructorParameters<typeof MssqlDialect>[0],
+    private readonly lockTimeoutMs: number,
+  ) {
+    super(config);
+  }
+
+  override createDriver(): Driver {
+    const driver = super.createDriver();
+    const prefix = `SET LOCK_TIMEOUT ${Math.trunc(this.lockTimeoutMs)}; `;
+    const timed = (c: DatabaseConnection): DatabaseConnection =>
+      new Proxy(c, {
+        get(target, prop) {
+          if (prop === 'executeQuery')
+            return (q: Parameters<DatabaseConnection['executeQuery']>[0]) =>
+              target.executeQuery({ ...q, sql: prefix + q.sql });
+          const v = Reflect.get(target, prop, target) as unknown;
+          return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+        },
+      });
+    return new Proxy(driver, {
+      get(target, prop) {
+        if (prop === 'acquireConnection')
+          return async () => timed(await target.acquireConnection());
+        const v = Reflect.get(target, prop, target) as unknown;
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+      },
+    });
+  }
+}
+
 export function createMssqlDb<DB>(url: string, opts: MssqlOptions = {}): Kysely<DB> {
   const base = parseMssqlUrl(url);
+  const Dialect = (config: ConstructorParameters<typeof MssqlDialect>[0]) =>
+    opts.lockTimeoutMs !== undefined && opts.lockTimeoutMs >= 0
+      ? new LockTimeoutDialect(config, opts.lockTimeoutMs)
+      : new MssqlDialect(config);
   return new Kysely<DB>({
-    dialect: new MssqlDialect({
+    dialect: Dialect({
       tarn: { ...Tarn, options: { min: 0, max: opts.max ?? 10 } },
       tedious: {
         ...Tedious,

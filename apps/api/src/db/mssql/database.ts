@@ -59,7 +59,7 @@ export class MssqlDatabase {
     opts: MssqlOptions & Partial<MssqlLimits> = {},
     private readonly limits: MssqlLimits = { lockTimeoutMs: opts.lockTimeoutMs ?? 5_000 },
   ) {
-    this.db = createMssqlDb<MssqlSchema>(url, opts);
+    this.db = createMssqlDb<MssqlSchema>(url, { ...opts, lockTimeoutMs: limits.lockTimeoutMs });
   }
 
   /**
@@ -130,7 +130,6 @@ export class MssqlDatabase {
       let original: unknown;
       try {
         return await this.db.transaction().execute(async (tx) => {
-          await sql`SET LOCK_TIMEOUT ${sql.lit(this.limits.lockTimeoutMs)}`.execute(tx);
           const tenantId = await prepare(tx);
           if (tenantId)
             await sql`EXEC sp_set_session_context @key = N'tenant_id', @value = ${tenantId}`.execute(

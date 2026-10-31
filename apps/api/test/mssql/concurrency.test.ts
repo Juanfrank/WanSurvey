@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config.js';
 import { mssqlNumber } from '../../src/db/mssql/connection.js';
 import { Engine } from '../../src/db/engine.js';
-import type { MssqlDatabase } from '../../src/db/mssql/database.js';
+import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import {
   bootstrap,
   configured,
@@ -51,25 +51,25 @@ describe.skipIf(!configured)('SQL Server: the database under concurrent use', ()
 
   it('answers 503 BUSY instead of waiting on a lock held too long', async () => {
     const project = await createProject(t.owner, tenant.id);
+    // The same application user with a short wait for locks.
+    const quick = new MssqlDatabase(process.env.MSSQL_URL!, { max: 2, lockTimeoutMs: 300 });
     // Someone else holds the row (a long transaction elsewhere).
     let release!: () => void;
     const held = new Promise<void>((ok) => (release = ok));
     const holder = t.owner.transaction().execute(async (x) => {
-      await sql`UPDATE projects WITH (UPDLOCK, HOLDLOCK) SET name = name WHERE id = ${project}`.execute(
-        x,
-      );
+      await sql`UPDATE projects SET name = name WHERE id = ${project}`.execute(x);
       await held;
     });
     await new Promise((ok) => setTimeout(ok, 300));
     const started = Date.now();
-    const err = await db
+    const err = await quick
       .withTenant(tenant.id, async (tx) => {
-        await sql`SET LOCK_TIMEOUT 300`.execute(tx);
         await sql`UPDATE projects SET name = name WHERE id = ${project}`.execute(tx);
       })
       .catch((e: unknown) => e);
     release();
     await holder;
+    await quick.destroy();
     expect(err).toBeInstanceOf(ServiceUnavailableException);
     expect((err as ServiceUnavailableException).getResponse()).toMatchObject({ code: 'BUSY' });
     expect(Date.now() - started).toBeLessThan(5000);
