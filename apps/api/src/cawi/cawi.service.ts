@@ -13,7 +13,6 @@ import { uuidv7 } from 'uuidv7';
 import { projectSettings, type CawiTheme } from '@wansurvey/schema';
 import { z } from 'zod';
 import { DisplayName } from '../common/zod.js';
-import { AuditService } from '../audit/audit.service.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
@@ -106,7 +105,6 @@ export class CawiService implements OnModuleInit {
     private readonly engine: Engine,
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
-    private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
   ) {}
@@ -320,7 +318,6 @@ export class CawiService implements OnModuleInit {
     await t.setWaveStatus(w.id, 'sending');
     await this.cases.events(
       t,
-      ctx.tenantId,
       ctx.userId,
       rows.map((r) => ({ caseId: r.caseId, type: 'invited', details: { waveId: w.id } })),
     );
@@ -356,7 +353,6 @@ export class CawiService implements OnModuleInit {
     await t.setWaveStatus(w.id, 'sent');
     await this.cases.events(
       t,
-      ctx.tenantId,
       ctx.userId,
       rows.map((r) => ({ caseId: r.caseId, type: 'link_made', details: { waveId: w.id } })),
     );
@@ -386,12 +382,7 @@ export class CawiService implements OnModuleInit {
     return l ? { ...l, url: `${this.webBase}/o/${l.slug}` } : null;
   }
 
-  async setOpenLink(
-    t: CawiTx,
-    ctx: AuthContext,
-    projectId: string,
-    body: z.infer<typeof OpenLinkBody>,
-  ) {
+  async setOpenLink(t: CawiTx, projectId: string, body: z.infer<typeof OpenLinkBody>) {
     const current = await this.openLink(t, projectId);
     // The questionnaire must be this project's, in use and fielded on the web.
     if (body.questionnaireId && body.questionnaireId !== current?.questionnaireId)
@@ -624,7 +615,7 @@ export class CawiService implements OnModuleInit {
           });
           if (ev.type === 'bounce' && inv.caseId && inv.waveId) {
             const w = await t.wave(inv.waveId);
-            await this.bounced(t, tenantId, inv.caseId, !!w?.bouncesToCati);
+            await this.bounced(t, inv.caseId, !!w?.bouncesToCati);
           }
         }
         applied++;
@@ -634,11 +625,9 @@ export class CawiService implements OnModuleInit {
   }
 
   /** A hard bounce: the case is marked, and optionally moved to telephone interviewing. */
-  private async bounced(t: CawiTx, tenantId: string, caseId: string, toCati: boolean) {
+  private async bounced(t: CawiTx, caseId: string, toCati: boolean) {
     if (!(await t.markBounced(caseId, toCati))) return;
-    await this.cases.events(t, tenantId, null, [
-      { caseId, type: 'email_bounced', details: { toCati } },
-    ]);
+    await this.cases.events(t, null, [{ caseId, type: 'email_bounced', details: { toCati } }]);
   }
 
   private async suppress(t: CawiTx, email: string | null, reason: string) {
@@ -658,7 +647,7 @@ export class CawiService implements OnModuleInit {
     return this.byToken(token, async (t, inv) => {
       await this.suppress(t, inv.email, 'unsubscribe');
       if (inv.caseId)
-        await this.cases.events(t, inv.tenantId, null, [
+        await this.cases.events(t, null, [
           { caseId: inv.caseId, type: 'unsubscribed', details: { invitationId: inv.id } },
         ]);
       return { email: maskEmail(inv.email), unsubscribed: true };
@@ -730,7 +719,7 @@ export class CawiService implements OnModuleInit {
           completion,
           branding,
         };
-      const lastSeq = await this.runtime.touchDevice(tx, inv.tenantId, row.id, deviceId);
+      const lastSeq = await this.runtime.touchDevice(tx, row.id, deviceId);
       if (!inv.startedAt) await tx.patchInvitation(inv.id, { startedAt: new Date() });
       const p = await this.runtime.payload(tx, row, deviceId, settings, lastSeq);
       const params = await this.keepParams(tx, row, p.compiled, linkQuery);
@@ -841,7 +830,7 @@ export class CawiService implements OnModuleInit {
     await tx.startInvitation(inv.id, row.id);
     if (inv.caseId) {
       await tx.startCase(inv.caseId);
-      await this.cases.events(tx, inv.tenantId, null, [
+      await this.cases.events(tx, null, [
         {
           caseId: inv.caseId,
           type: 'interview_started',

@@ -57,7 +57,7 @@ export class MssqlDatabase {
   constructor(
     url: string,
     opts: MssqlOptions & Partial<MssqlLimits> = {},
-    private readonly limits: MssqlLimits = { lockTimeoutMs: opts.lockTimeoutMs ?? 5_000 },
+    limits: MssqlLimits = { lockTimeoutMs: opts.lockTimeoutMs ?? 5_000 },
   ) {
     this.db = createMssqlDb<MssqlSchema>(url, { ...opts, lockTimeoutMs: limits.lockTimeoutMs });
   }

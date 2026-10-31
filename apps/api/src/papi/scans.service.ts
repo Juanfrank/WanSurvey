@@ -299,7 +299,7 @@ export class ScansService implements OnModuleInit {
       entryPass: 1,
     });
     await tx.setCaseInProgress(c.id);
-    await this.cases.events(tx, batch.tenantId, batch.uploadedBy, [
+    await this.cases.events(tx, batch.uploadedBy, [
       {
         caseId: c.id,
         type: 'interview_started',

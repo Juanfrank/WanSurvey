@@ -133,7 +133,6 @@ export class CasesService {
 
   async events(
     tx: CasesTx,
-    tenantId: string,
     actorUserId: string | null,
     rows: { caseId: string; type: string; details?: Record<string, unknown> }[],
   ) {
@@ -160,7 +159,6 @@ export class CasesService {
     const changed = await tx.assign(projectId, caseIds, userId, only);
     await this.events(
       tx,
-      ctx.tenantId,
       ctx.userId,
       changed.map((c) => ({
         caseId: c.id,
@@ -376,9 +374,7 @@ export class CasesService {
         message: 'Someone else has taken this case',
       });
     }
-    await this.events(tx, ctx.tenantId, ctx.userId, [
-      { caseId, type: 'claimed', details: { to: ctx.userId } },
-    ]);
+    await this.events(tx, ctx.userId, [{ caseId, type: 'claimed', details: { to: ctx.userId } }]);
     return row;
   }
 
@@ -396,7 +392,7 @@ export class CasesService {
         message: 'Only cases not yet started can be released',
       });
     await t.release(caseId);
-    await this.events(tx, ctx.tenantId, ctx.userId, [
+    await this.events(tx, ctx.userId, [
       { caseId, type: 'released', details: { from: c.assignedTo } },
     ]);
     return { released: true };

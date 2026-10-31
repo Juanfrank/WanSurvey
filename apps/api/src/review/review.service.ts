@@ -363,7 +363,7 @@ export class ReviewService implements OnModuleInit {
       const settings = (await this.cases.settings(t, row.projectId)).review;
       if (body.to === 'returned') await t.caseInProgress(row.caseId, now);
       if (body.to === 'rejected' && settings.rejectReopensCase) await t.reopenCase(row.caseId, now);
-      await this.cases.events(t, ctx.tenantId, ctx.userId, [
+      await this.cases.events(t, ctx.userId, [
         {
           caseId: row.caseId,
           type: `interview_${body.to}`,

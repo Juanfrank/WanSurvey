@@ -108,7 +108,7 @@ export class CawiController {
     @Body(new ZodPipe(OpenLinkBody)) body: z.infer<typeof OpenLinkBody>,
   ) {
     return this.repo.inTenant(ctx.tenantId, async (t) => ({
-      link: await this.cawi.setOpenLink(t, ctx, projectId, body),
+      link: await this.cawi.setOpenLink(t, projectId, body),
     }));
   }
 }

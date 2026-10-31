@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger, type MessageEvent } from '@nestjs/common';
 import { evaluate, truthy, type Scope, type Value } from '@wansurvey/logic';
 import { projectSettings } from '@wansurvey/schema';
 import { Observable } from 'rxjs';
-import { AuditService } from '../audit/audit.service.js';
 import { LIVE_REPO, type LiveRepo, type LiveTx } from './live-repo.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 
@@ -91,7 +90,6 @@ export class LiveService {
   constructor(
     @Inject(LIVE_REPO) private readonly repo: LiveRepo,
     @Inject(BUS) private readonly bus: Bus,
-    private readonly audit: AuditService,
   ) {}
 
   /** One snapshot in its own transaction (the endpoint behind the dashboard's first paint). */

@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { buildTables, type ExportInterview } from '@wansurvey/exporters';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import { z } from 'zod';
-import { AuditService } from '../audit/audit.service.js';
 import { type AnalysisTx } from './analysis-repo.js';
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -49,8 +48,6 @@ export interface Dataset {
  */
 @Injectable()
 export class DatasetService {
-  constructor(private readonly audit: AuditService) {}
-
   /** The project's questionnaires that have a published version, newest first. */
   async questionnaires(tx: AnalysisTx, projectId: string) {
     return tx.questionnairesWithVersions(projectId);

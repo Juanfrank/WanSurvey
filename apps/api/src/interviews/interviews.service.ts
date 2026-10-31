@@ -183,7 +183,7 @@ export class InterviewsService {
         entryPass: pass,
       });
       await t.setCaseInProgress(c.id);
-      await this.cases.events(t, ctx.tenantId, ctx.userId, [
+      await this.cases.events(t, ctx.userId, [
         {
           caseId: c.id,
           type: 'interview_started',
@@ -400,9 +400,7 @@ export class InterviewsService {
   ) {
     const t = tx;
     await t.finaliseCase(caseId, disposition);
-    await this.cases.events(t, writer.tenantId, writer.userId, [
-      { caseId, type: 'interview_submitted', details },
-    ]);
+    await this.cases.events(t, writer.userId, [{ caseId, type: 'interview_submitted', details }]);
   }
 
   /**
@@ -455,7 +453,7 @@ export class InterviewsService {
   }
 
   /** Records that the device is on the interview; returns its last acknowledged change. */
-  async touchDevice(tx: InterviewsTx, tenantId: string, interviewId: string, deviceId: string) {
+  async touchDevice(tx: InterviewsTx, interviewId: string, deviceId: string) {
     return tx.touchDevice(interviewId, deviceId);
   }
 

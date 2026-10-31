@@ -461,7 +461,6 @@ export class SamplingService {
       }
       await this.casesService.events(
         t,
-        ctx.tenantId,
         ctx.userId,
         part
           .filter((r) => byUnit.has(r.unit.id))
@@ -696,7 +695,7 @@ export class SamplingService {
           substituteFor: caseId,
         },
       ]);
-      await this.casesService.events(t, ctx.tenantId, ctx.userId, [
+      await this.casesService.events(t, ctx.userId, [
         { caseId, type: 'substituted', details: { by: created, reason } },
       ]);
       await t.audit(
@@ -747,7 +746,6 @@ export class SamplingService {
       ).map((x) => x.id);
       await this.casesService.events(
         t,
-        ctx.tenantId,
         ctx.userId,
         created.map((caseId) => ({
           caseId,

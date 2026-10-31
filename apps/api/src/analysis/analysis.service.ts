@@ -2,7 +2,6 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { crosstab, crosstabVariables, filterRows, topline, type Table } from '@wansurvey/exporters';
 import { projectSettings } from '@wansurvey/schema';
 import { z } from 'zod';
-import { AuditService } from '../audit/audit.service.js';
 import { type AnalysisTx } from './analysis-repo.js';
 import { median } from '../metrics/metrics.js';
 import { DataFilter, DatasetService, type Dataset } from './dataset.service.js';
@@ -34,10 +33,7 @@ const CACHE_SIZE = 50;
 export class AnalysisService {
   private readonly cache = new Map<string, { data: Dataset; table: Table }>();
 
-  constructor(
-    private readonly datasets: DatasetService,
-    private readonly audit: AuditService,
-  ) {}
+  constructor(private readonly datasets: DatasetService) {}
 
   /**
    * The table of a query. Every analysis page, and each viewer of a shared link, would read

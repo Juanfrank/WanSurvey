@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { DISPOSITIONS, type Disposition } from '@wansurvey/schema';
 import { z } from 'zod';
 import { can, type AuthContext } from '../common/auth-context.js';
-import { AuditService } from '../audit/audit.service.js';
 import { type MetricsTx } from './metrics-repo.js';
 import {
   addDisposition,
@@ -30,8 +29,6 @@ const aaporOf = (d: string | null) =>
  */
 @Injectable()
 export class MetricsService {
-  constructor(private readonly audit: AuditService) {}
-
   async interviewers(tx: MetricsTx, ctx: AuthContext, projectId: string, q: MetricsQuery) {
     const team = can(ctx.memberships, 'metrics.team', projectId);
     const t = tx;

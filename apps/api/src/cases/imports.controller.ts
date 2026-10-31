@@ -286,7 +286,7 @@ export class ImportsController {
         );
         updated.push(...existing.map((x) => x.id));
       }
-      await this.casesService.events(t, ctx.tenantId, ctx.userId, [
+      await this.casesService.events(t, ctx.userId, [
         ...created.map((caseId) => ({ caseId, type: 'imported', details: { importId } })),
         ...updated.map((caseId) => ({ caseId, type: 'updated_by_import', details: { importId } })),
       ]);

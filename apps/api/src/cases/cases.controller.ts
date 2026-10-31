@@ -333,7 +333,7 @@ export class CasesController {
           : undefined,
       });
       const changed = Object.keys(body);
-      await this.svc.events(t, ctx.tenantId, ctx.userId, [
+      await this.svc.events(t, ctx.userId, [
         {
           caseId,
           type: status && status !== before.status ? 'status_changed' : 'edited',

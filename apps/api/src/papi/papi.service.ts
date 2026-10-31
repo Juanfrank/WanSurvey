@@ -163,7 +163,7 @@ export class PapiService implements OnModuleInit {
     const reopen = () => tx.reopenCase(row.caseId!);
     if (row.entryPass === 1) {
       await reopen();
-      await this.cases.events(tx, writer.tenantId, writer.userId, [
+      await this.cases.events(tx, writer.userId, [
         { caseId: row.caseId, type: 'first_entry_done', details: { interviewId: row.id } },
       ]);
       return;
@@ -189,7 +189,7 @@ export class PapiService implements OnModuleInit {
       );
       await reopen();
     }
-    await this.cases.events(tx, writer.tenantId, writer.userId, [
+    await this.cases.events(tx, writer.userId, [
       {
         caseId: row.caseId,
         type: differ.length ? 'entries_differ' : 'entries_match',
@@ -248,7 +248,7 @@ export class PapiService implements OnModuleInit {
     if (!(await tx.openMismatches(m.secondInterviewId))) {
       const first = await tx.interview(m.firstInterviewId);
       await tx.finaliseCase(m.caseId, first?.disposition ?? 'COMPLETE');
-      await this.cases.events(tx, ctx.tenantId, ctx.userId, [
+      await this.cases.events(tx, ctx.userId, [
         { caseId: m.caseId, type: 'entries_resolved', details: { first: m.firstInterviewId } },
       ]);
       finished = true;

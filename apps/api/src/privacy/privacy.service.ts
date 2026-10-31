@@ -202,7 +202,7 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
         resolvedValue: strip(m.resolvedValue),
       });
     }
-    await this.cases.events(t, '', ctx?.userId ?? null, [
+    await this.cases.events(t, ctx?.userId ?? null, [
       { caseId, type: 'anonymised', details: { reason } },
     ]);
     const entry = {

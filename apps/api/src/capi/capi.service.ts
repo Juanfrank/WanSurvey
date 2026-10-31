@@ -110,7 +110,7 @@ export class CapiService implements OnModuleInit {
       if (latest && !open) versions.set(latest.id, latest);
       await t.setCheckout(c.id, { device: body.deviceId, by: ctx.userId, at: now });
       if (c.checkedOutDevice !== body.deviceId)
-        await this.cases.events(t, ctx.tenantId, ctx.userId, [
+        await this.cases.events(t, ctx.userId, [
           { caseId: c.id, type: 'checked_out', details: { deviceId: body.deviceId } },
         ]);
       let interview: Awaited<ReturnType<InterviewsService['payload']>>['interview'] | null = null;
@@ -172,7 +172,6 @@ export class CapiService implements OnModuleInit {
     const back = await t.checkIn(projectId, ids, deviceId, ctx.userId);
     await this.cases.events(
       t,
-      ctx.tenantId,
       ctx.userId,
       back.map((id) => ({ caseId: id, type: 'checked_in', details: { deviceId } })),
     );
@@ -186,7 +185,7 @@ export class CapiService implements OnModuleInit {
     const device = c.checkedOutDevice;
     if (!device) return { released: false };
     await t.setCheckout(caseId, null);
-    await this.cases.events(t, ctx.tenantId, ctx.userId, [
+    await this.cases.events(t, ctx.userId, [
       { caseId, type: 'checkout_released', details: { deviceId: device, from: c.checkedOutBy } },
     ]);
     await t.audit(
@@ -246,7 +245,7 @@ export class CapiService implements OnModuleInit {
       startedAt,
     });
     await t.setCaseInProgress(c.id);
-    await this.cases.events(t, ctx.tenantId, ctx.userId, [
+    await this.cases.events(t, ctx.userId, [
       {
         caseId: c.id,
         type: 'interview_started',

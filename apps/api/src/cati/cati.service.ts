@@ -507,7 +507,7 @@ export class CatiService implements OnModuleInit {
     disposition: string | null,
     callbackAt: Date | null = null,
   ) {
-    await this.cases.events(t, ctx.tenantId, ctx.userId, [
+    await this.cases.events(t, ctx.userId, [
       {
         caseId,
         type: 'call_attempt',

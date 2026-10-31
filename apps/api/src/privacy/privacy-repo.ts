@@ -83,7 +83,7 @@ const parse = <T>(text: string | null): T => (text === null ? (null as T) : JSON
 export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
   constructor(
     private readonly xtx: MssqlTx,
-    private readonly tn: string,
+    tn: string,
     cstore: CasesStore,
   ) {
     super(xtx, tn, cstore);

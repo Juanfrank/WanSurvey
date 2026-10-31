@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { uuidv7 } from 'uuidv7';
-import { AuditService } from '../audit/audit.service.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { SsoConfigs, type SsoConfig, type SsoStartConfig } from './sso-config.js';
 import { CONFIG, SSO_CALLBACK_PATH, type AppConfig } from '../config.js';
@@ -67,7 +66,6 @@ export class SsoService {
   private readonly jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
   constructor(
-    private readonly audit: AuditService,
     private readonly auth: AuthService,
     @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     private readonly configs: SsoConfigs,
