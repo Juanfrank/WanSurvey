@@ -102,7 +102,7 @@ import { QuestionnairesController } from './questionnaires/questionnaires.contro
 import { TenantsController } from './tenants/tenants.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
-import { maskTokens } from './common/mask.js';
+import { requestLogOptions } from './common/logging.js';
 import { sessionOrIp, throttleStorage } from './common/throttle.js';
 
 export interface AppModuleOptions {
@@ -139,18 +139,7 @@ export class AppModule {
       module: AppModule,
       imports: [
         LoggerModule.forRoot({
-          pinoHttp: {
-            level: config.LOG_LEVEL,
-            redact: [
-              'req.headers.cookie',
-              'req.headers["x-csrf-token"]',
-              'res.headers["set-cookie"]',
-            ],
-            // Respondent, unsubscribe, tracking and share links carry tokens in their path.
-            serializers: {
-              req: (req: { url?: string }) => ({ ...req, url: maskTokens(req.url) }),
-            },
-          },
+          pinoHttp: requestLogOptions(config.LOG_LEVEL),
         }),
         // Per session (or IP on public routes) with the route's own limits, and an overall
         // ceiling per IP; counters shared through Redis when it is configured.
