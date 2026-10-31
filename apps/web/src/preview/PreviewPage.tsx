@@ -137,6 +137,7 @@ export function PreviewWorkbench({
   const off = !!q && !modes.includes(p.options.mode);
   useEffect(() => {
     if (off) p.update({ mode: modes[0]! });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- switches mode only when it turns invalid
   }, [off]);
   if (!q || !p.loaded.compiled || !p.session) return null;
   return (

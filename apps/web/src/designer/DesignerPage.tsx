@@ -167,6 +167,7 @@ export function DesignerPage() {
   useEffect(() => {
     if (draft && selected === SETTINGS_ID && draft.sections?.[0]) setSelected(draft.sections[0].id);
     // Only on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the document changes, not on every edit
   }, [d.doc?.id]);
 
   if (d.error) return <p role="alert">{t('designer.loadFailed')}</p>;

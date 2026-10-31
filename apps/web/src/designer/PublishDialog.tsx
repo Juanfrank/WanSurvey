@@ -50,6 +50,7 @@ export function PublishDialog({
       if (rev === null) setError(t('designer.publish.saveFirst'));
       else setRevision(rev);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- saves the draft once, on opening
   }, []);
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export function PublishDialog({
       }
     }, 250);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-checks when the revision, mapping or address change
   }, [revision, mapping, url]);
 
   const publish = async () => {

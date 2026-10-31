@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Map as LeafletMap } from 'leaflet';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { smallBtn } from '../designer/fields.js';
@@ -85,7 +85,7 @@ export function CaseMap({
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<LeafletMap | null>(null);
   const [mapError, setMapError] = useState(false);
-  const data = points.data ?? [];
+  const data = useMemo(() => points.data ?? [], [points.data]);
   useEffect(() => {
     if (!box.current || !data.length) return;
     let cancelled = false;

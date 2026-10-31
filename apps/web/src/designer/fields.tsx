@@ -139,6 +139,7 @@ export function NumberField({
   const [text, setText] = useState(value === undefined ? '' : String(value));
   useEffect(() => {
     if (value !== Number(text) || text === '') setText(value === undefined ? '' : String(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the parent's value, not the text being typed
   }, [value]);
   return (
     <div className="flex min-w-0 flex-col gap-1">

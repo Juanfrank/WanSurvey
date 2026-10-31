@@ -120,6 +120,8 @@ export function ConditionBuilder({
   const { t } = useTranslation();
   const id = useId();
   const typeVars = useTypeVars();
+  // The tree is built from the first value only; later edits come from this component.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- read once
   const initial = useMemo(() => toTree(value ?? ''), []);
   const [mode, setMode] = useState<'rows' | 'expr'>(initial ? 'rows' : 'expr');
   const [tree, setTree] = useState<CondGroup>(initial ?? emptyGroup());

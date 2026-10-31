@@ -138,6 +138,7 @@ export function FeedbackPage() {
       },
       (e) => setProblem(e instanceof ApiError && e.status === 404 ? 'notFound' : 'failed'),
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loads the point once per link
   }, [slug]);
 
   const question = point ? (point.question[lang] ?? Object.values(point.question)[0] ?? '') : '';

@@ -87,7 +87,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
   });
   const people = useAssignees(projectId, canAssign);
   const data = list.data;
-  const fields = data?.fields ?? [];
+  const fields = useMemo(() => data?.fields ?? [], [data]);
   const shownNames = cols ?? fields.slice(0, MAX_FIELD_COLUMNS).map((f) => f.name);
   const shownFields = fields.filter((f) => shownNames.includes(f.name));
   const variables = useMemo(() => caseVariables(fields), [fields]);
@@ -759,9 +759,10 @@ function CaseDrawer({
   const [priority, setPriority] = useState('');
   const first = useRef<HTMLButtonElement>(null);
   const c = detail.data;
+  const casePriority = c?.priority;
   useEffect(() => {
-    if (c) setPriority(String(c.priority));
-  }, [c?.priority]);
+    if (casePriority !== undefined) setPriority(String(casePriority));
+  }, [casePriority]);
   const [note, setNote] = useState('');
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ['case', caseId] });

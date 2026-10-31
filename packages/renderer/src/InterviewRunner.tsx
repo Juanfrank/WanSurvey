@@ -135,10 +135,11 @@ function Runner(p: InterviewRunnerProps) {
   const respondent = p.mode === 'CAWI';
   const layout = p.layout ?? (respondent && !narrow ? 'page' : 'item');
 
+  const onChange = p.onChange;
   const refresh = useCallback(() => {
     setRev((r) => r + 1);
-    p.onChange?.();
-  }, [p.onChange]);
+    onChange?.();
+  }, [onChange]);
 
   const announce = useCallback(
     (r: ChangeResult) => {
@@ -207,6 +208,8 @@ function Runner(p: InterviewRunnerProps) {
 
   const status = session.status();
   const currentKey = session.currentKey();
+  // The session changes in place, so the pages are worked out on every render (cheap); the
+  // callbacks below that use them are therefore new each render too.
   const pages = layout === 'page' ? buildPages(session) : [];
   const pageKeys =
     layout === 'page'
@@ -217,7 +220,7 @@ function Runner(p: InterviewRunnerProps) {
     .map((k) => session.trace().find((e) => e.key === k && e.status === 'active'))
     .filter((e): e is TraceEntry => !!e);
 
-  const next = useCallback(() => {
+  const next = () => {
     setAlert(null);
     const keys = layout === 'page' ? pageKeys : currentKey ? [currentKey] : [];
     for (let i = 0; i < Math.max(1, keys.length); i++) {
@@ -233,9 +236,9 @@ function Runner(p: InterviewRunnerProps) {
     setShowErrors(false);
     setNotice(null);
     refresh();
-  }, [layout, pageKeys, currentKey, session, refresh, t]);
+  };
 
-  const back = useCallback(() => {
+  const back = () => {
     setAlert(null);
     setShowErrors(false);
     if (layout === 'page' && currentKey !== null) {
@@ -247,11 +250,13 @@ function Runner(p: InterviewRunnerProps) {
       session.prev();
     }
     refresh();
-  }, [layout, currentKey, pages, session, refresh]);
+  };
 
   // Shift+Enter goes back from anywhere on the page, not only from inside the questions: after
   // a click on the case panel, a footer button or the page itself focus is outside the runner.
   // Text areas and other forms keep the key for themselves.
+  const backRef = useRef(back);
+  backRef.current = back;
   useEffect(() => {
     const onWindowKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !e.shiftKey || e.key !== 'Enter') return;
@@ -262,11 +267,11 @@ function Runner(p: InterviewRunnerProps) {
       )
         return;
       e.preventDefault();
-      back();
+      backRef.current();
     };
     window.addEventListener('keydown', onWindowKey);
     return () => window.removeEventListener('keydown', onWindowKey);
-  }, [back]);
+  }, []);
 
   const addRow = useCallback(
     (roster: TraceEntry) => {

@@ -217,12 +217,15 @@ function TemplatesSection({ projectId }: { projectId: string }) {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [message, setMessage] = useState('');
+  const currentKey = current && `${current.kind}/${current.language}`;
+  const currentSubject = current?.subject;
+  const currentBody = current?.body;
   useEffect(() => {
-    if (current) {
-      setSubject(current.subject);
-      setBody(current.body);
+    if (currentSubject !== undefined && currentBody !== undefined) {
+      setSubject(currentSubject);
+      setBody(currentBody);
     }
-  }, [current?.kind, current?.language, current?.subject, current?.body]);
+  }, [currentKey, currentSubject, currentBody]);
   const save = useMutation({
     mutationFn: () =>
       api<TemplateRow[]>(`/projects/${projectId}/email-templates`, {

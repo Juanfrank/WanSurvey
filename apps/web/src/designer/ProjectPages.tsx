@@ -1106,6 +1106,7 @@ export function ProjectPage() {
         },
         replace: true,
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- redirects once when the list arrives
   }, [qList.data, redirecting]);
   const start = canDesign
     ? (tabs[0] ?? null)
@@ -1138,6 +1139,7 @@ export function ProjectPage() {
       search: (s: Record<string, unknown>) => ({ ...s, tab: place }),
       replace: true,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the tab only when it changes
   }, [place]);
 
   return (
