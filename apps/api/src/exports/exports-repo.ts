@@ -246,9 +246,9 @@ export class MssqlExportsTx extends MssqlAnalysisTx implements ExportsTx {
         questionnaire_id: v.questionnaireId,
         requested_by: v.requestedBy,
         options: JSON.stringify(v.options),
+        // `file` is left out: a NULL parameter travels as text, which varbinary refuses.
         file_name: null,
         content_type: null,
-        file: null,
         storage_key: null,
         size: null,
         rows: null,
