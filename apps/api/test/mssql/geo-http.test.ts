@@ -199,7 +199,7 @@ describe.skipIf(!configured)('SQL Server: geocoding, the case map and duplicates
       geocodeQuality: 'house',
     });
     const audit = await rows(
-      sql`SELECT details FROM audit_log WHERE action = 'cases.geocoded' AND target_id = ${projectA}`,
+      sql`SELECT details FROM audit_log WHERE action = 'cases.geocoded' AND target_id = ${projectA} ORDER BY at, id`,
     );
     expect(JSON.parse(audit[0]!.details as string)).toEqual({ addresses: 4, service: 'nominatim' });
   });

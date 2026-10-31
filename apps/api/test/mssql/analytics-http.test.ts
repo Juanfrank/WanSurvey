@@ -203,8 +203,8 @@ describe.skipIf(!configured)(
         mode: 'CAPI',
         submitted: 3,
         completes: 3,
-        active_ms: 1_800_000,
       });
+      expect(Number(before[0]!.active_ms)).toBe(1_800_000);
       expect((before[0]!.interviewer_id as string).toLowerCase()).toBe(iUser.id);
       // A rejection takes it out of the completes.
       expect(
