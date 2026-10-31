@@ -7,7 +7,7 @@ onlyBuiltDependencies:
   - esbuild
 overrides:
   # One Vite for the app and Vitest, pinned to a release at least two weeks old.
-  vite: 7.3.7
+  vite: 8.3.4
   # One set of Node types: apache-arrow (Blob Storage SDK) and mysql2 (Azurite) ask for newer
   # ones, and two copies split Vite's types.
   '@types/node': 24.19.2
