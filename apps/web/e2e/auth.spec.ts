@@ -40,7 +40,14 @@ test('the side panel compacts to a rail of icons, opens over the page on hover, 
   await expectAccessible(page);
   await page.reload();
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(80);
+  // Pointing at the rail opens the panel over the page, which moves the button: wait for it
+  // to settle before pressing, as a person does, then leave and check that it stayed open.
+  const inner = panel.locator('> div').first();
+  await panel.hover();
+  await expect.poll(async () => (await inner.boundingBox())!.width).toBeGreaterThan(280);
   await page.getByRole('button', { name: 'Keep the side panel open' }).click();
+  await page.mouse.move(800, 400);
+  await expect(page.getByRole('button', { name: 'Compact the side panel' })).toBeVisible();
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(280);
 });
 
