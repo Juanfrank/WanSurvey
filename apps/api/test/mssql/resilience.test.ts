@@ -47,14 +47,14 @@ describe.skipIf(!configured)('SQL Server: resilience', () => {
                 ${f.startedAt ? at(f.startedAt) : null}, ${f.attempts ?? 0}, ${f.finishedAt ? at(f.finishedAt) : null})`.execute(
       t.owner,
     );
-    if (f.file) await sql`UPDATE exports SET file = ${f.file} WHERE id = ${id}`.execute(t.owner);
+    if (f.file) await sql`UPDATE exports SET [file] = ${f.file} WHERE id = ${id}`.execute(t.owner);
     return id;
   };
   const rowsOf = async (ids: string[]): Promise<Record<string, unknown>[]> =>
     (
       (await sql<
         Record<string, unknown>
-      >`SELECT id, status, attempts, error, CASE WHEN file IS NULL THEN 1 ELSE 0 END AS gone FROM exports WHERE id IN (${sql.join(ids)})`.execute(
+      >`SELECT id, status, attempts, error, CASE WHEN [file] IS NULL THEN 1 ELSE 0 END AS gone FROM exports WHERE id IN (${sql.join(ids)})`.execute(
         t.owner,
       )) as { rows: Record<string, unknown>[] }
     ).rows.map((r) => ({ ...r, id: String(r.id).toLowerCase() }));

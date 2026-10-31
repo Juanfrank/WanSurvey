@@ -3,7 +3,8 @@ import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config.js';
 import { mssqlNumber } from '../../src/db/mssql/connection.js';
-import { MssqlDatabase } from '../../src/db/mssql/database.js';
+import { Engine } from '../../src/db/engine.js';
+import type { MssqlDatabase } from '../../src/db/mssql/database.js';
 import {
   bootstrap,
   configured,
@@ -20,7 +21,7 @@ describe.skipIf(!configured)('SQL Server: the database under concurrent use', ()
 
   beforeAll(async () => {
     t = await bootstrap();
-    db = t.app.get(MssqlDatabase);
+    db = t.app.get(Engine).sql;
     tenant = await createTenant(t.owner);
   });
   afterAll(async () => {
