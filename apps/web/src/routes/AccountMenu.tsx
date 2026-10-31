@@ -69,7 +69,7 @@ export function AccountMenu({
           type="button"
           aria-expanded={open}
           aria-controls={menuId}
-          aria-label={t('app.account', { name })}
+          aria-label={t('app.account', { name, email: me.user.email })}
           onClick={() => setOpen(!open)}
           className="flex h-9 min-w-0 items-center gap-2 rounded-full pl-0.5 pr-2 text-left hover:bg-slate-50 aria-expanded:bg-slate-50"
         >
