@@ -21,15 +21,14 @@ import {
   type TableLayout,
   type TableStats,
 } from '@wansurvey/exporters';
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, isTransient, type Tx } from '../db/database.js';
-import { claimable, MAX_JOB_ATTEMPTS } from '../jobs/claims.js';
-import { exports } from '../db/schema.js';
+import { isTransient } from '../db/database.js';
+import { Engine } from '../db/engine.js';
+import { MAX_JOB_ATTEMPTS } from '../jobs/claims.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import {
@@ -39,7 +38,9 @@ import {
   type PageKey,
 } from '../analysis/dataset.service.js';
 import { EXPORT_STORAGE, type ExportStorage, type StorageWriter } from './storage.js';
+import { EXPORTS_REPO, type ExportsRepo, type ExportsTx } from './exports-repo.js';
 import { sqlExport } from './sql-export.js';
+import { sqlExportMssql } from './sql-export.mssql.js';
 
 export const EXPORT_FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 
@@ -118,7 +119,8 @@ export class ExportsService implements OnModuleInit {
   pageSize = PAGE;
 
   constructor(
-    private readonly database: Database,
+    @Inject(EXPORTS_REPO) private readonly repo: ExportsRepo,
+    private readonly engine: Engine,
     private readonly datasets: DatasetService,
     private readonly jobs: JobsService,
     private readonly audit: AuditService,
@@ -145,25 +147,8 @@ export class ExportsService implements OnModuleInit {
     if (!days) return 0;
     const before = new Date(now.getTime() - days * 86_400_000);
     let n = 0;
-    for (const tenantId of await this.database.allTenantIds()) {
-      const rows = await this.database.withTenant(tenantId, async (tx) => {
-        const old = await tx
-          .select({ id: exports.id, key: exports.storageKey })
-          .from(exports)
-          .where(and(eq(exports.status, 'done'), lt(exports.finishedAt, before)))
-          .for('update');
-        if (old.length)
-          await tx
-            .update(exports)
-            .set({ status: 'expired', file: null, storageKey: null })
-            .where(
-              inArray(
-                exports.id,
-                old.map((r) => r.id),
-              ),
-            );
-        return old;
-      });
+    for (const tenantId of await this.engine.allTenantIds()) {
+      const rows = await this.repo.inTenant(tenantId, (t) => t.expireExports(before));
       n += rows.length;
       for (const r of rows) if (r.key) await this.forget(r.key);
     }
@@ -178,35 +163,29 @@ export class ExportsService implements OnModuleInit {
       .catch((e: Error) => this.logger.warn(`Export file ${key} not deleted: ${e.message}`));
   }
 
-  async request(tx: Tx, ctx: AuthContext, projectId: string, body: ExportBody) {
-    const qid = body.questionnaireId ?? (await this.datasets.questionnaires(tx, projectId))[0]?.id;
+  async request(t: ExportsTx, ctx: AuthContext, projectId: string, body: ExportBody) {
+    const qid = body.questionnaireId ?? (await this.datasets.questionnaires(t, projectId))[0]?.id;
     if (!qid) throw new NotFoundException({ code: 'NO_DATA', message: 'Nothing published yet' });
-    const [row] = await tx
-      .insert(exports)
-      .values({
-        tenantId: ctx.tenantId,
-        projectId,
+    const row = await t.createExport({
+      projectId,
+      questionnaireId: qid,
+      requestedBy: ctx.userId,
+      // Answers marked personal go only to people allowed to see personal data.
+      options: {
+        ...body,
         questionnaireId: qid,
-        requestedBy: ctx.userId,
-        // Answers marked personal go only to people allowed to see personal data.
-        options: {
-          ...body,
-          questionnaireId: qid,
-          personal: can(ctx.memberships, 'pii.view', projectId),
-        },
-      })
-      .returning({ id: exports.id, status: exports.status, createdAt: exports.createdAt });
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+        personal: can(ctx.memberships, 'pii.view', projectId),
+      },
+    });
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'data.exported',
         targetType: 'export',
-        targetId: row!.id,
+        targetId: row.id,
         details: { projectId, ...body, questionnaireId: qid },
       }),
     );
-    return row!;
+    return row;
   }
 
   /** Builds the export in the background; call it after the request's transaction commits. */
@@ -216,47 +195,19 @@ export class ExportsService implements OnModuleInit {
   }
 
   /** Exports holding personal answers are marked, so the list can say who may download them. */
-  async list(tx: Tx, projectId: string) {
-    const rows = await tx
-      .select({
-        id: exports.id,
-        options: exports.options,
-        status: exports.status,
-        fileName: exports.fileName,
-        size: exports.size,
-        rows: exports.rows,
-        error: exports.error,
-        createdAt: exports.createdAt,
-        finishedAt: exports.finishedAt,
-        requestedBy: exports.requestedBy,
-      })
-      .from(exports)
-      .where(eq(exports.projectId, projectId))
-      .orderBy(desc(exports.createdAt))
-      .limit(100);
+  async list(t: ExportsTx, projectId: string) {
+    const rows = await t.listExports(projectId);
     return rows.map((r) => ({ ...r, personal: isPersonal(r.options) }));
   }
 
-  async file(tx: Tx, ctx: AuthContext, projectId: string, id: string) {
-    const [row] = await tx
-      .select({
-        fileName: exports.fileName,
-        contentType: exports.contentType,
-        file: exports.file,
-        storageKey: exports.storageKey,
-        status: exports.status,
-        options: exports.options,
-      })
-      .from(exports)
-      .where(and(eq(exports.id, id), eq(exports.projectId, projectId)));
+  async file(t: ExportsTx, ctx: AuthContext, projectId: string, id: string) {
+    const row = await t.exportFile(projectId, id);
     if (!row || row.status !== 'done' || (!row.file && !row.storageKey))
       throw new NotFoundException({ code: 'NOT_READY', message: 'This export is not ready' });
     // A file with personal answers goes only to people allowed to see personal data.
     if (isPersonal(row.options) && !can(ctx.memberships, 'pii.view', projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not see personal data' });
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'data.downloaded',
         targetType: 'export',
@@ -264,10 +215,9 @@ export class ExportsService implements OnModuleInit {
         details: { projectId, fileName: row.fileName },
       }),
     );
-    const { fileName, contentType, file, storageKey } = row as typeof row & {
-      fileName: string;
-      contentType: string;
-    };
+    const { file, storageKey } = row;
+    const fileName = row.fileName!;
+    const contentType = row.contentType!;
     return {
       fileName,
       contentType,
@@ -280,6 +230,10 @@ export class ExportsService implements OnModuleInit {
   }
 
   /** The interviews of an export, page by page, each page read in its own short transaction. */
+  private get sqlExportOf() {
+    return this.engine.kind === 'mssql' ? sqlExportMssql : sqlExport;
+  }
+
   private async *pages(
     tenantId: string,
     projectId: string,
@@ -288,9 +242,9 @@ export class ExportsService implements OnModuleInit {
   ): AsyncGenerator<ExportInterview[]> {
     let after: PageKey | null = null;
     do {
-      const page = await this.database.withTenant(tenantId, (tx) =>
+      const page = await this.repo.inTenant(tenantId, (t) =>
         this.datasets.page(
-          tx,
+          t,
           projectId,
           src,
           opts,
@@ -311,24 +265,18 @@ export class ExportsService implements OnModuleInit {
    * the columns (coded texts, wide roster rows), once for SPSS/Stata stats, once to write.
    */
   async build(tenantId: string, exportId: string): Promise<void> {
-    const job = await this.database.withTenant(tenantId, async (tx) => {
-      const [row] = await tx.select().from(exports).where(eq(exports.id, exportId));
+    const job = await this.repo.inTenant(tenantId, async (t) => {
       // Not visible yet (its transaction still open): fail, and the queue tries again.
-      if (!row) throw new Error(`Export ${exportId} not found yet`);
+      if (!(await t.exportRow(exportId))) throw new Error(`Export ${exportId} not found yet`);
       // Taken once: a queued export, or one whose worker was lost (running for too long).
-      const [claimed] = await tx
-        .update(exports)
-        .set({ status: 'running', startedAt: new Date(), attempts: sql`${exports.attempts} + 1` })
-        .where(and(eq(exports.id, exportId), claimable(exports)))
-        .returning();
-      return claimed ?? null;
+      return t.claimExport(exportId);
     });
     if (!job) return;
     let writer: StorageWriter | undefined;
     try {
       const opts = ExportBody.parse(job.options);
-      const src = await this.database.withTenant(tenantId, (tx) =>
-        this.datasets.source(tx, job.projectId, opts),
+      const src = await this.repo.inTenant(tenantId, (t) =>
+        this.datasets.source(t, job.projectId, opts),
       );
       const builder = new TableBuilder(src.compiled, {
         rosters: opts.rosters,
@@ -364,7 +312,7 @@ export class ExportsService implements OnModuleInit {
       if (opts.format === 'sql') {
         await out(
           new TextEncoder().encode(
-            sqlExport({
+            this.sqlExportOf({
               name: src.name,
               projectId: job.projectId,
               questionnaireId: src.questionnaireId,
@@ -411,19 +359,14 @@ export class ExportsService implements OnModuleInit {
       await writer.done();
       const size = writer.size;
       writer = undefined;
-      await this.database.withTenant(tenantId, (tx) =>
-        tx
-          .update(exports)
-          .set({
-            status: 'done',
-            fileName: file.fileName,
-            contentType: file.contentType,
-            storageKey: `${tenantId}/${exportId}/${file.fileName}`,
-            size,
-            rows: interviews,
-            finishedAt: new Date(),
-          })
-          .where(eq(exports.id, exportId)),
+      await this.repo.inTenant(tenantId, (t) =>
+        t.finishExport(exportId, {
+          fileName: file.fileName,
+          contentType: file.contentType,
+          storageKey: `${tenantId}/${exportId}/${file.fileName}`,
+          size,
+          rows: interviews,
+        }),
       );
     } catch (e) {
       await writer?.abort().catch(() => undefined);
@@ -437,24 +380,11 @@ export class ExportsService implements OnModuleInit {
       // the sweeper) a few times before giving up.
       if (isTransient(e) && job.attempts < MAX_JOB_ATTEMPTS) {
         this.logger.warn(`Export ${exportId} will be retried: ${error.message}`);
-        await this.database
-          .withTenant(tenantId, (tx) =>
-            tx.update(exports).set({ status: 'queued' }).where(eq(exports.id, exportId)),
-          )
-          .catch(() => undefined);
+        await this.repo.inTenant(tenantId, (t) => t.requeueExport(exportId)).catch(() => undefined);
         throw e;
       }
       this.logger.error(`Export ${exportId} failed: ${error.message}`);
-      await this.database.withTenant(tenantId, (tx) =>
-        tx
-          .update(exports)
-          .set({
-            status: 'failed',
-            error: error.message.slice(0, 500),
-            finishedAt: new Date(),
-          })
-          .where(eq(exports.id, exportId)),
-      );
+      await this.repo.inTenant(tenantId, (t) => t.failExport(exportId, error.message));
     }
     await this.bus.publish(projectChannel(job.projectId), { type: 'export', id: exportId });
   }

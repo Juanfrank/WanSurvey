@@ -20,11 +20,11 @@ import { z } from 'zod';
 import { Auth, Public, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { sha256Hex } from '../common/crypto.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import { METRICS_REPO, type MetricsRepo } from '../metrics/metrics-repo.js';
 import { ANALYSIS_REPO, type AnalysisRepo } from './analysis-repo.js';
 import { LiveService } from '../dashboard/live.service.js';
+import { EXPORTS_REPO, type ExportsRepo } from '../exports/exports-repo.js';
 import { ExportBody, ExportsService } from '../exports/exports.service.js';
 import { MetricsQuery, MetricsService } from '../metrics/metrics.service.js';
 import { AnalysisQuery, AnalysisService, CrosstabQuery } from './analysis.service.js';
@@ -38,7 +38,7 @@ const PERM = { projectParam: 'projectId' } as const;
 @Controller('projects/:projectId')
 export class AnalysisController {
   constructor(
-    private readonly database: Database,
+    @Inject(EXPORTS_REPO) private readonly exportsRepo: ExportsRepo,
     @Inject(ANALYSIS_REPO) private readonly repo: AnalysisRepo,
     @Inject(METRICS_REPO) private readonly metricsRepo: MetricsRepo,
     private readonly metrics: MetricsService,
@@ -116,7 +116,7 @@ export class AnalysisController {
   @Get('exports')
   @RequirePermission('exports.run', PERM)
   listExports(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.exportsService.list(tx, projectId));
+    return this.exportsRepo.inTenant(ctx.tenantId, (t) => this.exportsService.list(t, projectId));
   }
 
   @Post('exports')
@@ -127,8 +127,8 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(ExportBody)) body: z.infer<typeof ExportBody>,
   ) {
-    const row = await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.exportsService.request(tx, ctx, projectId, body),
+    const row = await this.exportsRepo.inTenant(ctx.tenantId, (t) =>
+      this.exportsService.request(t, ctx, projectId, body),
     );
     // Queued once the row is committed, so the worker always finds it.
     await this.exportsService.queue(ctx.tenantId, row.id);
@@ -142,8 +142,8 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    const f = await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.exportsService.file(tx, ctx, projectId, id),
+    const f = await this.exportsRepo.inTenant(ctx.tenantId, (t) =>
+      this.exportsService.file(t, ctx, projectId, id),
     );
     // Streamed from storage as it is read: a large file never sits in the API's memory.
     const { stream, size } = await f.open();
