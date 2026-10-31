@@ -112,11 +112,15 @@ context), questionnaires, collaboration and the question library (`Questionnaire
 assignment rules and expiry (`CasesRepo`; `CasesService` takes a transaction of either engine, and
 wraps a Drizzle one for modules that have not moved), sample imports and the sampling selector
 (`SampleTx`), interviews and CAPI (`InterviewsTx`; submit hooks now receive the transaction of either
-engine, and a module that has not moved reaches Drizzle through `t.pg()`), and CATI (`CatiTx`,
-with `CatiRepo.extend(t)` to see a hook's transaction as its own). **Still on PostgreSQL:** review, web surveys (CAWI, dispatcher,
-feedback), paper (PAPI, scans), metrics and goals, the live dashboard, geolocation, privacy,
-analysis and sharing, statistics and the bi service, exports, background jobs (sweeper, claims,
-worker). Production keeps refusing `mssql` until they move.
+engine), CATI (`CatiTx`, with `CatiRepo.extend(t)` to see a hook's transaction as its own), review,
+geolocation, metrics and goals, the live dashboard, privacy (sealing, retention, erasure), analysis
+and share links, statistics and the bi service, data exports (`ExportsTx` extends `AnalysisTx`),
+background jobs (the sweeper and the worker's health check go through the engine), web surveys
+(`CawiTx`: templates, waves, dispatch with leases, tracking, bounces, respondents by link token and
+open link), quick feedback (`FeedbackTx`) and paper (`PapiTx`: keying, double entry, scanned
+batches). **Every module has moved**: the test port is what remains. Production keeps refusing
+`mssql` until then. The `t.pg()` / `t.native()` shims and `Database` (the PostgreSQL client) go
+when PostgreSQL does.
 
 Sample imports and the sampling selector have moved too (`SampleTx` extends `CasesTx`:
 `src/sampling/sampling-repo.ts`; the frame, plans, staged import rows and the cross-case checks).
@@ -132,8 +136,7 @@ repository. The stores already written for these modules (`interviews-store.mssq
 `cati-store.mssql.ts`, `review-store.mssql.ts`, `cawi-store.mssql.ts`, `papi-store.mssql.ts`)
 follow the services one to one, so the SQL Server side of each repository leans on them.
 
-**Left:** stores for metrics, jobs, dashboard, geolocation and privacy. The
-switch itself goes module by module, each tested over HTTP on SQL Server: the core first (sign-in,
+**Left:** the tests. The modules are tested over HTTP on SQL Server, the core first (sign-in,
 users, organisations, projects, teams, audit), then questionnaires, cases and sampling, interviews
 and CATI, web surveys, paper, review, statistics and exports. A fixtures helper that works on both
 engines replaces the raw PostgreSQL SQL the integration tests use today. Then the data copy, load
