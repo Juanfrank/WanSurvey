@@ -3,6 +3,7 @@ import { uuidv7 } from 'uuidv7';
 import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
+import { idOrder } from '../db/mssql/order.js';
 
 /**
  * Cases, contacts, history and assignment on SQL Server (Kysely): what `cases.service.ts` and the
@@ -253,7 +254,7 @@ export class CasesStore {
       .select(['type', 'details', 'actor_user_id', 'at'])
       .where('case_id', '=', caseId)
       .orderBy('at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
     return rows.map((r) => ({ ...r, details: json<Record<string, unknown>>(r.details) }));
   }
@@ -459,7 +460,7 @@ export class CasesStore {
       .selectAll()
       .where('project_id', '=', projectId)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
   }
 }

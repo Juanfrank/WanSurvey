@@ -150,8 +150,9 @@ PostgreSQL too (job `e2e`) and the package smoke test as well, until the code go
 Found while porting, and fixed: `SET LOCK_TIMEOUT` sent as its own statement does not outlast its
 `sp_executesql` batch, so the lock limit was never in force; every statement now carries it.
 
-**Left:** the data copy from PostgreSQL, load measurements on Azure SQL, the production cutover,
-and the removal of PostgreSQL (phases 4 and 5).
+**The data copy (done, rehearsed):** `apps/api/src/db/copy/` copies every table the two databases share, column by column, and verifies it (`docs/data-copy.md`); tried on a 1.8-million-row, 1 GB database (253 s) and on the browser-test data, with the API on each engine answering the same over the same data. Found on the way: the lock limit that was never in force, the `consent` field of a contact that came back as text on SQL Server, and the order of ties in lists.
+
+**Left:** load measurements on Azure SQL, the production cutover, and the removal of PostgreSQL (phases 4 and 5).
 
 More lessons: a `Date` parameter travels as `datetime`, which rounds to 3.33 ms, so what is
 written to or compared with a `datetimeoffset(3)` can land a millisecond off: send instants

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
+import { idOrder } from '../db/mssql/order.js';
 
 /**
  * CATI on SQL Server (Kysely): the call queue's candidates, the lock on the case being called,
@@ -193,7 +194,7 @@ export class CatiStore {
       ])
       .where('case_id', '=', caseId)
       .orderBy('started_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
   }
 

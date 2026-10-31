@@ -27,6 +27,7 @@ import {
 } from '../interviews/interviews-repo.js';
 import { InterviewsStore } from '../interviews/interviews-store.mssql.js';
 import { CatiStore } from './cati-store.mssql.js';
+import { idOrder } from '../db/mssql/order.js';
 
 /**
  * The database side of telephone interviewing, whichever engine runs (the pattern of
@@ -652,7 +653,7 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
       .where('type', '=', 'phone')
       .where('valid', '=', true)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
     return rows.map((r) => ({ id: low(r.id), value: r.value, label: r.label }));
   }

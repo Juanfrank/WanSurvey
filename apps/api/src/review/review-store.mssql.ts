@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
+import { idOrder } from '../db/mssql/order.js';
 
 /**
  * Review on SQL Server (Kysely): the review queue, comments, the interview's review status and
@@ -141,7 +142,7 @@ export class ReviewStore {
       .selectAll()
       .where('interview_id', '=', interviewId)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
   }
 

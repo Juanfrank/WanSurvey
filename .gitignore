@@ -13,3 +13,4 @@ dump.rdb
 load/sync-users.json
 apps/api/.exports/
 out/
+.exports/

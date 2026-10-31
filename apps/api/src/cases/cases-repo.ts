@@ -41,6 +41,7 @@ import {
 } from '../db/schema.js';
 import type { ProjectView } from '../projects/org-repo.js';
 import { CasesStore } from './cases-store.mssql.js';
+import { idOrder } from '../db/mssql/order.js';
 
 /**
  * The database side of cases, whichever engine runs (the pattern of `auth/auth-repo.ts`): the
@@ -1116,7 +1117,7 @@ export class MssqlCasesTx implements CasesTx {
       .select('id')
       .where('project_id', '=', projectId)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
     return rows.map((r) => low(r.id));
   }
@@ -1297,7 +1298,7 @@ export class MssqlCasesTx implements CasesTx {
       .select(['id', 'type', 'value', 'label', 'valid', 'consent', 'lat', 'lng', 'geocode_quality'])
       .where('case_id', '=', caseId)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
     return rows.map((r) => ({
       id: low(r.id),
@@ -1305,7 +1306,8 @@ export class MssqlCasesTx implements CasesTx {
       value: r.value,
       label: r.label,
       valid: r.valid === null ? null : !!r.valid,
-      consent: r.consent,
+      // A JSON column is text on SQL Server; PostgreSQL gives the document.
+      consent: (typeof r.consent === 'string' ? JSON.parse(r.consent) : r.consent) as string | null,
       lat: r.lat,
       lng: r.lng,
       geocodeQuality: r.geocode_quality,

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
+import { idOrder } from '../db/mssql/order.js';
 
 /**
  * The questionnaire vertical's data access on SQL Server (Kysely): the same operations the
@@ -78,7 +79,7 @@ export class QuestionnaireStore {
       .select(['id', 'name', 'state', 'draft_revision', 'updated_at', 'created_at'])
       .where('project_id', '=', projectId)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
   }
 
@@ -335,7 +336,7 @@ export class QuestionnaireStore {
       .selectAll()
       .where('questionnaire_id', '=', questionnaireId)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
   }
 

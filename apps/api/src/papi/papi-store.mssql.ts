@@ -3,6 +3,7 @@ import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
 import { claimJob } from '../jobs/claim.mssql.js';
+import { idOrder } from '../db/mssql/order.js';
 
 /**
  * Paper on SQL Server (Kysely): the differences between the two keyings of a form, and the scanned
@@ -271,7 +272,7 @@ export class PapiStore {
       .selectAll()
       .where('batch_id', '=', batchId)
       .orderBy('created_at')
-      .orderBy('id')
+      .orderBy(idOrder)
       .execute();
     return rows.map((r) => ({
       ...r,
