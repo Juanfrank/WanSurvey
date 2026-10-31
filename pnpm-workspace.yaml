@@ -24,3 +24,5 @@ overrides:
   multer: 2.5.0
   follow-redirects: 1.16.2
   uuid: 11.1.1
+  # ESLint and typescript-eslint only (nothing in production); 11.0.1 (2026-10-27) fixes an advisory.
+  minimatch: 11.0.1

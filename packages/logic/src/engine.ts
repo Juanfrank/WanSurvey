@@ -1517,7 +1517,7 @@ export class InterviewSession {
         if (q.maxLength !== undefined && s.length > q.maxLength)
           add('max_length', DEFAULT_MESSAGES.maxLength(q.maxLength), { n: String(q.maxLength) });
         if (q.pattern !== undefined) {
-          let re: RegExp | null = null;
+          let re: RegExp | null;
           try {
             re = new RegExp(`^(?:${q.pattern})$`, 'u');
           } catch {

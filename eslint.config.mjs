@@ -8,7 +8,6 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
-      'apps/api/drizzle/**',
       '**/test-results/**',
       '**/playwright-report/**',
     ],

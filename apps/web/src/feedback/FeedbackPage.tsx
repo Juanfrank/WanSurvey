@@ -125,7 +125,7 @@ export function FeedbackPage() {
         const r = Number(search.r);
         if (started.current || !Number.isInteger(r) || r < 1 || r > p.faces) return;
         started.current = true;
-        let before: string | null = null;
+        let before: string | null;
         try {
           before = sessionStorage.getItem(seen(slug, r, ref));
         } catch {

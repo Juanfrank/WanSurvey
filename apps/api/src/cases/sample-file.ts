@@ -59,7 +59,7 @@ export async function parseSampleFile(
 ): Promise<ParsedFile> {
   const lower = fileName.toLowerCase();
   let table: string[][];
-  let extra: Partial<ParsedFile> = {};
+  let extra: Partial<ParsedFile>;
   if (lower.endsWith('.xlsx')) {
     let wb;
     try {
