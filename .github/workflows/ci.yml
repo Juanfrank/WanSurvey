@@ -68,7 +68,8 @@ jobs:
           MSSQL_URL: mssql://wansurvey_app:Tr0ub4dor-Stronger%21@localhost:1433/wansurvey_test?trustServerCertificate=true
 
   e2e:
-    runs-on: ubuntu-latest
+    # Playwright does not install Chromium on Ubuntu 26.04 (what ubuntu-latest became): pinned.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -103,7 +104,8 @@ jobs:
 
   # The same browser tests with the API on SQL Server (DB_ENGINE=mssql).
   e2e-mssql:
-    runs-on: ubuntu-latest
+    # Playwright does not install Chromium on Ubuntu 26.04 (what ubuntu-latest became): pinned.
+    runs-on: ubuntu-24.04
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
