@@ -30,6 +30,5 @@ is replaced (see `docs/security.md`, 6.4), so plan its rotation before you do it
 ## The Entra redirect URI
 
 `ENTRA_REDIRECT_URI` is `https://<host>/api/auth/entra/callback`, registered exactly like that
-(platform _Web_) in the Entra app registration of this app. Register the new URI before
-deploying; the former one (`/api/v1/auth/sso/callback`) can stay for a cycle and is retired
-afterwards.
+(platform _Web_) in the Entra app registration of this app. Register it before deploying: the former
+address (`/api/v1/auth/sso/callback`) no longer answers.

@@ -92,6 +92,14 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
     ...extra,
   });
 
+  it('answers Microsoft at /api/auth/entra/callback only; the former address is gone', async () => {
+    const old = await request(t.app.getHttpServer()).get('/api/v1/auth/sso/callback');
+    expect(old.status).toBe(404);
+    const now = await request(t.app.getHttpServer()).get('/api/auth/entra/callback');
+    expect(now.status).toBe(302); // no state: back to the sign-in page with an error
+    expect(now.headers.location).toContain('/login?sso_error=');
+  });
+
   it('starts the authorization code flow with PKCE against the organisation’s Entra tenant', async () => {
     const org = await ssoTenant();
     const { authorize, start } = await signIn(org.slug, person(`a@agency.org`));

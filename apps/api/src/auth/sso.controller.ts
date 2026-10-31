@@ -102,7 +102,7 @@ abstract class SsoCallbackBase {
   }
 }
 
-/** Browser-facing Microsoft sign-in: the start, and the callback's former address. */
+/** Browser-facing Microsoft sign-in: where it starts. */
 @ApiTags('auth')
 @Controller('auth/sso')
 export class SsoController extends SsoCallbackBase {
@@ -128,21 +128,6 @@ export class SsoController extends SsoCallbackBase {
       if (e instanceof SsoError) return this.failRedirect(res, e.code);
       throw e;
     }
-  }
-
-  /**
-   * The callback's former address (/api/v1/auth/sso/callback), kept for a cycle so that sign-ins
-   * under way during the deployment are not cut. Removed with the transition.
-   */
-  @Public()
-  @Throttle(ssoLimit)
-  @Get('callback')
-  legacyCallback(
-    @Query(new ZodPipe(CallbackQuery)) q: z.infer<typeof CallbackQuery>,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
-    return this.finish(q, req, res);
   }
 }
 
