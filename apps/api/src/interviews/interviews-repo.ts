@@ -63,7 +63,12 @@ export interface FinishSync {
   total: number | null;
 }
 
+/** The open transaction of either engine, to build another module's view of it. */
+export type TxHandle =
+  { kind: 'pg'; tx: Tx; tenantId: string } | { kind: 'mssql'; tx: MssqlTx; tenantId: string };
+
 export interface InterviewsTx extends CasesTx {
+  handle(): TxHandle;
   /** The Drizzle transaction, for modules not yet moved (null on SQL Server). */
   pg(): Tx | null;
   /** The same, where a module that has not moved needs it (throws on SQL Server). */
@@ -281,6 +286,10 @@ export class PgInterviewsTx extends PgCasesTx implements InterviewsTx {
     audits: AuditService,
   ) {
     super(itx, tenant, audits);
+  }
+
+  handle(): TxHandle {
+    return { kind: 'pg', tx: this.itx, tenantId: this.tenant };
   }
 
   pg() {
@@ -663,7 +672,7 @@ const low = (s: string) => s.toLowerCase();
 const lowOrNull = (s: string | null) => (s === null ? null : s.toLowerCase());
 const parse = <T>(text: string | null): T => (text === null ? (null as T) : JSON.parse(text));
 
-function toCase(r: Record<string, unknown> & { sample: string }): CaseFull {
+export function toCase(r: Record<string, unknown> & { sample: string }): CaseFull {
   const g = (k: string) => r[k] as never;
   const id = (k: string) => lowOrNull((r[k] as string | null) ?? null);
   return {
@@ -746,6 +755,10 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
     private readonly istore: InterviewsStore,
   ) {
     super(itx, tenant, cstore);
+  }
+
+  handle(): TxHandle {
+    return { kind: 'mssql', tx: this.itx, tenantId: this.tenant };
   }
 
   pg(): Tx | null {

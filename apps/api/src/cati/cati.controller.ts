@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -11,12 +12,10 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
-import { cases } from '../db/schema.js';
+import { CATI_REPO, type CatiRepo } from './cati-repo.js';
 import { CatiService, NextBody, OutcomeBody } from './cati.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -27,7 +26,7 @@ const CONDUCT = 'interviews.conduct';
 @Controller()
 export class CatiController {
   constructor(
-    private readonly database: Database,
+    @Inject(CATI_REPO) private readonly repo: CatiRepo,
     private readonly cati: CatiService,
   ) {}
 
@@ -45,8 +44,8 @@ export class CatiController {
     @Body(new ZodPipe(NextBody)) body: z.infer<typeof NextBody>,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const out = await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.cati.next(tx, ctx, projectId, body.questionnaireId, body.caseId),
+    const out = await this.repo.inTenant(ctx.tenantId, (t) =>
+      this.cati.next(t, ctx, projectId, body.questionnaireId, body.caseId),
     );
     if ('reason' in out) {
       res.status(204);
@@ -65,9 +64,7 @@ export class CatiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const out = await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.cati.current(tx, ctx, projectId),
-    );
+    const out = await this.repo.inTenant(ctx.tenantId, (t) => this.cati.current(t, ctx, projectId));
     if (!out) res.status(204);
     return out ?? undefined;
   }
@@ -82,7 +79,7 @@ export class CatiController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(OutcomeBody)) body: OutcomeBody,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.cati.outcome(tx, ctx, id, body));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.cati.outcome(t, ctx, id, body));
   }
 
   /** Gives the case back without calling (not counted as an attempt). */
@@ -90,14 +87,14 @@ export class CatiController {
   @HttpCode(200)
   @RequirePermission(CONDUCT, { anyProject: true })
   release(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.cati.release(tx, ctx, id));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.cati.release(t, ctx, id));
   }
 
   /** The caller's callbacks and appointments, soonest first. */
   @Get('projects/:projectId/cati/callbacks')
   @RequirePermission(CONDUCT, PERM)
   callbacks(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.cati.callbacks(tx, ctx, projectId));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.cati.callbacks(t, ctx, projectId));
   }
 
   /** A case's calls, newest first (numbers by their last digits). */
@@ -108,14 +105,11 @@ export class CatiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('caseId', ParseUUIDPipe) caseId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [c] = await tx
-        .select({ assignedTo: cases.assignedTo })
-        .from(cases)
-        .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const c = await t.caseBrief(projectId, caseId);
       if (!c || (!can(ctx.memberships, 'cases.read_all', projectId) && c.assignedTo !== ctx.userId))
         throw new NotFoundException('Case not found');
-      return this.cati.history(tx, caseId);
+      return this.cati.history(t, caseId);
     });
   }
 }
