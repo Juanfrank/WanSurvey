@@ -1,6 +1,7 @@
 import { sampleTable, toCsv } from '@wansurvey/fixtures';
 import { ROLE_PERMISSIONS } from '@wansurvey/schema';
 import ExcelJS from 'exceljs';
+import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ImportMapping } from '../../src/cases/sample-mapping.js';
@@ -353,5 +354,218 @@ describe.skipIf(!configured)('SQL Server: cases over HTTP', () => {
       '•••',
     );
     await patchProject(pm, { revealToInterviewers: true });
+  });
+
+  it('pool mode: free cases are open to interviewers, the first claim wins', async () => {
+    const free = (
+      await pm.agent.get(`${base}/cases`).query({ assignedTo: 'none', status: 'fresh' })
+    ).body.rows as { id: string }[];
+    expect(free.length).toBeGreaterThan(1);
+    const notPool = await post(interviewerS, `${base}/cases/${free[0]!.id}/claim`);
+    expect(notPool.status).toBe(400);
+    expect(notPool.body.code).toBe('NOT_POOL');
+    expect((await interviewerS.agent.get(`${base}/cases/${free[0]!.id}`)).status).toBe(404);
+
+    const on = await patchProject(pm, { assignmentMode: 'pool' });
+    expect(on.body.settings.assignmentMode).toBe('pool');
+    const other = await login(t, interviewer2, tenant.slug);
+    const visible = await interviewerS.agent.get(`${base}/cases`).query({ limit: 200 });
+    expect(visible.body.assignmentMode).toBe('pool');
+    const ids = visible.body.rows.map((r: { id: string }) => r.id);
+    expect(ids).toEqual(expect.arrayContaining(free.map((f) => f.id)));
+    // Free cases are not theirs yet: masked, and no view is recorded.
+    const freeRow = visible.body.rows.find((r: { id: string }) => r.id === free[0]!.id);
+    expect(freeRow.sample.first_name).toBe('•••');
+    expect(await autoViews(interviewer.id)).not.toContain(free[0]!.id);
+    const before = await interviewerS.agent.get(`${base}/cases/${free[0]!.id}`);
+    expect(before.body).toMatchObject({ canClaim: true, canRelease: false });
+    expect(before.body.pii.masked).toBe(true);
+
+    const target = free[0]!.id;
+    // Roles that do not work cases may neither claim nor release.
+    const reviewer = await login(
+      t,
+      await createUser(t.owner, tenant.id, [{ role: 'reviewer' }]),
+      tenant.slug,
+    );
+    expect((await post(reviewer, `${base}/cases/${target}/claim`)).status).toBe(403);
+    expect((await post(reviewer, `${base}/cases/${target}/release`)).status).toBe(403);
+    const [a, b] = await Promise.all([
+      post(interviewerS, `${base}/cases/${target}/claim`),
+      post(other, `${base}/cases/${target}/claim`),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const loser = a.status === 409 ? a : b;
+    expect(loser.body.code).toBe('ALREADY_TAKEN');
+    const [winner, winnerUser, loserS] =
+      a.status === 200 ? [interviewerS, interviewer, other] : [other, interviewer2, interviewerS];
+    expect((await loserS.agent.get(`${base}/cases/${target}`)).status).toBe(404);
+    const held = await winner.agent.get(`${base}/cases/${target}`);
+    expect(held.body).toMatchObject({
+      status: 'assigned',
+      assignedTo: winnerUser.id,
+      canRelease: true,
+      canClaim: false,
+    });
+    expect(held.body.history[0]).toMatchObject({ type: 'claimed' });
+
+    // Someone else's case cannot be released by another interviewer; the holder can.
+    expect((await post(loserS, `${base}/cases/${target}/release`)).status).toBe(404);
+    const rel = await post(winner, `${base}/cases/${target}/release`);
+    expect(rel.body).toEqual({ released: true });
+    const back = await pm.agent.get(`${base}/cases/${target}`);
+    expect(back.body).toMatchObject({ status: 'fresh', assignedTo: null });
+    expect(back.body.history[0]).toMatchObject({ type: 'released' });
+    const audit = await rows(
+      sql`SELECT action FROM audit_log WHERE target_id = ${target} AND action IN ('case.claimed', 'case.released')`,
+    );
+    expect(audit.map((r) => r.action).sort()).toEqual(['case.claimed', 'case.released']);
+
+    // Imports do not run the rules in pool mode.
+    const table = [
+      [...sampleTable(0)[0]!],
+      ['POOL1', 'Eva', 'R', '3', 'Cusco', '41', '987654322', 'e@example.org', '0'],
+    ];
+    const { id } = await importTable(table);
+    const done = await post(pm, `${base}/imports/${id}/commit`);
+    expect(done.body).toMatchObject({ created: 1, assigned: 0 });
+    await patchProject(pm, { assignmentMode: 'assigned' });
+  });
+
+  it('previews and shares out by capacity, productivity and the fair method', async () => {
+    const ids = (await pm.agent.get(`${base}/cases`).query({ pageSize: 200 })).body.rows
+      .filter((r: { status: string }) => r.status === 'fresh' || r.status === 'assigned')
+      .map((r: { id: string }) => r.id);
+    expect(ids.length).toBeGreaterThan(2);
+    const people = [interviewer.id, interviewer2.id];
+    const preview = (body: object) =>
+      post(pm, `${base}/cases/distribute/preview`, { caseIds: ids, userIds: people, ...body });
+    type Row = { userId: string; receive: number; limit: number | null };
+    const by = (rows: Row[]): Record<string, Row> =>
+      Object.fromEntries(rows.map((r) => [r.userId, r]));
+
+    // Manual weights 3 to 1.
+    const manual = await preview({
+      method: 'capacity',
+      weights: { [people[0]!]: 3, [people[1]!]: 1 },
+    });
+    expect(manual.status, JSON.stringify(manual.body)).toBe(200);
+    const m = by(manual.body.rows);
+    expect(m[people[0]!]!.receive + m[people[1]!]!.receive).toBe(ids.length);
+    expect(m[people[0]!]!.receive).toBe(Math.round((ids.length * 3) / 4));
+    expect(m[people[0]!]!).toMatchObject({ source: 'manual', share: 0.75 });
+
+    // From goals: one person has a goal of their own, the other shares the team's.
+    const day = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+    const goal = (userId: string | null, target: number) =>
+      post(pm, `/api/v1/projects/${project}/goals`, {
+        userId,
+        frequency: 'daily',
+        startsOn: day(-2),
+        endsOn: day(2),
+        target,
+      }).expect(201);
+    const g1 = await goal(people[0]!, 6);
+    const g2 = await goal(null, 4);
+    const goals = by((await preview({ method: 'capacity' })).body.rows);
+    expect(goals[people[0]!]!).toMatchObject({ source: 'goal', weight: 6 });
+    expect(goals[people[1]!]!).toMatchObject({ source: 'team_goal', weight: 2 });
+    for (const g of [g1, g2])
+      await pm.agent
+        .delete(`/api/v1/projects/${project}/goals/${g.body.id}`)
+        .set('x-csrf-token', pm.csrf)
+        .expect(200);
+
+    // No interviews yet: productivity weighs everyone the same.
+    const perf = by((await preview({ method: 'performance', days: 30 })).body.rows);
+    expect(perf[people[0]!]!).toMatchObject({ source: 'output', weight: 1 });
+    expect(Math.abs(perf[people[0]!]!.receive - perf[people[1]!]!.receive)).toBeLessThanOrEqual(1);
+
+    // The fair method with a cap of 1 open case: the rest stays free.
+    const fair = await preview({ method: 'fair', cap: 1 });
+    const f = by(fair.body.rows);
+    expect(f[people[0]!]!.limit).toBeLessThanOrEqual(1);
+    expect(fair.body.free).toBe(ids.length - f[people[0]!]!.receive - f[people[1]!]!.receive);
+
+    // A preview assigns nothing; the share-out does, and says what stayed free.
+    const done = await post(pm, `${base}/cases/distribute`, {
+      caseIds: ids,
+      userIds: people,
+      method: 'capacity',
+      weights: { [people[0]!]: 3, [people[1]!]: 1 },
+    });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    expect(done.body.perPerson[people[0]!]).toBe(m[people[0]!]!.receive);
+    expect(done.body.free).toBe(0);
+    expect(
+      (await post(interviewerS, `${base}/cases/distribute/preview`, { userIds: people })).status,
+    ).toBe(403);
+  });
+
+  it('distributes cases at random and evenly among the people chosen', async () => {
+    const ids = (await pm.agent.get(`${base}/cases`).query({ pageSize: 200 })).body.rows
+      .filter((r: { status: string }) => r.status === 'fresh' || r.status === 'assigned')
+      .map((r: { id: string }) => r.id);
+    expect(ids.length).toBeGreaterThan(2);
+    const res = await post(supervisor, `${base}/cases/distribute`, {
+      caseIds: ids,
+      userIds: [interviewer.id, interviewer2.id],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const counts = Object.values(res.body.perPerson as Record<string, number>);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(ids.length);
+    expect(Math.abs(counts[0]! - counts[1]!)).toBeLessThanOrEqual(1);
+    expect(
+      (
+        await post(interviewerS, `${base}/cases/distribute`, {
+          caseIds: ids,
+          userIds: [interviewer.id],
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it('a share-out does not take a case claimed while it ran', async () => {
+    const other = await createProject(t.owner, tenant.id);
+    const ids = [randomUUID(), randomUUID()];
+    for (const [i, id] of ids.entries())
+      await sql`INSERT INTO cases (id, tenant_id, project_id, external_id, sample, status)
+        VALUES (${id}, ${tenant.id}, ${other}, ${'R' + i}, '{}', 'fresh')`.execute(t.owner);
+    // An interviewer's claim of the first case, not committed yet.
+    let commit!: () => void;
+    const go = new Promise<void>((ok) => (commit = ok));
+    let locked!: () => void;
+    const held = new Promise<void>((ok) => (locked = ok));
+    const claim = t.owner.transaction().execute(async (x) => {
+      await sql`UPDATE cases SET assigned_to = ${interviewer.id}, status = 'assigned' WHERE id = ${ids[0]!}`.execute(
+        x,
+      );
+      locked();
+      await go;
+    });
+    await held;
+    const share = post(supervisor, `/api/v1/projects/${other}/cases/distribute`, {
+      userIds: [interviewer2.id],
+    }).then((r) => r);
+    await new Promise((ok) => setTimeout(ok, 300));
+    commit();
+    await claim;
+    const res = await share;
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.perPerson[interviewer2.id]).toBe(2);
+    expect(res.body.changed).toBe(1);
+    const owners = await rows(
+      sql`SELECT id, assigned_to FROM cases WHERE project_id = ${other} ORDER BY external_id`,
+    );
+    expect(owners.map((r) => (r.assigned_to as string).toLowerCase())).toEqual([
+      interviewer.id,
+      interviewer2.id,
+    ]);
+  });
+
+  it('keeps cases inside their tenant', async () => {
+    const other = await createTenant(t.owner);
+    const s = await login(t, await createUser(t.owner, other.id, [{ role: 'admin' }]), other.slug);
+    expect((await s.agent.get(`${base}/cases`)).status).toBe(404);
   });
 });
