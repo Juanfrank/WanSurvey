@@ -1,6 +1,6 @@
 import { hash } from '@node-rs/argon2';
 import { expect, test, type Page } from '@playwright/test';
-import postgres from 'postgres';
+import { connectDb } from './db.js';
 import { uuidv7 } from 'uuidv7';
 import {
   PASSWORD,
@@ -15,8 +15,6 @@ import {
 const CLERK = 'data.entry@demo.wansurvey.test';
 const CLERK2 = 'second.clerk@demo.wansurvey.test';
 const SUPERVISOR = 'supervisor@demo.wansurvey.test';
-const adminUrl =
-  process.env.E2E_DATABASE_ADMIN_URL ?? 'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';
 
 async function openPaper(page: Page, email: string) {
   await login(page, email);
@@ -70,17 +68,29 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
   browser,
 }) => {
   test.setTimeout(150_000);
-  const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
+  const db = connectDb();
   try {
     // A second clerk, and a case for the first one.
-    const [demo] = await sql`select id from tenants where slug = 'demo'`;
-    const [clerk] = await sql`select id from users where email = ${CLERK}`;
+    const [demo] = await db.all(`select id from tenants where slug = 'demo'`);
+    const [clerk] = await db.all(`select id from users where email = ?`, [CLERK]);
     const id2 = uuidv7();
-    await sql`insert into users (id, email, name, first_name, status, password_hash)
-      values (${id2}, ${CLERK2}, 'Second Clerk', 'Second', 'active', ${await hash(PASSWORD, { algorithm: 2 })})`;
-    await sql`insert into tenant_members (id, tenant_id, user_id, status) values (${uuidv7()}, ${demo!.id}, ${id2}, 'active')`;
-    await sql`insert into memberships (id, tenant_id, user_id, role) values (${uuidv7()}, ${demo!.id}, ${id2}, 'interviewer')`;
-    await sql`update cases set assigned_to = ${clerk!.id}, status = 'assigned' where external_id = 'HH0005'`;
+    await db.run(
+      `insert into users (id, email, name, first_name, status, password_hash)
+       values (?, ?, 'Second Clerk', 'Second', 'active', ?)`,
+      [id2, CLERK2, await hash(PASSWORD, { algorithm: 2 })],
+    );
+    await db.run(
+      `insert into tenant_members (id, tenant_id, user_id, status) values (?, ?, ?, 'active')`,
+      [uuidv7(), demo!.id, id2],
+    );
+    await db.run(
+      `insert into memberships (id, tenant_id, user_id, role) values (?, ?, ?, 'interviewer')`,
+      [uuidv7(), demo!.id, id2],
+    );
+    await db.run(
+      `update cases set assigned_to = ?, status = 'assigned' where external_id = 'HH0005'`,
+      [clerk!.id],
+    );
 
     // The project manager keys every form twice and prints forms.
     const pm = await (
@@ -113,7 +123,7 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     ).newPage();
     await openPaper(c1, CLERK);
     await keyForm(c1, 'HH0005', '15');
-    const [waiting] = await sql`select status from cases where external_id = 'HH0005'`;
+    const [waiting] = await db.all(`select status from cases where external_id = 'HH0005'`);
     expect(waiting!.status).toBe('in_progress');
 
     // The second clerk keys the same form and types 16.
@@ -140,13 +150,19 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     await expectAccessible(sup);
     await row.getByRole('button', { name: /Use second/ }).click();
     await expect(sup.getByTestId('mismatch-message')).toContainText('Case HH0005 is finished.');
-    const [done] = await sql`select status, disposition from cases where external_id = 'HH0005'`;
+    const [done] = await db.all(
+      `select status, disposition from cases where external_id = 'HH0005'`,
+    );
     expect(done).toMatchObject({ status: 'finalised', disposition: 'SCREENED_OUT' });
-    const meta =
-      await sql`select count(*)::int as n from interview_paradata p join interviews i on i.id = p.interview_id
-                join cases c on c.id = i.case_id where c.external_id = 'HH0005' and p.type = 'paper_meta'`;
-    expect(meta[0]!.n).toBeGreaterThanOrEqual(2);
+    const meta = await db.all(
+      `select count(*)::int as n from interview_paradata p join interviews i on i.id = p.interview_id
+       join cases c on c.id = i.case_id where c.external_id = 'HH0005' and p.type = 'paper_meta'`,
+      [],
+      `select count(*) as n from interview_paradata p join interviews i on i.id = p.interview_id
+       join cases c on c.id = i.case_id where c.external_id = 'HH0005' and p.type = 'paper_meta'`,
+    );
+    expect(Number(meta[0]!.n)).toBeGreaterThanOrEqual(2);
   } finally {
-    await sql.end();
+    await db.end();
   }
 });

@@ -1,10 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import postgres from 'postgres';
+import { connectDb } from './db.js';
 import { PM, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
-const adminUrl =
-  process.env.E2E_DATABASE_ADMIN_URL ?? 'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';
 
 async function openProject(page: Page, email: string) {
   await login(page, email);
@@ -44,7 +42,7 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
   page,
 }) => {
   test.setTimeout(120_000);
-  const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
+  const db = connectDb();
   try {
     await openProject(page, INTERVIEWER);
     await page.getByRole('tab', { name: 'Phone calls' }).click();
@@ -79,7 +77,11 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await expect(mine).toContainText('Booked by');
 
     // Time passes: the callback is due, announced, listed as due now, and called from the list.
-    await sql`update cases set next_contact_at = now() - interval '1 minute' where external_id = ${caseId}`;
+    await db.run(
+      `update cases set next_contact_at = now() - interval '1 minute' where external_id = ?`,
+      [caseId],
+      `update cases set next_contact_at = dateadd(minute, -1, sysdatetimeoffset()) where external_id = ?`,
+    );
     await page.reload();
     await page.getByRole('tab', { name: 'Phone calls' }).click();
     await expect(page.getByTestId('callback-due')).toContainText(`Callback due: case ${caseId}`);
@@ -119,7 +121,9 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await expect(page.getByTestId('calls-message')).toContainText('Interview submitted');
 
     // The case shows both calls.
-    const [row] = await sql`select status, disposition from cases where external_id = ${caseId}`;
+    const [row] = await db.all(`select status, disposition from cases where external_id = ?`, [
+      caseId,
+    ]);
     expect(row).toMatchObject({ status: 'finalised', disposition: 'REFUSAL' });
     await page.getByRole('tab', { name: 'My cases' }).click();
     await page.getByLabel('Search id or sample data').fill(caseId);
@@ -129,6 +133,6 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await expect(history).toContainText('Answered');
     await expect(history).toContainText('Call back later');
   } finally {
-    await sql.end();
+    await db.end();
   }
 });

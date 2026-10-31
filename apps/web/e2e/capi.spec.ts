@@ -1,10 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import postgres from 'postgres';
+import { connectDb, marks } from './db.js';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
-const adminUrl =
-  process.env.E2E_DATABASE_ADMIN_URL ?? 'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';
 
 const question = (page: Page, id: string) => page.locator(`[data-qkey^="${id}"]`).first();
 async function onQuestion(page: Page, id: string) {
@@ -22,7 +20,7 @@ test('download cases, interview offline after a reload, and everything arrives o
   context,
 }) => {
   test.setTimeout(180_000);
-  const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
+  const db = connectDb();
   try {
     await login(page, INTERVIEWER);
     await pickOrganisation(page, 'Demo Research');
@@ -79,8 +77,10 @@ test('download cases, interview offline after a reload, and everything arrives o
       { timeout: 30_000 },
     );
     await expect(page.getByTestId('waiting')).toHaveText('Everything has been sent.');
-    const done =
-      await sql`select external_id, status, disposition, checked_out_device from cases where external_id in ${sql(ids)}`;
+    const done = await db.all(
+      `select external_id, status, disposition, checked_out_device from cases where external_id in (${marks(ids.length)})`,
+      ids,
+    );
     expect(done).toHaveLength(3);
     for (const c of done)
       expect(c).toMatchObject({
@@ -88,11 +88,15 @@ test('download cases, interview offline after a reload, and everything arrives o
         disposition: 'REFUSAL',
         checked_out_device: null,
       });
-    const offline =
-      await sql`select count(*)::int as n from case_events e join cases c on c.id = e.case_id
-                where c.external_id in ${sql(ids)} and e.type = 'interview_started' and (e.details->>'offline')::boolean`;
-    expect(offline[0]!.n).toBe(3);
+    const offline = await db.all(
+      `select count(*)::int as n from case_events e join cases c on c.id = e.case_id
+       where c.external_id in (${marks(ids.length)}) and e.type = 'interview_started' and (e.details->>'offline')::boolean`,
+      ids,
+      `select count(*) as n from case_events e join cases c on c.id = e.case_id
+       where c.external_id in (${marks(ids.length)}) and e.type = 'interview_started' and json_value(e.details, '$.offline') = 'true'`,
+    );
+    expect(Number(offline[0]!.n)).toBe(3);
   } finally {
-    await sql.end();
+    await db.end();
   }
 });

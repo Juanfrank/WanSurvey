@@ -17,6 +17,8 @@ const LOST = ['REFUSAL', 'NON_CONTACT', 'NO_ANSWER', 'REFUSAL', 'WRONG_NUMBER', 
  * daily figures. Idempotent: does nothing if the demo cases exist.
  */
 export async function seedDemoData(adminUrl: string, password: string, count = 60): Promise<void> {
+  if (adminUrl.startsWith('mssql:'))
+    return (await import('./seed-demo.mssql.js')).seedDemoDataMssql(adminUrl, password, count);
   const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
   try {
     const [p] = await sql<{ id: string; tenant_id: string; timezone: string }[]>`

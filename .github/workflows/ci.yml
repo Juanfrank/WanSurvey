@@ -113,6 +113,42 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
 
+  # The same browser tests with the API on SQL Server (DB_ENGINE=mssql).
+  e2e-mssql:
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Wansurvey_Test1!
+        ports: ['1433:1433']
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Wansurvey_Test1!' -Q 'SELECT 1'"
+          --health-interval 5s --health-retries 20 --health-start-period 20s
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      E2E_ENGINE: mssql
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @wansurvey/web exec playwright install --with-deps chromium
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+      - run: pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-mssql
+          path: apps/web/playwright-report
+
   # The zip App Service runs (Linux, Node 24, no containers): built on Linux x64 like App
   # Service, started from a clean folder against a new database, and kept as an artifact to
   # upload (Kudu → Zip Push Deploy; see docs/appservice-zip.md).

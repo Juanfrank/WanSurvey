@@ -1,29 +1,34 @@
 import { expect, test } from '@playwright/test';
-import postgres from 'postgres';
+import { connectDb } from './db.js';
 import { uuidv7 } from 'uuidv7';
 import { expectAccessible, login, pickOrganisation, questionnaireAction, shot } from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
-const adminUrl =
-  process.env.E2E_DATABASE_ADMIN_URL ?? 'postgres://postgres:postgres@localhost:5432/wansurvey_e2e';
 
 test('scanned forms: a PDF with two forms is split and read, and the clerk finishes one by hand', async ({
   page,
   browser,
 }) => {
   test.setTimeout(120_000);
-  const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
+  const db = connectDb();
   try {
     // Two cases of their own for the household questionnaire.
-    const [q] = await sql`select q.id, q.project_id, q.tenant_id from questionnaires q
-      join projects p on p.id = q.project_id
-      where q.name = 'Household questionnaire' and p.name = 'Household Survey 2026'`;
+    const [q] = await db.all(
+      `select q.id, q.project_id, q.tenant_id from questionnaires q
+       join projects p on p.id = q.project_id
+       where q.name = 'Household questionnaire' and p.name = 'Household Survey 2026'`,
+    );
     const ids: string[] = [];
     for (const ext of ['SCAN-A', 'SCAN-B']) {
       const id = uuidv7();
       ids.push(id);
-      await sql`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, status)
-        values (${id}, ${q!.tenant_id}, ${q!.project_id}, ${q!.id}, ${ext}, ${sql.json({ city: 'Lima' })}, 'fresh')`;
+      await db.run(
+        `insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, status)
+         values (?, ?, ?, ?, ?, ?::jsonb, 'fresh')`,
+        [id, q!.tenant_id, q!.project_id, q!.id, ext, JSON.stringify({ city: 'Lima' })],
+        `insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, status)
+         values (?, ?, ?, ?, ?, ?, 'fresh')`,
+      );
     }
 
     await login(page);
@@ -79,6 +84,6 @@ test('scanned forms: a PDF with two forms is split and read, and the clerk finis
     await shot(clerk, 'papi-scan-second-round');
     await expectAccessible(clerk);
   } finally {
-    await sql.end();
+    await db.end();
   }
 });

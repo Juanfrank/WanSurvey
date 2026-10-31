@@ -15,6 +15,8 @@ import { PiiCipher } from '../cases/pii.js';
  * Owners and admins enrol TOTP on first login. Idempotent: does nothing if the tenant exists.
  */
 export async function seed(adminUrl: string, password: string): Promise<void> {
+  if (adminUrl.startsWith('mssql:'))
+    return (await import('./seed.mssql.js')).seedMssql(adminUrl, password);
   const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
   try {
     const [existing] = await sql`select id from tenants where slug = 'demo'`;
