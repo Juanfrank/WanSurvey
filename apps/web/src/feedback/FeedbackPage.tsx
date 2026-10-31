@@ -1,7 +1,7 @@
-import { useParams, useSearch } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api.js';
 import { Shell } from '../respondent/RespondentPage.js';
+import type { FeedbackSearch } from '../respondent/public-routes.js';
 import { respondentLang } from '../respondent/text.js';
 import type { FeedbackItem } from '@wansurvey/schema/feedback';
 import { Face } from './Faces.js';
@@ -75,9 +75,7 @@ const seen = (slug: string, r: number, ref: string) => `wansurvey.fb.${slug}.${r
  * shown to choose from. `?embed=1` is the compact widget for an iframe; `?ref=` says what the
  * answer is about (a ticket, a branch…).
  */
-export function FeedbackPage() {
-  const { slug } = useParams({ strict: false }) as { slug: string };
-  const search = useSearch({ strict: false }) as { r?: number; ref?: string; embed?: boolean };
+export function FeedbackPage({ slug, search }: { slug: string; search: FeedbackSearch }) {
   const browser = respondentLang(navigator.language) as 'es' | 'en';
   const [point, setPoint] = useState<Point | null>(null);
   const [problem, setProblem] = useState<'notFound' | 'failed' | null>(null);

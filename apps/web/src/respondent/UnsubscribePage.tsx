@@ -1,12 +1,10 @@
-import { useParams } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { Shell } from './RespondentPage.js';
 import { respondentLang, respondentText } from './text.js';
 
 /** Unsubscribe from a survey's e-mails (`/u/$token`), with one confirmation. */
-export function UnsubscribePage() {
-  const { token } = useParams({ strict: false }) as { token: string };
+export function UnsubscribePage({ token }: { token: string }) {
   // The browser's language when the catalogue has it; the page says which one it uses.
   const lang = respondentLang(navigator.language);
   const t = respondentText(lang);

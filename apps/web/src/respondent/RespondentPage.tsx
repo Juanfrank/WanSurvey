@@ -1,4 +1,3 @@
-import { useParams } from '@tanstack/react-router';
 import {
   createInterview,
   respondentFromCase,
@@ -64,8 +63,7 @@ export function closedReason(e: unknown): ClosedReason {
       : 'closed';
 }
 
-export function RespondentPage() {
-  const { token } = useParams({ strict: false }) as { token: string };
+export function RespondentPage({ token }: { token: string }) {
   const [payload, setPayload] = useState<RespondentPayload | null>(null);
   const [session, setSession] = useState<InterviewSession | null>(null);
   const [error, setError] = useState<ClosedReason | null>(null);

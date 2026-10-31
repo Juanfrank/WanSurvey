@@ -28,7 +28,6 @@ export async function initI18n(lng = 'es', { catalogue = true } = {}) {
       es: { app: {}, ...rendererResources.es },
     } as unknown as Record<string, Record<string, object>>,
     interpolation: { escapeValue: false },
-    showSupportNotice: false,
   });
   if (catalogue) await loadCatalogue();
 }

@@ -8,11 +8,14 @@ import { gzipSync } from 'node:zlib';
 
 const DIST = new URL('../dist/', import.meta.url).pathname;
 const BUDGET_KB = Number(process.env.RESPONDENT_BUDGET_KB ?? 160);
-// Chunks by name: the respondent page is shared by invitation and open links.
+// Chunks by name: the respondent page is shared by invitation and open links. The public pages
+// start from their own entry (no router, no query library), loaded after the app entry.
 const ROUTES = ['RespondentPage', 'OpenLinkPage'];
 
 const manifest = JSON.parse(readFileSync(join(DIST, '.vite/manifest.json'), 'utf8'));
 const entry = Object.keys(manifest).find((k) => manifest[k].isEntry);
+const publicEntry = Object.keys(manifest).find((k) => k.endsWith('respondent/entry.tsx'));
+if (!publicEntry) throw new Error('respondent/entry.tsx is not a chunk; update the script');
 const size = (file) => gzipSync(readFileSync(join(DIST, file))).length;
 
 let failed = false;
@@ -28,6 +31,7 @@ for (const route of ROUTES) {
     for (const dep of chunk.imports ?? []) walk(dep);
   };
   walk(entry);
+  walk(publicEntry);
   walk(key);
   const total = [...files].reduce((n, f) => n + size(f), 0) / 1024;
   const ok = total <= BUDGET_KB;

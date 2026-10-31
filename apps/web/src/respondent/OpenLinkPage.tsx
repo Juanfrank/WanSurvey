@@ -1,4 +1,3 @@
-import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { closedReason, Shell, type ClosedReason } from './RespondentPage.js';
@@ -10,9 +9,14 @@ const key = (slug: string) => `wansurvey.open.${slug}`;
  * An open link (`/o/$slug`): the first visit starts an anonymous interview and the browser
  * keeps its token, so coming back continues the same one instead of starting another (W6).
  */
-export function OpenLinkPage() {
-  const { slug } = useParams({ strict: false }) as { slug: string };
-  const navigate = useNavigate();
+export function OpenLinkPage({
+  slug,
+  go,
+}: {
+  slug: string;
+  /** Moves on to another address of the application, replacing this one. */
+  go: (href: string) => void | Promise<void>;
+}) {
   const [failed, setFailed] = useState<ClosedReason | null>(null);
   // The browser's language when the catalogue has it; the page says which one it uses.
   const lang = respondentLang(navigator.language);
@@ -40,12 +44,12 @@ export function OpenLinkPage() {
           }
         }
         // The open link's parameters (?sede=2) go on to the survey, which keeps them.
-        await navigate({ href: `/s/${token}${window.location.search}`, replace: true });
+        await go(`/s/${token}${window.location.search}`);
       } catch (e) {
         setFailed(closedReason(e));
       }
     })();
-  }, [slug, navigate]);
+  }, [slug, go]);
 
   return (
     <Shell title="">

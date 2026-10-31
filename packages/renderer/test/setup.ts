@@ -11,7 +11,6 @@ await i18next.use(initReactI18next).init({
   defaultNS: RENDERER_NS,
   resources: rendererResources as unknown as Record<string, Record<string, object>>,
   interpolation: { escapeValue: false },
-  showSupportNotice: false,
 });
 
 afterEach(async () => {

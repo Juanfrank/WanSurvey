@@ -7,6 +7,7 @@ import {
   Outlet,
 } from '@tanstack/react-router';
 import { isRespondentPath, loadCatalogue } from './i18n.js';
+import { parseFeedbackSearch, type FeedbackSearch } from './respondent/public-routes.js';
 import { usePageTitle } from './routes/pageTitle.js';
 
 // Every page loads when opened: a web respondent downloads none of the staff application (H6).
@@ -75,28 +76,24 @@ const forgotPasswordRoute = createRoute({
 const respondentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/s/$token',
-  component: lazyRouteComponent(() => import('./respondent/RespondentPage.js'), 'RespondentPage'),
+  component: lazyRouteComponent(() => import('./respondent/RouterPages.js'), 'RespondentRoute'),
 });
 const openLinkRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/o/$slug',
-  component: lazyRouteComponent(() => import('./respondent/OpenLinkPage.js'), 'OpenLinkPage'),
+  component: lazyRouteComponent(() => import('./respondent/RouterPages.js'), 'OpenLinkRoute'),
 });
 // Quick feedback (F1): a face per link, or the widget for an iframe.
 const feedbackRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/f/$slug',
-  component: lazyRouteComponent(() => import('./feedback/FeedbackPage.js'), 'FeedbackPage'),
-  validateSearch: (s: Record<string, unknown>): { r?: number; ref?: string; embed?: boolean } => ({
-    ...(Number.isInteger(Number(s.r)) ? { r: Number(s.r) } : {}),
-    ...(typeof s.ref === 'string' || typeof s.ref === 'number' ? { ref: String(s.ref) } : {}),
-    ...(s.embed === 1 || s.embed === '1' || s.embed === true ? { embed: true } : {}),
-  }),
+  component: lazyRouteComponent(() => import('./respondent/RouterPages.js'), 'FeedbackRoute'),
+  validateSearch: (s: Record<string, unknown>): FeedbackSearch => parseFeedbackSearch(s),
 });
 const unsubscribeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/u/$token',
-  component: lazyRouteComponent(() => import('./respondent/UnsubscribePage.js'), 'UnsubscribePage'),
+  component: lazyRouteComponent(() => import('./respondent/RouterPages.js'), 'UnsubscribeRoute'),
 });
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: AppLayout });
