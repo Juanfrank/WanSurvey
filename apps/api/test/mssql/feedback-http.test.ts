@@ -11,7 +11,7 @@ import {
   type Session,
 } from './harness.js';
 
-/** Quick feedback over HTTP on SQL Server, the counterpart of test/feedback.test.ts. */
+/** Quick feedback over HTTP on SQL Server. */
 describe.skipIf(!configured)('SQL Server: quick feedback (faces) over HTTP', () => {
   let t: MssqlTestApp;
   let tenant: { id: string; slug: string };

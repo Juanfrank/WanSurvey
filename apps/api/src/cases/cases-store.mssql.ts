@@ -6,9 +6,8 @@ import type { MssqlSchema } from '../db/mssql/schema.js';
 import { idOrder } from '../db/mssql/order.js';
 
 /**
- * Cases, contacts, history and assignment on SQL Server (Kysely): what `cases.service.ts` and the
- * imports do on PostgreSQL with Drizzle, as a store for the switch (docs/roadmap.md). Takes the
- * transaction of `MssqlDatabase.withTenant`.
+ * Cases, contacts, history and assignment on SQL Server (Kysely), for `cases.service.ts` and the
+ * imports. Takes the transaction of `MssqlDatabase.withTenant`.
  *
  * Bulk writes send ONE JSON parameter and open it with OPENJSON: SQL Server allows 2100 parameters
  * per statement, which a row-by-row INSERT of a large sample would exceed.
@@ -102,8 +101,7 @@ export class CasesStore {
 
   /**
    * Loads cases and their contacts in one round trip. A repeated external id (per project and
-   * questionnaire) fails the whole load with SQL Server error 2627, as the unique index does on
-   * PostgreSQL. Returns the ids in the order given.
+   * questionnaire) fails the whole load with SQL Server error 2627, from the unique index. Returns the ids in the order given.
    */
   async insertCases(
     tx: MssqlTx,
@@ -111,7 +109,7 @@ export class CasesStore {
   ): Promise<string[]> {
     const ids: string[] = [];
     for (const part of chunks(v.cases, 2000)) {
-      // Time-ordered ids, as on PostgreSQL: ties in the call queue go to the older case.
+      // Time-ordered ids: ties in the call queue go to the older case.
       const rows = part.map((c) => ({
         id: uuidv7(),
         qid: c.questionnaireId ?? null,

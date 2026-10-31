@@ -47,7 +47,7 @@ const definition = {
 const ALL_DAY = { from: '00:00', to: '00:00' };
 
 /**
- * Telephone interviewing over HTTP on SQL Server, the counterpart of test/cati.test.ts: the call
+ * Telephone interviewing over HTTP on SQL Server: the call
  * queue and its locks, outcomes and retries, callbacks inside calling hours, and the last attempt.
  */
 describe.skipIf(!configured)('SQL Server: telephone interviewing over HTTP', () => {

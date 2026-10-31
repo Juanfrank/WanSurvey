@@ -7,8 +7,8 @@ import { sql } from 'kysely';
 import type { MssqlTestApp, Session } from './harness.js';
 
 /**
- * Fixtures for the HTTP tests on SQL Server, written as the database's owner (the counterpart of
- * `createQuestionnaire` and the raw inserts in the PostgreSQL tests). JSON columns are text here.
+ * Fixtures for the HTTP tests on SQL Server, written as the database's owner. JSON columns are
+ * text here.
  */
 type Owner = MssqlTestApp['owner'];
 
@@ -89,7 +89,7 @@ export async function newContact(
 
 const GUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
 
-/** Rows as the PostgreSQL client gave them: GUIDs in lower case, JSON columns parsed. */
+/** Rows with GUIDs in lower case and JSON columns parsed. */
 function plain(r: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(r)) {
@@ -106,8 +106,7 @@ function plain(r: Record<string, unknown>) {
 }
 
 /**
- * `admin\`select …\`` for the owner connection, like the tagged template the PostgreSQL tests use:
- * the rows come back as plain objects (see `plain`). The SQL itself is T-SQL.
+ * `admin\`select …\`` for the owner connection, as a tagged template: the rows come back as plain objects (see `plain`). The SQL itself is T-SQL.
  */
 export function ownerQuery(owner: Owner) {
   return async (strings: TemplateStringsArray, ...values: unknown[]) => {

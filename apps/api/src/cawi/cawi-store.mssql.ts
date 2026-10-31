@@ -6,8 +6,7 @@ import type { MssqlSchema } from '../db/mssql/schema.js';
 /**
  * Web surveys and e-mail on SQL Server (Kysely): templates, waves, invitations with the leases the
  * dispatcher takes, delivery tracking, bounces and suppressions, open links, and quick feedback,
- * as `cawi.service.ts` and `feedback.service.ts` do them on PostgreSQL with Drizzle
- * (docs/roadmap.md). Takes the transaction of `MssqlDatabase.withTenant`; the public lookups by
+ * for `cawi.service.ts` and `feedback.service.ts`. Takes the transaction of `MssqlDatabase.withTenant`; the public lookups by
  * token or slug are `MssqlDatabase.withTenantOf`.
  */
 export type InvitationRow = Selectable<MssqlSchema['invitations']>;
@@ -169,7 +168,7 @@ export class CawiStore {
 
   /**
    * Adds the invitations of a wave, one per case: a case already invited in the wave is skipped
-   * (ON CONFLICT DO NOTHING of PostgreSQL), under a range lock so that two sends at once cannot
+   * (a NOT EXISTS), under a range lock so that two sends at once cannot
    * both add it. Returns how many were added.
    */
   async addInvitations(

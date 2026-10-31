@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { MssqlTx } from '../db/mssql/database.js';
 
 /**
- * Teams of the organisation on SQL Server (Kysely): what `teams.controller.ts` does on PostgreSQL
- * with Drizzle, as a store for the switch (docs/roadmap.md). A name, a leader and members, all
- * people of the organisation; the leader is also a member.
+ * Teams of the organisation on SQL Server (Kysely), for `teams.controller.ts`. A name, a leader
+ * and members, all people of the organisation; the leader is also a member.
  */
 export interface Team {
   id: string;

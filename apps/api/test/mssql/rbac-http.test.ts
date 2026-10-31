@@ -481,8 +481,7 @@ const ENDPOINTS: Endpoint[] = [
 
 /**
  * Every protected endpoint against every role, over HTTP on SQL Server: a role without the
- * permission gets 403 and one with it gets through (the counterpart of test/rbac.test.ts, which
- * checks the same matrix on PostgreSQL). It also reaches every controller on the other engine.
+ * permission gets 403 and one with it gets through It also reaches every controller.
  */
 describe.skipIf(!configured)('SQL Server: role-based access control', () => {
   let t: MssqlTestApp;

@@ -43,7 +43,7 @@ const definition = {
 const SECRET = 'webhook-secret-1234567890';
 
 /**
- * Web surveys by e-mail over HTTP on SQL Server, the counterpart of test/cawi.test.ts: templates,
+ * Web surveys by e-mail over HTTP on SQL Server: templates,
  * a wave sent in batches with reminders, tracking, the respondent resuming on another device,
  * bounces and unsubscribing, the open link, and links-only waves.
  */

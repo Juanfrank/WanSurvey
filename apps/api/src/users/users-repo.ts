@@ -8,9 +8,8 @@ import type { MssqlTx } from '../db/mssql/database.js';
 import { PeopleStore, type Grant, type Member } from './people-store.mssql.js';
 
 /**
- * What the people service needs from the database, whichever engine runs (the pattern of
- * `auth/auth-repo.ts`): the PostgreSQL side is the Drizzle code the service had, the SQL Server
- * side uses `PeopleStore` and `SessionsStore`. The rules (who may grant what, whom one may manage)
+ * What the people service needs from the database (the pattern of `auth/auth-repo.ts`): the
+ * implementation uses `PeopleStore` and `SessionsStore`. The rules (who may grant what, whom one may manage)
  * live once, in the service.
  */
 export type { Grant, Member };

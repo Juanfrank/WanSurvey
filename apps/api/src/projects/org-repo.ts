@@ -6,9 +6,9 @@ import type { MssqlTx } from '../db/mssql/database.js';
 import { ProjectsStore, type ProjectRow, type TenantRow } from './projects-store.mssql.js';
 
 /**
- * What the organisation and project controllers need from the database, whichever engine runs
- * (the pattern of `auth/auth-repo.ts`): the PostgreSQL side is the Drizzle code they had, the SQL
- * Server side uses `ProjectsStore`. Rows come out in one shape, as Drizzle returned them.
+ * What the organisation and project controllers need from the database (the pattern of
+ * `auth/auth-repo.ts`): the implementation uses `ProjectsStore`. Rows come out in one shape
+ * (camelCase, lower-case ids).
  */
 export interface TenantView {
   id: string;

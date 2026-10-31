@@ -12,8 +12,7 @@ type InstantOrNull = ColumnType<
 type JsonText = ColumnType<string, string | undefined, string>;
 
 /**
- * The tables made so far on SQL Server (mssql/0000, 0001). The rest follows as each part of
- * the app moves; until then it runs on PostgreSQL with Drizzle (src/db/schema.ts).
+ * The tables of the schema the code reads and writes through Kysely (migrations in `mssql/`).
  */
 export interface MssqlSchema {
   tenants: {

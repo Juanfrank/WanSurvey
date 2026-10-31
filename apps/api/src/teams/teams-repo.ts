@@ -6,10 +6,9 @@ import type { MssqlTx } from '../db/mssql/database.js';
 import { TeamsStore, type Team } from './teams-store.mssql.js';
 
 /**
- * What the teams controller needs from the database, whichever engine runs (the pattern of
- * `auth/auth-repo.ts`): the PostgreSQL side is the Drizzle code the controller had, the SQL Server
- * side uses `TeamsStore`. The rules (people of the organisation, unique name, leader is a member)
- * live once, in the controller.
+ * What the teams controller needs from the database (the pattern of `auth/auth-repo.ts`): the
+ * implementation uses `TeamsStore`. The rules (people of the organisation, unique name, leader is
+ * a member) live once, in the controller.
  */
 export type { Team };
 

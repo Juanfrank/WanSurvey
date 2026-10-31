@@ -11,9 +11,8 @@ import { CasesStore } from './cases-store.mssql.js';
 import { idOrder } from '../db/mssql/order.js';
 
 /**
- * The database side of cases, whichever engine runs (the pattern of `auth/auth-repo.ts`): the
- * PostgreSQL side is the Drizzle code `CasesService` and the controllers had, the SQL Server side
- * uses `CasesStore` and direct queries. The rules (who may see, assign, claim, what a share-out
+ * The database side of cases (the pattern of `auth/auth-repo.ts`): the implementation uses
+ * `CasesStore` and direct queries. The rules (who may see, assign, claim, what a share-out
  * does) stay in the services, written once. Rows come out camelCase with lower-case ids.
  */
 export interface CaseRowView {
@@ -594,7 +593,7 @@ export class MssqlCasesTx implements CasesTx {
       value: r.value,
       label: r.label,
       valid: r.valid === null ? null : !!r.valid,
-      // A JSON column is text on SQL Server; PostgreSQL gives the document.
+      // A JSON column is text on SQL Server: parse it.
       consent: (typeof r.consent === 'string' ? JSON.parse(r.consent) : r.consent) as string | null,
       lat: r.lat,
       lng: r.lng,

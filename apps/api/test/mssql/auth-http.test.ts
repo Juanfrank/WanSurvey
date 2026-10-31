@@ -16,8 +16,7 @@ import {
 
 /**
  * Sign-in and the session guard over HTTP, on SQL Server: the services and the stores together
- * (the HTTP counterpart of what test/auth.test.ts checks on PostgreSQL). Runs only where a SQL
- * Server is given.
+ * Runs only where a SQL Server is given.
  */
 describe.skipIf(!configured)('SQL Server: sign-in and sessions over HTTP', () => {
   let t: MssqlTestApp;

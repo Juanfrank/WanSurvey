@@ -5,8 +5,7 @@ import type { MssqlSchema } from '../db/mssql/schema.js';
 
 /**
  * Interviews on SQL Server (Kysely): start or resume on a case, numbered changes from a device,
- * the snapshot, submission and the history, as `interviews.service.ts` does them on PostgreSQL
- * with Drizzle (docs/roadmap.md). Takes the transaction of `MssqlDatabase.withTenant`.
+ * the snapshot, submission and the history, for `interviews.service.ts`. Takes the transaction of `MssqlDatabase.withTenant`.
  *
  * Idempotent replays rely on IGNORE_DUP_KEY unique indexes (mssql/0005): a change number sent
  * twice is dropped by the database, whatever the interleaving of two requests.

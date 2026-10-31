@@ -76,9 +76,8 @@ interface Payload {
 }
 
 /**
- * Metrics, the live dashboard, tabulations, exports and share links over HTTP on SQL Server, the
- * counterpart of test/analytics.test.ts (the stream itself is the same code on both engines; the
- * snapshot behind it is read here).
+ * Metrics, the live dashboard, tabulations, exports and share links over HTTP on SQL Server (the
+ * stream itself is the same code; the snapshot behind it is read here).
  */
 describe.skipIf(!configured)(
   'SQL Server: metrics, dashboard, tabulations, exports, sharing',

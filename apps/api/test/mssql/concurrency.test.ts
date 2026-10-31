@@ -13,7 +13,7 @@ import {
   type MssqlTestApp,
 } from './harness.js';
 
-/** The counterpart of test/concurrency.test.ts: the database under concurrent use, on SQL Server. */
+/** The database under concurrent use. */
 describe.skipIf(!configured)('SQL Server: the database under concurrent use', () => {
   let t: MssqlTestApp;
   let db: MssqlDatabase;

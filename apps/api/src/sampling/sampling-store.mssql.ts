@@ -5,8 +5,7 @@ import type { MssqlSchema } from '../db/mssql/schema.js';
 
 /**
  * The sampling plan, the frame of units, the cases made from the units that were selected, and
- * interviewer goals on SQL Server (Kysely): what `sampling.service.ts` does on PostgreSQL with
- * Drizzle, as a store for the switch (docs/roadmap.md). Takes the transaction of
+ * interviewer goals on SQL Server (Kysely), for `sampling.service.ts`. Takes the transaction of
  * `MssqlDatabase.withTenant`. Bulk writes send one JSON parameter opened with OPENJSON, as in
  * `CasesStore`.
  */
@@ -134,7 +133,7 @@ export class SamplingStore {
 
   /**
    * Adds units to the frame, skipping those whose external id is already there (the same
-   * questionnaire of the project): ON CONFLICT DO NOTHING of PostgreSQL, as a NOT EXISTS under a
+   * questionnaire of the project): done as a NOT EXISTS under a
    * range lock so that two loads at once cannot both insert it. Returns how many were added.
    */
   async addUnits(

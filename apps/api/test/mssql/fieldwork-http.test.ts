@@ -64,7 +64,7 @@ interface Started {
 }
 
 /**
- * The interview runtime over HTTP on SQL Server, the counterpart of test/interviews.test.ts:
+ * The interview runtime over HTTP on SQL Server:
  * starting once per case, numbered changes replayed safely, submission after the server checks the
  * path, the case's history, and the review of what was submitted.
  */

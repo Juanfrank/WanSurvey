@@ -4,8 +4,8 @@ import { instant } from '../db/mssql/instant.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 
 /**
- * Sessions and one-time tokens on SQL Server (Kysely): what `auth.service.ts` and `auth.guard.ts`
- * do on PostgreSQL with Drizzle, as a store for the switch (docs/roadmap.md). Sessions belong to
+ * Sessions and one-time tokens on SQL Server (Kysely), for `auth.service.ts` and `auth.guard.ts`.
+ * Sessions belong to
  * an organisation (the transaction of `MssqlDatabase.withTenant`); tokens are global, hashed, and
  * work once.
  */

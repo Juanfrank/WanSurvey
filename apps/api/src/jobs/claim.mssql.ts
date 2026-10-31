@@ -8,7 +8,6 @@ export type JobTable = 'exports' | 'papi_scan_batches';
  * Takes a job once: a queued one, or one whose worker was lost (running for too long), that still
  * has attempts left. The conditional update is the claim: two workers racing for the same job
  * cannot both get it (the second finds it running). Returns whether this caller got it. The
- * PostgreSQL version is `claimable()` in jobs/claims.ts.
  */
 export async function claimJob(
   tx: MssqlTx,

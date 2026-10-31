@@ -19,8 +19,7 @@ const DAY = 86_400_000;
 const utc = (d: Date) => d.toISOString().slice(0, 19);
 
 /**
- * Keeps the analysis model (schema bi, mssql/0009) up to date, as `bi.service.ts` does on
- * PostgreSQL: the UTC offsets of the projects' zones first (SQL Server's AT TIME ZONE cannot read
+ * Keeps the analysis model (schema bi, mssql/0009) up to date, for `bi.service.ts`: the UTC offsets of the projects' zones first (SQL Server's AT TIME ZONE cannot read
  * IANA names), then each table in its own transaction, so readers wait for one table at most.
  * The application may only run the model's procedures; it can read nothing in bi.
  */

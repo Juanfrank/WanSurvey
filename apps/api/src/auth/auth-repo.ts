@@ -12,10 +12,8 @@ import { SessionsStore } from './sessions-store.mssql.js';
 import type { AuthUserRow, UserTenant } from '../db/common.js';
 
 /**
- * What sign-in and the session guard need from the database, whichever engine runs: the business
- * rules stay in `AuthService` and `AuthGuard`, written once; this is the part that differs. The
- * PostgreSQL side is the Drizzle code they had; the SQL Server side uses the stores. Until
- * PostgreSQL is retired both exist, and the same HTTP tests run on each (docs/roadmap.md).
+ * What sign-in and the session guard need from the database: the business rules stay in
+ * `AuthService` and `AuthGuard`; this is the data access, implemented with the stores.
  */
 export interface NewSession {
   tenantId: string;

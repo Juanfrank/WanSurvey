@@ -5,8 +5,7 @@ import { dayBounds, localDay, nextDay } from './zoned-day.js';
 
 /**
  * Daily figures on SQL Server (Kysely): completed interviews per project, local day, mode and
- * interviewer, as `stats.service.ts` keeps them on PostgreSQL with Drizzle (docs/roadmap.md).
- * Takes the transaction of `MssqlDatabase.withTenant`. A day's bounds are instants worked out from
+ * interviewer, for `stats.service.ts`. Takes the transaction of `MssqlDatabase.withTenant`. A day's bounds are instants worked out from
  * the project's IANA time zone (zoned-day.ts); the database never converts zones.
  */
 export class StatsStore {

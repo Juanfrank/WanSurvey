@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { MssqlTx } from '../db/mssql/database.js';
 
 /**
- * The people of an organisation on SQL Server (Kysely): what `users.service.ts` does on
- * PostgreSQL with Drizzle, as a store for the switch (docs/roadmap.md). Accounts are global; an
+ * The people of an organisation on SQL Server (Kysely), for `users.service.ts`. Accounts are global; an
  * organisation sees a person through its member row, and gives them roles (memberships, whole
  * organisation or one project). Takes the transaction of `MssqlDatabase.withTenant`; changes to
  * an account's own fields need the person in context (`withTenant(…, userId)`).

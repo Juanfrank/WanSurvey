@@ -24,7 +24,6 @@ import { compiledCache, Lru } from './compiled-cache.js';
 
 export type { InterviewRow } from './interviews-repo.js';
 
-/** A transaction of either engine; a Drizzle one is wrapped for the modules that have not moved. */
 /** What `interviews.context` holds: the case data the interview was given at start. */
 export interface StoredContext {
   externalId?: string;
@@ -361,7 +360,6 @@ export class InterviewsService {
         offPathAnswers: check.offPathAnswers.slice(0, 50),
       });
     const disposition = status.disposition ?? 'COMPLETE';
-    // Modules not yet moved hook in through `t.pg()`.
     const extra = {};
     for (const c of this.contributors) Object.assign(extra, await c(t, row));
     const done = await t.markSubmitted(row.id, {

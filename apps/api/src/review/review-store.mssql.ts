@@ -5,8 +5,8 @@ import { idOrder } from '../db/mssql/order.js';
 
 /**
  * Review on SQL Server (Kysely): the review queue, comments, the interview's review status and
- * the corrections a reviewer makes, and the coding of "other, specify" texts, as
- * `review.service.ts` does them on PostgreSQL with Drizzle (docs/roadmap.md). The rules (who may
+ * the corrections a reviewer makes, and the coding of "other, specify" texts, for
+ * `review.service.ts`. The rules (who may
  * move an interview where, how a correction re-runs the logic) stay in the service; this is the
  * data access. Takes the transaction of `MssqlDatabase.withTenant`.
  */

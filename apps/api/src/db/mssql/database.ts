@@ -30,7 +30,7 @@ export interface MssqlLimits {
 }
 
 /**
- * The SQL Server counterpart of `Database.withTenant`: a transaction whose SESSION_CONTEXT
+ * `withTenant`: a transaction whose SESSION_CONTEXT
  * carries the organisation, which the security policy (mssql/0001) filters every row by.
  * SESSION_CONTEXT belongs to the connection, not the transaction, and pooled connections are
  * reused: it is set first thing in every transaction and cleared before it ends, so a
@@ -92,7 +92,7 @@ export class MssqlDatabase {
 
   /**
    * Finds a link's organisation and works in it in one transaction: the lookup (a procedure that
-   * runs as the owner) and the context are set before anything else, as on PostgreSQL. `fn` gets
+   * runs as the owner) and the context are set before anything else. `fn` gets
    * null when nothing matches (and no context is set then, so it sees nothing).
    */
   async withTenantOf<T>(

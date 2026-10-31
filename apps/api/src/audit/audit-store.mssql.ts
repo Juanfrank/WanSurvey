@@ -4,8 +4,7 @@ import type { MssqlTx } from '../db/mssql/database.js';
 import type { AuditEntry } from './audit.service.js';
 
 /**
- * The audit log on SQL Server (Kysely): what `audit.service.ts` does on PostgreSQL with Drizzle,
- * as a store for the switch (docs/roadmap.md). Append-only: the database refuses changes and
+ * The audit log on SQL Server (Kysely), for `audit.service.ts`. Append-only: the database refuses changes and
  * deletes (an INSTEAD OF trigger), and the application user may only insert and read.
  */
 export interface AuditRow {

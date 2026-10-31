@@ -9,9 +9,8 @@ import { instant } from '../db/mssql/instant.js';
 import { InterviewsStore } from './interviews-store.mssql.js';
 
 /**
- * The database side of the interview runtime, whichever engine runs (the pattern of
- * `auth/auth-repo.ts`). A transaction here is also a `CasesTx`. Rows come out in the shape
- * Drizzle returns, so the modules that have not moved (their submit hooks) read them unchanged.
+ * The database side of the interview runtime (the pattern of `auth/auth-repo.ts`). A transaction
+ * here is also a `CasesTx`.
  */
 export interface InterviewRow {
   id: string;

@@ -7,9 +7,8 @@ import { idOrder } from '../db/mssql/order.js';
 
 /**
  * Paper on SQL Server (Kysely): the differences between the two keyings of a form, and the scanned
- * PDFs with the forms found in them and the page images, as `papi.service.ts` and `scans.service.ts`
- * do them on PostgreSQL with Drizzle (docs/roadmap.md). Takes the transaction of
- * `MssqlDatabase.withTenant`. A batch is deleted with its pages and forms by the application: the
+ * PDFs with the forms found in them and the page images, for `papi.service.ts` and
+ * `scans.service.ts`. Takes the transaction of `MssqlDatabase.withTenant`. A batch is deleted with its pages and forms by the application: the
  * foreign keys do not cascade (see mssql/0008).
  */
 export type BatchRow = Selectable<MssqlSchema['papi_scan_batches']>;

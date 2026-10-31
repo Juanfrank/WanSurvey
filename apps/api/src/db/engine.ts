@@ -3,7 +3,7 @@ import { PROCESS_ROLE, type ProcessRole } from '../jobs/role.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { MssqlDatabase } from './mssql/database.js';
 
-/** The database of a process: SQL Server (docs/roadmap.md, "SQL Server replaces PostgreSQL"). */
+/** The database of a process: SQL Server. */
 @Injectable()
 export class Engine implements OnModuleDestroy {
   readonly sql: MssqlDatabase;

@@ -34,7 +34,7 @@ const norm = (v: unknown): Cell => {
  * The SQL export rebuilds the Excel export from the analysis model (schema bi): same sheets,
  * columns, order and cells, whatever the options and the questionnaire.
  */
-describe.skipIf(!configured)('SQL Server: SQL export, the counterpart of Excel', () => {
+describe.skipIf(!configured)('SQL Server: SQL export, with the same cells as Excel', () => {
   let t: MssqlTestApp;
   let tenant: { id: string; slug: string };
   let project: string;

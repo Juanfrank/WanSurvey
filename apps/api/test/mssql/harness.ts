@@ -12,8 +12,8 @@ import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import { MemoryMailer } from '../../src/mail/mailer.js';
 
 /**
- * The integration-test harness on SQL Server, the counterpart of `test/harness.ts`: the whole
- * application started with DB_ENGINE=mssql (vitest.mssql.config.ts), fixtures written as the
+ * The integration-test harness on SQL Server: the whole application started on it
+ * (vitest.mssql.config.ts), fixtures written as the
  * database's owner, and sign-in through the API. The HTTP tests written with it check the stores
  * and the services together.
  */

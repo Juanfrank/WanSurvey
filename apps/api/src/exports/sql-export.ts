@@ -56,7 +56,7 @@ const PARADATA: Record<string, string> = {
 };
 
 /**
- * The T-SQL counterpart of `sqlExport` (format `sql` on SQL Server): a query per sheet over the
+ * The SQL export (format `sql`): a query per sheet over the
  * analysis model (schema bi, mssql/0009) that gives the same columns, in the same order, with
  * the same cells for the same filters: codes or labels, wide or long rosters, paradata. The
  * columns come from the export's own table (`Column.source`), so both stay in step. The tables

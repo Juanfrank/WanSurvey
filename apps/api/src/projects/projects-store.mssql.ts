@@ -4,9 +4,8 @@ import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
 
 /**
- * Organisations and projects on SQL Server (Kysely): what `tenants.controller.ts` and
- * `projects.controller.ts` do on PostgreSQL with Drizzle, as a store for the switch
- * (docs/roadmap.md). Takes the transaction of `MssqlDatabase.withTenant`.
+ * Organisations and projects on SQL Server (Kysely), for `tenants.controller.ts` and
+ * `projects.controller.ts`. Takes the transaction of `MssqlDatabase.withTenant`.
  */
 export type TenantRow = Omit<
   Selectable<MssqlSchema['tenants']>,

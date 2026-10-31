@@ -10,9 +10,8 @@ import { json, QuestionnaireStore } from './questionnaire-store.mssql.js';
 
 /**
  * What the questionnaire, collaboration and library controllers need from the database,
- * whichever engine runs (the pattern of `auth/auth-repo.ts`): the PostgreSQL side is the Drizzle
- * code they had, the SQL Server side uses `QuestionnaireStore` and direct queries. Rows come out
- * in one shape (camelCase, lower-case ids), as Drizzle returned them.
+ * (the pattern of `auth/auth-repo.ts`): the implementation uses `QuestionnaireStore` and direct
+ * queries. Rows come out in one shape (camelCase, lower-case ids).
  */
 export interface QuestionnaireView {
   id: string;

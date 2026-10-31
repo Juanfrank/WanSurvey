@@ -8,9 +8,8 @@ import { dayStart, nextDay } from '../stats/zoned-day.js';
 
 /**
  * Exports on SQL Server (Kysely): the jobs the worker builds, the pages of interviews an export
- * reads, and the read-only summary links, as `exports.service.ts`, `dataset.service.ts` and
- * `share.service.ts` do them on PostgreSQL with Drizzle (docs/roadmap.md). Takes the transaction of
- * `MssqlDatabase.withTenant`. The files themselves go to export storage, not to the database.
+ * reads, and the read-only summary links, for `exports.service.ts`, `dataset.service.ts` and
+ * `share.service.ts`. Takes the transaction of `MssqlDatabase.withTenant`. The files themselves go to export storage, not to the database.
  */
 export type ExportRow = Omit<Selectable<MssqlSchema['exports']>, 'options' | 'file'> & {
   options: Record<string, unknown>;

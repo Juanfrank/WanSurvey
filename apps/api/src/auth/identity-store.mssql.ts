@@ -6,7 +6,7 @@ import type { MssqlTx } from '../db/mssql/database.js';
 /**
  * What the sign-in service reads and writes beyond sessions and people, on SQL Server (Kysely):
  * second-factor codes that work once, links between an account and an external identity (Entra),
- * and an organisation's Microsoft sign-in settings. A store for the switch (docs/roadmap.md).
+ * and an organisation's Microsoft sign-in settings.
  */
 export interface SsoRow {
   tenantId: string;

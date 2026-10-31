@@ -15,8 +15,7 @@ import {
 /**
  * The organisation and its projects over HTTP, on SQL Server: settings merged, role changes,
  * projects with defaults from the organisation, the codes once, what a project-scoped member sees,
- * logos kept apart from the project, permissions and isolation by organisation. The counterpart of
- * what test/admin.test.ts, test/rbac.test.ts and test/branding.test.ts check on PostgreSQL.
+ * logos kept apart from the project, permissions and isolation by organisation.
  */
 describe.skipIf(!configured)('SQL Server: organisation and projects over HTTP', () => {
   let t: MssqlTestApp;

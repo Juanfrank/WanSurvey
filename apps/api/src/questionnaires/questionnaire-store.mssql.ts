@@ -5,9 +5,7 @@ import type { MssqlSchema } from '../db/mssql/schema.js';
 import { idOrder } from '../db/mssql/order.js';
 
 /**
- * The questionnaire vertical's data access on SQL Server (Kysely): the same operations the
- * controller runs on PostgreSQL with Drizzle, as a store the controller will call at the switch
- * (docs/roadmap.md). Every method takes the transaction of `MssqlDatabase.withTenant`, so the
+ * The questionnaire vertical's data access on SQL Server (Kysely), for the controller. Every method takes the transaction of `MssqlDatabase.withTenant`, so the
  * security policy filters by organisation. JSON columns are JSON text: written with
  * JSON.stringify and read with `json`.
  */

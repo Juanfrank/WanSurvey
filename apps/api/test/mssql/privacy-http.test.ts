@@ -44,7 +44,7 @@ const definition = {
 };
 
 /**
- * Personal data on SQL Server over HTTP, the counterpart of test/privacy.test.ts: personal sample
+ * Personal data on SQL Server over HTTP: personal sample
  * fields sealed, a data subject's access request, erasure from every copy (including the
  * append-only history, through the owner procedures), and retention.
  */

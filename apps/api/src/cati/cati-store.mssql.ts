@@ -6,8 +6,7 @@ import { idOrder } from '../db/mssql/order.js';
 
 /**
  * CATI on SQL Server (Kysely): the call queue's candidates, the lock on the case being called,
- * call attempts and what a call does to its case, as `cati.service.ts` does them on PostgreSQL
- * with Drizzle (docs/roadmap.md). The rules (calling hours, retries, outcomes) stay in the
+ * call attempts and what a call does to its case, for `cati.service.ts`. The rules (calling hours, retries, outcomes) stay in the
  * service; this is the data access. Takes the transaction of `MssqlDatabase.withTenant`.
  */
 export type CaseRow = Selectable<MssqlSchema['cases']>;
@@ -27,7 +26,7 @@ export interface QueueQuery {
 export class CatiStore {
   /**
    * One request at a time per caller and project, so a caller never holds two open calls: an
-   * application lock owned by the transaction (PostgreSQL's pg_advisory_xact_lock).
+   * application lock owned by the transaction (`sp_getapplock`).
    */
   async lockUserQueue(tx: MssqlTx, projectId: string, userId: string): Promise<void> {
     await sql`
@@ -39,7 +38,7 @@ export class CatiStore {
 
   /**
    * The cases a person can call now, best first: a booked callback, one for them, one never
-   * called, higher priority, longest without a call. The same conditions as the PostgreSQL queue:
+   * called, higher priority, longest without a call. The conditions of the queue:
    * callable status and mode, held by the person (or free in pool mode), not locked by someone
    * else, due, attempts left (or a callback), a valid phone, an active questionnaire, not downloaded
    * to a device and not being interviewed face to face.
