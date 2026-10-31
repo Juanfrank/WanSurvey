@@ -65,13 +65,16 @@ self.addEventListener('fetch', (event) => {
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req).catch(() =>
-        caches.match('/index.html').then((hit) => hit || caches.match('/')),
+        caches.match('/index.html', { ignoreVary: true }).then((hit) => hit || caches.match('/', { ignoreVary: true })),
       ),
     );
     return;
   }
   event.respondWith(
-    caches.match(req).then(
+    // The files are cached by their hashed address and the server answers them with
+    // \`Vary: Origin\`; recent browsers send an Origin header on module scripts that the cached
+    // copy was not stored with, so the Vary header must not decide the match.
+    caches.match(req, { ignoreVary: true }).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {
