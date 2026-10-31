@@ -43,6 +43,7 @@ import {
 } from './interviews/interviews-repo.js';
 import { CATI_REPO, MssqlCatiRepo, PgCatiRepo } from './cati/cati-repo.js';
 import { MssqlReviewRepo, PgReviewRepo, REVIEW_REPO } from './review/review-repo.js';
+import { METRICS_REPO, MssqlMetricsRepo, PgMetricsRepo } from './metrics/metrics-repo.js';
 import { TeamsController } from './teams/teams.controller.js';
 import { MssqlTeamsRepo, PgTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
 import { ProjectPeopleController } from './projects/project-people.controller.js';
@@ -288,6 +289,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgReviewRepo, ms: MssqlReviewRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgReviewRepo, MssqlReviewRepo],
+        },
+        PgMetricsRepo,
+        MssqlMetricsRepo,
+        {
+          provide: METRICS_REPO,
+          useFactory: (engine: Engine, pg: PgMetricsRepo, ms: MssqlMetricsRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgMetricsRepo, MssqlMetricsRepo],
         },
         AuditService,
         AuthService,

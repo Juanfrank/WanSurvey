@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -11,13 +12,11 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { Auth, can, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CasesService } from '../cases/cases.service.js';
-import { Database, type Tx } from '../db/database.js';
-import { interviewerGoals, projects, users } from '../db/schema.js';
+import { METRICS_REPO, type MetricsRepo, type MetricsTx } from './metrics-repo.js';
 import { daysBetween, FREQUENCIES, windowOf, windowsIn, type Frequency } from './goal-periods.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -52,60 +51,31 @@ const GoalPatch = z.object({
 @Controller('projects/:projectId/goals')
 export class GoalsController {
   constructor(
-    private readonly database: Database,
+    @Inject(METRICS_REPO) private readonly repo: MetricsRepo,
     private readonly cases: CasesService,
   ) {}
 
   @Get()
   @RequirePermission(['metrics.team', 'metrics.own'], PERM)
   list(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
       const team = can(ctx.memberships, 'metrics.team', projectId);
-      const rows = await tx
-        .select({
-          id: interviewerGoals.id,
-          userId: interviewerGoals.userId,
-          name: users.name,
-          frequency: interviewerGoals.frequency,
-          questionnaireId: interviewerGoals.questionnaireId,
-          startsOn: interviewerGoals.startsOn,
-          endsOn: interviewerGoals.endsOn,
-          target: interviewerGoals.target,
-        })
-        .from(interviewerGoals)
-        .leftJoin(users, eq(users.id, interviewerGoals.userId))
-        .where(
-          and(
-            eq(interviewerGoals.projectId, projectId),
-            // Without the team's metrics: one's own goals and the team's.
-            team
-              ? undefined
-              : or(eq(interviewerGoals.userId, ctx.userId), isNull(interviewerGoals.userId)),
-          ),
-        )
-        .orderBy(asc(interviewerGoals.startsOn), asc(users.name));
-      const [p] = await tx
-        .select({ timezone: projects.timezone })
-        .from(projects)
-        .where(eq(projects.id, projectId));
-      const tz = p?.timezone ?? 'UTC';
-      const today = (
-        (await tx.execute(sql`select (now() at time zone ${tz})::date::text as d`)) as unknown as {
-          d: string;
-        }[]
-      )[0]!.d;
+      // Without the team's metrics: one's own goals and the team's.
+      const rows = await t.goals(projectId, team ? {} : { userId: ctx.userId });
+      const tz = (await t.project(projectId))?.timezone ?? 'UTC';
+      const today = await t.projectToday(projectId);
       return Promise.all(
         rows.map(async (g) => {
           const f = g.frequency as Frequency;
           const periodTarget = g.target * windowsIn(f, g.startsOn, g.endsOn);
-          const periodCompletes = await this.completes(tx, projectId, g, g.startsOn, g.endsOn, tz);
+          const periodCompletes = await this.completes(t, projectId, g, g.startsOn, g.endsOn, tz);
           // The window shown: today's, or the first or last one outside the dates.
           const ref = today < g.startsOn ? g.startsOn : today > g.endsOn ? g.endsOn : today;
           const win = windowOf(f, g.startsOn, g.endsOn, ref);
           const done = win
             ? f === 'period'
               ? periodCompletes
-              : await this.completes(tx, projectId, g, win.from, win.to, tz)
+              : await this.completes(t, projectId, g, win.from, win.to, tz)
             : 0;
           const total = win ? daysBetween(win.from, win.to) : 1;
           const elapsed = win ? Math.max(0, Math.min(total, daysBetween(win.from, today))) : 0;
@@ -140,29 +110,15 @@ export class GoalsController {
     });
   }
 
-  private async completes(
-    tx: Tx,
+  private completes(
+    t: MetricsTx,
     projectId: string,
     g: { userId: string | null; questionnaireId: string | null },
     from: string,
     to: string,
     tz: string,
   ) {
-    const [r] = (await tx.execute(sql`
-      select count(*)::int as n
-      from interviews i
-      join questionnaire_versions v on v.id = i.questionnaire_version_id
-      where i.project_id = ${projectId}
-        ${g.userId ? sql`and i.interviewer_id = ${g.userId}` : sql``}
-        and i.disposition = 'COMPLETE'
-        and i.status in ('submitted', 'in_review', 'approved', 'returned')
-        -- A paper form keyed twice is one complete (as in the metrics).
-        and i.entry_pass = 1
-        and i.submitted_at >= (${from}::date)::timestamp at time zone ${tz}
-        and i.submitted_at < (${to}::date + 1)::timestamp at time zone ${tz}
-        ${g.questionnaireId ? sql`and v.questionnaire_id = ${g.questionnaireId}` : sql``}
-    `)) as unknown as { n: number }[];
-    return r?.n ?? 0;
+    return t.goalCompletes(projectId, g, from, to, tz);
   }
 
   @Post()
@@ -173,27 +129,26 @@ export class GoalsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(GoalBody)) body: z.infer<typeof GoalBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const people = await this.cases.assignees(tx, projectId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const people = await this.cases.assignees(t, projectId);
       if (body.userId && !people.some((p) => p.userId === body.userId))
         throw new BadRequestException({
           code: 'NOT_ASSIGNEE',
           message: 'Goals are for people who work cases in this project',
         });
       const questionnaireId = body.questionnaireId
-        ? await this.cases.questionnaireFor(tx, projectId, body.questionnaireId)
+        ? await this.cases.questionnaireFor(t, projectId, body.questionnaireId)
         : null;
-      const [row] = await tx
-        .insert(interviewerGoals)
-        .values({
-          tenantId: ctx.tenantId,
-          projectId,
-          ...body,
-          questionnaireId,
-          createdBy: ctx.userId,
-        })
-        .returning();
-      return row!;
+      return t.insertGoal({
+        projectId,
+        userId: body.userId,
+        frequency: body.frequency,
+        questionnaireId,
+        startsOn: body.startsOn,
+        endsOn: body.endsOn,
+        target: body.target,
+        createdBy: ctx.userId,
+      });
     });
   }
 
@@ -206,21 +161,13 @@ export class GoalsController {
     @Param('goalId', ParseUUIDPipe) goalId: string,
     @Body(new ZodPipe(GoalPatch)) body: z.infer<typeof GoalPatch>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [before] = await tx
-        .select()
-        .from(interviewerGoals)
-        .where(and(eq(interviewerGoals.id, goalId), eq(interviewerGoals.projectId, projectId)));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const before = await t.goal(projectId, goalId);
       if (!before) throw new NotFoundException('Goal not found');
       const next = { ...before, ...body };
       if (next.endsOn < next.startsOn)
         throw new BadRequestException('The period ends before it starts');
-      const [row] = await tx
-        .update(interviewerGoals)
-        .set(body)
-        .where(eq(interviewerGoals.id, goalId))
-        .returning();
-      return row!;
+      return t.updateGoal(goalId, body);
     });
   }
 
@@ -231,12 +178,8 @@ export class GoalsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('goalId', ParseUUIDPipe) goalId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const r = await tx
-        .delete(interviewerGoals)
-        .where(and(eq(interviewerGoals.id, goalId), eq(interviewerGoals.projectId, projectId)))
-        .returning({ id: interviewerGoals.id });
-      if (!r.length) throw new NotFoundException('Goal not found');
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      if (!(await t.deleteGoal(projectId, goalId))) throw new NotFoundException('Goal not found');
       return { ok: true };
     });
   }
