@@ -12,15 +12,13 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { and, eq, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database } from '../db/database.js';
-import { cases, contacts } from '../db/schema.js';
+import { CASES_REPO, type CasesRepo } from '../cases/cases-repo.js';
 import { GeoService } from './geo.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -34,7 +32,7 @@ const GeocodeBody = z.object({
 @Controller('projects/:projectId')
 export class GeoController {
   constructor(
-    private readonly database: Database,
+    @Inject(CASES_REPO) private readonly repo: CasesRepo,
     private readonly audit: AuditService,
     private readonly geo: GeoService,
     private readonly cases: CasesService,
@@ -61,17 +59,15 @@ export class GeoController {
         code: 'GEOCODE_RUNNING',
         message: 'Addresses of this project are being geocoded already',
       });
-    await this.database.withTenant(ctx.tenantId, (tx) => this.cases.project(tx, projectId));
+    await this.repo.inTenant(ctx.tenantId, (t) => this.cases.project(t, projectId));
     const todo = await this.geo.pending(
       ctx.tenantId,
       projectId,
       this.config.GEOCODE_MAX,
       body.again,
     );
-    await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.audit.record(
-        tx,
-        ctx.tenantId,
+    await this.repo.inTenant(ctx.tenantId, (t) =>
+      t.audit(
         this.audit.fromContext(ctx, {
           action: 'cases.geocoded',
           targetType: 'project',
@@ -99,38 +95,17 @@ export class GeoController {
   @Get('cases-map')
   @RequirePermission(['cases.read_all', 'cases.read_assigned'], PERM)
   map(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      await this.cases.project(tx, projectId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.cases.project(t, projectId);
       if (!this.cases.canSeePii(ctx, projectId))
         throw new ForbiddenException({
           code: 'FORBIDDEN',
           message: 'You may not see personal data',
         });
       const own = this.cases.restrictedToOwn(ctx, projectId);
-      const points = await tx
-        .select({
-          caseId: cases.id,
-          externalId: cases.externalId,
-          status: cases.status,
-          lat: contacts.lat,
-          lng: contacts.lng,
-          quality: contacts.geocodeQuality,
-        })
-        .from(contacts)
-        .innerJoin(cases, eq(cases.id, contacts.caseId))
-        .where(
-          and(
-            eq(cases.projectId, projectId),
-            eq(contacts.type, 'address'),
-            isNotNull(contacts.lat),
-            ...(own ? [eq(cases.assignedTo, ctx.userId)] : []),
-          ),
-        )
-        .limit(20_000);
+      const points = await t.mapPoints(projectId, own ? ctx.userId : undefined);
       if (points.length)
-        await this.audit.record(
-          tx,
-          ctx.tenantId,
+        await t.audit(
           this.audit.fromContext(ctx, {
             action: 'cases.map_viewed',
             targetType: 'project',

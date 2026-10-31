@@ -1,7 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, asc, eq, isNull } from 'drizzle-orm';
-import { Database } from '../db/database.js';
-import { cases, contacts } from '../db/schema.js';
+import { CASES_REPO, type CasesRepo } from '../cases/cases-repo.js';
 import { GEOCODER, type Geocoder } from './geocoder.js';
 
 export interface GeocodeJob {
@@ -26,7 +24,7 @@ export class GeoService {
   private readonly jobs = new Map<string, GeocodeJob>();
 
   constructor(
-    private readonly database: Database,
+    @Inject(CASES_REPO) private readonly repo: CasesRepo,
     @Inject(GEOCODER) readonly geocoder: Geocoder | null,
   ) {}
 
@@ -36,21 +34,7 @@ export class GeoService {
 
   /** Address contacts of the project not geocoded yet (or all, when `again`). */
   pending(tenantId: string, projectId: string, limit: number, again = false) {
-    return this.database.withTenant(tenantId, (tx) =>
-      tx
-        .select({ id: contacts.id, value: contacts.value })
-        .from(contacts)
-        .innerJoin(cases, eq(cases.id, contacts.caseId))
-        .where(
-          and(
-            eq(cases.projectId, projectId),
-            eq(contacts.type, 'address'),
-            ...(again ? [] : [isNull(contacts.geocodedAt)]),
-          ),
-        )
-        .orderBy(asc(contacts.id))
-        .limit(limit),
-    );
+    return this.repo.inTenant(tenantId, (t) => t.pendingAddresses(projectId, limit, again));
   }
 
   /** Starts a job over the given contacts; returns at once. */
@@ -76,17 +60,7 @@ export class GeoService {
     for (const c of todo) {
       try {
         const point = await geocoder.geocode(c.value);
-        await this.database.withTenant(tenantId, (tx) =>
-          tx
-            .update(contacts)
-            .set({
-              lat: point?.lat ?? null,
-              lng: point?.lng ?? null,
-              geocodeQuality: point?.quality ?? 'not_found',
-              geocodedAt: new Date(),
-            })
-            .where(eq(contacts.id, c.id)),
-        );
+        await this.repo.inTenant(tenantId, (t) => t.setGeocode(c.id, point));
         if (point) job.found++;
         else job.notFound++;
       } catch (e) {

@@ -275,6 +275,31 @@ export interface CasesTx {
     questionnaireId?: string,
   ): Promise<{ userId: string; completes: number; days: number }[]>;
 
+  // ─── Geocoding ─────────────────────────────────────────────────────────────────────
+  /** Address contacts of the project not geocoded yet (or all, with `again`). */
+  pendingAddresses(
+    projectId: string,
+    limit: number,
+    again: boolean,
+  ): Promise<{ id: string; value: string }[]>;
+  setGeocode(
+    contactId: string,
+    point: { lat: number; lng: number; quality: string } | null,
+  ): Promise<void>;
+  mapPoints(
+    projectId: string,
+    ownUserId?: string,
+  ): Promise<
+    {
+      caseId: string;
+      externalId: string;
+      status: string;
+      lat: number | null;
+      lng: number | null;
+      quality: string | null;
+    }[]
+  >;
+
   // ─── Other projects, expiry, audit ─────────────────────────────────────────────────
   /** Cases of other projects with one of these contacts. */
   contactMatches(
@@ -842,6 +867,57 @@ export class PgCasesTx implements CasesTx {
         ${questionnaireId ? sql`and v.questionnaire_id = ${questionnaireId}` : sql``}
       group by i.interviewer_id
     `)) as unknown as { userId: string; completes: number; days: number }[];
+  }
+
+  pendingAddresses(projectId: string, limit: number, again: boolean) {
+    return this.tx
+      .select({ id: contacts.id, value: contacts.value })
+      .from(contacts)
+      .innerJoin(cases, eq(cases.id, contacts.caseId))
+      .where(
+        and(
+          eq(cases.projectId, projectId),
+          eq(contacts.type, 'address'),
+          ...(again ? [] : [isNull(contacts.geocodedAt)]),
+        ),
+      )
+      .orderBy(asc(contacts.id))
+      .limit(limit);
+  }
+
+  async setGeocode(contactId: string, point: { lat: number; lng: number; quality: string } | null) {
+    await this.tx
+      .update(contacts)
+      .set({
+        lat: point?.lat ?? null,
+        lng: point?.lng ?? null,
+        geocodeQuality: point?.quality ?? 'not_found',
+        geocodedAt: new Date(),
+      })
+      .where(eq(contacts.id, contactId));
+  }
+
+  mapPoints(projectId: string, ownUserId?: string) {
+    return this.tx
+      .select({
+        caseId: cases.id,
+        externalId: cases.externalId,
+        status: cases.status,
+        lat: contacts.lat,
+        lng: contacts.lng,
+        quality: contacts.geocodeQuality,
+      })
+      .from(contacts)
+      .innerJoin(cases, eq(cases.id, contacts.caseId))
+      .where(
+        and(
+          eq(cases.projectId, projectId),
+          eq(contacts.type, 'address'),
+          isNotNull(contacts.lat),
+          ...(ownUserId ? [eq(cases.assignedTo, ownUserId)] : []),
+        ),
+      )
+      .limit(20_000);
   }
 
   async contactMatches(projectId: string, pairs: [string, string][]) {
@@ -1591,6 +1667,59 @@ export class MssqlCasesTx implements CasesTx {
       per.set(id, o);
     }
     return [...per].map(([userId, o]) => ({ userId, completes: o.completes, days: o.days.size }));
+  }
+
+  async pendingAddresses(projectId: string, limit: number, again: boolean) {
+    let q = this.tx
+      .selectFrom('contacts as c')
+      .innerJoin('cases as k', 'k.id', 'c.case_id')
+      .select(['c.id', 'c.value'])
+      .where('k.project_id', '=', projectId)
+      .where('c.type', '=', 'address');
+    if (!again) q = q.where('c.geocoded_at', 'is', null);
+    return (await q.orderBy('c.id').top(limit).execute()).map((r) => ({
+      id: low(r.id),
+      value: r.value,
+    }));
+  }
+
+  async setGeocode(contactId: string, point: { lat: number; lng: number; quality: string } | null) {
+    await this.tx
+      .updateTable('contacts')
+      .set({
+        lat: point?.lat ?? null,
+        lng: point?.lng ?? null,
+        geocode_quality: point?.quality ?? 'not_found',
+        geocoded_at: ksql<Date>`SYSDATETIMEOFFSET()`,
+      })
+      .where('id', '=', contactId)
+      .execute();
+  }
+
+  async mapPoints(projectId: string, ownUserId?: string) {
+    let q = this.tx
+      .selectFrom('contacts as c')
+      .innerJoin('cases as k', 'k.id', 'c.case_id')
+      .select([
+        'k.id as case_id',
+        'k.external_id',
+        'k.status',
+        'c.lat',
+        'c.lng',
+        'c.geocode_quality',
+      ])
+      .where('k.project_id', '=', projectId)
+      .where('c.type', '=', 'address')
+      .where('c.lat', 'is not', null);
+    if (ownUserId) q = q.where('k.assigned_to', '=', ownUserId);
+    return (await q.top(20_000).execute()).map((r) => ({
+      caseId: low(r.case_id),
+      externalId: r.external_id,
+      status: r.status,
+      lat: r.lat,
+      lng: r.lng,
+      quality: r.geocode_quality,
+    }));
   }
 
   async contactMatches(projectId: string, pairs: [string, string][]) {
