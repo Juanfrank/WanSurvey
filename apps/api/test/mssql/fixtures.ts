@@ -86,3 +86,34 @@ export async function newContact(
     owner,
   );
 }
+
+const GUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+
+/** Rows as the PostgreSQL client gave them: GUIDs in lower case, JSON columns parsed. */
+function plain(r: Record<string, unknown>) {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (typeof v === 'string' && GUID.test(v)) out[k] = v.toLowerCase();
+    else if (typeof v === 'string' && /^[[{]/.test(v)) {
+      try {
+        out[k] = JSON.parse(v);
+      } catch {
+        out[k] = v;
+      }
+    } else out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * `admin\`select …\`` for the owner connection, like the tagged template the PostgreSQL tests use:
+ * the rows come back as plain objects (see `plain`). The SQL itself is T-SQL.
+ */
+export function ownerQuery(owner: Owner) {
+  return async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const res = (await sql(strings, ...values).execute(owner)) as {
+      rows: Record<string, unknown>[];
+    };
+    return res.rows.map(plain);
+  };
+}
