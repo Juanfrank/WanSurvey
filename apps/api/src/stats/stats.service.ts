@@ -1,6 +1,9 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+import type { CasesTx } from '../cases/cases-repo.js';
 import { Database, type Tx } from '../db/database.js';
+import { Engine } from '../db/engine.js';
+import { StatsStore } from './stats-store.mssql.js';
 import { projects, statsDaily } from '../db/schema.js';
 import { rememberedProject } from '../cases/project-memo.js';
 import { InterviewsService } from '../interviews/interviews.service.js';
@@ -41,6 +44,7 @@ export class StatsService implements OnModuleInit {
 
   constructor(
     private readonly database: Database,
+    private readonly engine: Engine,
     private readonly jobs: JobsService,
     private readonly interviews: InterviewsService,
     @Inject(BUS) private readonly bus: Bus,
@@ -52,18 +56,28 @@ export class StatsService implements OnModuleInit {
     );
     this.jobs.register('stats.nightly', () => this.recomputeAll());
     this.jobs.schedule('stats.nightly', { cron: '0 2 * * *' });
-    this.interviews.onSubmitted(async (t, row) => {
-      const tx = t.pg();
-      if (tx) await this.touched(tx, row.tenantId, row.projectId, new Date());
-    });
+    this.interviews.onSubmitted((t, row) =>
+      this.touched(t, row.tenantId, row.projectId, new Date()),
+    );
   }
 
+  private readonly store = new StatsStore();
+
   /** Called inside the transaction that changed an interview; the refresh runs after it. */
-  async touched(tx: Tx, tenantId: string, projectId: string, at: Date): Promise<void> {
-    const known = rememberedProject(tx, projectId);
-    const [p] = known
-      ? [{ tz: known.timezone }]
-      : await tx.select({ tz: projects.timezone }).from(projects).where(eq(projects.id, projectId));
+  async touched(tx: Tx | CasesTx, tenantId: string, projectId: string, at: Date): Promise<void> {
+    let p: { tz: string } | undefined;
+    if ('piiFields' in tx) {
+      const project = await tx.project(projectId);
+      p = project ? { tz: project.timezone } : undefined;
+    } else {
+      const known = rememberedProject(tx, projectId);
+      [p] = known
+        ? [{ tz: known.timezone }]
+        : await tx
+            .select({ tz: projects.timezone })
+            .from(projects)
+            .where(eq(projects.id, projectId));
+    }
     const day = localDay(at, p?.tz ?? 'UTC');
     // At most one refresh per project day every few seconds. The id changes with the time
     // window, so a refresh already running (or one that failed) never swallows later ones; it
@@ -77,6 +91,16 @@ export class StatsService implements OnModuleInit {
 
   /** Recomputes one day of a project (or every day, with `day` null) and announces it. */
   async refresh(tenantId: string, projectId: string, day: string | null): Promise<void> {
+    if (this.engine.kind === 'mssql') {
+      await this.engine.sql.withTenant(tenantId, async (tx) => {
+        const timezone = await this.store.timezone(tx, projectId);
+        if (!timezone) return;
+        if (day) await this.store.refreshDay(tx, { tenantId, projectId, day, timezone });
+        else await this.store.refreshAll(tx, { tenantId, projectId, timezone });
+      });
+      await this.bus.publish(projectChannel(projectId), { type: 'stats', day });
+      return;
+    }
     await this.database.withTenant(tenantId, async (tx) => {
       const [p] = await tx
         .select({ tz: projects.timezone })
@@ -117,11 +141,20 @@ export class StatsService implements OnModuleInit {
   /** Nightly: every project of every organisation, from scratch. */
   async recomputeAll(): Promise<number> {
     let n = 0;
-    for (const tenantId of await this.database.allTenantIds()) {
-      const ids = await this.database.withTenant(tenantId, (tx) =>
-        tx.select({ id: projects.id }).from(projects),
-      );
-      for (const { id } of ids) {
+    for (const tenantId of await this.engine.allTenantIds()) {
+      const ids =
+        this.engine.kind === 'mssql'
+          ? (
+              await this.engine.sql.withTenant(tenantId, (tx) =>
+                tx.selectFrom('projects').select('id').execute(),
+              )
+            ).map((p) => p.id.toLowerCase())
+          : (
+              await this.database.withTenant(tenantId, (tx) =>
+                tx.select({ id: projects.id }).from(projects),
+              )
+            ).map((p) => p.id);
+      for (const id of ids) {
         try {
           await this.refresh(tenantId, id, null);
           n++;

@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Database } from '../db/database.js';
+import { Engine } from '../db/engine.js';
+import { BiStore } from './bi-store.mssql.js';
 import { JobsService } from '../jobs/jobs.service.js';
 
 /**
@@ -28,6 +30,7 @@ export class BiService implements OnModuleInit {
   constructor(
     @Inject(CONFIG) private readonly config: AppConfig,
     private readonly database: Database,
+    private readonly engine: Engine,
     private readonly jobs: JobsService,
   ) {}
 
@@ -44,6 +47,11 @@ export class BiService implements OnModuleInit {
    */
   async refresh(force = false): Promise<boolean> {
     const started = Date.now();
+    if (this.engine.kind === 'mssql') {
+      const ran = await new BiStore().refresh(this.engine.sql, force);
+      if (ran) this.logger.log(`Analysis model refreshed in ${Date.now() - started} ms`);
+      return ran;
+    }
     const sql = this.database.client;
     const [state] = await sql<{ now: string; last: string | null }[]>`
       select bi.huella() as now, bi.ultima_huella() as last`;

@@ -379,10 +379,7 @@ export class ReviewService implements OnModuleInit {
         details: { from: row.status, to: body.to },
       }),
     );
-    // Statistics have not moved to SQL Server yet.
-    const pg = t.pg();
-    if (pg && row.submittedAt)
-      await this.stats.touched(pg, row.tenantId, row.projectId, row.submittedAt);
+    if (row.submittedAt) await this.stats.touched(t, row.tenantId, row.projectId, row.submittedAt);
     return { status: body.to };
   }
 
