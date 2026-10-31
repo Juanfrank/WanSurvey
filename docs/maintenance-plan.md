@@ -43,8 +43,7 @@ intentional. End state: `pnpm lint` prints no warnings; then make warnings fail 
 ## 3. Dead code
 
 1. Compiler: add `noUnusedLocals` and `noUnusedParameters` to `tsconfig.base.json`, run `pnpm typecheck`, remove what it reports (revert the flags if parameters of interface implementations make it noisy; keep `noUnusedLocals`).
-2. Unused files, exports and dependencies: `npx knip@6.43.0` (older than two weeks on 31 October 2026; the
-   latest is newer, so do not take it) at the root, with a `knip.json` that lists the entry points: `apps/api/src/main.ts`, `worker.ts`, `db/seed.ts`,
+2. Unused files, exports and dependencies: `npx knip@6.41.0` (published 9 October 2026; newer ones are under two weeks old on 31 October, check the date again when you run it) at the root, with a `knip.json` that lists the entry points: `apps/api/src/main.ts`, `worker.ts`, `db/seed.ts`,
    `db/seed-demo.ts`, `db/mssql/migrate.ts`, `apps/web/src/main.tsx`, the Playwright and Vitest
    specs, and `packages/*/src/index.ts`. Do not add it to `package.json` until it is clean.
 3. Review the report by category, never apply it blindly: Nest providers and decorators are used
