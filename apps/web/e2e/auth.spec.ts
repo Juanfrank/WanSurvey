@@ -3,6 +3,8 @@ import { expectAccessible, login, openAccount, pickOrganisation, PM, shot } from
 
 test('sign in, switch organisation, sign out', async ({ page }) => {
   await page.goto('/login');
+  // axe needs the rendered page, not the empty shell.
+  await expect(page.getByRole('main')).toBeVisible();
   await expectAccessible(page);
   await shot(page, 'login');
   await login(page);
