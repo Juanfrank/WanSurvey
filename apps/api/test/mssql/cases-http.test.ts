@@ -1,6 +1,6 @@
 import { sampleTable, toCsv } from '@wansurvey/fixtures';
 import { ROLE_PERMISSIONS } from '@wansurvey/schema';
-import ExcelJS from 'exceljs';
+import { writeXlsx } from 'hucre/xlsx';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -18,12 +18,10 @@ import {
 } from './harness.js';
 
 async function xlsx(table: string[][]): Promise<Buffer> {
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Sample');
-  table.forEach((r, i) =>
-    ws.addRow(i === 0 ? r : r.map((c) => (/^\d+$/.test(c) && c.length < 6 ? Number(c) : c))),
+  const rows = table.map((r, i) =>
+    i === 0 ? r : r.map((c) => (/^\d+$/.test(c) && c.length < 6 ? Number(c) : c)),
   );
-  return Buffer.from(await wb.xlsx.writeBuffer());
+  return Buffer.from(await writeXlsx({ sheets: [{ name: 'Sample', rows }] }));
 }
 
 /** Importing, listing, revealing, assigning and editing cases over HTTP on SQL Server (test/cases.test.ts). */

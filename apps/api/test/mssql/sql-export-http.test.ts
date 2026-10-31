@@ -1,6 +1,6 @@
 import { allTypes, household } from '@wansurvey/fixtures';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import ExcelJS from 'exceljs';
+import { readXlsx } from 'hucre/xlsx';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -179,8 +179,7 @@ describe.skipIf(!configured)('SQL Server: SQL export, with the same cells as Exc
         status: 'done',
       });
 
-      const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load((await download(xlsx.body.id)) as never);
+      const wb = await readXlsx(new Uint8Array(await download(xlsx.body.id)));
       const text = (await download(sqlExport.body.id)).toString('utf8');
       expect(text).toMatch(/^-- WanSurvey/);
       // One query per data sheet (the variables and values sheets are the codebook).
@@ -188,15 +187,14 @@ describe.skipIf(!configured)('SQL Server: SQL export, with the same cells as Exc
         .split(/;\n/)
         .map((s) => s.replace(/^(--.*\n|\s*\n)*/g, '').trim())
         .filter(Boolean);
-      const sheets = wb.worksheets.filter((w) => w.name !== 'variables' && w.name !== 'values');
+      const sheets = wb.sheets.filter((w) => w.name !== 'variables' && w.name !== 'values');
       expect(statements).toHaveLength(sheets.length);
 
       for (const [i, ws] of sheets.entries()) {
-        const excel: Cell[][] = [];
-        ws.eachRow({ includeEmpty: false }, (row) => {
-          const width = ws.getRow(1).cellCount;
-          excel.push(Array.from({ length: width }, (_, k) => norm(row.getCell(k + 1).value)));
-        });
+        // The rows with something in them, as the cells both sides write.
+        const excel: Cell[][] = ws.rows
+          .filter((row) => row.some((v) => v !== null && v !== ''))
+          .map((row) => row.map(norm));
         const [header, ...rows] = excel;
         // The columns come from the statement itself, so a sheet with no rows still has its header.
         const columns = (

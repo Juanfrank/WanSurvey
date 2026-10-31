@@ -19,7 +19,7 @@ overrides:
   seroval: 1.6.11
   # Fixes for advisories, taken before they are two weeks old because the advisories are high:
   # body-parser 2.4.0 and multer 2.5.0 (2026-10-22, both reached through @nestjs/platform-express),
-  # follow-redirects 1.16.2 (2026-10-25, through Azurite), uuid 11.1.1 (through ExcelJS and Azurite).
+  # follow-redirects 1.16.2 (2026-10-25, through Azurite), uuid 11.1.1 (through Azurite).
   body-parser: 2.4.0
   multer: 2.5.0
   follow-redirects: 1.16.2

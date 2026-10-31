@@ -6,7 +6,7 @@ import {
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
-import { Readable, Writable } from 'node:stream';
+import { Readable } from 'node:stream';
 import {
   codebook,
   csvEncoder,
@@ -21,7 +21,7 @@ import {
   type TableLayout,
   type TableStats,
 } from '@wansurvey/exporters';
-import ExcelJS from 'exceljs';
+import { writeXlsxStreamSheets, type XlsxStreamRow, type XlsxStreamSheet } from 'hucre/xlsx';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
@@ -80,29 +80,54 @@ const safeName = (s: string) =>
     .replace(/^_+|_+$/g, '')
     .slice(0, 60) || 'data';
 
-/** The codebook sheets of a table, into a streaming workbook. */
-function addCodebookSheets(
-  wb: ExcelJS.stream.xlsx.WorkbookWriter,
-  columns: TableLayout['columns'],
-) {
+const BOLD = { font: { bold: true } };
+type SheetCell = string | number | boolean | null;
+
+/** A header row in bold, then the rows. */
+function* withHeader(names: string[], body: Iterable<SheetCell[]>): Generator<XlsxStreamRow> {
+  yield names.map((value) => ({ value, style: BOLD }));
+  yield* body;
+}
+
+/** The codebook sheets of a table: its variables, and the values of each. */
+function codebookSheets(columns: TableLayout['columns']): XlsxStreamSheet[] {
   const entries = codebook({ name: '', columns, rows: [] });
-  const vars = wb.addWorksheet('variables');
-  vars.columns = [16, 60, 16, 16].map((width) => ({ width }));
-  const head = (ws: ExcelJS.Worksheet, names: string[]) => {
-    const r = ws.addRow(names);
-    r.font = { bold: true };
-    r.commit();
-  };
-  head(vars, ['name', 'label', 'type', 'measure']);
-  for (const e of entries) vars.addRow([e.name, e.label, e.type, e.measure]).commit();
-  vars.commit();
-  const values = wb.addWorksheet('values');
-  values.columns = [14, 14, 40, 14].map((width) => ({ width }));
-  head(values, ['name', 'code', 'label', 'missing']);
-  for (const e of entries)
-    for (const v of e.values)
-      values.addRow([e.name, v.code, v.label, v.missing ? 'yes' : '']).commit();
-  values.commit();
+  return [
+    {
+      name: 'variables',
+      columns: [16, 60, 16, 16].map((width) => ({ width })),
+      rows: withHeader(
+        ['name', 'label', 'type', 'measure'],
+        entries.map((e) => [e.name, e.label, e.type, e.measure ?? null]),
+      ),
+    },
+    {
+      name: 'values',
+      columns: [14, 14, 40, 14].map((width) => ({ width })),
+      rows: withHeader(
+        ['name', 'code', 'label', 'missing'],
+        entries.flatMap((e) =>
+          e.values.map((v): SheetCell[] => [e.name, v.code, v.label, v.missing ? 'yes' : '']),
+        ),
+      ),
+    },
+  ];
+}
+
+/** The rows of a data table as they come in batches, value labels in place of codes if asked. */
+async function* dataRows(
+  table: TableLayout,
+  batches: AsyncGenerator<Cell[][]>,
+  labels: boolean,
+): AsyncGenerator<XlsxStreamRow> {
+  yield table.columns.map((c) => ({ value: c.name, style: BOLD }));
+  for await (const batch of batches)
+    for (const row of batch)
+      yield row.map((v, i) => {
+        const c = table.columns[i]!;
+        if (labels && typeof v === 'number' && c.valueLabels?.has(v)) return c.valueLabels.get(v)!;
+        return v;
+      }) as SheetCell[];
 }
 
 const isPersonal = (options: unknown) => (options as { personal?: boolean }).personal === true;
@@ -412,8 +437,10 @@ export class ExportsService implements OnModuleInit {
   }
 
   /**
-   * Excel, written sheet by sheet as rows come (ExcelJS's streaming writer): the data sheets
-   * (none for a codebook), then the codebook of the main table and of each roster table.
+   * Excel, written sheet by sheet as rows come (hucre's streaming writer, which pulls the rows
+   * of one sheet at a time and keeps memory flat): the data sheets (none for a codebook), then
+   * the codebook of the main table and of each roster table. A data sheet past Excel's row limit
+   * continues in `name_2`, with its header again.
    */
   private async workbook(
     out: (chunk: Uint8Array) => Promise<void>,
@@ -421,54 +448,37 @@ export class ExportsService implements OnModuleInit {
     tables: TableLayout[],
     rows: (t: number) => AsyncGenerator<Cell[][]>,
   ) {
-    const sink = new Writable({
-      write(chunk: Buffer, _enc, done) {
-        out(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.length)).then(() => done(), done);
-      },
-    });
-    const finished = new Promise<void>((ok, fail) => {
-      sink.on('finish', ok);
-      sink.on('error', fail);
-    });
-    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({
-      stream: sink,
-      useStyles: true,
-      useSharedStrings: false,
-    });
-    wb.creator = 'WanSurvey';
     const labels = opts.labels === 'labels';
+    const sheets: XlsxStreamSheet[] = [];
     if (opts.format === 'xlsx')
       for (let t = 0; t < tables.length; t++) {
         const table = tables[t]!;
-        const ws = wb.addWorksheet((t === 0 ? 'data' : table.name).slice(0, 31), {
-          views: [{ state: 'frozen', ySplit: 1 }],
+        sheets.push({
+          name: (t === 0 ? 'data' : table.name).slice(0, 31),
+          freezePane: { rows: 1 },
+          rows: dataRows(table, rows(t), labels),
         });
-        const head = ws.addRow(table.columns.map((c) => c.name));
-        head.font = { bold: true };
-        head.commit();
-        for await (const batch of rows(t))
-          for (const row of batch)
-            ws.addRow(
-              row.map((v, i) => {
-                const c = table.columns[i]!;
-                if (labels && typeof v === 'number' && c.valueLabels?.has(v))
-                  return c.valueLabels.get(v);
-                return v;
-              }),
-            ).commit();
-        ws.commit();
       }
-    addCodebookSheets(wb, tables[0]!.columns);
+    sheets.push(...codebookSheets(tables[0]!.columns));
     if (opts.format === 'codebook')
-      for (const r of tables.slice(1)) {
-        const ws = wb.addWorksheet(`variables_${r.name}`.slice(0, 31));
-        const head = ws.addRow(['name', 'label', 'type']);
-        head.font = { bold: true };
-        head.commit();
-        for (const e of codebook({ ...r, rows: [] })) ws.addRow([e.name, e.label, e.type]).commit();
-        ws.commit();
+      for (const r of tables.slice(1))
+        sheets.push({
+          name: `variables_${r.name}`.slice(0, 31),
+          rows: withHeader(
+            ['name', 'label', 'type'],
+            codebook({ ...r, rows: [] }).map((e) => [e.name, e.label, e.type]),
+          ),
+        });
+    const reader = writeXlsxStreamSheets(sheets).getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await out(value);
       }
-    await wb.commit();
-    await finished;
+    } catch (e) {
+      await reader.cancel(e).catch(() => undefined);
+      throw e;
+    }
   }
 }

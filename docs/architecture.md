@@ -219,7 +219,7 @@ API ── enqueue ──▶ Redis (BullMQ "wansurvey") ──▶ worker: mail.d
 
 - `apps/api/src/jobs`: `JobsService` (BullMQ, or inline without `REDIS_URL`) and the bus (`RedisBus`, `LocalBus`). `src/worker.ts` starts the worker.
 - `stats_daily` is refreshed per project and day; `MetricsService` reads it with grouped queries over interviews, calls and cases, then applies `metrics.ts`.
-- `DatasetService` reads a questionnaire's submitted interviews (any filter) against its latest version; `packages/exporters` turns them into tables (`buildTables`), toplines and crosstabs, and CSV, SPSS, Stata and zip files; Excel and the codebook use exceljs.
+- `DatasetService` reads a questionnaire's submitted interviews (any filter) against its latest version; `packages/exporters` turns them into tables (`buildTables`), toplines and crosstabs, and CSV, SPSS, Stata and zip files; Excel and the codebook are written with hucre (`writeXlsxStreamSheets`, one sheet at a time, flat memory; a data sheet past Excel's row limit continues in `name_2`) and sample files in Excel are read with hucre.
 - Exports are rows in `exports` with the file (bytea); share links resolve their organisation through a security-definer function, like respondent tokens.
 - Web: project tabs Dashboard (EventSource), Metrics, Results (topline, crosstab, client links) and Exports; `/projects/:id/summary` prints; `/share/:token` is public.
 

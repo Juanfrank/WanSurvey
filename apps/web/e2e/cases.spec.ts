@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { sampleTable } from '@wansurvey/fixtures';
-import ExcelJS from 'exceljs';
+import { writeXlsx } from 'hucre/xlsx';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
@@ -22,10 +22,7 @@ async function openProject(page: Page, email?: string) {
 /** 12 households with ids X…, two bad e-mails and a repeated id, as an .xlsx file. */
 async function sampleXlsx(): Promise<Buffer> {
   const table = sampleTable(12, true).map((r, i) => (i === 0 ? r : [`X${r[0]}`, ...r.slice(1)]));
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Sample');
-  table.forEach((r) => ws.addRow(r));
-  return Buffer.from(await wb.xlsx.writeBuffer());
+  return Buffer.from(await writeXlsx({ sheets: [{ name: 'Sample', rows: table }] }));
 }
 
 test('sampling selector: load a frame from Excel, see the problems, select a census, get the cases', async ({

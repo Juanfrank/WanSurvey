@@ -1,5 +1,5 @@
 import { parse as parseCsv } from 'csv-parse/sync';
-import ExcelJS from 'exceljs';
+import { readXlsx, type CellValue } from 'hucre/xlsx';
 
 export interface ParsedFile {
   headers: string[];
@@ -39,15 +39,9 @@ function decode(buf: Buffer): { text: string; encoding: ParsedFile['encoding'] }
   }
 }
 
-function cellText(v: ExcelJS.CellValue): string {
+function cellText(v: CellValue): string {
   if (v === null || v === undefined) return '';
   if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === 'object') {
-    if ('richText' in v) return v.richText.map((r) => r.text).join('');
-    if ('result' in v) return cellText(v.result as ExcelJS.CellValue);
-    if ('text' in v) return String(v.text);
-    if ('error' in v) return '';
-  }
   return String(v);
 }
 
@@ -67,23 +61,19 @@ export async function parseSampleFile(
   let table: string[][];
   let extra: Partial<ParsedFile> = {};
   if (lower.endsWith('.xlsx')) {
-    const wb = new ExcelJS.Workbook();
+    let wb;
     try {
-      await wb.xlsx.load(buf as unknown as ArrayBuffer);
+      wb = await readXlsx(new Uint8Array(buf));
     } catch {
       throw new SampleFileError('This is not a readable .xlsx file');
     }
-    const sheets = wb.worksheets.map((w) => w.name);
-    const ws = opts.sheet ? wb.getWorksheet(opts.sheet) : wb.worksheets[0];
+    const sheets = wb.sheets.map((w) => w.name);
+    const ws = opts.sheet ? wb.sheets.find((w) => w.name === opts.sheet) : wb.sheets[0];
     if (!ws) throw new SampleFileError(`No worksheet ${opts.sheet ?? ''}`.trim());
-    table = [];
-    const width = ws.columnCount;
-    ws.eachRow({ includeEmpty: true }, (row, n) => {
-      const cells: string[] = [];
-      for (let c = 1; c <= width; c++) cells.push(cellText(row.getCell(c).value));
-      table[n - 1] = cells;
-    });
-    table = Array.from(table, (r) => r ?? []);
+    // Formula results and rich text arrive as their text; a cell holding an error stays empty.
+    table = ws.rows.map((row, r) =>
+      row.map((v, c) => (ws.cells?.get(`${r},${c}`)?.type === 'error' ? '' : cellText(v))),
+    );
     extra = { sheets };
   } else if (lower.endsWith('.csv') || lower.endsWith('.txt') || lower.endsWith('.tsv')) {
     const { text, encoding } = decode(buf);
