@@ -69,7 +69,6 @@ export function AccountMenu({
           type="button"
           aria-expanded={open}
           aria-controls={menuId}
-          aria-label={t('app.account', { name, email: me.user.email })}
           onClick={() => setOpen(!open)}
           className="flex h-9 min-w-0 items-center gap-2 rounded-full pl-0.5 pr-2 text-left hover:bg-slate-50 aria-expanded:bg-slate-50"
         >
@@ -79,8 +78,9 @@ export function AccountMenu({
           >
             {initialsOf(me.user.name, me.user.email)}
           </span>
-          <span className="hidden min-w-0 flex-col leading-tight sm:flex">
-            <b className="max-w-48 truncate text-[13px] text-navy">{name}</b>
+          <span className="sr-only">{t('app.accountPrefix')}</span>
+          <span className="sr-only min-w-0 flex-col leading-tight sm:not-sr-only sm:flex">
+            <b className="max-w-48 truncate text-[13px] text-navy">{name}</b>{' '}
             <span className="max-w-48 truncate text-[11px] text-slate-600">{me.user.email}</span>
           </span>
           <ChevronDownIcon className="h-4 w-4 text-slate-500" />
