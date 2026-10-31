@@ -2,37 +2,23 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
 import { createInterview } from '@wansurvey/logic';
 import type { Permission } from '@wansurvey/schema';
-import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService, type AuditAction } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
-import { Prepared, type Tx } from '../db/database.js';
-import {
-  cases,
-  codedTexts,
-  interviewAnswerEvents,
-  interviewParadata,
-  interviews,
-  openCodes,
-  reviewComments,
-  users,
-} from '../db/schema.js';
 import { MASK, maskContact, maskSample } from '../cases/case-logic.js';
-import {
-  InterviewsService,
-  personalVariables,
-  type InterviewRow,
-} from '../interviews/interviews.service.js';
+import type { InterviewRow } from '../interviews/interviews-repo.js';
+import { InterviewsService, personalVariables } from '../interviews/interviews.service.js';
+import { REVIEW_REPO, type ReviewRepo, type ReviewTx } from './review-repo.js';
 import { StatsService } from '../stats/stats.service.js';
 import { FLAG_KINDS, computeFlags, inSample } from './flags.js';
-import { COUNTED_SQL } from '../common/statuses.js';
 
 export const QueueQuery = z.object({
   status: z
@@ -143,17 +129,6 @@ const baseName = (key: string) =>
  * submission, the review queue and screen, status changes, corrections that re-run the
  * logic, comment threads, and coding of "other" texts.
  */
-/** Warnings confirmed and double-entry differences of an interview, in one query. */
-const submitCounts = new Prepared<{ warnings: number; differences: number }>(
-  () => sql`
-    select
-      (select count(*)::int from interview_paradata
-        where interview_id = ${sql.placeholder('id')} and type = 'warning_confirmed') as warnings,
-      (select count(*)::int from entry_mismatches
-        where second_interview_id = ${sql.placeholder('id')}) as differences`,
-  { warnings: 'raw', differences: 'raw' },
-);
-
 @Injectable()
 export class ReviewService implements OnModuleInit {
   constructor(
@@ -161,32 +136,30 @@ export class ReviewService implements OnModuleInit {
     private readonly runtime: InterviewsService,
     private readonly audit: AuditService,
     private readonly stats: StatsService,
+    @Inject(REVIEW_REPO) private readonly repo: ReviewRepo,
   ) {}
 
   onModuleInit() {
     // The flags are written by the submission's own update.
-    this.runtime.onSubmitting(async (t, row) => {
-      const tx = t.pg();
-      return tx ? this.flags(tx, row) : {};
-    });
+    this.runtime.onSubmitting((t, row) => this.flags(this.repo.extend(t), row));
   }
 
   /** Flags and the sample, computed at each submission (R2, R3). */
-  private async flags(tx: Tx, row: InterviewRow) {
-    const settings = (await this.cases.settings(tx, row.projectId)).review;
-    const compiled = await this.runtime.compiledOf(tx, row.questionnaireVersionId);
+  private async flags(t: ReviewTx, row: InterviewRow) {
+    const settings = (await this.cases.settings(t, row.projectId)).review;
+    const compiled = await this.runtime.compiledOf(t, row.questionnaireVersionId);
     const s = createInterview(compiled, {
       ...this.runtime.engineOptions(row),
       state: row.state as never,
     });
-    const [c] = await submitCounts.run(tx, { id: row.id });
+    const c = await t.submitCounts(row.id);
     const flags = computeFlags({
       compiled,
       answers: (row.answers ?? {}) as Record<string, unknown>,
       path: s.pathKeys(),
       activeMs: row.activeMs,
-      warningsConfirmed: c?.warnings ?? 0,
-      doubleEntryDifferences: c?.differences ?? 0,
+      warningsConfirmed: c.warnings,
+      doubleEntryDifferences: c.differences,
       settings,
     });
     return { flags, sampled: inSample(row.id, settings.samplePercent) };
@@ -200,58 +173,20 @@ export class ReviewService implements OnModuleInit {
   }
 
   /** Interviews to review, newest submission first, with their flags (R2). */
-  async queue(tx: Tx, projectId: string, q: z.infer<typeof QueueQuery>) {
-    const conds: SQL[] = [
-      eq(interviews.projectId, projectId),
-      inArray(interviews.status, q.status),
-    ];
-    if (q.interviewerId) conds.push(eq(interviews.interviewerId, q.interviewerId));
-    if (q.mode) conds.push(eq(interviews.mode, q.mode));
-    if (q.flag) conds.push(sql`${interviews.flags} ? ${q.flag}`);
-    if (q.sampled !== undefined) conds.push(eq(interviews.sampled, q.sampled));
-    if (q.from) conds.push(gte(interviews.submittedAt, new Date(`${q.from}T00:00:00Z`)));
-    if (q.to) conds.push(lte(interviews.submittedAt, new Date(`${q.to}T23:59:59.999Z`)));
-    const where = and(...conds);
-    const [total] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(interviews)
-      .where(where);
-    const rows = await tx
-      .select({
-        id: interviews.id,
-        externalId: cases.externalId,
-        interviewer: users.name,
-        interviewerId: interviews.interviewerId,
-        mode: interviews.mode,
-        status: interviews.status,
-        disposition: interviews.disposition,
-        submittedAt: interviews.submittedAt,
-        activeMs: interviews.activeMs,
-        flags: interviews.flags,
-        sampled: interviews.sampled,
-        submissions: interviews.submissions,
-        comments: sql<number>`(select count(*)::int from review_comments rc where rc.interview_id = ${interviews.id})`,
-      })
-      .from(interviews)
-      .leftJoin(cases, eq(cases.id, interviews.caseId))
-      .leftJoin(users, eq(users.id, interviews.interviewerId))
-      .where(where)
-      .orderBy(desc(interviews.submittedAt), asc(interviews.id))
-      .limit(q.limit)
-      .offset((q.page - 1) * q.limit);
-    return { total: total?.n ?? 0, page: q.page, limit: q.limit, rows };
+  async queue(t: ReviewTx, projectId: string, q: z.infer<typeof QueueQuery>) {
+    const r = await t.queue(projectId, q);
+    return { total: r.total, page: q.page, limit: q.limit, rows: r.rows };
   }
 
-  private async load(tx: Tx, id: string, lock = false) {
-    const query = tx.select().from(interviews).where(eq(interviews.id, id));
-    const [row] = lock ? await query.for('update') : await query;
+  private async load(t: ReviewTx, id: string, lock = false) {
+    const row = await t.interview(id, lock);
     if (!row) throw new NotFoundException('Interview not found');
     return row;
   }
 
   /** Reviewers of the project, or the interviewer whose interview it is. */
-  private async access(tx: Tx, ctx: AuthContext, id: string, lock = false) {
-    const row = await this.load(tx, id, lock);
+  private async access(t: ReviewTx, ctx: AuthContext, id: string, lock = false) {
+    const row = await this.load(t, id, lock);
     const reviewer = this.reviewer(ctx, row.projectId);
     if (!reviewer && row.interviewerId !== ctx.userId)
       throw new NotFoundException('Interview not found');
@@ -259,37 +194,17 @@ export class ReviewService implements OnModuleInit {
   }
 
   /** Everything the review screen shows (R4). */
-  async detail(tx: Tx, ctx: AuthContext, id: string) {
-    const { row, reviewer } = await this.access(tx, ctx, id);
-    const compiled = await this.runtime.compiledOf(tx, row.questionnaireVersionId);
-    const [c] = row.caseId
-      ? await tx
-          .select({ externalId: cases.externalId })
-          .from(cases)
-          .where(eq(cases.id, row.caseId))
-      : [];
-    const [who] = row.interviewerId
-      ? await tx.select({ name: users.name }).from(users).where(eq(users.id, row.interviewerId))
-      : [];
-    const para = await tx
-      .select({
-        type: interviewParadata.type,
-        payload: interviewParadata.payload,
-        at: interviewParadata.at,
-      })
-      .from(interviewParadata)
-      .where(
-        and(
-          eq(interviewParadata.interviewId, id),
-          inArray(interviewParadata.type, [
-            'leave_question',
-            'note_added',
-            'warning_confirmed',
-            'paper_meta',
-          ]),
-        ),
-      )
-      .orderBy(asc(interviewParadata.at));
+  async detail(t: ReviewTx, ctx: AuthContext, id: string) {
+    const { row, reviewer } = await this.access(t, ctx, id);
+    const compiled = await this.runtime.compiledOf(t, row.questionnaireVersionId);
+    const externalId = row.caseId ? await t.externalIdOf(row.caseId) : null;
+    const who = row.interviewerId ? await t.userName(row.interviewerId) : null;
+    const para = await t.paradataOf(id, [
+      'leave_question',
+      'note_added',
+      'warning_confirmed',
+      'paper_meta',
+    ]);
     const timings: Record<string, number> = {};
     const notes: { key: string; text: string; at: Date }[] = [];
     const warnings: { key: string; ruleId: string }[] = [];
@@ -304,25 +219,12 @@ export class ReviewService implements OnModuleInit {
         warnings.push({ key: String(d.key ?? ''), ruleId: String(d.ruleId ?? '') });
       else if (p.type === 'paper_meta') paper = d;
     }
-    const history = await tx
-      .select({
-        variable: interviewAnswerEvents.variable,
-        oldValue: interviewAnswerEvents.oldValue,
-        newValue: interviewAnswerEvents.newValue,
-        at: interviewAnswerEvents.at,
-        source: interviewAnswerEvents.source,
-        reason: interviewAnswerEvents.reason,
-        by: users.name,
-      })
-      .from(interviewAnswerEvents)
-      .leftJoin(users, eq(users.id, interviewAnswerEvents.byUserId))
-      .where(eq(interviewAnswerEvents.interviewId, id))
-      .orderBy(asc(interviewAnswerEvents.at), asc(interviewAnswerEvents.seq));
+    const history = (await t.answerEventsOf([id])).map(({ interviewId: _i, seq: _s, ...h }) => h);
     // Without `pii.view`, personal case fields, contacts and answers to personal questions are
     // masked, as in the case's answer history.
     const canSee = this.cases.canSeePii(ctx, row.projectId);
     const personal = canSee ? new Set<string>() : personalVariables(compiled);
-    const piiFields = canSee ? new Set<string>() : await this.cases.piiFields(tx, row.projectId);
+    const piiFields = canSee ? new Set<string>() : await this.cases.piiFields(t, row.projectId);
     const isPersonal = (key: string) => personal.has(baseName(key).replace(/_OTHER$/, ''));
     const hide = (v: unknown) => (v === null || v === undefined ? v : MASK);
     const maskValues = (values: unknown) =>
@@ -343,8 +245,8 @@ export class ReviewService implements OnModuleInit {
         id: row.id,
         projectId: row.projectId,
         caseId: row.caseId,
-        externalId: c?.externalId ?? null,
-        interviewer: who?.name ?? null,
+        externalId,
+        interviewer: who,
         mode: row.mode,
         language: row.language,
         status: row.status,
@@ -382,7 +284,7 @@ export class ReviewService implements OnModuleInit {
               ? { ...h, oldValue: hide(h.oldValue), newValue: hide(h.newValue) }
               : h,
           ),
-      comments: await this.comments(tx, id),
+      comments: await this.comments(t, id),
       allowed,
       canCorrect:
         REVIEWABLE.includes(row.status) &&
@@ -391,46 +293,29 @@ export class ReviewService implements OnModuleInit {
     };
   }
 
-  async comments(tx: Tx, id: string) {
-    return tx
-      .select({
-        id: reviewComments.id,
-        variable: reviewComments.variable,
-        body: reviewComments.body,
-        author: users.name,
-        authorId: reviewComments.authorId,
-        createdAt: reviewComments.createdAt,
-        resolvedAt: reviewComments.resolvedAt,
-      })
-      .from(reviewComments)
-      .leftJoin(users, eq(users.id, reviewComments.authorId))
-      .where(eq(reviewComments.interviewId, id))
-      .orderBy(asc(reviewComments.createdAt));
+  async comments(t: ReviewTx, id: string) {
+    return t.comments(id);
   }
 
-  async addComment(tx: Tx, ctx: AuthContext, id: string, body: z.infer<typeof CommentBody>) {
-    const { row, reviewer } = await this.access(tx, ctx, id);
+  async addComment(t: ReviewTx, ctx: AuthContext, id: string, body: z.infer<typeof CommentBody>) {
+    const { row, reviewer } = await this.access(t, ctx, id);
     if (!reviewer && row.status !== 'returned')
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Comments are closed' });
-    await tx.insert(reviewComments).values({
-      tenantId: ctx.tenantId,
+    await t.addComment({
       interviewId: id,
       variable: body.variable ?? null,
       body: body.body,
       authorId: ctx.userId,
     });
-    return this.comments(tx, id);
+    return this.comments(t, id);
   }
 
-  async resolveComment(tx: Tx, ctx: AuthContext, commentId: string) {
-    const [c] = await tx.select().from(reviewComments).where(eq(reviewComments.id, commentId));
+  async resolveComment(t: ReviewTx, ctx: AuthContext, commentId: string) {
+    const c = await t.comment(commentId);
     if (!c) throw new NotFoundException('Comment not found');
-    await this.access(tx, ctx, c.interviewId);
-    await tx
-      .update(reviewComments)
-      .set({ resolvedAt: c.resolvedAt ? null : new Date() })
-      .where(eq(reviewComments.id, commentId));
-    return this.comments(tx, c.interviewId);
+    await this.access(t, ctx, c.interviewId);
+    await t.setResolved(commentId, c.resolvedAt ? null : new Date());
+    return this.comments(t, c.interviewId);
   }
 
   /**
@@ -438,8 +323,13 @@ export class ReviewService implements OnModuleInit {
    * the interview for its interviewer; rejecting keeps it for the audit trail and, by
    * default, sends the case back to be interviewed again.
    */
-  async transition(tx: Tx, ctx: AuthContext, id: string, body: z.infer<typeof TransitionBody>) {
-    const row = await this.load(tx, id, true);
+  async transition(
+    t: ReviewTx,
+    ctx: AuthContext,
+    id: string,
+    body: z.infer<typeof TransitionBody>,
+  ) {
+    const row = await this.load(t, id, true);
     const perm = TRANSITIONS[row.status]?.[body.to];
     if (!perm)
       throw new ConflictException({
@@ -461,35 +351,19 @@ export class ReviewService implements OnModuleInit {
         });
     }
     const now = new Date();
-    await tx
-      .update(interviews)
-      .set({ status: body.to, reviewedBy: ctx.userId, reviewedAt: now, updatedAt: now })
-      .where(eq(interviews.id, id));
+    await t.setReviewStatus(id, body.to, ctx.userId, now);
     if (body.comment?.trim())
-      await tx.insert(reviewComments).values({
-        tenantId: ctx.tenantId,
+      await t.addComment({
         interviewId: id,
         variable: null,
         body: body.comment.trim(),
         authorId: ctx.userId,
       });
     if (row.caseId) {
-      const settings = (await this.cases.settings(tx, row.projectId)).review;
-      if (body.to === 'returned')
-        await tx
-          .update(cases)
-          .set({ status: 'in_progress', updatedAt: now })
-          .where(eq(cases.id, row.caseId));
-      if (body.to === 'rejected' && settings.rejectReopensCase)
-        await tx
-          .update(cases)
-          .set({
-            status: sql`case when ${cases.assignedTo} is null then 'fresh' else 'assigned' end`,
-            disposition: null,
-            updatedAt: now,
-          })
-          .where(eq(cases.id, row.caseId));
-      await this.cases.events(tx, ctx.tenantId, ctx.userId, [
+      const settings = (await this.cases.settings(t, row.projectId)).review;
+      if (body.to === 'returned') await t.caseInProgress(row.caseId, now);
+      if (body.to === 'rejected' && settings.rejectReopensCase) await t.reopenCase(row.caseId, now);
+      await this.cases.events(t, ctx.tenantId, ctx.userId, [
         {
           caseId: row.caseId,
           type: `interview_${body.to}`,
@@ -497,9 +371,7 @@ export class ReviewService implements OnModuleInit {
         },
       ]);
     }
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: AUDIT[body.to],
         targetType: 'interview',
@@ -507,21 +379,11 @@ export class ReviewService implements OnModuleInit {
         details: { from: row.status, to: body.to },
       }),
     );
-    if (row.submittedAt) await this.stats.touched(tx, row.tenantId, row.projectId, row.submittedAt);
+    // Statistics have not moved to SQL Server yet.
+    const pg = t.pg();
+    if (pg && row.submittedAt)
+      await this.stats.touched(pg, row.tenantId, row.projectId, row.submittedAt);
     return { status: body.to };
-  }
-
-  private async nextReviewSeq(tx: Tx, id: string) {
-    const [r] = await tx
-      .select({ n: sql<number>`coalesce(max(${interviewAnswerEvents.seq}), 0)::int` })
-      .from(interviewAnswerEvents)
-      .where(
-        and(
-          eq(interviewAnswerEvents.interviewId, id),
-          eq(interviewAnswerEvents.deviceId, REVIEW_DEVICE),
-        ),
-      );
-    return (r?.n ?? 0) + 1;
   }
 
   /**
@@ -529,8 +391,8 @@ export class ReviewService implements OnModuleInit {
    * validation runs and answers that fall off the path are cleared and recorded. A change
    * that would open questions with no answer is refused (return the interview instead).
    */
-  async correct(tx: Tx, ctx: AuthContext, id: string, body: z.infer<typeof CorrectBody>) {
-    const row = await this.load(tx, id, true);
+  async correct(t: ReviewTx, ctx: AuthContext, id: string, body: z.infer<typeof CorrectBody>) {
+    const row = await this.load(t, id, true);
     if (!can(ctx.memberships, 'interviews.correct', row.projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not correct answers' });
     if (!REVIEWABLE.includes(row.status))
@@ -538,7 +400,7 @@ export class ReviewService implements OnModuleInit {
         code: 'NOT_IN_REVIEW',
         message: 'Only submitted interviews or those in review can be corrected',
       });
-    const compiled = await this.runtime.compiledOf(tx, row.questionnaireVersionId);
+    const compiled = await this.runtime.compiledOf(t, row.questionnaireVersionId);
     const s = createInterview(compiled, {
       ...this.runtime.engineOptions(row),
       state: row.state as never,
@@ -567,49 +429,41 @@ export class ReviewService implements OnModuleInit {
         opened: s.currentKey(),
       });
     const events = s.drainEvents();
-    let seq = await this.nextReviewSeq(tx, id);
+    let seq = await t.nextReviewSeq(id);
     const now = new Date();
-    if (events.length)
-      await tx.insert(interviewAnswerEvents).values(
-        events.map((e) => ({
-          tenantId: ctx.tenantId,
-          interviewId: id,
-          deviceId: REVIEW_DEVICE,
-          seq: seq++,
-          variable: e.key,
-          oldValue: e.oldValue ?? null,
-          newValue: e.newValue ?? null,
-          at: now,
-          byUserId: ctx.userId,
-          source: 'reviewer',
-          reason: e.key === body.variable ? 'correction' : (e.reason ?? null),
-        })),
-      );
+    await t.insertAnswerEvents(
+      id,
+      REVIEW_DEVICE,
+      events.map((e) => ({
+        seq: seq++,
+        variable: e.key,
+        oldValue: e.oldValue ?? null,
+        newValue: e.newValue ?? null,
+        at: now,
+        byUserId: ctx.userId,
+        source: 'reviewer',
+        reason: e.key === body.variable ? 'correction' : (e.reason ?? null),
+      })),
+    );
     const disposition = s.status().disposition ?? row.disposition;
-    await tx
-      .update(interviews)
-      .set({
-        state: s.state(),
-        answers: keepCodes(row.answers as Record<string, unknown>, s.getAnswers()),
-        // A device holding a copy of this interview (returned later) takes the new state.
-        stateVersion: row.stateVersion + 1,
-        stateDevice: REVIEW_DEVICE,
-        disposition,
-        updatedAt: now,
-      })
-      .where(eq(interviews.id, id));
-    await tx.insert(reviewComments).values({
-      tenantId: ctx.tenantId,
+    await t.saveCorrection(id, {
+      state: s.state(),
+      answers: keepCodes(row.answers as Record<string, unknown>, s.getAnswers()),
+      // A device holding a copy of this interview (returned later) takes the new state.
+      stateVersion: row.stateVersion + 1,
+      stateDevice: REVIEW_DEVICE,
+      disposition,
+      now,
+    });
+    await t.addComment({
       interviewId: id,
       variable: body.variable,
       body: body.reason,
       authorId: ctx.userId,
     });
     if (row.caseId && disposition !== row.disposition)
-      await tx.update(cases).set({ disposition, updatedAt: now }).where(eq(cases.id, row.caseId));
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+      await t.setCaseDisposition(row.caseId, disposition, now);
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'interview.corrected',
         targetType: 'interview',
@@ -625,63 +479,25 @@ export class ReviewService implements OnModuleInit {
   }
 
   /** The caller's interviews returned for fixing, with the latest comment. */
-  async returned(tx: Tx, ctx: AuthContext, projectId: string) {
-    return tx
-      .select({
-        id: interviews.id,
-        externalId: cases.externalId,
-        mode: interviews.mode,
-        reviewedAt: interviews.reviewedAt,
-        reviewer: users.name,
-        comment: sql<
-          string | null
-        >`(select body from review_comments rc where rc.interview_id = ${interviews.id} order by rc.created_at desc limit 1)`,
-      })
-      .from(interviews)
-      .leftJoin(cases, eq(cases.id, interviews.caseId))
-      .leftJoin(users, eq(users.id, interviews.reviewedBy))
-      .where(
-        and(
-          eq(interviews.projectId, projectId),
-          eq(interviews.interviewerId, ctx.userId),
-          eq(interviews.status, 'returned'),
-        ),
-      )
-      .orderBy(desc(interviews.reviewedAt));
+  async returned(t: ReviewTx, ctx: AuthContext, projectId: string) {
+    return t.returnedTo(projectId, ctx.userId);
   }
 
   // -------------------------------------------------------------------------
   // Coding of "other" texts (R6)
   // -------------------------------------------------------------------------
 
-  private async otherTexts(tx: Tx, projectId: string, variable?: string) {
-    const rows = (await tx.execute(sql`
-      select a.key as key, a.value as value, i.id as interview_id
-      from interviews i, jsonb_each_text(i.answers) a
-      where i.project_id = ${projectId}
-        and i.status in ${COUNTED_SQL}
-        and a.key ~ '_OTHER$' and length(trim(a.value)) > 0`)) as unknown as {
-      key: string;
-      value: string;
-      interview_id: string;
-    }[];
-    return rows.filter((r) => !variable || baseName(r.key) === variable);
-  }
-
   /** Variables with "other" texts, and how many are still without a code. */
-  async codingOverview(tx: Tx, projectId: string) {
-    const texts = await this.otherTexts(tx, projectId);
-    const coded = await tx
-      .select({ variable: codedTexts.variable, text: codedTexts.text })
-      .from(codedTexts)
-      .where(eq(codedTexts.projectId, projectId));
+  async codingOverview(t: ReviewTx, projectId: string) {
+    const texts = await t.otherTexts(projectId);
+    const coded = await t.codedTexts(projectId);
     const done = new Set(coded.map((c) => `${c.variable}\u0000${c.text}`));
     const by = new Map<string, { total: number; uncoded: number }>();
-    for (const t of texts) {
-      const v = baseName(t.key);
+    for (const x of texts) {
+      const v = baseName(x.key);
       const e = by.get(v) ?? { total: 0, uncoded: 0 };
       e.total++;
-      if (!done.has(`${v}\u0000${norm(t.value)}`)) e.uncoded++;
+      if (!done.has(`${v}\u0000${norm(x.value)}`)) e.uncoded++;
       by.set(v, e);
     }
     return [...by]
@@ -689,25 +505,14 @@ export class ReviewService implements OnModuleInit {
       .sort((a, b) => a.variable.localeCompare(b.variable));
   }
 
-  async codingDetail(tx: Tx, projectId: string, variable: string) {
-    const texts = await this.otherTexts(tx, projectId, variable);
-    const codes = await tx
-      .select({ code: openCodes.code, label: openCodes.label })
-      .from(openCodes)
-      .where(and(eq(openCodes.projectId, projectId), eq(openCodes.variable, variable)))
-      .orderBy(asc(openCodes.code));
-    const coded = new Map(
-      (
-        await tx
-          .select({ text: codedTexts.text, code: codedTexts.code })
-          .from(codedTexts)
-          .where(and(eq(codedTexts.projectId, projectId), eq(codedTexts.variable, variable)))
-      ).map((c) => [c.text, c.code]),
-    );
+  async codingDetail(t: ReviewTx, projectId: string, variable: string) {
+    const texts = await t.otherTexts(projectId, variable);
+    const codes = await t.codesOf(projectId, variable);
+    const coded = new Map((await t.codedTexts(projectId, variable)).map((c) => [c.text, c.code]));
     const grouped = new Map<string, { text: string; count: number }>();
-    for (const t of texts) {
-      const k = norm(t.value);
-      const g = grouped.get(k) ?? { text: t.value.trim(), count: 0 };
+    for (const x of texts) {
+      const k = norm(x.value);
+      const g = grouped.get(k) ?? { text: x.value.trim(), count: 0 };
       g.count++;
       grouped.set(k, g);
     }
@@ -721,31 +526,19 @@ export class ReviewService implements OnModuleInit {
   }
 
   async saveCodes(
-    tx: Tx,
-    ctx: AuthContext,
+    t: ReviewTx,
+    _ctx: AuthContext,
     projectId: string,
     variable: string,
     body: z.infer<typeof CodesBody>,
   ) {
-    const keep = body.codes.map((c) => c.code);
-    const used = await tx
-      .select({ code: codedTexts.code })
-      .from(codedTexts)
-      .where(and(eq(codedTexts.projectId, projectId), eq(codedTexts.variable, variable)));
-    const missing = used.filter((u) => !keep.includes(u.code));
-    if (missing.length)
+    const { inUse } = await t.saveCodeList(projectId, variable, body.codes);
+    if (inUse.length)
       throw new ConflictException({
         code: 'CODE_IN_USE',
-        message: `Codes in use cannot be removed: ${[...new Set(missing.map((m) => m.code))].join(', ')}`,
+        message: `Codes in use cannot be removed: ${inUse.join(', ')}`,
       });
-    await tx
-      .delete(openCodes)
-      .where(and(eq(openCodes.projectId, projectId), eq(openCodes.variable, variable)));
-    if (body.codes.length)
-      await tx
-        .insert(openCodes)
-        .values(body.codes.map((c) => ({ tenantId: ctx.tenantId, projectId, variable, ...c })));
-    return this.codingDetail(tx, projectId, variable);
+    return this.codingDetail(t, projectId, variable);
   }
 
   /**
@@ -753,88 +546,22 @@ export class ReviewService implements OnModuleInit {
    * every interview with that text as `<VARIABLE>_CODE`, recorded as a reviewer's change.
    */
   async assign(
-    tx: Tx,
+    t: ReviewTx,
     ctx: AuthContext,
     projectId: string,
     variable: string,
     body: z.infer<typeof AssignBody>,
   ) {
-    if (body.code !== null) {
-      const [ok] = await tx
-        .select({ id: openCodes.id })
-        .from(openCodes)
-        .where(
-          and(
-            eq(openCodes.projectId, projectId),
-            eq(openCodes.variable, variable),
-            eq(openCodes.code, body.code),
-          ),
-        );
-      if (!ok) throw new BadRequestException({ code: 'UNKNOWN_CODE', message: 'Unknown code' });
-    }
+    if (body.code !== null && !(await t.codeExists(projectId, variable, body.code)))
+      throw new BadRequestException({ code: 'UNKNOWN_CODE', message: 'Unknown code' });
     const keys = [...new Set(body.texts.map(norm))];
-    if (body.code === null)
-      await tx
-        .delete(codedTexts)
-        .where(
-          and(
-            eq(codedTexts.projectId, projectId),
-            eq(codedTexts.variable, variable),
-            inArray(codedTexts.text, keys),
-          ),
-        );
-    else
-      for (const text of keys)
-        await tx
-          .insert(codedTexts)
-          .values({
-            tenantId: ctx.tenantId,
-            projectId,
-            variable,
-            text,
-            code: body.code,
-            codedBy: ctx.userId,
-          })
-          .onConflictDoUpdate({
-            target: [codedTexts.projectId, codedTexts.variable, codedTexts.text],
-            set: { code: body.code, codedBy: ctx.userId, codedAt: new Date() },
-          });
-    const hits = (await this.otherTexts(tx, projectId, variable)).filter((t) =>
-      keys.includes(norm(t.value)),
-    );
-    const now = new Date();
-    let changed = 0;
-    for (const h of hits) {
-      const codeKey = h.key.replace(/_OTHER$/, '_CODE');
-      const [iv] = await tx
-        .select({ answers: interviews.answers })
-        .from(interviews)
-        .where(eq(interviews.id, h.interview_id))
-        .for('update');
-      const old = (iv!.answers as Record<string, unknown>)[codeKey] ?? null;
-      if (old === body.code) continue;
-      const answers = { ...(iv!.answers as Record<string, unknown>) };
-      if (body.code === null) delete answers[codeKey];
-      else answers[codeKey] = body.code;
-      await tx
-        .update(interviews)
-        .set({ answers, updatedAt: now })
-        .where(eq(interviews.id, h.interview_id));
-      await tx.insert(interviewAnswerEvents).values({
-        tenantId: ctx.tenantId,
-        interviewId: h.interview_id,
-        deviceId: REVIEW_DEVICE,
-        seq: await this.nextReviewSeq(tx, h.interview_id),
-        variable: codeKey,
-        oldValue: old,
-        newValue: body.code,
-        at: now,
-        byUserId: ctx.userId,
-        source: 'reviewer',
-        reason: 'coding',
-      });
-      changed++;
-    }
-    return { ...(await this.codingDetail(tx, projectId, variable)), changed };
+    const changed = await t.assignCode({
+      projectId,
+      variable,
+      keys,
+      code: body.code,
+      userId: ctx.userId,
+    });
+    return { ...(await this.codingDetail(t, projectId, variable)), changed };
   }
 }
