@@ -40,7 +40,7 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 
 ## Requirements
 
-- Node 24 (LTS)
+- Node 24.22.1 or newer (LTS; `.nvmrc` and CI use 24.22.2, the 24.22.1 release being a security release)
 - pnpm 10
 - SQL Server 2022 (or Azure SQL Database)
 - Redis 7 (unused until the background worker; e-mail runs in-process for now, W5)

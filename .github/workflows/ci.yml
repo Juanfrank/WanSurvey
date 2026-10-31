@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.22.2, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.22.2, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # The application starts whole in these tests, so the workspace packages it imports are built.
       - run: pnpm --filter '@wansurvey/api^...' build
@@ -90,7 +90,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.22.2, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm --filter @wansurvey/web exec playwright install --with-deps chromium
@@ -121,7 +121,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.22.2, cache: pnpm }
       - run: scripts/package-appservice.sh out
       - name: Start the package as App Service would
         run: scripts/smoke-appservice.sh out/wansurvey-appservice.zip

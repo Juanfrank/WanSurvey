@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24-slim AS build
+FROM node:24.22.2-slim AS build
 WORKDIR /repo
 RUN corepack enable
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json ./
@@ -14,7 +14,7 @@ COPY apps/api apps/api
 RUN pnpm --filter @wansurvey/api... build \
   && pnpm deploy --filter @wansurvey/api --prod --legacy /out
 
-FROM node:24-slim
+FROM node:24.22.2-slim
 ENV NODE_ENV=production
 # tini, so Node is not PID 1:
 # signals reach it (a clean shutdown drains jobs and connections) and zombies are reaped.
