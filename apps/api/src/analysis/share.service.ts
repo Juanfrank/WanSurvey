@@ -1,12 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import type { Tx } from '../db/database.js';
-import { shareLinks } from '../db/schema.js';
+import type { AnalysisTx } from './analysis-repo.js';
 
 export const ShareBody = z.object({
   /** Days the link works; none means until revoked. */
@@ -28,12 +26,8 @@ export class ShareService {
     return `${this.config.PUBLIC_WEB_URL}/share/${token}`;
   }
 
-  async list(tx: Tx, projectId: string) {
-    const rows = await tx
-      .select()
-      .from(shareLinks)
-      .where(eq(shareLinks.projectId, projectId))
-      .orderBy(desc(shareLinks.createdAt));
+  async list(t: AnalysisTx, projectId: string) {
+    const rows = await t.shareLinks(projectId);
     return rows.map((r) => ({
       id: r.id,
       createdAt: r.createdAt,
@@ -43,49 +37,35 @@ export class ShareService {
     }));
   }
 
-  async create(tx: Tx, ctx: AuthContext, projectId: string, body: z.infer<typeof ShareBody>) {
+  async create(
+    t: AnalysisTx,
+    ctx: AuthContext,
+    projectId: string,
+    body: z.infer<typeof ShareBody>,
+  ) {
     const token = randomToken(24);
     const expiresAt = body.days ? new Date(Date.now() + body.days * 86_400_000) : null;
-    const [row] = await tx
-      .insert(shareLinks)
-      .values({
-        tenantId: ctx.tenantId,
-        projectId,
-        tokenHash: sha256Hex(token),
-        tokenEnc: encryptField(token, this.config.APP_ENCRYPTION_KEY),
-        createdBy: ctx.userId,
-        expiresAt,
-      })
-      .returning({ id: shareLinks.id });
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+    const id = await t.createShareLink({
+      projectId,
+      tokenHash: sha256Hex(token),
+      tokenEnc: encryptField(token, this.config.APP_ENCRYPTION_KEY),
+      createdBy: ctx.userId,
+      expiresAt,
+    });
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'share_link.created',
         targetType: 'share_link',
-        targetId: row!.id,
+        targetId: id,
         details: { projectId, expiresAt },
       }),
     );
-    return { id: row!.id, url: this.url(token), expiresAt };
+    return { id, url: this.url(token), expiresAt };
   }
 
-  async revoke(tx: Tx, ctx: AuthContext, projectId: string, id: string) {
-    const [row] = await tx
-      .update(shareLinks)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(shareLinks.id, id),
-          eq(shareLinks.projectId, projectId),
-          isNull(shareLinks.revokedAt),
-        ),
-      )
-      .returning({ id: shareLinks.id });
-    if (!row) throw new NotFoundException('Link not found');
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+  async revoke(t: AnalysisTx, ctx: AuthContext, projectId: string, id: string) {
+    if (!(await t.revokeShareLink(projectId, id))) throw new NotFoundException('Link not found');
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'share_link.revoked',
         targetType: 'share_link',
@@ -96,12 +76,9 @@ export class ShareService {
   }
 
   /** The project a live link opens (inside the link's organisation). */
-  async projectOf(tx: Tx, id: string): Promise<string> {
-    const [row] = await tx
-      .select({ projectId: shareLinks.projectId })
-      .from(shareLinks)
-      .where(eq(shareLinks.id, id));
-    if (!row) throw new NotFoundException('Link not found');
-    return row.projectId;
+  async projectOf(t: AnalysisTx, id: string): Promise<string> {
+    const projectId = await t.shareLinkProject(id);
+    if (!projectId) throw new NotFoundException('Link not found');
+    return projectId;
   }
 }

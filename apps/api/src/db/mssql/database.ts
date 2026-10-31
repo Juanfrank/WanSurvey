@@ -201,6 +201,14 @@ export class MssqlDatabase {
     return res.rows[0] ?? null;
   }
 
+  /** The organisation and id of a live share link, from the hash of its token. */
+  async shareLinkByHash(hash: string): Promise<{ id: string; tenantId: string } | null> {
+    const res = await sql<{ id: string; tenant_id: string }>`
+      EXEC dbo.share_link_by_hash @hash = ${hash}`.execute(this.db);
+    const r = res.rows[0];
+    return r ? { id: r.id.toLowerCase(), tenantId: r.tenant_id.toLowerCase() } : null;
+  }
+
   /** Every organisation, for nightly jobs. */
   async allTenantIds(): Promise<string[]> {
     const res = await sql<{ tenant_id: string }>`EXEC dbo.all_tenant_ids`.execute(this.db);

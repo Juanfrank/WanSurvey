@@ -40,6 +40,11 @@ export class Engine implements OnModuleDestroy {
     return this.mssql ? this.mssql.allTenantIds() : this.postgres.allTenantIds();
   }
 
+  /** The organisation and id of a live share link, from the hash of its token. */
+  shareLinkByHash(hash: string): Promise<{ id: string; tenantId: string } | null> {
+    return this.mssql ? this.mssql.shareLinkByHash(hash) : this.postgres.shareLinkByHash(hash);
+  }
+
   /** Whether the database answers. */
   probe(): Promise<boolean> {
     return this.mssql ? this.mssql.probe() : this.postgres.probe();

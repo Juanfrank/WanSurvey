@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { crosstab, crosstabVariables, filterRows, topline, type Table } from '@wansurvey/exporters';
 import { projectSettings } from '@wansurvey/schema';
-import { sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { AuditService } from '../audit/audit.service.js';
 import type { Tx } from '../db/database.js';
+import { asAnalysisTx, type AnalysisTx } from './analysis-repo.js';
 import { median } from '../metrics/metrics.js';
 import { DataFilter, DatasetService, type Dataset } from './dataset.service.js';
 
@@ -34,22 +35,19 @@ const CACHE_SIZE = 50;
 export class AnalysisService {
   private readonly cache = new Map<string, { data: Dataset; table: Table }>();
 
-  constructor(private readonly datasets: DatasetService) {}
+  constructor(
+    private readonly datasets: DatasetService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * The table of a query. Every analysis page, and each viewer of a shared link, would read
    * and rebuild all the interviews; instead the result is kept until the project's interviews
    * or published versions change (a cheap check on indexed columns).
    */
-  private async table(tx: Tx, projectId: string, q: AnalysisQuery) {
-    const [stamp] = await tx.execute<{ s: string }>(sql`
-      select concat_ws('|',
-        (select count(*) || ':' || coalesce(max(updated_at)::text, '') from interviews
-         where project_id = ${projectId}),
-        (select coalesce(max(v.published_at)::text, '') from questionnaire_versions v
-         join questionnaires qq on qq.id = v.questionnaire_id where qq.project_id = ${projectId})
-      ) as s`);
-    const key = `${projectId}|${stamp?.s}|${JSON.stringify(q)}`;
+  private async table(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
+    const stamp = await asAnalysisTx(tx, this.audit).dataStamp(projectId);
+    const key = `${projectId}|${stamp}|${JSON.stringify(q)}`;
     const hit = this.cache.get(key);
     if (hit) {
       this.cache.delete(key);
@@ -62,7 +60,7 @@ export class AnalysisService {
     return built;
   }
 
-  private async build(tx: Tx, projectId: string, q: AnalysisQuery) {
+  private async build(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
     const data = await this.datasets.load(tx, projectId, q, { completesOnly: true });
     let table = this.datasets.table(data, q.lang);
     if (q.where) {
@@ -78,7 +76,7 @@ export class AnalysisService {
     return { data, table };
   }
 
-  async topline(tx: Tx, projectId: string, q: AnalysisQuery) {
+  async topline(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
     const { data, table } = await this.table(tx, projectId, q);
     return {
       questionnaire: { id: data.questionnaireId, name: data.name },
@@ -89,7 +87,7 @@ export class AnalysisService {
     };
   }
 
-  async crosstab(tx: Tx, projectId: string, q: z.infer<typeof CrosstabQuery>) {
+  async crosstab(tx: Tx | AnalysisTx, projectId: string, q: z.infer<typeof CrosstabQuery>) {
     const { table } = await this.table(tx, projectId, q);
     const x = crosstab(table, q.row, q.col);
     if (!x)
@@ -119,11 +117,9 @@ export class AnalysisService {
     };
   }
 
-  async summary(tx: Tx, projectId: string, q: AnalysisQuery) {
+  async summary(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
     const { data, table } = await this.table(tx, projectId, q);
-    const [p] = await tx.execute<{ name: string; code: string; settings: unknown }>(
-      sql`select name, code, settings from projects where id = ${projectId}`,
-    );
+    const p = await asAnalysisTx(tx, this.audit).projectBrief(projectId);
     return {
       project: { name: p?.name ?? '', code: p?.code ?? '' },
       questionnaire: { id: data.questionnaireId, name: data.name },

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -20,6 +21,9 @@ import { Auth, Public, RequirePermission, type AuthContext } from '../common/aut
 import { sha256Hex } from '../common/crypto.js';
 import { ZodPipe } from '../common/zod.js';
 import { Database } from '../db/database.js';
+import { Engine } from '../db/engine.js';
+import { METRICS_REPO, type MetricsRepo } from '../metrics/metrics-repo.js';
+import { ANALYSIS_REPO, type AnalysisRepo } from './analysis-repo.js';
 import { LiveService } from '../dashboard/live.service.js';
 import { ExportBody, ExportsService } from '../exports/exports.service.js';
 import { MetricsQuery, MetricsService } from '../metrics/metrics.service.js';
@@ -35,6 +39,8 @@ const PERM = { projectParam: 'projectId' } as const;
 export class AnalysisController {
   constructor(
     private readonly database: Database,
+    @Inject(ANALYSIS_REPO) private readonly repo: AnalysisRepo,
+    @Inject(METRICS_REPO) private readonly metricsRepo: MetricsRepo,
     private readonly metrics: MetricsService,
     private readonly live: LiveService,
     private readonly analysis: AnalysisService,
@@ -50,17 +56,15 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(MetricsQuery)) q: z.infer<typeof MetricsQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.metrics.interviewers(tx, ctx, projectId, q),
+    return this.metricsRepo.inTenant(ctx.tenantId, (t) =>
+      this.metrics.interviewers(t, ctx, projectId, q),
     );
   }
 
   @Get('live/snapshot')
   @RequirePermission('dashboards.read', PERM)
   snapshot(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.live.snapshot(tx, projectId, ctx.tenantId),
-    );
+    return this.live.snapshotOf(ctx.tenantId, projectId);
   }
 
   /** Server-Sent Events: `snapshot` on change, `heartbeat` every 15 s (M2). */
@@ -76,9 +80,7 @@ export class AnalysisController {
   @Get('data/questionnaires')
   @RequirePermission(['dashboards.read', 'exports.run'], PERM)
   questionnaires(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.datasets.questionnaires(tx, projectId),
-    );
+    return this.repo.inTenant(ctx.tenantId, (t) => this.datasets.questionnaires(t, projectId));
   }
 
   @Get('topline')
@@ -88,7 +90,7 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(AnalysisQuery)) q: z.infer<typeof AnalysisQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.analysis.topline(tx, projectId, q));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.analysis.topline(t, projectId, q));
   }
 
   @Get('crosstab')
@@ -98,7 +100,7 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(CrosstabQuery)) q: z.infer<typeof CrosstabQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.analysis.crosstab(tx, projectId, q));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.analysis.crosstab(t, projectId, q));
   }
 
   @Get('summary')
@@ -108,7 +110,7 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(AnalysisQuery)) q: z.infer<typeof AnalysisQuery>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.analysis.summary(tx, projectId, q));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.analysis.summary(t, projectId, q));
   }
 
   @Get('exports')
@@ -155,7 +157,7 @@ export class AnalysisController {
   @Get('share-links')
   @RequirePermission('projects.update', PERM)
   links(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.share.list(tx, projectId));
+    return this.repo.inTenant(ctx.tenantId, (t) => this.share.list(t, projectId));
   }
 
   @Post('share-links')
@@ -166,9 +168,7 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(ShareBody)) body: z.infer<typeof ShareBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.share.create(tx, ctx, projectId, body),
-    );
+    return this.repo.inTenant(ctx.tenantId, (t) => this.share.create(t, ctx, projectId, body));
   }
 
   @Post('share-links/:id/revoke')
@@ -179,7 +179,7 @@ export class AnalysisController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    await this.database.withTenant(ctx.tenantId, (tx) => this.share.revoke(tx, ctx, projectId, id));
+    await this.repo.inTenant(ctx.tenantId, (t) => this.share.revoke(t, ctx, projectId, id));
   }
 }
 
@@ -190,7 +190,8 @@ const Token = z.string().regex(/^[A-Za-z0-9_-]{20,100}$/);
 @Controller('public/share')
 export class PublicShareController {
   constructor(
-    private readonly database: Database,
+    private readonly engine: Engine,
+    @Inject(ANALYSIS_REPO) private readonly repo: AnalysisRepo,
     private readonly analysis: AnalysisService,
     private readonly share: ShareService,
   ) {}
@@ -204,12 +205,12 @@ export class PublicShareController {
     q: z.infer<typeof AnalysisQuery>,
   ) {
     if (!Token.safeParse(token).success) throw new NotFoundException('Link not found');
-    const link = await this.database.shareLinkByHash(sha256Hex(token));
+    const link = await this.engine.shareLinkByHash(sha256Hex(token));
     if (!link)
       throw new NotFoundException({ code: 'LINK_EXPIRED', message: 'This link is not valid' });
-    return this.database.withTenant(link.tenantId, async (tx) => {
-      const projectId = await this.share.projectOf(tx, link.id);
-      return this.analysis.summary(tx, projectId, q);
+    return this.repo.inTenant(link.tenantId, async (t) => {
+      const projectId = await this.share.projectOf(t, link.id);
+      return this.analysis.summary(t, projectId, q);
     });
   }
 }

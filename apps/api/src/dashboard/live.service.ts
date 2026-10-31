@@ -1,10 +1,5 @@
 import { Inject, Injectable, Logger, type MessageEvent } from '@nestjs/common';
-import {
-  evaluate,
-  truthy,
-  type Scope,
-  type Value,
-} from '@wansurvey/logic';
+import { evaluate, truthy, type Scope, type Value } from '@wansurvey/logic';
 import { projectSettings } from '@wansurvey/schema';
 import { Observable } from 'rxjs';
 import { AuditService } from '../audit/audit.service.js';
@@ -99,6 +94,11 @@ export class LiveService {
     @Inject(BUS) private readonly bus: Bus,
     private readonly audit: AuditService,
   ) {}
+
+  /** One snapshot in its own transaction (the endpoint behind the dashboard's first paint). */
+  snapshotOf(tenantId: string, projectId: string) {
+    return this.repo.inTenant(tenantId, (t) => this.snapshot(t, projectId));
+  }
 
   async snapshot(tx: Tx | LiveTx, projectId: string, tenantId = ''): Promise<LiveSnapshot> {
     const t: LiveTx = 'activeInterviewers' in tx ? tx : new PgLiveTx(tx, tenantId, this.audit);
