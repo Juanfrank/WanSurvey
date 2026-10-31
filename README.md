@@ -8,7 +8,7 @@ The MVP is built in 13 vertical slices; all thirteen are done.
 
 | Slice | Scope                                                                                                                                                                                                                                                                                                                                                                                                                 | State |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| 1     | **Foundations**: monorepo, CI, Docker, Postgres with RLS, auth (Argon2id, cookie sessions, TOTP 2FA, CSRF, rate limiting, Microsoft Entra ID sign-in), tenants, users and roles, projects, audit log                                                                                                                                                                                                                  | ✅    |
+| 1     | **Foundations**: monorepo, CI, Docker, SQL Server with row-level security, auth (Argon2id, cookie sessions, TOTP 2FA, CSRF, rate limiting, Microsoft Entra ID sign-in), tenants, users and roles, projects, audit log                                                                                                                                                                                                 | ✅    |
 | 2     | **Schema and logic engine**: Zod questionnaire schema, expression parser and evaluator, routing, validation, piping, static analysis                                                                                                                                                                                                                                                                                  | ✅    |
 | 3     | **Renderer and test mode**: every question type in all four modes (PAPI as a print-style paper form), keyboard operation, English/Spanish, web app with sign-in (password and Microsoft), organisation switcher, waiting-for-access page, and the designer preview with path tracer and saved test scenarios                                                                                                          | ✅    |
 | 4     | **Questionnaire designer**: projects and questionnaires, keyboard-driven outline, editors for every item type, mode variants, scripts, quotas, visual condition builder, autosaved drafts with conflict detection, publish checks (errors, saved scenarios, breaking-change mapping) and immutable versions                                                                                                           | ✅    |
@@ -31,7 +31,7 @@ Background reading:
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
 - [`docs/operations.md`](docs/operations.md): running it in production (processes, configuration, jobs, backups, retention)
 - [`docs/bi.md`](docs/bi.md): the analysis model (schema `bi`) for BI tools and SQL: snowflake and flat table, refreshed by the worker
-- [`docs/azure.md`](docs/azure.md): running on one Azure App Service (Premium v3 P0v3, web, API and worker as sidecars, `infra/azure/main.bicep`) with PostgreSQL Flexible Server and Azure Cache for Redis, and what moving to SQL Server involves
+- [`docs/azure.md`](docs/azure.md): running on one Azure App Service (Premium v3 P0v3, web, API and worker as sidecars, `infra/azure/main.bicep`) with Azure SQL (or SQL Server) and Azure Cache for Redis
 - [`docs/security.md`](docs/security.md): the OWASP ASVS level 2 checklist and personal data handling
 - [`docs/accessibility.md`](docs/accessibility.md): WCAG 2.2 AA audit results and the keyboard map
 - [`docs/acceptance.md`](docs/acceptance.md): the MVP acceptance criteria and the tests that prove them
@@ -42,16 +42,16 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 
 - Node 24 (LTS)
 - pnpm 10
-- Postgres 16
+- SQL Server 2022 (or Azure SQL Database)
 - Redis 7 (unused until the background worker; e-mail runs in-process for now, W5)
 
 ## Getting started
 
-1. Install dependencies and start the databases (or use local Postgres):
+1. Install dependencies and start the database and Redis (or use your own SQL Server):
 
    ```bash
    pnpm install
-   docker compose up -d postgres redis   # creates the `wansurvey` and `wansurvey_test` databases
+   docker compose up -d mssql mssql-init redis   # SQL Server with an empty `wansurvey` database
    ```
 
 2. Configure the API:
@@ -63,13 +63,13 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 
    Deploying to Azure App Service without containers: [`docs/appservice-zip.md`](docs/appservice-zip.md)
    (what each setting is: [its settings section](docs/appservice-zip.md#what-each-setting-is)).
-   Planned work, such as SQL Server replacing PostgreSQL: [`docs/roadmap.md`](docs/roadmap.md).
+   Planned work: [`docs/roadmap.md`](docs/roadmap.md).
 
    Other confidential files (production environment files, keys, certificates) go in
    `appconfig/`: git ignores everything in it but the folder itself and the App Service settings
    templates (development and production; see `docs/azure.md`).
 
-3. Build, migrate and seed. Migrations create and update the restricted `wansurvey_app` role.
+3. Build, migrate and seed. Migrations create and update the restricted `wansurvey_app` user.
 
    ```bash
    pnpm build
@@ -102,15 +102,15 @@ pnpm test
 
 `pnpm test` runs the unit suites:
 
-| Package             | What it covers                                                                                                                                                                   |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/schema`   | Schema validation                                                                                                                                                                |
-| `packages/logic`    | Unit tests, fast-check properties, and a performance test on a 500-item questionnaire                                                                                            |
-| `packages/renderer` | Every control and layout in each mode, keyboard behaviour, Spanish, the paper form; axe-core accessibility checks                                                                |
-| `apps/web`          | API client, sign-in redirects and the waiting page                                                                                                                               |
-| `apps/api`          | Runs against the `wansurvey_test` database, which the suite recreates on each run. Covers RLS isolation, auth and 2FA, the full role × endpoint denial matrix, and the audit log |
+| Package             | What it covers                                                                                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/schema`   | Schema validation                                                                                                                                                                              |
+| `packages/logic`    | Unit tests, fast-check properties, and a performance test on a 500-item questionnaire                                                                                                          |
+| `packages/renderer` | Every control and layout in each mode, keyboard behaviour, Spanish, the paper form; axe-core accessibility checks                                                                              |
+| `apps/web`          | API client, sign-in redirects and the waiting page                                                                                                                                             |
+| `apps/api`          | `pnpm test` needs no database; `pnpm test:mssql` runs the rest against a SQL Server. Covers isolation by organisation, auth and 2FA, the full role × endpoint denial matrix, and the audit log |
 
-The API tests connect as `postgres://wansurvey_app:wansurvey_app@localhost:5432/wansurvey_test`. To use another database, set `TEST_DATABASE_URL` and `TEST_DATABASE_ADMIN_URL`.
+The tests that need a database run with `pnpm --filter @wansurvey/api test:mssql`, against the SQL Server of `MSSQL_ADMIN_URL` (the owner) and `MSSQL_URL` (`wansurvey_app`); they create the `wansurvey_test` database themselves. CI starts a SQL Server container for them.
 
 End-to-end tests (Playwright, Chromium) run the built API and web app against a fresh `wansurvey_e2e` database:
 

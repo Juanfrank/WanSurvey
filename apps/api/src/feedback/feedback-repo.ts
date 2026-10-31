@@ -1,18 +1,40 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
 import { randomUUID } from 'node:crypto';
-import { Database, type Tx } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
-import { feedbackPoints, feedbackResponses } from '../db/schema.js';
 
 /**
  * The database side of quick feedback, whichever engine runs (the pattern of
  * `auth/auth-repo.ts`).
  */
-export type PointView = typeof feedbackPoints.$inferSelect;
-export type ResponseView = typeof feedbackResponses.$inferSelect;
+export interface PointView {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  name: string;
+  question: unknown;
+  faces: number;
+  askComment: boolean;
+  slug: string;
+  active: boolean;
+  version: number;
+  items: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export interface ResponseView {
+  id: string;
+  tenantId: string;
+  pointId: string;
+  score: number;
+  channel: string;
+  ref: string | null;
+  comment: string | null;
+  editHash: string | null;
+  answers: unknown;
+  createdAt: Date;
+}
 
 export interface PointPatchView {
   name?: string;
@@ -78,169 +100,6 @@ export interface FeedbackRepo {
     slug: string,
     fn: (t: FeedbackTx, found: { id: string; tenantId: string } | null) => Promise<T>,
   ): Promise<T>;
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-export class PgFeedbackTx implements FeedbackTx {
-  constructor(
-    private readonly tx: Tx,
-    private readonly tenant: string,
-  ) {}
-
-  points(projectId: string) {
-    return this.tx
-      .select()
-      .from(feedbackPoints)
-      .where(eq(feedbackPoints.projectId, projectId))
-      .orderBy(feedbackPoints.createdAt);
-  }
-
-  async counts(pointIds: string[]) {
-    if (!pointIds.length) return [];
-    return this.tx
-      .select({
-        pointId: feedbackResponses.pointId,
-        score: feedbackResponses.score,
-        n: sql<number>`count(*)::int`,
-      })
-      .from(feedbackResponses)
-      .where(inArray(feedbackResponses.pointId, pointIds))
-      .groupBy(feedbackResponses.pointId, feedbackResponses.score);
-  }
-
-  async insertPoint(v: Parameters<FeedbackTx['insertPoint']>[0]) {
-    const [p] = await this.tx
-      .insert(feedbackPoints)
-      .values({ tenantId: this.tenant, ...v })
-      .returning();
-    return p!;
-  }
-
-  async updatePoint(projectId: string, id: string, patch: PointPatchView, asked: boolean) {
-    const [p] = await this.tx
-      .update(feedbackPoints)
-      .set({
-        ...patch,
-        ...(asked ? { version: sql`${feedbackPoints.version} + 1`, updatedAt: new Date() } : {}),
-      })
-      .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)))
-      .returning();
-    return p ?? null;
-  }
-
-  async point(projectId: string, id: string, lock = false) {
-    const q = this.tx
-      .select()
-      .from(feedbackPoints)
-      .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)));
-    const [p] = await (lock ? q.for('update') : q);
-    return p ?? null;
-  }
-
-  async pointById(id: string) {
-    const [p] = await this.tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, id));
-    return p ?? null;
-  }
-
-  async hasResponses(pointId: string) {
-    const [answered] = await this.tx
-      .select({ id: feedbackResponses.id })
-      .from(feedbackResponses)
-      .where(eq(feedbackResponses.pointId, pointId))
-      .limit(1);
-    return !!answered;
-  }
-
-  async deletePoint(id: string) {
-    await this.tx.delete(feedbackPoints).where(eq(feedbackPoints.id, id));
-  }
-
-  channels(pointId: string) {
-    return this.tx
-      .select({ channel: feedbackResponses.channel, n: sql<number>`count(*)::int` })
-      .from(feedbackResponses)
-      .where(eq(feedbackResponses.pointId, pointId))
-      .groupBy(feedbackResponses.channel);
-  }
-
-  comments(pointId: string, limit: number) {
-    return this.tx
-      .select({
-        score: feedbackResponses.score,
-        comment: feedbackResponses.comment,
-        ref: feedbackResponses.ref,
-        at: feedbackResponses.createdAt,
-      })
-      .from(feedbackResponses)
-      .where(and(eq(feedbackResponses.pointId, pointId), isNotNull(feedbackResponses.comment)))
-      .orderBy(desc(feedbackResponses.createdAt))
-      .limit(limit);
-  }
-
-  answered(pointId: string, limit: number) {
-    return this.tx
-      .select({
-        score: feedbackResponses.score,
-        answers: feedbackResponses.answers,
-        ref: feedbackResponses.ref,
-        at: feedbackResponses.createdAt,
-      })
-      .from(feedbackResponses)
-      .where(and(eq(feedbackResponses.pointId, pointId), isNotNull(feedbackResponses.answers)))
-      .orderBy(desc(feedbackResponses.createdAt))
-      .limit(limit);
-  }
-
-  async insertResponse(v: Parameters<FeedbackTx['insertResponse']>[0]) {
-    const [r] = await this.tx
-      .insert(feedbackResponses)
-      .values({
-        tenantId: this.tenant,
-        pointId: v.pointId,
-        score: v.score,
-        channel: v.channel,
-        ref: v.ref ?? null,
-        answers: v.answers ?? null,
-        editHash: v.editHash ?? null,
-      })
-      .returning({ id: feedbackResponses.id });
-    return r!.id;
-  }
-
-  async lockResponse(pointId: string, id: string) {
-    const [r] = await this.tx
-      .select()
-      .from(feedbackResponses)
-      .where(and(eq(feedbackResponses.id, id), eq(feedbackResponses.pointId, pointId)))
-      .for('update');
-    return r ?? null;
-  }
-
-  async updateResponse(
-    id: string,
-    patch: { answers?: Record<string, unknown>; comment?: string; editHash: null },
-  ) {
-    await this.tx.update(feedbackResponses).set(patch).where(eq(feedbackResponses.id, id));
-  }
-}
-
-@Injectable()
-export class PgFeedbackRepo implements FeedbackRepo {
-  constructor(private readonly database: Database) {}
-
-  inTenant<T>(tenantId: string, fn: (t: FeedbackTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) => fn(new PgFeedbackTx(tx, tenantId)));
-  }
-
-  ofSlug<T>(
-    slug: string,
-    fn: (t: FeedbackTx, found: { id: string; tenantId: string } | null) => Promise<T>,
-  ) {
-    return this.database.withTenantOf('feedback_point_by_slug', slug, (tx, found) =>
-      fn(new PgFeedbackTx(tx, found?.tenantId ?? ''), found),
-    );
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────

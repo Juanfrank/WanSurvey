@@ -24,10 +24,8 @@ test('scanned forms: a PDF with two forms is split and read, and the clerk finis
       ids.push(id);
       await db.run(
         `insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, status)
-         values (?, ?, ?, ?, ?, ?::text::jsonb, 'fresh')`,
-        [id, q!.tenant_id, q!.project_id, q!.id, ext, JSON.stringify({ city: 'Lima' })],
-        `insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, status)
          values (?, ?, ?, ?, ?, ?, 'fresh')`,
+        [id, q!.tenant_id, q!.project_id, q!.id, ext, JSON.stringify({ city: 'Lima' })],
       );
     }
 

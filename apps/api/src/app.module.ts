@@ -29,32 +29,27 @@ import { ScansController } from './papi/scans.controller.js';
 import { ScansService } from './papi/scans.service.js';
 import { AnalysisController, PublicShareController } from './analysis/analysis.controller.js';
 import { GoalsController } from './metrics/goals.controller.js';
-import { MssqlUsersRepo, PgUsersRepo, USERS_REPO } from './users/users-repo.js';
+import { MssqlUsersRepo, USERS_REPO } from './users/users-repo.js';
 import {
   MssqlQuestionnairesRepo,
-  PgQuestionnairesRepo,
   QUESTIONNAIRES_REPO,
 } from './questionnaires/questionnaires-repo.js';
-import { MssqlSampleRepo, PgSampleRepo, SAMPLE_REPO } from './sampling/sampling-repo.js';
-import {
-  INTERVIEWS_REPO,
-  MssqlInterviewsRepo,
-  PgInterviewsRepo,
-} from './interviews/interviews-repo.js';
-import { CATI_REPO, MssqlCatiRepo, PgCatiRepo } from './cati/cati-repo.js';
-import { MssqlReviewRepo, PgReviewRepo, REVIEW_REPO } from './review/review-repo.js';
-import { METRICS_REPO, MssqlMetricsRepo, PgMetricsRepo } from './metrics/metrics-repo.js';
-import { LIVE_REPO, MssqlLiveRepo, PgLiveRepo } from './dashboard/live-repo.js';
-import { MssqlPrivacyRepo, PgPrivacyRepo, PRIVACY_REPO } from './privacy/privacy-repo.js';
-import { ANALYSIS_REPO, MssqlAnalysisRepo, PgAnalysisRepo } from './analysis/analysis-repo.js';
+import { MssqlSampleRepo, SAMPLE_REPO } from './sampling/sampling-repo.js';
+import { INTERVIEWS_REPO, MssqlInterviewsRepo } from './interviews/interviews-repo.js';
+import { CATI_REPO, MssqlCatiRepo } from './cati/cati-repo.js';
+import { MssqlReviewRepo, REVIEW_REPO } from './review/review-repo.js';
+import { METRICS_REPO, MssqlMetricsRepo } from './metrics/metrics-repo.js';
+import { LIVE_REPO, MssqlLiveRepo } from './dashboard/live-repo.js';
+import { MssqlPrivacyRepo, PRIVACY_REPO } from './privacy/privacy-repo.js';
+import { ANALYSIS_REPO, MssqlAnalysisRepo } from './analysis/analysis-repo.js';
 import { TeamsController } from './teams/teams.controller.js';
-import { MssqlTeamsRepo, PgTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
+import { MssqlTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
 import { ProjectPeopleController } from './projects/project-people.controller.js';
-import { EXPORTS_REPO, MssqlExportsRepo, PgExportsRepo } from './exports/exports-repo.js';
-import { MssqlSweepRepo, PgSweepRepo, SWEEP_REPO } from './jobs/sweep-repo.js';
-import { CAWI_REPO, MssqlCawiRepo, PgCawiRepo } from './cawi/cawi-repo.js';
-import { FEEDBACK_REPO, MssqlFeedbackRepo, PgFeedbackRepo } from './feedback/feedback-repo.js';
-import { MssqlPapiRepo, PAPI_REPO, PgPapiRepo } from './papi/papi-repo.js';
+import { EXPORTS_REPO, MssqlExportsRepo } from './exports/exports-repo.js';
+import { MssqlSweepRepo, SWEEP_REPO } from './jobs/sweep-repo.js';
+import { CAWI_REPO, MssqlCawiRepo } from './cawi/cawi-repo.js';
+import { FEEDBACK_REPO, MssqlFeedbackRepo } from './feedback/feedback-repo.js';
+import { MssqlPapiRepo, PAPI_REPO } from './papi/papi-repo.js';
 import { AnalysisService } from './analysis/analysis.service.js';
 import { DatasetService } from './analysis/dataset.service.js';
 import { ShareService } from './analysis/share.service.js';
@@ -77,16 +72,15 @@ import { CatiService } from './cati/cati.service.js';
 import { AssignmentRulesController } from './cases/assignment-rules.controller.js';
 import { CasesController } from './cases/cases.controller.js';
 import { CasesService } from './cases/cases.service.js';
-import { CASES_REPO, MssqlCasesRepo, PgCasesRepo } from './cases/cases-repo.js';
+import { CASES_REPO, MssqlCasesRepo } from './cases/cases-repo.js';
 import { ImportsController } from './cases/imports.controller.js';
 import { SsoController, SsoSettingsController } from './auth/sso.controller.js';
 import { SsoConfigs } from './auth/sso-config.js';
 import { SsoService } from './auth/sso.service.js';
 import { CONFIG, loadConfig } from './config.js';
-import { Database } from './db/database.js';
 import { Engine } from './db/engine.js';
-import { MssqlOrgRepo, ORG_REPO, PgOrgRepo } from './projects/org-repo.js';
-import { AUTH_REPO, MssqlAuthRepo, PgAuthRepo } from './auth/auth-repo.js';
+import { MssqlOrgRepo, ORG_REPO } from './projects/org-repo.js';
+import { AUTH_REPO, MssqlAuthRepo } from './auth/auth-repo.js';
 import { HealthController } from './health/health.controller.js';
 import {
   ConsoleMailer,
@@ -216,160 +210,26 @@ export class AppModule {
                   ? new SmtpMailer(config.SMTP_URL!, config.MAIL_FROM)
                   : new ConsoleMailer(config.NODE_ENV !== 'production')),
         },
-        Database,
         Engine,
-        PgAuthRepo,
-        MssqlAuthRepo,
-        {
-          provide: AUTH_REPO,
-          useFactory: (engine: Engine, pg: PgAuthRepo, ms: MssqlAuthRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgAuthRepo, MssqlAuthRepo],
-        },
-        PgOrgRepo,
-        MssqlOrgRepo,
-        {
-          provide: ORG_REPO,
-          useFactory: (engine: Engine, pg: PgOrgRepo, ms: MssqlOrgRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgOrgRepo, MssqlOrgRepo],
-        },
-        PgTeamsRepo,
-        MssqlTeamsRepo,
-        {
-          provide: TEAMS_REPO,
-          useFactory: (engine: Engine, pg: PgTeamsRepo, ms: MssqlTeamsRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgTeamsRepo, MssqlTeamsRepo],
-        },
-        PgUsersRepo,
-        MssqlUsersRepo,
-        {
-          provide: USERS_REPO,
-          useFactory: (engine: Engine, pg: PgUsersRepo, ms: MssqlUsersRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgUsersRepo, MssqlUsersRepo],
-        },
-        PgQuestionnairesRepo,
-        MssqlQuestionnairesRepo,
-        {
-          provide: QUESTIONNAIRES_REPO,
-          useFactory: (engine: Engine, pg: PgQuestionnairesRepo, ms: MssqlQuestionnairesRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgQuestionnairesRepo, MssqlQuestionnairesRepo],
-        },
-        PgCasesRepo,
-        MssqlCasesRepo,
-        {
-          provide: CASES_REPO,
-          useFactory: (engine: Engine, pg: PgCasesRepo, ms: MssqlCasesRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgCasesRepo, MssqlCasesRepo],
-        },
-        PgSampleRepo,
-        MssqlSampleRepo,
-        {
-          provide: SAMPLE_REPO,
-          useFactory: (engine: Engine, pg: PgSampleRepo, ms: MssqlSampleRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgSampleRepo, MssqlSampleRepo],
-        },
-        PgInterviewsRepo,
-        MssqlInterviewsRepo,
-        {
-          provide: INTERVIEWS_REPO,
-          useFactory: (engine: Engine, pg: PgInterviewsRepo, ms: MssqlInterviewsRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgInterviewsRepo, MssqlInterviewsRepo],
-        },
-        PgCatiRepo,
-        MssqlCatiRepo,
-        {
-          provide: CATI_REPO,
-          useFactory: (engine: Engine, pg: PgCatiRepo, ms: MssqlCatiRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgCatiRepo, MssqlCatiRepo],
-        },
-        PgReviewRepo,
-        MssqlReviewRepo,
-        {
-          provide: REVIEW_REPO,
-          useFactory: (engine: Engine, pg: PgReviewRepo, ms: MssqlReviewRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgReviewRepo, MssqlReviewRepo],
-        },
-        PgMetricsRepo,
-        MssqlMetricsRepo,
-        {
-          provide: METRICS_REPO,
-          useFactory: (engine: Engine, pg: PgMetricsRepo, ms: MssqlMetricsRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgMetricsRepo, MssqlMetricsRepo],
-        },
-        PgLiveRepo,
-        MssqlLiveRepo,
-        {
-          provide: LIVE_REPO,
-          useFactory: (engine: Engine, pg: PgLiveRepo, ms: MssqlLiveRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgLiveRepo, MssqlLiveRepo],
-        },
-        PgPrivacyRepo,
-        MssqlPrivacyRepo,
-        {
-          provide: PRIVACY_REPO,
-          useFactory: (engine: Engine, pg: PgPrivacyRepo, ms: MssqlPrivacyRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgPrivacyRepo, MssqlPrivacyRepo],
-        },
-        PgAnalysisRepo,
-        MssqlAnalysisRepo,
-        {
-          provide: ANALYSIS_REPO,
-          useFactory: (engine: Engine, pg: PgAnalysisRepo, ms: MssqlAnalysisRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgAnalysisRepo, MssqlAnalysisRepo],
-        },
-        PgSweepRepo,
-        MssqlSweepRepo,
-        {
-          provide: SWEEP_REPO,
-          useFactory: (engine: Engine, pg: PgSweepRepo, ms: MssqlSweepRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgSweepRepo, MssqlSweepRepo],
-        },
-        PgCawiRepo,
-        MssqlCawiRepo,
-        {
-          provide: CAWI_REPO,
-          useFactory: (engine: Engine, pg: PgCawiRepo, ms: MssqlCawiRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgCawiRepo, MssqlCawiRepo],
-        },
-        PgFeedbackRepo,
-        MssqlFeedbackRepo,
-        {
-          provide: FEEDBACK_REPO,
-          useFactory: (engine: Engine, pg: PgFeedbackRepo, ms: MssqlFeedbackRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgFeedbackRepo, MssqlFeedbackRepo],
-        },
-        PgPapiRepo,
-        MssqlPapiRepo,
-        {
-          provide: PAPI_REPO,
-          useFactory: (engine: Engine, pg: PgPapiRepo, ms: MssqlPapiRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgPapiRepo, MssqlPapiRepo],
-        },
-        PgExportsRepo,
-        MssqlExportsRepo,
-        {
-          provide: EXPORTS_REPO,
-          useFactory: (engine: Engine, pg: PgExportsRepo, ms: MssqlExportsRepo) =>
-            engine.kind === 'mssql' ? ms : pg,
-          inject: [Engine, PgExportsRepo, MssqlExportsRepo],
-        },
+        { provide: AUTH_REPO, useClass: MssqlAuthRepo },
+        { provide: ORG_REPO, useClass: MssqlOrgRepo },
+        { provide: TEAMS_REPO, useClass: MssqlTeamsRepo },
+        { provide: USERS_REPO, useClass: MssqlUsersRepo },
+        { provide: QUESTIONNAIRES_REPO, useClass: MssqlQuestionnairesRepo },
+        { provide: CASES_REPO, useClass: MssqlCasesRepo },
+        { provide: SAMPLE_REPO, useClass: MssqlSampleRepo },
+        { provide: INTERVIEWS_REPO, useClass: MssqlInterviewsRepo },
+        { provide: CATI_REPO, useClass: MssqlCatiRepo },
+        { provide: REVIEW_REPO, useClass: MssqlReviewRepo },
+        { provide: METRICS_REPO, useClass: MssqlMetricsRepo },
+        { provide: LIVE_REPO, useClass: MssqlLiveRepo },
+        { provide: PRIVACY_REPO, useClass: MssqlPrivacyRepo },
+        { provide: ANALYSIS_REPO, useClass: MssqlAnalysisRepo },
+        { provide: SWEEP_REPO, useClass: MssqlSweepRepo },
+        { provide: CAWI_REPO, useClass: MssqlCawiRepo },
+        { provide: FEEDBACK_REPO, useClass: MssqlFeedbackRepo },
+        { provide: PAPI_REPO, useClass: MssqlPapiRepo },
+        { provide: EXPORTS_REPO, useClass: MssqlExportsRepo },
         AuditService,
         AuthService,
         SsoService,

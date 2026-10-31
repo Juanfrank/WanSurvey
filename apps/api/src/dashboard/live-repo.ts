@@ -1,12 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import { sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
-import { AuditService } from '../audit/audit.service.js';
-import { MssqlCasesTx, PgCasesTx, type CasesTx } from '../cases/cases-repo.js';
+import { MssqlCasesTx, type CasesTx } from '../cases/cases-repo.js';
 import { CasesStore } from '../cases/cases-store.mssql.js';
-import { COUNTED, COUNTED_SQL } from '../common/statuses.js';
-import { Database, type Tx } from '../db/database.js';
+import { COUNTED } from '../common/statuses.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { instant } from '../db/mssql/instant.js';
@@ -64,113 +61,6 @@ export interface LiveTx extends CasesTx {
 
 export interface LiveRepo {
   inTenant<T>(tenantId: string, fn: (t: LiveTx) => Promise<T>): Promise<T>;
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-export class PgLiveTx extends PgCasesTx implements LiveTx {
-  constructor(
-    private readonly ltx: Tx,
-    tenant: string,
-    audits: AuditService,
-  ) {
-    super(ltx, tenant, audits);
-  }
-
-  async modeTotals(projectId: string) {
-    return (await this.ltx.execute(sql`
-      select mode, sum(completes)::int as n from stats_daily where project_id = ${projectId} group by 1`)) as unknown as {
-      mode: string;
-      n: number;
-    }[];
-  }
-
-  async recentDays(projectId: string, tz: string) {
-    return (await this.ltx.execute(sql`
-      select to_char(day, 'YYYY-MM-DD') as day, sum(completes)::int as n from stats_daily
-      where project_id = ${projectId} and day > (now() at time zone ${tz})::date - 30
-      group by 1 order by 1`)) as unknown as { day: string; n: number }[];
-  }
-
-  async latestVersions(projectId: string) {
-    return (await this.ltx.execute(sql`
-      select distinct on (v.questionnaire_id) v.questionnaire_id as qid, v.compiled
-      from questionnaire_versions v
-      join questionnaires q on q.id = v.questionnaire_id
-      where q.project_id = ${projectId} order by v.questionnaire_id, v.version desc`)) as unknown as {
-      qid: string;
-      compiled: CompiledQuestionnaire;
-    }[];
-  }
-
-  async quotaRows(projectId: string, refs: string[], fields: string[]) {
-    return (await this.ltx.execute(sql`
-        select v.questionnaire_id as qid,
-               (select jsonb_object_agg(key, value) from jsonb_each(i.answers)
-                where key in ${refs.length ? refs : ['']}) as a,
-               (select jsonb_object_agg(key, value) from jsonb_each(
-                  case when jsonb_typeof(i.context->'case') = 'object'
-                       then i.context->'case' else '{}'::jsonb end)
-                where key in ${fields.length ? fields : ['']}) as c,
-               i.mode
-        from interviews i join questionnaire_versions v on v.id = i.questionnaire_version_id
-        where i.project_id = ${projectId} and i.entry_pass = 1 and i.disposition = 'COMPLETE'
-          and i.status in ${COUNTED_SQL}`)) as unknown as Awaited<ReturnType<LiveTx['quotaRows']>>;
-  }
-
-  async caseStatuses(projectId: string) {
-    return (await this.ltx.execute(sql`
-      select status, disposition, count(*)::int as n from cases where project_id = ${projectId} group by 1, 2`)) as unknown as {
-      status: string;
-      disposition: string | null;
-      n: number;
-    }[];
-  }
-
-  async callbacksDue(projectId: string) {
-    const r = (await this.ltx.execute(sql`
-      select count(*)::int as n from cases where project_id = ${projectId}
-        and status not in ('finalised', 'withdrawn') and next_contact_at is not null and next_contact_at <= now()`)) as unknown as {
-      n: number;
-    }[];
-    return r[0]?.n ?? 0;
-  }
-
-  async funnel(projectId: string) {
-    const r = (await this.ltx.execute(sql`
-      select count(*)::int as total, count(sent_at)::int as sent, count(opened_at)::int as opened,
-             count(started_at)::int as started, count(completed_at)::int as completed,
-             count(*) filter (where bounce_type = 'hard')::int as bounced
-      from invitations where project_id = ${projectId}`)) as unknown as Awaited<
-      ReturnType<LiveTx['funnel']>
-    >[];
-    return r[0]!;
-  }
-
-  async activeInterviewers(projectId: string, minutes: number) {
-    return (await this.ltx.execute(sql`
-      select distinct on (i.interviewer_id) i.interviewer_id as "userId", u.name, i.mode,
-             i.case_id as "caseId", c.external_id as "externalId", i.updated_at as "lastAt"
-      from interviews i join users u on u.id = i.interviewer_id
-      left join cases c on c.id = i.case_id
-      where i.project_id = ${projectId} and i.interviewer_id is not null
-        and i.updated_at > now() - make_interval(mins => ${minutes})
-      order by i.interviewer_id, i.updated_at desc`)) as unknown as Awaited<
-      ReturnType<LiveTx['activeInterviewers']>
-    >;
-  }
-}
-
-@Injectable()
-export class PgLiveRepo implements LiveRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: LiveTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) => fn(new PgLiveTx(tx, tenantId, this.audits)));
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────

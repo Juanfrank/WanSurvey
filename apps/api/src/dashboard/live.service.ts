@@ -3,8 +3,7 @@ import { evaluate, truthy, type Scope, type Value } from '@wansurvey/logic';
 import { projectSettings } from '@wansurvey/schema';
 import { Observable } from 'rxjs';
 import { AuditService } from '../audit/audit.service.js';
-import type { Tx } from '../db/database.js';
-import { LIVE_REPO, PgLiveTx, type LiveRepo, type LiveTx } from './live-repo.js';
+import { LIVE_REPO, type LiveRepo, type LiveTx } from './live-repo.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
 
 /** Minutes without activity after which an interviewer no longer shows as working. */
@@ -100,8 +99,8 @@ export class LiveService {
     return this.repo.inTenant(tenantId, (t) => this.snapshot(t, projectId));
   }
 
-  async snapshot(tx: Tx | LiveTx, projectId: string, tenantId = ''): Promise<LiveSnapshot> {
-    const t: LiveTx = 'activeInterviewers' in tx ? tx : new PgLiveTx(tx, tenantId, this.audit);
+  async snapshot(tx: LiveTx, projectId: string): Promise<LiveSnapshot> {
+    const t = tx;
     const p = await t.project(projectId);
     const target = projectSettings(p?.settings).fieldwork.targetCompletes;
 

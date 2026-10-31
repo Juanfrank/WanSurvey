@@ -1,32 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
 import { randomUUID } from 'node:crypto';
-import { AuditService } from '../audit/audit.service.js';
-import { ofQuestionnaire } from '../cases/cases.service.js';
 import { CasesStore } from '../cases/cases-store.mssql.js';
-import { rememberProject, type ProjectRow } from '../cases/project-memo.js';
-import { columnsAs, Database, Prepared, type Tx } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { instant } from '../db/mssql/instant.js';
 import {
-  cases,
-  contacts,
-  emailTemplates,
-  interviewDevices,
-  interviews,
-  invitations,
-  openLinks,
-  projectLogos,
-  projects,
-  questionnaires,
-  suppressions,
-  waves,
-} from '../db/schema.js';
-import {
   MssqlInterviewsTx,
-  PgInterviewsTx,
   type InterviewRow,
   type InterviewsTx,
 } from '../interviews/interviews-repo.js';
@@ -38,10 +18,67 @@ import { CawiStore } from './cawi-store.mssql.js';
  * `auth/auth-repo.ts`). A transaction here is also an `InterviewsTx`: the respondent runs the
  * interview runtime with the link's token instead of a sign-in.
  */
-export type InvitationView = typeof invitations.$inferSelect;
-export type WaveView = typeof waves.$inferSelect;
-export type SuppressionView = typeof suppressions.$inferSelect;
-export type OpenLinkView = typeof openLinks.$inferSelect;
+export interface InvitationView {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  questionnaireId: string;
+  waveId: string | null;
+  caseId: string | null;
+  contactId: string | null;
+  email: string | null;
+  tokenHash: string;
+  tokenEnc: string;
+  language: string;
+  status: string;
+  sendAttempts: number;
+  queuedAt: Date;
+  sentAt: Date | null;
+  deliveredAt: Date | null;
+  bouncedAt: Date | null;
+  bounceType: string | null;
+  openedAt: Date | null;
+  clickedAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  remindersSent: number;
+  lastReminderAt: Date | null;
+  leaseUntil: Date | null;
+  lastError: string | null;
+  interviewId: string | null;
+}
+export interface WaveView {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  questionnaireId: string;
+  name: string;
+  status: string;
+  channel: string;
+  filter: string | null;
+  reminderDays: number[];
+  sendAt: Date | null;
+  bouncesToCati: boolean;
+  createdBy: string | null;
+  createdAt: Date;
+  sentAt: Date | null;
+}
+export interface SuppressionView {
+  id: string;
+  tenantId: string;
+  email: string;
+  reason: string;
+  createdAt: Date;
+}
+export interface OpenLinkView {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  questionnaireId: string;
+  slug: string;
+  active: boolean;
+  createdAt: Date;
+}
 
 export type InvitationPatch = Partial<
   Pick<
@@ -240,577 +277,6 @@ export interface CawiRepo {
   ): Promise<T>;
   /** The same transaction, seen as CAWI (for the submit hook). */
   extend(t: InterviewsTx): CawiTx;
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-/** The invitation, locked, with its project. */
-const lockLinkQ = new Prepared<{ inv: InvitationView; project: ProjectRow }>(
-  () => sql`
-    select ${columnsAs(invitations, 'inv', 'inv')}, ${columnsAs(projects, 'p', 'project')}
-    from invitations inv join projects p on p.id = inv.project_id
-    where inv.id = ${sql.placeholder('id')}
-    for update of inv`,
-  { inv: getTableColumns(invitations), project: getTableColumns(projects) },
-);
-
-/** For syncs and submissions: the invitation and its interview, locked, the project and the device's number. */
-const lockSurveyQ = new Prepared<{
-  inv: InvitationView;
-  interview: InterviewRow;
-  project: ProjectRow;
-  lastSeq: number | null;
-}>(
-  () => sql`
-    select ${columnsAs(invitations, 'inv', 'inv')}, ${columnsAs(interviews, 'i', 'interview')},
-           ${columnsAs(projects, 'p', 'project')}, d.last_seq
-    from invitations inv
-    join interviews i on i.id = inv.interview_id
-    join projects p on p.id = inv.project_id
-    left join interview_devices d on d.interview_id = i.id and d.device_id = ${sql.placeholder('device')}
-    where inv.id = ${sql.placeholder('id')}
-    for update of inv, i`,
-  {
-    inv: getTableColumns(invitations),
-    interview: getTableColumns(interviews),
-    project: getTableColumns(projects),
-    lastSeq: interviewDevices.lastSeq,
-  },
-);
-
-/** A questionnaire's state and its latest published version. */
-const questionnaireTargetQ = new Prepared<TargetView>(
-  () => sql`
-    select q.state as "state", q.successor_id as "successorId", v.id as "versionId", v.version as "version"
-    from questionnaires q
-    left join lateral (
-      select id, version from questionnaire_versions
-      where questionnaire_id = q.id and status = 'published'
-      order by version desc limit 1
-    ) v on true
-    where q.id = ${sql.placeholder('qid')} and q.project_id = ${sql.placeholder('project')}`,
-  { state: 'raw', successorId: 'raw', versionId: 'raw', version: 'raw' },
-);
-
-/** An open link with its questionnaire's state and latest published version. */
-const openLinkTargetQ = new Prepared<TargetView & { projectId: string; questionnaireId: string }>(
-  () => sql`
-    select l.project_id as "projectId", l.questionnaire_id as "questionnaireId",
-           q.state as "state", q.successor_id as "successorId", v.id as "versionId", v.version as "version"
-    from open_links l
-    join questionnaires q on q.id = l.questionnaire_id
-    left join lateral (
-      select id, version from questionnaire_versions
-      where questionnaire_id = q.id and status = 'published'
-      order by version desc limit 1
-    ) v on true
-    where l.id = ${sql.placeholder('id')}`,
-  {
-    projectId: 'raw',
-    questionnaireId: 'raw',
-    state: 'raw',
-    successorId: 'raw',
-    versionId: 'raw',
-    version: 'raw',
-  },
-);
-
-const insertOpenInvitationQ = new Prepared<never>(
-  (tx) =>
-    tx.insert(invitations).values({
-      id: sql.placeholder('id'),
-      tenantId: sql.placeholder('tenantId'),
-      projectId: sql.placeholder('projectId'),
-      questionnaireId: sql.placeholder('questionnaireId'),
-      tokenHash: sql.placeholder('tokenHash'),
-      tokenEnc: sql.placeholder('tokenEnc'),
-      language: sql.placeholder('language'),
-      status: 'sent',
-      sentAt: sql`now()`,
-    }),
-  {},
-);
-
-const startInvitationQ = new Prepared<never>(
-  (tx) =>
-    tx
-      .update(invitations)
-      .set({
-        interviewId: sql`${sql.placeholder('interview')}`,
-        startedAt: sql`coalesce(started_at, now())`,
-      })
-      .where(eq(invitations.id, sql.placeholder('id'))),
-  {},
-);
-
-const completeInvitationQ = new Prepared<never>(
-  (tx) =>
-    tx
-      .update(invitations)
-      .set({ status: 'completed', completedAt: sql`now()` })
-      .where(eq(invitations.interviewId, sql.placeholder('interview'))),
-  {},
-);
-
-export class PgCawiTx extends PgInterviewsTx implements CawiTx {
-  /** The project read together with the link, so the rest of the request does not read it again. */
-  private linkProject: ProjectRow | null = null;
-
-  constructor(
-    private readonly ctx: Tx,
-    private readonly cten: string,
-    audits: AuditService,
-  ) {
-    super(ctx, cten, audits);
-  }
-
-  override async project(projectId: string) {
-    if (this.linkProject?.id === projectId)
-      return this.linkProject as unknown as Awaited<ReturnType<PgInterviewsTx['project']>>;
-    return super.project(projectId);
-  }
-
-  async projectLanguages(projectId: string) {
-    const [p] = await this.ctx
-      .select({ languages: projects.languages })
-      .from(projects)
-      .where(eq(projects.id, projectId));
-    return p ? (p.languages ?? []) : null;
-  }
-
-  ownTemplates(projectId: string) {
-    return this.ctx.select().from(emailTemplates).where(eq(emailTemplates.projectId, projectId));
-  }
-
-  async saveTemplate(
-    projectId: string,
-    userId: string,
-    v: { kind: string; language: string; subject: string; body: string },
-  ) {
-    await this.ctx
-      .insert(emailTemplates)
-      .values({ tenantId: this.cten, projectId, ...v, updatedBy: userId })
-      .onConflictDoUpdate({
-        target: [emailTemplates.projectId, emailTemplates.kind, emailTemplates.language],
-        set: {
-          subject: v.subject,
-          body: v.body,
-          updatedBy: userId,
-          updatedAt: new Date(),
-        },
-      });
-  }
-
-  async template(projectId: string, kind: string, language: string) {
-    const [t] = await this.ctx
-      .select({ subject: emailTemplates.subject, body: emailTemplates.body })
-      .from(emailTemplates)
-      .where(
-        and(
-          eq(emailTemplates.projectId, projectId),
-          eq(emailTemplates.kind, kind),
-          eq(emailTemplates.language, language),
-        ),
-      );
-    return t ?? null;
-  }
-
-  async hasQuestionnaire(projectId: string, questionnaireId: string) {
-    const [q] = await this.ctx
-      .select({ id: questionnaires.id })
-      .from(questionnaires)
-      .where(and(eq(questionnaires.id, questionnaireId), eq(questionnaires.projectId, projectId)));
-    return !!q;
-  }
-
-  async insertWave(v: Parameters<CawiTx['insertWave']>[0]) {
-    const [w] = await this.ctx
-      .insert(waves)
-      .values({ tenantId: this.cten, ...v })
-      .returning();
-    return w!;
-  }
-
-  waves(projectId: string) {
-    return this.ctx
-      .select()
-      .from(waves)
-      .where(eq(waves.projectId, projectId))
-      .orderBy(desc(waves.createdAt));
-  }
-
-  waveCounts(projectId: string) {
-    return this.ctx
-      .select({
-        waveId: invitations.waveId,
-        total: sql<number>`count(*)::int`,
-        queued: sql<number>`count(*) filter (where ${invitations.status} = 'queued')::int`,
-        sent: sql<number>`count(${invitations.sentAt})::int`,
-        delivered: sql<number>`count(${invitations.deliveredAt})::int`,
-        opened: sql<number>`count(${invitations.openedAt})::int`,
-        clicked: sql<number>`count(${invitations.clickedAt})::int`,
-        started: sql<number>`count(${invitations.startedAt})::int`,
-        completed: sql<number>`count(${invitations.completedAt})::int`,
-        bounced: sql<number>`count(*) filter (where ${invitations.bounceType} = 'hard')::int`,
-        suppressed: sql<number>`count(*) filter (where ${invitations.status} = 'suppressed')::int`,
-        failed: sql<number>`count(*) filter (where ${invitations.status} = 'failed')::int`,
-        reminders: sql<number>`coalesce(sum(${invitations.remindersSent}), 0)::int`,
-      })
-      .from(invitations)
-      .where(and(eq(invitations.projectId, projectId), sql`${invitations.waveId} is not null`))
-      .groupBy(invitations.waveId) as unknown as Promise<WaveCount[]>;
-  }
-
-  async waveChannel(projectId: string, waveId: string) {
-    const [peek] = await this.ctx
-      .select({ channel: waves.channel })
-      .from(waves)
-      .where(and(eq(waves.id, waveId), eq(waves.projectId, projectId)));
-    return peek?.channel ?? null;
-  }
-
-  async lockWave(projectId: string, waveId: string) {
-    const [w] = await this.ctx
-      .select()
-      .from(waves)
-      .where(and(eq(waves.id, waveId), eq(waves.projectId, projectId)))
-      .for('update');
-    return w ?? null;
-  }
-
-  async wave(id: string) {
-    const [w] = await this.ctx.select().from(waves).where(eq(waves.id, id));
-    return w ?? null;
-  }
-
-  async setWaveStatus(id: string, status: 'sending' | 'sent') {
-    await this.ctx.update(waves).set({ status, sentAt: new Date() }).where(eq(waves.id, id));
-  }
-
-  waveCandidates(projectId: string, questionnaireId: string) {
-    return this.ctx
-      .select({
-        id: cases.id,
-        sample: cases.sample,
-        samplePii: cases.samplePii,
-        status: cases.status,
-        priority: cases.priority,
-        modePreference: cases.modePreference,
-      })
-      .from(cases)
-      .where(
-        and(
-          eq(cases.projectId, projectId),
-          // A campaign invites the cases of its own questionnaire.
-          ofQuestionnaire(questionnaireId),
-          inArray(cases.status, ['fresh', 'assigned']),
-        ),
-      )
-      .orderBy(asc(cases.externalId));
-  }
-
-  async emailContacts(caseIds: string[]) {
-    if (!caseIds.length) return [];
-    return this.ctx
-      .select({
-        id: contacts.id,
-        caseId: contacts.caseId,
-        value: contacts.value,
-        consent: contacts.consent,
-      })
-      .from(contacts)
-      .where(
-        and(
-          inArray(contacts.caseId, caseIds),
-          eq(contacts.type, 'email'),
-          eq(contacts.valid, true),
-        ),
-      )
-      .orderBy(asc(contacts.createdAt));
-  }
-
-  async suppressedEmails() {
-    return (await this.ctx.select({ email: suppressions.email }).from(suppressions)).map(
-      (s) => s.email,
-    );
-  }
-
-  async insertInvitations(rows: NewInvitationRow[]) {
-    for (let i = 0; i < rows.length; i += 500)
-      await this.ctx
-        .insert(invitations)
-        .values(rows.slice(i, i + 500).map((r) => ({ tenantId: this.cten, ...r })))
-        .onConflictDoNothing();
-  }
-
-  waveLinkRows(projectId: string, waveId: string) {
-    return this.ctx
-      .select({
-        tokenEnc: invitations.tokenEnc,
-        externalId: cases.externalId,
-        startedAt: invitations.startedAt,
-        completedAt: invitations.completedAt,
-      })
-      .from(invitations)
-      .innerJoin(cases, eq(cases.id, invitations.caseId))
-      .where(and(eq(invitations.projectId, projectId), eq(invitations.waveId, waveId)))
-      .orderBy(asc(cases.externalId));
-  }
-
-  suppressionList() {
-    return this.ctx.select().from(suppressions).orderBy(desc(suppressions.createdAt)).limit(1000);
-  }
-
-  async openLinkOf(projectId: string) {
-    const [l] = await this.ctx.select().from(openLinks).where(eq(openLinks.projectId, projectId));
-    return l ?? null;
-  }
-
-  async updateOpenLink(id: string, patch: { active: boolean; questionnaireId?: string }) {
-    await this.ctx
-      .update(openLinks)
-      .set({
-        active: patch.active,
-        ...(patch.questionnaireId ? { questionnaireId: patch.questionnaireId } : {}),
-      })
-      .where(eq(openLinks.id, id));
-  }
-
-  async insertOpenLink(v: Parameters<CawiTx['insertOpenLink']>[0]) {
-    await this.ctx.insert(openLinks).values({ tenantId: this.cten, ...v });
-  }
-
-  async openLinkTarget(id: string) {
-    const [l] = await openLinkTargetQ.run(this.ctx, { id });
-    return l ?? null;
-  }
-
-  async insertOpenInvitation(v: Parameters<CawiTx['insertOpenInvitation']>[0]) {
-    await insertOpenInvitationQ.run(this.ctx, { id: randomUUID(), tenantId: this.cten, ...v });
-  }
-
-  async leaseBatch(now: Date, limit: number, leaseUntil: Date) {
-    const free = sql`(${invitations.leaseUntil} is null or ${invitations.leaseUntil} < ${now.toISOString()}::timestamptz)`;
-    const active = sql`exists (select 1 from questionnaires qq where qq.id = ${invitations.questionnaireId}
-                and qq.state = 'active')`;
-    const queued = await this.ctx
-      .select({ inv: invitations })
-      .from(invitations)
-      .innerJoin(waves, eq(waves.id, invitations.waveId))
-      .where(
-        and(
-          eq(invitations.status, 'queued'),
-          free,
-          sql`(${waves.sendAt} is null or ${waves.sendAt} <= ${now.toISOString()}::timestamptz)`,
-          // A disabled or completed questionnaire sends nothing; queued mail waits.
-          active,
-        ),
-      )
-      .orderBy(asc(invitations.queuedAt))
-      .limit(limit)
-      .for('update', { of: invitations, skipLocked: true });
-    const due = await this.ctx
-      .select({ inv: invitations })
-      .from(invitations)
-      .innerJoin(waves, eq(waves.id, invitations.waveId))
-      .where(
-        and(
-          eq(invitations.status, 'sent'),
-          isNull(invitations.completedAt),
-          free,
-          active,
-          // A case finished another way (by telephone, say) or withdrawn is not reminded.
-          sql`not exists (select 1 from cases cc where cc.id = ${invitations.caseId}
-                and cc.status in ('finalised', 'withdrawn'))`,
-          sql`${invitations.remindersSent} < cardinality(${waves.reminderDays})`,
-          sql`${invitations.sentAt} + (${waves.reminderDays}[${invitations.remindersSent} + 1] * interval '1 day') <= ${now.toISOString()}::timestamptz`,
-        ),
-      )
-      .limit(limit)
-      .for('update', { of: invitations, skipLocked: true });
-    const items = [
-      ...queued.map((r) => ({ inv: r.inv, kind: 'invitation' as const })),
-      ...due.map((r) => ({ inv: r.inv, kind: 'reminder' as const })),
-    ];
-    if (items.length)
-      await this.ctx
-        .update(invitations)
-        .set({ leaseUntil })
-        .where(
-          inArray(
-            invitations.id,
-            items.map((i) => i.inv.id),
-          ),
-        );
-    return items;
-  }
-
-  async markWavesSent() {
-    await this.ctx.execute(sql`
-        update waves set status = 'sent'
-        where status = 'sending' and not exists (
-          select 1 from invitations i where i.wave_id = waves.id and i.status = 'queued')`);
-  }
-
-  async isSuppressed(email: string) {
-    const [s] = await this.ctx
-      .select({ id: suppressions.id })
-      .from(suppressions)
-      .where(eq(suppressions.email, email));
-    return !!s;
-  }
-
-  async caseSample(caseId: string) {
-    const [c] = await this.ctx
-      .select({ sample: cases.sample, samplePii: cases.samplePii })
-      .from(cases)
-      .where(eq(cases.id, caseId));
-    return c ?? null;
-  }
-
-  async patchInvitation(id: string, patch: InvitationPatch) {
-    await this.ctx.update(invitations).set(patch).where(eq(invitations.id, id));
-  }
-
-  async lockInvitation(id: string) {
-    const [inv] = await this.ctx
-      .select()
-      .from(invitations)
-      .where(eq(invitations.id, id))
-      .for('update');
-    return inv ?? null;
-  }
-
-  async suppress(email: string, reason: string) {
-    await this.ctx
-      .insert(suppressions)
-      .values({ tenantId: this.cten, email, reason })
-      .onConflictDoNothing();
-  }
-
-  async markBounced(caseId: string, toCati: boolean) {
-    const [c] = await this.ctx.select().from(cases).where(eq(cases.id, caseId));
-    if (!c || c.status === 'finalised' || c.status === 'withdrawn') return false;
-    await this.ctx
-      .update(cases)
-      .set({
-        disposition: 'EMAIL_BOUNCED',
-        ...(toCati ? { modePreference: 'CATI', nextContactAt: new Date() } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(cases.id, caseId));
-    return true;
-  }
-
-  async lockLink(id: string) {
-    const [r] = await lockLinkQ.run(this.ctx, { id });
-    this.linkProject = r!.project;
-    rememberProject(this.ctx, r!.project);
-    return r!.inv;
-  }
-
-  async lockSurvey(id: string, device: string) {
-    const [r] = await lockSurveyQ.run(this.ctx, { id, device });
-    if (!r) return null;
-    this.linkProject = r.project;
-    rememberProject(this.ctx, r.project);
-    return { inv: r.inv, interview: r.interview, lastSeq: r.lastSeq };
-  }
-
-  async caseStatusOf(caseId: string) {
-    const [c] = await this.ctx
-      .select({ status: cases.status })
-      .from(cases)
-      .where(eq(cases.id, caseId));
-    return c?.status ?? null;
-  }
-
-  async logo(projectId: string) {
-    const [logo] = await this.ctx
-      .select({ contentType: projectLogos.contentType, image: projectLogos.image })
-      .from(projectLogos)
-      .where(eq(projectLogos.projectId, projectId));
-    return logo ?? null;
-  }
-
-  async setInterviewContext(id: string, context: unknown) {
-    await this.ctx.update(interviews).set({ context }).where(eq(interviews.id, id));
-  }
-
-  async casePiping(caseId: string) {
-    const [c] = await this.ctx
-      .select({ sample: cases.sample, samplePii: cases.samplePii })
-      .from(cases)
-      .where(eq(cases.id, caseId));
-    return c ?? null;
-  }
-
-  async startCase(caseId: string) {
-    await this.ctx
-      .update(cases)
-      .set({ status: 'in_progress', updatedAt: new Date() })
-      .where(and(eq(cases.id, caseId), inArray(cases.status, ['fresh', 'assigned'])));
-  }
-
-  async startInvitation(id: string, interviewId: string) {
-    await startInvitationQ.run(this.ctx, { id, interview: interviewId });
-  }
-
-  async completeInvitation(interviewId: string) {
-    await completeInvitationQ.run(this.ctx, { interview: interviewId });
-  }
-
-  async questionnaireState(id: string) {
-    const [q] = await this.ctx
-      .select({ state: questionnaires.state, successorId: questionnaires.successorId })
-      .from(questionnaires)
-      .where(eq(questionnaires.id, id));
-    return q ?? null;
-  }
-
-  async questionnaireTarget(questionnaireId: string, projectId: string) {
-    const [t] = await questionnaireTargetQ.run(this.ctx, {
-      qid: questionnaireId,
-      project: projectId,
-    });
-    return t ?? null;
-  }
-}
-
-@Injectable()
-export class PgCawiRepo implements CawiRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: CawiTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) => fn(new PgCawiTx(tx, tenantId, this.audits)));
-  }
-
-  ofToken<T>(
-    hash: string,
-    fn: (t: CawiTx, found: { id: string; tenantId: string } | null) => Promise<T>,
-  ) {
-    return this.database.withTenantOf('invitation_by_token', hash, (tx, found) =>
-      fn(new PgCawiTx(tx, found?.tenantId ?? '', this.audits), found),
-    );
-  }
-
-  ofOpenLink<T>(
-    slug: string,
-    fn: (t: CawiTx, found: { id: string; tenantId: string } | null) => Promise<T>,
-  ) {
-    return this.database.withTenantOf('open_link_by_slug', slug, (tx, found) =>
-      fn(new PgCawiTx(tx, found?.tenantId ?? '', this.audits), found),
-    );
-  }
-
-  extend(t: InterviewsTx): CawiTx {
-    const h = t.handle();
-    if (h.kind !== 'pg') throw new Error('Not a PostgreSQL transaction');
-    return new PgCawiTx(h.tx, h.tenantId, this.audits);
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
@@ -1435,7 +901,6 @@ export class MssqlCawiRepo implements CawiRepo {
 
   extend(t: InterviewsTx): CawiTx {
     const h = t.handle();
-    if (h.kind !== 'mssql') throw new Error('Not a SQL Server transaction');
     return this.view(h.tx, h.tenantId);
   }
 }

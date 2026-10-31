@@ -67,19 +67,20 @@ jobs:
           MSSQL_ADMIN_URL: mssql://sa:Wansurvey_Test1%21@localhost:1433/wansurvey_test?trustServerCertificate=true
           MSSQL_URL: mssql://wansurvey_app:Tr0ub4dor-Stronger%21@localhost:1433/wansurvey_test?trustServerCertificate=true
 
+  # The browser tests, with the API on SQL Server.
   e2e:
     # Playwright does not install Chromium on Ubuntu 26.04 (what ubuntu-latest became): pinned.
     runs-on: ubuntu-24.04
     services:
-      postgres:
-        image: postgres:16
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: wansurvey_test
-        ports: ['5432:5432']
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Wansurvey_Test1!
+        ports: ['1433:1433']
         options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Wansurvey_Test1!' -Q 'SELECT 1'"
+          --health-interval 5s --health-retries 20 --health-start-period 20s
       redis:
         image: redis:7
         ports: ['6379:6379']
@@ -93,7 +94,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm --filter @wansurvey/web exec playwright install --with-deps chromium
-      # pdftotext and pdftoppm, to read the summary PDF in the E2E tests.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - run: pnpm e2e
       - uses: actions/upload-artifact@v4
@@ -102,106 +102,21 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
 
-  # The same browser tests with the API on SQL Server (DB_ENGINE=mssql).
-  e2e-mssql:
-    # Playwright does not install Chromium on Ubuntu 26.04 (what ubuntu-latest became): pinned.
-    runs-on: ubuntu-24.04
-    services:
-      mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: 'Y'
-          MSSQL_SA_PASSWORD: Wansurvey_Test1!
-        ports: ['1433:1433']
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Wansurvey_Test1!' -Q 'SELECT 1'"
-          --health-interval 5s --health-retries 20 --health-start-period 20s
-      redis:
-        image: redis:7
-        ports: ['6379:6379']
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
-    env:
-      E2E_ENGINE: mssql
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm --filter @wansurvey/web exec playwright install --with-deps chromium
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
-      - run: pnpm e2e
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report-mssql
-          path: apps/web/playwright-report
-
-  # A rehearsal of the move: the PostgreSQL database with the demo fieldwork is copied into a new
-  # SQL Server database (apps/api/src/db/copy), checked table by table, and the application on each
-  # engine, over the same data, must answer the same (scripts/compare-engines.mjs).
-  data-copy:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
-      mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: 'Y'
-          MSSQL_SA_PASSWORD: Wansurvey_Test1!
-        ports: ['1433:1433']
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Wansurvey_Test1!' -Q 'SELECT 1'"
-          --health-interval 5s --health-retries 20 --health-start-period 20s
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter '@wansurvey/api^...' build
-      - run: pnpm --filter @wansurvey/api build
-      - name: A PostgreSQL database with the demo fieldwork
-        working-directory: apps/api
-        run: DEMO_INTERVIEWS=2000 node scripts/make-copy-source.mjs
-      - name: Copy it to SQL Server and verify
-        working-directory: apps/api
-        run: node dist/db/copy/rehearse.js
-        env:
-          SOURCE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/wansurvey_source
-          TARGET_DATABASE_ADMIN_URL: mssql://sa:Wansurvey_Test1%21@localhost:1433/wansurvey_ci_copy?trustServerCertificate=true
-          TARGET_DATABASE_URL: mssql://wansurvey_app:Tr0ub4dor-Stronger%21@localhost:1433/wansurvey_ci_copy?trustServerCertificate=true
-      - name: The API gives the same answers on both
-        working-directory: apps/api
-        run: scripts/engine-parity.sh
-        env:
-          PG_APP_URL: postgres://wansurvey_app:wansurvey_app@localhost:5432/wansurvey_source
-          MS_APP_URL: mssql://wansurvey_app:Tr0ub4dor-Stronger%21@localhost:1433/wansurvey_ci_copy?trustServerCertificate=true
-
   # The zip App Service runs (Linux, Node 24, no containers): built on Linux x64 like App
   # Service, started from a clean folder against a new database, and kept as an artifact to
   # upload (Kudu → Zip Push Deploy; see docs/appservice-zip.md).
   package:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports: ['5432:5432']
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Wansurvey_Test1!
+        ports: ['1433:1433']
         options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Wansurvey_Test1!' -Q 'SELECT 1'"
+          --health-interval 5s --health-retries 20 --health-start-period 20s
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -211,7 +126,7 @@ jobs:
       - name: Start the package as App Service would
         run: scripts/smoke-appservice.sh out/wansurvey-appservice.zip
         env:
-          DATABASE_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+          DATABASE_ADMIN_URL: mssql://sa:Wansurvey_Test1%21@localhost:1433/master?trustServerCertificate=true
       - uses: actions/upload-artifact@v4
         with:
           name: wansurvey-appservice-${{ github.sha }}

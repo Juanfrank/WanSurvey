@@ -5,17 +5,13 @@ const API_PORT = 3100;
 const WEB_PORT = 4173;
 const GEO_PORT = 3200;
 const redisUrl = process.env.E2E_REDIS_URL ?? 'redis://localhost:6379/1';
-const MSSQL = process.env.E2E_ENGINE === 'mssql';
-const appUrl = MSSQL
-  ? (process.env.E2E_MSSQL_URL ??
-    'mssql://wansurvey_app:Tr0ub4dor-Stronger%21@localhost:1433/wansurvey_e2e?trustServerCertificate=true')
-  : (process.env.E2E_DATABASE_URL ??
-    'postgres://wansurvey_app:wansurvey_app@localhost:5432/wansurvey_e2e');
+const appUrl =
+  process.env.E2E_MSSQL_URL ??
+  'mssql://wansurvey_app:Tr0ub4dor-Stronger%21@localhost:1433/wansurvey_e2e?trustServerCertificate=true';
 
 function apiEnv(): Record<string, string> {
   return {
     DATABASE_URL: appUrl,
-    ...(MSSQL ? { DB_ENGINE: 'mssql' } : {}),
     // No DATABASE_ADMIN_URL: the API would migrate at start, before global setup has made the
     // database; global setup migrates it.
     APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',

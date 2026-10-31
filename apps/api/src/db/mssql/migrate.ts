@@ -85,10 +85,10 @@ export async function runMssqlMigrations(adminUrl: string, appUrl: string): Prom
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const admin = process.env.MSSQL_ADMIN_URL;
-  const app = process.env.MSSQL_URL;
+  const admin = process.env.DATABASE_ADMIN_URL;
+  const app = process.env.DATABASE_URL;
   if (!admin || !app) {
-    console.error('MSSQL_ADMIN_URL and MSSQL_URL are required');
+    console.error('DATABASE_ADMIN_URL and DATABASE_URL are required');
     process.exit(1);
   }
   runMssqlMigrations(admin, app)

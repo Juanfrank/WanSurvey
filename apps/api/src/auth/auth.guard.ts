@@ -20,8 +20,8 @@ import {
 import { CSRF_HEADER, SESSION_COOKIE } from '../common/cookies.js';
 import { safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { isUuid } from '../db/database.js';
 import { AUTH_REPO, grantsOf, type AuthRepo } from './auth-repo.js';
+import { isUuid } from '../db/common.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOUCH_INTERVAL_MS = 60_000;

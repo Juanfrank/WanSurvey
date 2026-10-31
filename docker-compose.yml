@@ -1,31 +1,49 @@
 services:
-  postgres:
-    image: postgres:16
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: wansurvey
-    ports: ['5432:5432']
-    volumes:
-      [
-        'pgdata:/var/lib/postgresql/data',
-        './infra/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro',
-      ]
+      ACCEPT_EULA: 'Y'
+      MSSQL_SA_PASSWORD: Wansurvey_Dev1!
+    ports: ['1433:1433']
+    volumes: ['mssqldata:/var/opt/mssql']
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      test:
+        [
+          'CMD-SHELL',
+          "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Wansurvey_Dev1!' -Q 'SELECT 1'",
+        ]
       interval: 5s
-      retries: 10
+      retries: 20
+      start_period: 20s
+  # Creates the database once; the API's migrations do the rest.
+  mssql-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on: { mssql: { condition: service_healthy } }
+    restart: 'no'
+    entrypoint:
+      [
+        '/opt/mssql-tools18/bin/sqlcmd',
+        '-C',
+        '-S',
+        'mssql',
+        '-U',
+        'sa',
+        '-P',
+        'Wansurvey_Dev1!',
+        '-Q',
+        "IF DB_ID('wansurvey') IS NULL CREATE DATABASE wansurvey",
+      ]
   redis:
     image: redis:7
     ports: ['6379:6379']
   api:
     build: { context: ., dockerfile: apps/api/Dockerfile }
     profiles: ['full']
-    depends_on: { postgres: { condition: service_healthy } }
+    depends_on: { mssql-init: { condition: service_completed_successfully } }
     env_file: apps/api/.env
     environment:
-      DATABASE_URL: postgres://wansurvey_app:wansurvey_app@postgres:5432/wansurvey
-      DATABASE_ADMIN_URL: postgres://postgres:postgres@postgres:5432/wansurvey
+      DATABASE_URL: mssql://wansurvey_app:Wansurvey-App1%21@mssql:1433/wansurvey?trustServerCertificate=true
+      DATABASE_ADMIN_URL: mssql://sa:Wansurvey_Dev1%21@mssql:1433/wansurvey?trustServerCertificate=true
       REDIS_URL: redis://redis:6379
     ports: ['3000:3000']
   worker:
@@ -34,10 +52,14 @@ services:
     command: ['node', 'dist/worker.js']
     # No HTTP port: the image's /health check is for the API.
     healthcheck: { disable: true }
-    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_started } }
+    depends_on:
+      {
+        mssql-init: { condition: service_completed_successfully },
+        redis: { condition: service_started },
+      }
     env_file: apps/api/.env
     environment:
-      DATABASE_URL: postgres://wansurvey_app:wansurvey_app@postgres:5432/wansurvey
+      DATABASE_URL: mssql://wansurvey_app:Wansurvey-App1%21@mssql:1433/wansurvey?trustServerCertificate=true
       REDIS_URL: redis://redis:6379
   web:
     build: { context: ., dockerfile: apps/web/Dockerfile }
@@ -45,4 +67,4 @@ services:
     depends_on: [api]
     ports: ['8080:8080']
 volumes:
-  pgdata:
+  mssqldata:

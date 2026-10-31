@@ -1,31 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
 import { randomUUID } from 'node:crypto';
-import { AuditService } from '../audit/audit.service.js';
 import { CasesStore } from '../cases/cases-store.mssql.js';
-import { ofQuestionnaire } from '../cases/cases.service.js';
-import { Database, type Tx } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { instant } from '../db/mssql/instant.js';
-import {
-  cases,
-  entryMismatches,
-  interviewAnswerEvents,
-  interviews,
-  papiScanBatches,
-  papiScanForms,
-  papiScanPages,
-  questionnaireVersions,
-  questionnaires,
-  users,
-} from '../db/schema.js';
-import { claimable, MAX_JOB_ATTEMPTS, STUCK_AFTER_MS } from '../jobs/claims.js';
+import { MAX_JOB_ATTEMPTS, STUCK_AFTER_MS } from '../jobs/claims.js';
 import { claimJob } from '../jobs/claim.mssql.js';
 import {
   MssqlInterviewsTx,
-  PgInterviewsTx,
   toCase,
   type CaseFull,
   type InterviewRow,
@@ -37,9 +20,53 @@ import { InterviewsStore } from '../interviews/interviews-store.mssql.js';
  * The database side of paper interviewing (double entry) and scanned forms, whichever engine
  * runs (the pattern of `auth/auth-repo.ts`). A transaction here is also an `InterviewsTx`.
  */
-export type MismatchRow = typeof entryMismatches.$inferSelect;
-export type BatchView = typeof papiScanBatches.$inferSelect;
-export type FormView = typeof papiScanForms.$inferSelect;
+export interface MismatchRow {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  caseId: string;
+  firstInterviewId: string;
+  secondInterviewId: string;
+  variable: string;
+  firstValue: unknown;
+  secondValue: unknown;
+  status: string;
+  resolvedValue: unknown;
+  resolvedBy: string | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+}
+export interface BatchView {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  uploadedBy: string | null;
+  fileName: string;
+  pdf: Buffer | null;
+  status: string;
+  pages: number;
+  error: string | null;
+  createdAt: Date;
+  finishedAt: Date | null;
+  startedAt: Date | null;
+  attempts: number;
+}
+export interface FormView {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  batchId: string;
+  caseId: string;
+  questionnaireVersionId: string;
+  lang: string;
+  interviewId: string | null;
+  status: string;
+  pagesExpected: number;
+  pagesFound: number[];
+  issues: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export interface FormCase {
   id: string;
@@ -197,396 +224,6 @@ export interface PapiRepo {
   inTenant<T>(tenantId: string, fn: (t: PapiTx) => Promise<T>): Promise<T>;
   /** The same transaction, seen as paper (for the submit hook). */
   extend(t: InterviewsTx): PapiTx;
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-export class PgPapiTx extends PgInterviewsTx implements PapiTx {
-  constructor(
-    private readonly ptx: Tx,
-    private readonly pten: string,
-    audits: AuditService,
-  ) {
-    super(ptx, pten, audits);
-  }
-
-  formCases(
-    projectId: string,
-    q: { userId: string | null; caseIds?: string[]; questionnaireId?: string },
-  ) {
-    const conds = [eq(cases.projectId, projectId)];
-    if (q.userId) conds.push(eq(cases.assignedTo, q.userId));
-    if (q.caseIds?.length) conds.push(inArray(cases.id, q.caseIds));
-    // Each questionnaire prints its own cases.
-    const ofQ = ofQuestionnaire(q.questionnaireId);
-    if (ofQ) conds.push(ofQ);
-    return this.ptx
-      .select({
-        id: cases.id,
-        externalId: cases.externalId,
-        sample: cases.sample,
-        samplePii: cases.samplePii,
-        status: cases.status,
-        priority: cases.priority,
-        modePreference: cases.modePreference,
-        assignedTo: cases.assignedTo,
-      })
-      .from(cases)
-      .where(and(...conds))
-      .orderBy(asc(cases.externalId));
-  }
-
-  paperInterviews(caseId: string) {
-    return this.ptx
-      .select()
-      .from(interviews)
-      .where(and(eq(interviews.caseId, caseId), eq(interviews.mode, 'PAPI')))
-      .orderBy(desc(interviews.startedAt));
-  }
-
-  async caseByExternalId(projectId: string, externalId: string) {
-    const [c] = await this.ptx
-      .select({
-        id: cases.id,
-        externalId: cases.externalId,
-        status: cases.status,
-        assignedTo: cases.assignedTo,
-      })
-      .from(cases)
-      .where(and(eq(cases.projectId, projectId), eq(cases.externalId, externalId)));
-    return c ?? null;
-  }
-
-  async reopenCase(caseId: string) {
-    await this.ptx
-      .update(cases)
-      .set({ status: 'in_progress', disposition: null, updatedAt: new Date() })
-      .where(eq(cases.id, caseId));
-  }
-
-  async firstEntry(caseId: string, statuses: string[]) {
-    const [first] = await this.ptx
-      .select()
-      .from(interviews)
-      .where(
-        and(
-          eq(interviews.caseId, caseId),
-          eq(interviews.mode, 'PAPI'),
-          eq(interviews.entryPass, 1),
-          inArray(interviews.status, statuses),
-        ),
-      );
-    return first ?? null;
-  }
-
-  async insertMismatches(rows: Parameters<PapiTx['insertMismatches']>[0]) {
-    if (!rows.length) return;
-    await this.ptx.insert(entryMismatches).values(rows.map((r) => ({ tenantId: this.pten, ...r })));
-  }
-
-  mismatches(projectId: string, status: 'open' | 'resolved' | 'all') {
-    return this.ptx
-      .select({
-        id: entryMismatches.id,
-        caseId: entryMismatches.caseId,
-        externalId: cases.externalId,
-        variable: entryMismatches.variable,
-        firstValue: entryMismatches.firstValue,
-        secondValue: entryMismatches.secondValue,
-        status: entryMismatches.status,
-        resolvedValue: entryMismatches.resolvedValue,
-        resolvedBy: users.name,
-        resolvedAt: entryMismatches.resolvedAt,
-        firstInterviewId: entryMismatches.firstInterviewId,
-        questionnaireVersionId: interviews.questionnaireVersionId,
-      })
-      .from(entryMismatches)
-      .innerJoin(cases, eq(cases.id, entryMismatches.caseId))
-      .innerJoin(interviews, eq(interviews.id, entryMismatches.firstInterviewId))
-      .leftJoin(users, eq(users.id, entryMismatches.resolvedBy))
-      .where(
-        and(
-          eq(entryMismatches.projectId, projectId),
-          status === 'all' ? sql`true` : eq(entryMismatches.status, status),
-        ),
-      )
-      .orderBy(asc(cases.externalId), asc(entryMismatches.variable))
-      .limit(1000);
-  }
-
-  async lockMismatch(projectId: string, id: string) {
-    const [m] = await this.ptx
-      .select()
-      .from(entryMismatches)
-      .where(and(eq(entryMismatches.id, id), eq(entryMismatches.projectId, projectId)))
-      .for('update');
-    return m ?? null;
-  }
-
-  async resolveMismatch(id: string, v: { value: unknown; by: string; at: Date }) {
-    await this.ptx
-      .update(entryMismatches)
-      .set({ status: 'resolved', resolvedValue: v.value, resolvedBy: v.by, resolvedAt: v.at })
-      .where(eq(entryMismatches.id, id));
-  }
-
-  async overwriteAnswer(interviewId: string, variable: string, value: unknown, at: Date) {
-    const path = `{${variable}}`;
-    const statePath = `{answers,${variable}}`;
-    await this.ptx
-      .update(interviews)
-      .set({
-        answers:
-          value === null
-            ? sql`${interviews.answers} - ${variable}`
-            : sql`jsonb_set(${interviews.answers}, ${path}::text[], ${JSON.stringify(value)}::jsonb, true)`,
-        state:
-          value === null
-            ? sql`jsonb_set(${interviews.state}, '{answers}', (${interviews.state} -> 'answers') - ${variable}, true)`
-            : sql`jsonb_set(${interviews.state}, ${statePath}::text[], ${JSON.stringify(value)}::jsonb, true)`,
-        updatedAt: at,
-      })
-      .where(eq(interviews.id, interviewId));
-  }
-
-  async nextEventSeq(interviewId: string, deviceId: string) {
-    const [{ next }] = (await this.ptx
-      .select({ next: sql<number>`coalesce(max(${interviewAnswerEvents.seq}), 0)::int + 1` })
-      .from(interviewAnswerEvents)
-      .where(
-        and(
-          eq(interviewAnswerEvents.interviewId, interviewId),
-          eq(interviewAnswerEvents.deviceId, deviceId),
-        ),
-      )) as [{ next: number }];
-    return next;
-  }
-
-  async openMismatches(secondInterviewId: string) {
-    const [left] = await this.ptx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(entryMismatches)
-      .where(
-        and(
-          eq(entryMismatches.secondInterviewId, secondInterviewId),
-          eq(entryMismatches.status, 'open'),
-        ),
-      );
-    return left!.n;
-  }
-
-  async insertBatch(v: { projectId: string; uploadedBy: string; fileName: string; pdf: Buffer }) {
-    const [b] = await this.ptx
-      .insert(papiScanBatches)
-      .values({ tenantId: this.pten, ...v })
-      .returning({ id: papiScanBatches.id });
-    return b!.id;
-  }
-
-  async claimBatch(id: string) {
-    const [b] = await this.ptx
-      .update(papiScanBatches)
-      .set({
-        status: 'running',
-        startedAt: new Date(),
-        attempts: sql`${papiScanBatches.attempts} + 1`,
-      })
-      .where(and(eq(papiScanBatches.id, id), claimable(papiScanBatches)))
-      .returning();
-    return b ?? null;
-  }
-
-  async failBatch(id: string, error: string) {
-    await this.ptx
-      .update(papiScanBatches)
-      .set({ status: 'failed', error, finishedAt: new Date() })
-      .where(eq(papiScanBatches.id, id));
-  }
-
-  async finishBatch(id: string, pages: number) {
-    await this.ptx
-      .update(papiScanBatches)
-      .set({ status: 'done', pages, pdf: null, finishedAt: new Date() })
-      .where(eq(papiScanBatches.id, id));
-  }
-
-  async caseInProject(projectId: string, id: string) {
-    const [c] = await this.ptx
-      .select()
-      .from(cases)
-      .where(and(eq(cases.id, id), eq(cases.projectId, projectId)));
-    return c ?? null;
-  }
-
-  async insertForm(v: NewForm) {
-    await this.ptx.insert(papiScanForms).values({ tenantId: this.pten, ...v });
-  }
-
-  async insertPages(rows: NewPage[]) {
-    for (const r of rows)
-      await this.ptx.insert(papiScanPages).values({ tenantId: this.pten, ...r } as never);
-  }
-
-  async hasTakenInterview(caseId: string) {
-    const [taken] = await this.ptx
-      .select({ id: interviews.id })
-      .from(interviews)
-      .where(
-        and(
-          eq(interviews.caseId, caseId),
-          inArray(interviews.status, ['in_progress', 'submitted', 'in_review', 'approved']),
-        ),
-      )
-      .limit(1);
-    return !!taken;
-  }
-
-  batches(projectId: string) {
-    return this.ptx
-      .select({
-        id: papiScanBatches.id,
-        fileName: papiScanBatches.fileName,
-        status: papiScanBatches.status,
-        pages: papiScanBatches.pages,
-        error: papiScanBatches.error,
-        createdAt: papiScanBatches.createdAt,
-        uploadedBy: users.name,
-      })
-      .from(papiScanBatches)
-      .leftJoin(users, eq(users.id, papiScanBatches.uploadedBy))
-      .where(eq(papiScanBatches.projectId, projectId))
-      .orderBy(desc(papiScanBatches.createdAt))
-      .limit(50);
-  }
-
-  scanForms(batchIds: string[]) {
-    return this.ptx
-      .select({
-        id: papiScanForms.id,
-        batchId: papiScanForms.batchId,
-        caseId: papiScanForms.caseId,
-        externalId: cases.externalId,
-        interviewId: papiScanForms.interviewId,
-        status: papiScanForms.status,
-        pagesExpected: papiScanForms.pagesExpected,
-        pagesFound: papiScanForms.pagesFound,
-        issues: papiScanForms.issues,
-        interviewStatus: interviews.status,
-      })
-      .from(papiScanForms)
-      .innerJoin(cases, eq(cases.id, papiScanForms.caseId))
-      .leftJoin(interviews, eq(interviews.id, papiScanForms.interviewId))
-      .where(inArray(papiScanForms.batchId, batchIds))
-      .orderBy(asc(cases.externalId));
-  }
-
-  strayPages(batchIds: string[]) {
-    return this.ptx
-      .select({
-        batchId: papiScanPages.batchId,
-        pageNo: papiScanPages.pageNo,
-        problem: papiScanPages.problem,
-      })
-      .from(papiScanPages)
-      .where(
-        and(inArray(papiScanPages.batchId, batchIds), sql`${papiScanPages.problem} is not null`),
-      )
-      .orderBy(asc(papiScanPages.pageNo));
-  }
-
-  async formOfInterview(interviewId: string) {
-    const [form] = await this.ptx
-      .select()
-      .from(papiScanForms)
-      .where(eq(papiScanForms.interviewId, interviewId));
-    return form ?? null;
-  }
-
-  async formOf(projectId: string, id: string) {
-    const [form] = await this.ptx
-      .select()
-      .from(papiScanForms)
-      .where(and(eq(papiScanForms.id, id), eq(papiScanForms.projectId, projectId)));
-    return form ?? null;
-  }
-
-  formPages(formId: string) {
-    return this.ptx
-      .select({
-        id: papiScanPages.id,
-        formPage: papiScanPages.formPage,
-        transform: papiScanPages.transform,
-        width: papiScanPages.width,
-        height: papiScanPages.height,
-      })
-      .from(papiScanPages)
-      .where(eq(papiScanPages.formId, formId))
-      .orderBy(asc(papiScanPages.formPage));
-  }
-
-  async pageImage(projectId: string, pageId: string) {
-    const [p] = await this.ptx
-      .select({ image: papiScanPages.image })
-      .from(papiScanPages)
-      .innerJoin(papiScanBatches, eq(papiScanBatches.id, papiScanPages.batchId))
-      .where(and(eq(papiScanPages.id, pageId), eq(papiScanBatches.projectId, projectId)));
-    return p?.image ?? null;
-  }
-
-  async claimInterview(interviewId: string, userId: string) {
-    const [row] = await this.ptx
-      .update(interviews)
-      .set({ interviewerId: userId, updatedAt: new Date() })
-      .where(and(eq(interviews.id, interviewId), eq(interviews.status, 'in_progress')))
-      .returning({ id: interviews.id });
-    return row?.id ?? null;
-  }
-
-  async assignCase(caseId: string, userId: string) {
-    await this.ptx
-      .update(cases)
-      .set({ assignedTo: userId, updatedAt: new Date() })
-      .where(eq(cases.id, caseId));
-  }
-
-  async questionnaireName(id: string) {
-    const [q] = await this.ptx
-      .select({ name: questionnaires.name })
-      .from(questionnaires)
-      .where(eq(questionnaires.id, id));
-    return q?.name ?? null;
-  }
-
-  async versionIdOf(questionnaireId: string, version: number) {
-    const [v] = await this.ptx
-      .select({ id: questionnaireVersions.id })
-      .from(questionnaireVersions)
-      .where(
-        and(
-          eq(questionnaireVersions.questionnaireId, questionnaireId),
-          eq(questionnaireVersions.version, version),
-        ),
-      );
-    return v?.id ?? null;
-  }
-}
-
-@Injectable()
-export class PgPapiRepo implements PapiRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: PapiTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) => fn(new PgPapiTx(tx, tenantId, this.audits)));
-  }
-
-  extend(t: InterviewsTx): PapiTx {
-    const h = t.handle();
-    if (h.kind !== 'pg') throw new Error('Not a PostgreSQL transaction');
-    return new PgPapiTx(h.tx, h.tenantId, this.audits);
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
@@ -1119,7 +756,6 @@ export class MssqlPapiRepo implements PapiRepo {
 
   extend(t: InterviewsTx): PapiTx {
     const h = t.handle();
-    if (h.kind !== 'mssql') throw new Error('Not a SQL Server transaction');
     return new MssqlPapiTx(h.tx, h.tenantId, this.cstore, this.istore);
   }
 }

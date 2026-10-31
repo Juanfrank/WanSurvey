@@ -4,17 +4,17 @@ How to run WanSurvey in production: what runs, how it is configured, and the rou
 
 ## What runs
 
-| Process     | Image / command                                        | Scale                          | Needs                          |
-| ----------- | ------------------------------------------------------ | ------------------------------ | ------------------------------ |
-| Web         | `apps/web/Dockerfile` (nginx, port 8080)               | 2+ behind the load balancer    | —                              |
-| API         | `apps/api/Dockerfile`, `node dist/main.js` (port 3000) | 2+                             | Postgres, Redis                |
-| Worker      | same image, `node dist/worker.js`                      | 1–2 (jobs are taken once each) | Postgres, Redis                |
-| Postgres 16 | managed service                                        | primary + standby              | encrypted disks, daily backups |
-| Redis 7     | managed service                                        | 1 (with persistence)           | —                              |
+| Process    | Image / command                                        | Scale                          | Needs                     |
+| ---------- | ------------------------------------------------------ | ------------------------------ | ------------------------- |
+| Web        | `apps/web/Dockerfile` (nginx, port 8080)               | 2+ behind the load balancer    | —                         |
+| API        | `apps/api/Dockerfile`, `node dist/main.js` (port 3000) | 2+                             | SQL Server, Redis         |
+| Worker     | same image, `node dist/worker.js`                      | 1–2 (jobs are taken once each) | SQL Server, Redis         |
+| SQL Server | Azure SQL Database or SQL Server 2022                  | per the service tier           | encryption, daily backups |
+| Redis 7    | managed service                                        | 1 (with persistence)           | —                         |
 
 TLS terminates at the load balancer, which sends `/` to the web containers. nginx serves the app with its security headers and proxies `/api/` to the API, so the session cookie stays first-party. Server-Sent Events (`/api/v1/projects/:id/live`) need proxy buffering off and a long read timeout; `infra/nginx/templates/default.conf.template` sets both, and a load balancer in front needs an idle timeout above 30 s.
 
-On Azure App Service, see [`azure.md`](azure.md). `docker compose --profile full up` runs the whole stack locally (Postgres, Redis, API, worker, web on http://localhost:8080).
+On Azure App Service, see [`azure.md`](azure.md). `docker compose --profile full up` runs the whole stack locally (SQL Server, Redis, API, worker, web on http://localhost:8080).
 
 ## Configuration
 
@@ -53,11 +53,11 @@ API and worker read the same environment (validated at start; see `apps/api/.env
 
 Without Redis (App Service from a zip, `docs/appservice-zip.md`) jobs run in the API's process with the same limits: `JOB_CONCURRENCY` light jobs and `HEAVY_JOB_CONCURRENCY` heavy ones at a time, three tries each (`JOB_RETRY_MS`, doubled). Failed jobs retry three times with backoff; the 500 most recent failed jobs (a week at most) are kept in Redis for inspection. Without the worker, e-mail stops, dashboards stop updating and exports stay queued; the API keeps working. Without Redis, the API still answers: jobs are not queued (submissions, exports and uploads go through; the sweeper and the nightly recompute catch up), live notices are skipped and rate limits are counted by each instance on its own (a little looser with several instances, never off).
 
-A locked account (too many failed passwords or codes) opens by itself after `LOGIN_LOCK_MINUTES`; to open it sooner: `update users set locked_until = null, failed_logins = 0 where lower(email) = lower('…');`.
+A locked account (too many failed passwords or codes) opens by itself after `LOGIN_LOCK_MINUTES`; to open it sooner: `UPDATE users SET locked_until = NULL, failed_logins = 0 WHERE LOWER(email) = LOWER('…');`.
 
 ## Backups and restore
 
-- Postgres: daily full backups and point-in-time recovery (WAL), kept 30 days, encrypted at rest. Test a restore every quarter into a separate database and run `pnpm --filter @wansurvey/api test` against it.
+- SQL Server: daily full backups and point-in-time recovery (automatic on Azure SQL Database), kept 30 days, encrypted at rest. Test a restore every quarter into a separate database and run `pnpm --filter @wansurvey/api test:mssql` against it.
 - Redis holds only queues and pub/sub; it can be lost. Scheduled jobs are re-created when the worker starts, and a nightly recompute rebuilds the figures.
 - `APP_ENCRYPTION_KEY` is backed up separately from the database backups.
 
@@ -71,8 +71,8 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 
 - `/health` for liveness and database reachability; with `HEALTH_ALLOWED_IPS` set it answers only those addresses (`docs/appservice-zip.md`).
 - Logs are JSON (pino); cookies and CSRF tokens are redacted.
-- Watch: API 5xx rate, p95 latency of `/interviews/sync` and `/public/s/*/submit`, Redis queue length (`bull:wansurvey:wait`), failed jobs, Postgres connections and replication lag.
+- Watch: API 5xx rate, p95 latency of `/interviews/sync` and `/public/s/*/submit`, Redis queue length (`bull:wansurvey:wait`), failed jobs, database sessions, blocked requests and replication lag.
 
 ## Load testing
 
-k6 scripts in `load/` (CAWI burst of 50 completes per second; 300 interviewers syncing). Run them against staging before large waves; see `load/README.md`.
+The k6 scripts that measured a CAWI burst of 50 completes per second and 300 interviewers syncing were removed with the PostgreSQL code (they are in the git history, before commit `3484e04`'s successor that removed `load/`). Measure again on a staging copy before large waves.

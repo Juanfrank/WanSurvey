@@ -5,9 +5,8 @@ import { loadConfig, resetConfigCache } from '../../src/config.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 
 /**
- * The whole application starting on SQL Server (DB_ENGINE=mssql): every module registers, the
- * health check answers from SQL Server, and production refuses the engine while modules are still
- * on PostgreSQL. Runs only where a SQL Server is given.
+ * The whole application starting on SQL Server: every module registers and the health check
+ * answers from it. Runs only where a SQL Server is given.
  */
 const ADMIN = process.env.MSSQL_ADMIN_URL;
 const APP = process.env.MSSQL_URL;
@@ -34,18 +33,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: the application boots', () => {
     expect(res.body).toEqual({ status: 'ok', db: true });
   });
 
-  it('refuses SQL Server in production while modules are still on PostgreSQL', () => {
-    const env = {
-      ...process.env,
-      NODE_ENV: 'production',
-      EXPORT_STORAGE: 'blob',
-      EXPORT_BLOB_URL: 'https://x.blob.core.windows.net',
-    };
-    expect(() => loadConfig(env)).toThrow(/not ready for production/);
-  });
-
-  it('wants DATABASE_URL to match the engine', () => {
-    expect(() => loadConfig({ ...process.env, DB_ENGINE: 'postgres' })).toThrow(/mssql:\/\/ URL/);
+  it('wants a mssql:// DATABASE_URL', () => {
     expect(() => loadConfig({ ...process.env, DATABASE_URL: 'postgres://u:p@h/db' })).toThrow(
       /mssql:\/\/ URL/,
     );

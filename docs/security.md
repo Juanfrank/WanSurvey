@@ -12,7 +12,7 @@ How WanSurvey meets spec §12, checked against the [OWASP ASVS 4.0.3](https://ow
 | Rate limits             | ✅     | Login, CAWI links and open links, webhooks (`test/security.test.ts`, `test/rbac.test.ts`)                                             |
 | Content-Security-Policy | ✅     | `apps/web/security-headers.ts`, `infra/nginx/templates/default.conf.template`; no violations on any page (`e2e/hardening.spec.ts`)    |
 | Dependency scanning     | ✅     | `pnpm audit --prod` in CI                                                                                                             |
-| Tenant isolation        | ✅     | Postgres row-level security on every tenant table (`test/rls.test.ts`)                                                                |
+| Tenant isolation        | ✅     | SQL Server row-level security (security policy on `SESSION_CONTEXT`) on every tenant table (`test/mssql/isolation.test.ts`)           |
 | Access control          | ✅     | Role matrix enforced on every endpoint (`test/rbac.test.ts`, 470+ cases)                                                              |
 | Audit                   | ✅     | Logins, role changes, publishes, reassignments, answer changes, exports, downloads, personal data views and erasures                  |
 | Privacy                 | ✅     | Retention with anonymisation, data subject export and erasure (`test/privacy.test.ts`)                                                |
@@ -70,7 +70,7 @@ An address without an account can never lock, so answering a locked account diff
 | 5.1 Input validation | ✅     | Zod on every input; size limits on bodies (5 MB) and uploads (20 MB, 200,000 rows); compressed request bodies refused (415) |
 | 5.2 Sanitisation     | ✅     | Rich text in questionnaires is a restricted subset rendered as React elements, never as raw HTML; e-mails are plain text    |
 | 5.3 Output encoding  | ✅     | React escapes output; the only raw markup is the QR code SVG the browser generates itself                                   |
-| 5.3.4 SQL injection  | ✅     | Parameterised queries (Drizzle, postgres.js); identifiers never come from input                                             |
+| 5.3.4 SQL injection  | ✅     | Parameterised queries (Kysely, tedious); identifiers never come from input                                                  |
 | 5.5 Deserialisation  | ✅     | JSON only; questionnaire logic is parsed by our own parser, never evaluated as code                                         |
 
 ## V6 Stored cryptography

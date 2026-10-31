@@ -35,7 +35,7 @@ if [[ -n "$links" ]]; then
   echo "$links" >&2
   exit 1
 fi
-for f in dist/main.js drizzle/meta/_journal.json public/index.html package.json; do
+for f in dist/main.js mssql/0000_init.sql public/index.html package.json; do
   [[ -e "$STAGE/$f" ]] || { echo "Missing in the package: $f" >&2; exit 1; }
 done
 

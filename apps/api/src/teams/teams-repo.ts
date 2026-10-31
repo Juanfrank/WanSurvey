@@ -1,11 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { asc, eq, inArray } from 'drizzle-orm';
-import { AuditService, type AuditEntry } from '../audit/audit.service.js';
+import type { AuditEntry } from '../audit/audit.service.js';
 import { AuditStore } from '../audit/audit-store.mssql.js';
-import { Database, type Tx } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
-import { teamMembers, teams, tenantMembers, users } from '../db/schema.js';
 import { TeamsStore, type Team } from './teams-store.mssql.js';
 
 /**
@@ -37,122 +34,6 @@ export interface TeamsTx {
 
 export interface TeamsRepo {
   inTenant<T>(tenantId: string, fn: (t: TeamsTx) => Promise<T>): Promise<T>;
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-class PgTeamsTx implements TeamsTx {
-  constructor(
-    private readonly tx: Tx,
-    private readonly tenantId: string,
-    private readonly audits: AuditService,
-  ) {}
-
-  async list() {
-    const rows = await this.tx.select().from(teams).orderBy(asc(teams.name));
-    const members = rows.length
-      ? await this.tx
-          .select({
-            teamId: teamMembers.teamId,
-            userId: users.id,
-            name: users.name,
-            email: users.email,
-          })
-          .from(teamMembers)
-          .innerJoin(users, eq(users.id, teamMembers.userId))
-          .where(
-            inArray(
-              teamMembers.teamId,
-              rows.map((r) => r.id),
-            ),
-          )
-          .orderBy(asc(users.name))
-      : [];
-    return rows.map((r) => {
-      const ms = members.filter((m) => m.teamId === r.id);
-      const leader = r.leaderUserId ? (ms.find((m) => m.userId === r.leaderUserId) ?? null) : null;
-      return {
-        id: r.id,
-        name: r.name,
-        leaderId: r.leaderUserId,
-        leaderName: leader?.name ?? null,
-        members: ms.map(({ teamId: _t, ...m }) => m),
-      };
-    });
-  }
-
-  async strangers(ids: string[]) {
-    const unique = [...new Set(ids)];
-    if (!unique.length) return [];
-    const found = await this.tx
-      .select({ userId: tenantMembers.userId })
-      .from(tenantMembers)
-      .where(inArray(tenantMembers.userId, unique));
-    const known = new Set(found.map((f) => f.userId));
-    return unique.filter((i) => !known.has(i));
-  }
-
-  async nameTaken(name: string, except?: string) {
-    const [dup] = await this.tx.select({ id: teams.id }).from(teams).where(eq(teams.name, name));
-    return !!dup && dup.id !== except;
-  }
-
-  private async setMembers(teamId: string, ids: string[]) {
-    await this.tx.delete(teamMembers).where(eq(teamMembers.teamId, teamId));
-    const unique = [...new Set(ids)];
-    if (unique.length)
-      await this.tx
-        .insert(teamMembers)
-        .values(unique.map((userId) => ({ teamId, userId, tenantId: this.tenantId })));
-  }
-
-  async create(v: { name: string; leaderId: string | null; memberIds: string[] }) {
-    const [team] = await this.tx
-      .insert(teams)
-      .values({ tenantId: this.tenantId, name: v.name, leaderUserId: v.leaderId })
-      .returning();
-    await this.setMembers(team!.id, v.memberIds);
-    return team!.id;
-  }
-
-  async current(id: string) {
-    const [team] = await this.tx.select().from(teams).where(eq(teams.id, id));
-    if (!team) return null;
-    const ms = await this.tx
-      .select({ userId: teamMembers.userId })
-      .from(teamMembers)
-      .where(eq(teamMembers.teamId, id));
-    return { leaderId: team.leaderUserId, memberIds: ms.map((m) => m.userId) };
-  }
-
-  async update(id: string, v: { name?: string; leaderId: string | null; memberIds?: string[] }) {
-    if (v.memberIds) await this.setMembers(id, v.memberIds);
-    await this.tx
-      .update(teams)
-      .set({ ...(v.name ? { name: v.name } : {}), leaderUserId: v.leaderId })
-      .where(eq(teams.id, id));
-  }
-
-  async remove(id: string) {
-    const r = await this.tx.delete(teams).where(eq(teams.id, id)).returning({ name: teams.name });
-    return r[0]?.name ?? null;
-  }
-
-  audit(entry: AuditEntry) {
-    return this.audits.record(this.tx, this.tenantId, entry);
-  }
-}
-
-@Injectable()
-export class PgTeamsRepo implements TeamsRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: TeamsTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) => fn(new PgTeamsTx(tx, tenantId, this.audits)));
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────

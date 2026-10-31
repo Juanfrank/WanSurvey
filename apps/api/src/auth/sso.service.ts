@@ -6,11 +6,11 @@ import { AuditService } from '../audit/audit.service.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { SsoConfigs, type SsoConfig, type SsoStartConfig } from './sso-config.js';
 import { CONFIG, SSO_CALLBACK_PATH, type AppConfig } from '../config.js';
-import { isUniqueViolation, isUuid } from '../db/database.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { parseSessionCookie } from './auth.guard.js';
 import { AUTH_REPO, type AuthRepo } from './auth-repo.js';
 import { AuthService, type ClientInfo } from './auth.service.js';
+import { isUniqueViolation, isUuid } from '../db/common.js';
 
 const STATE_TTL_MS = 10 * 60_000;
 

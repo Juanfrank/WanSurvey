@@ -2,10 +2,16 @@ import { pathToFileURL } from 'node:url';
 import { household, sampleRows } from '@wansurvey/fixtures';
 import { compile } from '@wansurvey/logic';
 import { Questionnaire, ROLES } from '@wansurvey/schema';
-import postgres from 'postgres';
+import { sql, type Transaction } from 'kysely';
 import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
 import { PiiCipher } from '../cases/pii.js';
+import { createMssqlDb } from './mssql/connection.js';
+
+type Tx = Transaction<Record<string, never>>;
+
+/** An instant as SQL Server takes it (see db/mssql/instant.ts). */
+export const at = (d: Date) => sql`CAST(${d.toISOString()} AS datetimeoffset(3))`;
 
 /**
  * Demo organisation "demo" with one user per role (password from SEED_PASSWORD) and a second
@@ -15,12 +21,10 @@ import { PiiCipher } from '../cases/pii.js';
  * Owners and admins enrol TOTP on first login. Idempotent: does nothing if the tenant exists.
  */
 export async function seed(adminUrl: string, password: string): Promise<void> {
-  if (adminUrl.startsWith('mssql:'))
-    return (await import('./seed.mssql.js')).seedMssql(adminUrl, password);
-  const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
+  const db = createMssqlDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
   try {
-    const [existing] = await sql`select id from tenants where slug = 'demo'`;
-    if (existing) {
+    const existing = await sql`SELECT id FROM tenants WHERE slug = 'demo'`.execute(db);
+    if (existing.rows.length) {
       console.log('Demo tenant already exists; nothing to do');
       return;
     }
@@ -28,54 +32,66 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
     const otherTenantId = uuidv7();
     const projectId = uuidv7();
     const hash = await hashPassword(password);
-    await sql.begin(async (tx) => {
-      await tx`insert into tenants (id, name, slug) values (${tenantId}, 'Demo Research', 'demo')`;
-      await tx`insert into tenants (id, name, slug) values (${otherTenantId}, 'Second Agency', 'demo2')`;
-      await tx`
-        insert into projects (id, tenant_id, name, code, status, modes_enabled, timezone, languages)
-        values (${projectId}, ${tenantId}, 'Household Survey 2026', 'HH2026', 'active',
-                ${['CATI', 'CAPI', 'CAWI', 'PAPI']}, 'America/Lima', ${['es']})`;
-      await tx`
-        insert into projects (id, tenant_id, name, code, status)
-        values (${uuidv7()}, ${otherTenantId}, 'Business Panel', 'BIZ', 'active')`;
+    await db.transaction().execute(async (tx: Tx) => {
+      const run = async (q: ReturnType<typeof sql>) => void (await q.execute(tx));
+      await run(
+        sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Demo Research', 'demo')`,
+      );
+      await run(
+        sql`INSERT INTO tenants (id, name, slug) VALUES (${otherTenantId}, 'Second Agency', 'demo2')`,
+      );
+      await run(sql`
+        INSERT INTO projects (id, tenant_id, name, code, status, modes_enabled, timezone, languages)
+        VALUES (${projectId}, ${tenantId}, 'Household Survey 2026', 'HH2026', 'active',
+                ${JSON.stringify(['CATI', 'CAPI', 'CAWI', 'PAPI'])}, 'America/Lima', ${JSON.stringify(['es'])})`);
+      await run(sql`
+        INSERT INTO projects (id, tenant_id, name, code, status)
+        VALUES (${uuidv7()}, ${otherTenantId}, 'Business Panel', 'BIZ', 'active')`);
       const questionnaireId = uuidv7();
       const definition = Questionnaire.parse(household);
       const compiled = compile(definition);
-      await tx`
-        insert into questionnaires (id, tenant_id, project_id, name, draft)
-        values (${questionnaireId}, ${tenantId}, ${projectId}, 'Household questionnaire',
-                ${tx.json(definition as never)})`;
-      await tx`
-        insert into questionnaire_versions
+      await run(sql`
+        INSERT INTO questionnaires (id, tenant_id, project_id, name, draft)
+        VALUES (${questionnaireId}, ${tenantId}, ${projectId}, 'Household questionnaire',
+                ${JSON.stringify(definition)})`);
+      await run(sql`
+        INSERT INTO questionnaire_versions
           (id, tenant_id, questionnaire_id, version, definition, compiled, hash)
-        values (${uuidv7()}, ${tenantId}, ${questionnaireId}, 1, ${tx.json(definition as never)},
-                ${tx.json(compiled as never)}, ${compiled.hash})`;
+        VALUES (${uuidv7()}, ${tenantId}, ${questionnaireId}, 1, ${JSON.stringify(definition)},
+                ${JSON.stringify(compiled)}, ${compiled.hash})`);
+      const member = async (tenant: string, user: string) =>
+        run(
+          sql`INSERT INTO tenant_members (id, tenant_id, user_id, status) VALUES (${uuidv7()}, ${tenant}, ${user}, 'active')`,
+        );
+      const membership = async (tenant: string, user: string, role: string) =>
+        run(
+          sql`INSERT INTO memberships (id, tenant_id, user_id, role) VALUES (${uuidv7()}, ${tenant}, ${user}, ${role})`,
+        );
       const userIds: Partial<Record<(typeof ROLES)[number], string>> = {};
       for (const role of ROLES) {
         const userId = uuidv7();
         userIds[role] = userId;
         const email = `${role.replace('_', '.')}@demo.wansurvey.test`;
-        await tx`
-          insert into users (id, email, name, first_name, status, password_hash)
-          values (${userId}, ${email}, ${`Demo ${role}`}, ${role}, 'active', ${hash})`;
-        await tx`insert into tenant_members (id, tenant_id, user_id, status) values (${uuidv7()}, ${tenantId}, ${userId}, 'active')`;
-        await tx`insert into memberships (id, tenant_id, user_id, role) values (${uuidv7()}, ${tenantId}, ${userId}, ${role})`;
+        await run(sql`
+          INSERT INTO users (id, email, name, first_name, status, password_hash)
+          VALUES (${userId}, ${email}, ${`Demo ${role}`}, ${role}, 'active', ${hash})`);
+        await member(tenantId, userId);
+        await membership(tenantId, userId, role);
         if (role === 'project_manager') {
           // Same account in a second organisation, to try switching.
-          await tx`insert into tenant_members (id, tenant_id, user_id, status) values (${uuidv7()}, ${otherTenantId}, ${userId}, 'active')`;
-          await tx`insert into memberships (id, tenant_id, user_id, role) values (${uuidv7()}, ${otherTenantId}, ${userId}, 'supervisor')`;
+          await member(otherTenantId, userId);
+          await membership(otherTenantId, userId, 'supervisor');
         }
         console.log(`  ${role.padEnd(16)} ${email}`);
       }
       // A second interviewer who mostly keys paper forms (interviewers also key them).
       const clerkId = uuidv7();
-      await tx`
-        insert into users (id, email, name, first_name, status, password_hash)
-        values (${clerkId}, 'data.entry@demo.wansurvey.test', 'Demo clerk', 'clerk', 'active', ${hash})`;
-      await tx`insert into tenant_members (id, tenant_id, user_id, status) values (${uuidv7()}, ${tenantId}, ${clerkId}, 'active')`;
-      await tx`insert into memberships (id, tenant_id, user_id, role) values (${uuidv7()}, ${tenantId}, ${clerkId}, 'interviewer')`;
+      await run(sql`
+        INSERT INTO users (id, email, name, first_name, status, password_hash)
+        VALUES (${clerkId}, 'data.entry@demo.wansurvey.test', 'Demo clerk', 'clerk', 'active', ${hash})`);
+      await member(tenantId, clerkId);
+      await membership(tenantId, clerkId, 'interviewer');
       console.log(`  ${'clerk'.padEnd(16)} data.entry@demo.wansurvey.test`);
-      // Sample dictionary and cases.
       const fields: [string, string, boolean][] = [
         ['first_name', 'text', true],
         ['last_name', 'text', true],
@@ -84,15 +100,14 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
         ['age', 'number', false],
       ];
       for (const [i, [name, type, pii]] of fields.entries()) {
-        await tx`insert into sample_fields (id, tenant_id, project_id, name, type, pii, position)
-                 values (${uuidv7()}, ${tenantId}, ${projectId}, ${name}, ${type}, ${pii}, ${i})`;
+        await run(sql`INSERT INTO sample_fields (id, tenant_id, project_id, name, type, pii, position)
+                      VALUES (${uuidv7()}, ${tenantId}, ${projectId}, ${name}, ${type}, ${pii ? 1 : 0}, ${i})`);
       }
       const interviewer = userIds.interviewer!;
-      // Personal fields are sealed (H1) when the encryption key is at hand; otherwise the
-      // worker's `pii.encrypt` job seals them.
       const key = process.env.APP_ENCRYPTION_KEY;
       const cipher = key ? new PiiCipher(key) : null;
       const pii = new Set(fields.filter(([, , p]) => p).map(([n]) => n));
+      const now = new Date();
       for (const r of sampleRows(50)) {
         const caseId = uuidv7();
         const mine = r.region === 1;
@@ -106,25 +121,26 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
         const sealed = cipher
           ? cipher.seal(sample, pii)
           : { sample, samplePii: null, samplePiiIndex: null };
-        await tx`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, sample_pii, sample_pii_index, status, priority, assigned_to, assigned_at)
-                 values (${caseId}, ${tenantId}, ${projectId}, ${questionnaireId}, ${r.id}, ${tx.json(sealed.sample as never)},
-                         ${sealed.samplePii}, ${sealed.samplePiiIndex}, ${mine ? 'assigned' : 'fresh'}, ${r.priority}, ${mine ? interviewer : null},
-                         ${mine ? new Date() : null})`;
-        await tx`insert into contacts (id, tenant_id, case_id, type, value, label)
-                 values (${uuidv7()}, ${tenantId}, ${caseId}, 'phone', ${'+51' + r.phone}, 'phone'),
-                        (${uuidv7()}, ${tenantId}, ${caseId}, 'email', ${r.email}, 'email')`;
-        await tx`insert into case_events (id, tenant_id, case_id, type, details)
-                 values (${uuidv7()}, ${tenantId}, ${caseId}, 'imported', ${tx.json({ seed: true })})`;
+        await run(sql`INSERT INTO cases (id, tenant_id, project_id, questionnaire_id, external_id, sample, sample_pii, sample_pii_index, status, priority, assigned_to, assigned_at)
+                      VALUES (${caseId}, ${tenantId}, ${projectId}, ${questionnaireId}, ${r.id}, ${JSON.stringify(sealed.sample)},
+                              ${sealed.samplePii}, ${sealed.samplePiiIndex ? JSON.stringify(sealed.samplePiiIndex) : null},
+                              ${mine ? 'assigned' : 'fresh'}, ${r.priority}, ${mine ? interviewer : null},
+                              ${mine ? at(now) : null})`);
+        await run(sql`INSERT INTO contacts (id, tenant_id, case_id, type, value, label)
+                      VALUES (${uuidv7()}, ${tenantId}, ${caseId}, 'phone', ${'+51' + r.phone}, 'phone'),
+                             (${uuidv7()}, ${tenantId}, ${caseId}, 'email', ${r.email}, 'email')`);
+        await run(sql`INSERT INTO case_events (id, tenant_id, case_id, type, details)
+                      VALUES (${uuidv7()}, ${tenantId}, ${caseId}, 'imported', ${JSON.stringify({ seed: true })})`);
       }
-      await tx`insert into assignments (id, tenant_id, project_id, user_id, kind, name, filter)
-               values (${uuidv7()}, ${tenantId}, ${projectId}, ${interviewer}, 'rule', 'Region 1', 'case.region == 1')`;
+      await run(sql`INSERT INTO assignments (id, tenant_id, project_id, user_id, kind, name, filter)
+                    VALUES (${uuidv7()}, ${tenantId}, ${projectId}, ${interviewer}, 'rule', 'Region 1', 'case.region == 1')`);
     });
     console.log(
       'Seeded organisations "demo" and "demo2" (log in with the e-mail and SEED_PASSWORD).',
     );
     console.log('project.manager@demo.wansurvey.test belongs to both.');
   } finally {
-    await sql.end({ timeout: 5 });
+    await db.destroy();
   }
 }
 

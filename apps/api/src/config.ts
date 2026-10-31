@@ -47,40 +47,20 @@ const ipList = z
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(3000),
-  /**
-   * The database engine. PostgreSQL serves production until the switch (docs/roadmap.md); with
-   * `mssql`, DATABASE_URL and DATABASE_ADMIN_URL are `mssql://…` URLs, and the modules that have
-   * moved use SQL Server (the rest still need PostgreSQL and are not usable yet).
-   */
-  DB_ENGINE: z.enum(['postgres', 'mssql']).default('postgres'),
-  /** Connection as the restricted application role (RLS enforced). */
+  /** `mssql://…` as the restricted application user (the security policy applies to it). */
   DATABASE_URL: z.string().url(),
-  /** Owner/superuser connection, used only for migrations and seeding. */
+  /** `mssql://…` as the database owner, used only for migrations and seeding. */
   DATABASE_ADMIN_URL: z.string().url().optional(),
   /**
    * Database connections per process (API, worker). Size them so that, over every instance of
-   * both, they stay under the server's max_connections (or the pooler's pool size).
+   * both, they stay under what the database allows (Azure SQL: the limit of the service tier).
    */
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
   DB_WORKER_POOL_MAX: z.coerce.number().int().min(1).max(200).default(5),
-  /** Idle connections are closed after this many seconds; connections are renewed after 30 min. */
-  DB_IDLE_TIMEOUT_S: z.coerce.number().int().min(0).default(30),
-  DB_MAX_LIFETIME_S: z.coerce.number().int().min(60).default(1800),
-  DB_CONNECT_TIMEOUT_S: z.coerce.number().int().min(1).default(10),
-  /**
-   * Server-side prepared statements. Turn off (false) behind a pooler in transaction mode, such
-   * as Azure's built-in PgBouncer on port 6432, unless it supports them.
-   */
-  DB_PREPARE: z
-    .enum(['true', 'false'])
-    .default('true')
-    .transform((v) => v === 'true'),
   /** A request's statement and lock waits are cut after these (ms); jobs get a longer statement time. */
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
   DB_WORKER_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(600_000),
   DB_LOCK_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
-  /** A transaction left idle this long (ms) is ended by the server, releasing its locks. */
-  DB_IDLE_IN_TRANSACTION_MS: z.coerce.number().int().min(0).default(60_000),
   /**
    * Requests handled at once per API process; beyond it the API answers 503 with Retry-After
    * instead of queueing without limit (load shedding). 0 turns it off.
@@ -265,15 +245,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('Invalid configuration:\n  SMTP_URL: required when MAILER=smtp');
   if (parsed.success) {
     const d = parsed.data;
-    // Not every module has moved to SQL Server yet: refuse it where real data would be kept.
-    if (d.DB_ENGINE === 'mssql' && d.NODE_ENV === 'production')
-      throw new Error(
-        'Invalid configuration:\n  DB_ENGINE: mssql is not ready for production (modules still on PostgreSQL)',
-      );
-    if ((d.DB_ENGINE === 'mssql') !== /^mssql:/.test(d.DATABASE_URL))
-      throw new Error(
-        'Invalid configuration:\n  DATABASE_URL: must be an mssql:// URL with DB_ENGINE=mssql, and a postgres:// one otherwise',
-      );
+    if (!/^mssql:/.test(d.DATABASE_URL))
+      throw new Error('Invalid configuration:\n  DATABASE_URL: must be an mssql:// URL');
+    if (d.DATABASE_ADMIN_URL && !/^mssql:/.test(d.DATABASE_ADMIN_URL))
+      throw new Error('Invalid configuration:\n  DATABASE_ADMIN_URL: must be an mssql:// URL');
     // The API and the worker run in separate containers: only Blob Storage is shared.
     if (d.NODE_ENV === 'production' && d.EXPORT_STORAGE !== 'blob')
       throw new Error('Invalid configuration:\n  EXPORT_STORAGE: must be blob in production');

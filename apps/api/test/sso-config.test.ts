@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { SsoConfigs } from '../src/auth/sso-config.js';
 import type { AppConfig } from '../src/config.js';
-import type { Database, SsoPublicConfig } from '../src/db/database.js';
+import type { SsoPublicConfig } from '../src/db/common.js';
+import type { Engine } from '../src/db/engine.js';
 import { LocalBus } from '../src/jobs/bus.js';
 
 const config = { SSO_DEFAULT_ORG: undefined, ENTRA_ALLOWED_DOMAINS: [] } as unknown as AppConfig;
@@ -39,8 +40,8 @@ describe('Microsoft sign-in settings cache', () => {
   it('forgets an organisation in every process once its settings are saved', async () => {
     const bus = new LocalBus();
     const db = fakeDatabase();
-    const a = new SsoConfigs(db as unknown as Database, config, bus);
-    const b = new SsoConfigs(db as unknown as Database, config, bus);
+    const a = new SsoConfigs(config, bus, { sql: db } as unknown as Engine);
+    const b = new SsoConfigs(config, bus, { sql: db } as unknown as Engine);
     expect((await b.startBySlug('org'))?.clientId).toBe('old');
     db.clientId = 'new';
     expect((await b.startBySlug('org'))?.clientId).toBe('old'); // cached
@@ -50,7 +51,7 @@ describe('Microsoft sign-in settings cache', () => {
 
   it('does not keep a read that began before a change', async () => {
     const db = fakeDatabase();
-    const c = new SsoConfigs(db as unknown as Database, config, new LocalBus());
+    const c = new SsoConfigs(config, new LocalBus(), { sql: db } as unknown as Engine);
     let release!: () => void;
     db.hold = new Promise((r) => (release = r));
     const reading = c.startBySlug('org'); // reads the old row, then waits
@@ -64,7 +65,7 @@ describe('Microsoft sign-in settings cache', () => {
 
   it('keeps no unknown slug', async () => {
     const db = fakeDatabase();
-    const c = new SsoConfigs(db as unknown as Database, config, new LocalBus());
+    const c = new SsoConfigs(config, new LocalBus(), { sql: db } as unknown as Engine);
     expect(await c.tenantIdBySlug('nope')).toBeNull();
     db.slugs.add('nope'); // created afterwards: found at once
     expect(await c.tenantIdBySlug('nope')).toBe('t1');

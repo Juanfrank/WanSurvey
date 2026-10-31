@@ -1,23 +1,31 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
 import { randomUUID } from 'node:crypto';
-import { AuditService } from '../audit/audit.service.js';
-import { MssqlCasesTx, PgCasesTx, type CasesTx } from '../cases/cases-repo.js';
+import { MssqlCasesTx, type CasesTx } from '../cases/cases-repo.js';
 import { CasesStore } from '../cases/cases-store.mssql.js';
-import { COUNTED, COUNTED_SQL } from '../common/statuses.js';
-import { Database, type Tx } from '../db/database.js';
+import { COUNTED } from '../common/statuses.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { instant } from '../db/mssql/instant.js';
-import { interviewerGoals, users } from '../db/schema.js';
 import { dayStart, nextDay } from '../stats/zoned-day.js';
 
 /**
  * The database side of goals and interviewer metrics, whichever engine runs (the pattern of
  * `auth/auth-repo.ts`). A transaction here is also a `CasesTx`.
  */
-export type GoalRow = typeof interviewerGoals.$inferSelect;
+export interface GoalRow {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  questionnaireId: string | null;
+  userId: string | null;
+  frequency: string;
+  startsOn: string;
+  endsOn: string;
+  target: number;
+  createdBy: string | null;
+  createdAt: Date;
+}
 
 export interface GoalListRow {
   id: string;
@@ -97,203 +105,6 @@ export interface MetricsTx extends CasesTx {
 
 export interface MetricsRepo {
   inTenant<T>(tenantId: string, fn: (t: MetricsTx) => Promise<T>): Promise<T>;
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-export class PgMetricsTx extends PgCasesTx implements MetricsTx {
-  constructor(
-    private readonly mtx: Tx,
-    tenant: string,
-    audits: AuditService,
-  ) {
-    super(mtx, tenant, audits);
-    this.tenantId2 = tenant;
-  }
-  private readonly tenantId2: string;
-
-  goals(projectId: string, scope: { userId?: string }) {
-    return this.mtx
-      .select({
-        id: interviewerGoals.id,
-        userId: interviewerGoals.userId,
-        name: users.name,
-        frequency: interviewerGoals.frequency,
-        questionnaireId: interviewerGoals.questionnaireId,
-        startsOn: interviewerGoals.startsOn,
-        endsOn: interviewerGoals.endsOn,
-        target: interviewerGoals.target,
-      })
-      .from(interviewerGoals)
-      .leftJoin(users, eq(users.id, interviewerGoals.userId))
-      .where(
-        and(
-          eq(interviewerGoals.projectId, projectId),
-          // Without the team's metrics: one's own goals and the team's.
-          scope.userId
-            ? or(eq(interviewerGoals.userId, scope.userId), isNull(interviewerGoals.userId))
-            : undefined,
-        ),
-      )
-      .orderBy(asc(interviewerGoals.startsOn), asc(users.name));
-  }
-
-  async goalCompletes(
-    projectId: string,
-    g: { userId: string | null; questionnaireId: string | null },
-    from: string,
-    to: string,
-    tz: string,
-  ) {
-    const [r] = (await this.mtx.execute(sql`
-      select count(*)::int as n
-      from interviews i
-      join questionnaire_versions v on v.id = i.questionnaire_version_id
-      where i.project_id = ${projectId}
-        ${g.userId ? sql`and i.interviewer_id = ${g.userId}` : sql``}
-        and i.disposition = 'COMPLETE'
-        and i.status in ('submitted', 'in_review', 'approved', 'returned')
-        -- A paper form keyed twice is one complete (as in the metrics).
-        and i.entry_pass = 1
-        and i.submitted_at >= (${from}::date)::timestamp at time zone ${tz}
-        and i.submitted_at < (${to}::date + 1)::timestamp at time zone ${tz}
-        ${g.questionnaireId ? sql`and v.questionnaire_id = ${g.questionnaireId}` : sql``}
-    `)) as unknown as { n: number }[];
-    return r?.n ?? 0;
-  }
-
-  async insertGoal(v: Parameters<MetricsTx['insertGoal']>[0]) {
-    const [row] = await this.mtx
-      .insert(interviewerGoals)
-      .values({ tenantId: this.tenantId2, ...v })
-      .returning();
-    return row!;
-  }
-
-  async goal(projectId: string, id: string) {
-    const [g] = await this.mtx
-      .select()
-      .from(interviewerGoals)
-      .where(and(eq(interviewerGoals.id, id), eq(interviewerGoals.projectId, projectId)));
-    return g ?? null;
-  }
-
-  async updateGoal(id: string, patch: object) {
-    const [row] = await this.mtx
-      .update(interviewerGoals)
-      .set(patch)
-      .where(eq(interviewerGoals.id, id))
-      .returning();
-    return row!;
-  }
-
-  async deleteGoal(projectId: string, id: string) {
-    const r = await this.mtx
-      .delete(interviewerGoals)
-      .where(and(eq(interviewerGoals.id, id), eq(interviewerGoals.projectId, projectId)))
-      .returning({ id: interviewerGoals.id });
-    return r.length > 0;
-  }
-
-  private day(col: string, tz: string) {
-    return sql`(${sql.raw(col)} at time zone ${tz})::date`;
-  }
-  private range(col: string, f: MetricsFilter) {
-    return sql`${f.from ? sql`and ${this.day(col, f.timezone)} >= ${f.from}::date` : sql``} ${f.to ? sql`and ${this.day(col, f.timezone)} <= ${f.to}::date` : sql``}`;
-  }
-  private mode(col: string, f: MetricsFilter) {
-    return f.mode ? sql`and ${sql.raw(col)} = ${f.mode}` : sql``;
-  }
-  private who(col: string, f: MetricsFilter) {
-    return f.userId ? sql`and ${sql.raw(col)} = ${f.userId}` : sql``;
-  }
-
-  async statsDaily(f: MetricsFilter) {
-    return (await this.mtx.execute(sql`
-      select interviewer_id as id, to_char(day, 'YYYY-MM-DD') as day, sum(submitted)::int as submitted,
-             sum(completes)::int as completes, sum(approved)::int as approved, sum(rejected)::int as rejected
-      from stats_daily
-      where project_id = ${f.projectId} and interviewer_id is not null
-        ${f.from ? sql`and day >= ${f.from}::date` : sql``} ${f.to ? sql`and day <= ${f.to}::date` : sql``}
-        ${this.mode('mode', f)} ${this.who('interviewer_id', f)}
-      group by 1, 2`)) as unknown as Awaited<ReturnType<MetricsTx['statsDaily']>>;
-  }
-
-  async completeInterviews(f: MetricsFilter) {
-    return (await this.mtx.execute(sql`
-      select i.interviewer_id as id, i.active_ms,
-             (select count(*)::int from jsonb_each(i.answers)) as items,
-             (select count(*)::int from jsonb_each(i.answers) e
-               where jsonb_typeof(e.value) = 'object' and e.value ? '$special') as specials,
-             i.flags ? 'speeding' as speeding, i.flags ? 'straightlining' as straight,
-             (select count(*)::int from interview_paradata pd
-               where pd.interview_id = i.id and pd.type = 'navigate_back') as back
-      from interviews i
-      where i.project_id = ${f.projectId} and i.interviewer_id is not null and i.entry_pass = 1
-        and i.status in ${COUNTED_SQL} and i.disposition = 'COMPLETE'
-        ${this.range('i.submitted_at', f)} ${this.mode('i.mode', f)} ${this.who('i.interviewer_id', f)}`)) as unknown as Awaited<
-      ReturnType<MetricsTx['completeInterviews']>
-    >;
-  }
-
-  async dialCounts(f: MetricsFilter) {
-    return (await this.mtx.execute(sql`
-      select interviewer_id as id, count(*)::int as n from call_attempts
-      where project_id = ${f.projectId} ${this.range('started_at', f)} ${this.who('interviewer_id', f)}
-      group by 1`)) as unknown as { id: string; n: number }[];
-  }
-
-  async workedCases(f: MetricsFilter) {
-    return (await this.mtx.execute(sql`
-      select w.id, c.disposition from (
-        select interviewer_id as id, case_id from call_attempts
-          where project_id = ${f.projectId} ${this.range('started_at', f)} ${this.who('interviewer_id', f)}
-            ${f.mode && f.mode !== 'CATI' ? sql`and false` : sql``}
-        union
-        select interviewer_id, case_id from interviews
-          where project_id = ${f.projectId} and interviewer_id is not null and case_id is not null
-            and entry_pass = 1 ${this.range('started_at', f)} ${this.mode('mode', f)} ${this.who('interviewer_id', f)}
-      ) w join cases c on c.id = w.case_id`)) as unknown as {
-      id: string;
-      disposition: string | null;
-    }[];
-  }
-
-  async syncLatency(f: MetricsFilter) {
-    return (await this.mtx.execute(sql`
-      select i.interviewer_id as id,
-             percentile_cont(0.5) within group (order by extract(epoch from e.received_at - e.at)) as s
-      from interview_answer_events e join interviews i on i.id = e.interview_id
-      where i.project_id = ${f.projectId} and i.mode = 'CAPI' and i.interviewer_id is not null
-        and e.received_at is not null ${this.range('e.at', f)} ${this.who('i.interviewer_id', f)}
-      group by 1`)) as unknown as { id: string; s: number | null }[];
-  }
-
-  userNames(ids: string[]) {
-    return this.mtx
-      .select({ id: users.id, name: users.name })
-      .from(users)
-      .where(inArray(users.id, ids));
-  }
-}
-
-@Injectable()
-export class PgMetricsRepo implements MetricsRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: MetricsTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) =>
-      fn(new PgMetricsTx(tx, tenantId, this.audits)),
-    );
-  }
-
-  /** The same operations inside a transaction someone else opened (modules not yet moved). */
-  wrap(tx: Tx, tenantId: string): MetricsTx {
-    return new PgMetricsTx(tx, tenantId, this.audits);
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────

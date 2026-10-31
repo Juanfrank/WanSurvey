@@ -21,21 +21,21 @@ Every push builds it in CI (job **package**, on Linux x64 like App Service): dow
 
 ```bash
 scripts/package-appservice.sh out        # → out/wansurvey-appservice.zip (~70 MB)
-DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5432/postgres \
+DATABASE_ADMIN_URL='mssql://sa:Wansurvey_Test1%21@localhost:1433/master?trustServerCertificate=true' \
   scripts/smoke-appservice.sh out/wansurvey-appservice.zip   # starts it as App Service would
 ```
 
-It holds `dist/` (the API), `drizzle/` (migrations), `public/` (the web app), `package.json`
+It holds `dist/` (the API), `mssql/` (migrations), `public/` (the web app), `package.json`
 (`npm start`) and `node_modules/` with production dependencies only, as plain folders. Native
 modules (Argon2, the canvas) are built for Linux x64 glibc: build it on Linux, not on Windows or a
 Mac.
 
 ## 2. Azure resources (portal)
 
-1. **Azure Database for PostgreSQL – Flexible Server** 16 (B1ms for testing, B2s for fieldwork):
-   database `wansurvey`; connections only through the app's network (VNet integration and private
-   endpoint) or its outbound addresses. The owner role goes in `DATABASE_ADMIN_URL`; the app's own
-   role (`wansurvey_app`, made by the migrations) in `DATABASE_URL`.
+1. **Azure SQL Database** (a small tier for testing, larger for fieldwork): database `wansurvey`;
+   connections only through the app's network (VNet integration and private endpoint) or its
+   outbound addresses. The owner login goes in `DATABASE_ADMIN_URL`; the app's own contained user
+   (`wansurvey_app`, made by the migrations) in `DATABASE_URL`.
 2. **User-assigned managed identity** (`wansurvey-id`).
 3. **Storage account** (StorageV2, LRS, minimum TLS 1.2, no public blob access, account key
    access off): container `exports`; on the account, role **Storage Blob Data Contributor** for

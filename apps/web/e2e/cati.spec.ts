@@ -78,9 +78,8 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
 
     // Time passes: the callback is due, announced, listed as due now, and called from the list.
     await db.run(
-      `update cases set next_contact_at = now() - interval '1 minute' where external_id = ?`,
-      [caseId],
       `update cases set next_contact_at = dateadd(minute, -1, sysdatetimeoffset()) where external_id = ?`,
+      [caseId],
     );
     await page.reload();
     await page.getByRole('tab', { name: 'Phone calls' }).click();

@@ -155,11 +155,9 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     );
     expect(done).toMatchObject({ status: 'finalised', disposition: 'SCREENED_OUT' });
     const meta = await db.all(
-      `select count(*)::int as n from interview_paradata p join interviews i on i.id = p.interview_id
-       join cases c on c.id = i.case_id where c.external_id = 'HH0005' and p.type = 'paper_meta'`,
-      [],
       `select count(*) as n from interview_paradata p join interviews i on i.id = p.interview_id
        join cases c on c.id = i.case_id where c.external_id = 'HH0005' and p.type = 'paper_meta'`,
+      [],
     );
     expect(Number(meta[0]!.n)).toBeGreaterThanOrEqual(2);
   } finally {

@@ -12,43 +12,26 @@ import {
   type ProjectSettings,
   type Role,
 } from '@wansurvey/schema';
-import { eq, isNull, or } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { can } from '../common/auth-context.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import type { Tx } from '../db/database.js';
-import { cases, users } from '../db/schema.js';
 import type { ProjectView } from '../projects/org-repo.js';
 import { maskSample } from './case-logic.js';
-import { PgCasesTx, type CasesTx } from './cases-repo.js';
+import { type CasesTx } from './cases-repo.js';
 import { PiiCipher } from './pii.js';
-import { rememberedProject } from './project-memo.js';
 import { STRATEGIES } from './strategies.js';
 
 export type { Assignee } from './cases-repo.js';
 import type { Assignee } from './cases-repo.js';
 
-/** A transaction of either engine; a Drizzle one is wrapped for the moment (modules not yet moved). */
-export type AnyCasesTx = Tx | CasesTx;
-
-/** Batches of rows per INSERT, to stay well under Postgres' parameter limit. */
+/** Batches of rows per INSERT, to stay under SQL Server's limit of 2100 parameters. */
 export const BATCH = 1000;
 
 export function chunks<T>(xs: T[], n = BATCH): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
   return out;
-}
-
-/**
- * The cases of one questionnaire: its own, and those that belong to none (written before
- * cases were per questionnaire). No questionnaire: every case of the project.
- */
-export function ofQuestionnaire(questionnaireId?: string | null) {
-  return questionnaireId
-    ? or(eq(cases.questionnaireId, questionnaireId), isNull(cases.questionnaireId))!
-    : undefined;
 }
 
 @Injectable()
@@ -71,52 +54,14 @@ export class CasesService {
     }));
   }
 
-  selectCases(tx: Tx) {
-    return tx
-      .select({
-        id: cases.id,
-        externalId: cases.externalId,
-        sample: cases.sample,
-        samplePii: cases.samplePii,
-        questionnaireId: cases.questionnaireId,
-        status: cases.status,
-        disposition: cases.disposition,
-        attempts: cases.attempts,
-        assignedAt: cases.assignedAt,
-        priority: cases.priority,
-        modePreference: cases.modePreference,
-        assignedTo: cases.assignedTo,
-        assignedName: users.name,
-        checkedOutAt: cases.checkedOutAt,
-        anonymisedAt: cases.anonymisedAt,
-        updatedAt: cases.updatedAt,
-        selectionRole: cases.selectionRole,
-        substituteFor: cases.substituteFor,
-        inclusionProb: cases.inclusionProb,
-        baseWeight: cases.baseWeight,
-      })
-      .from(cases)
-      .leftJoin(users, eq(users.id, cases.assignedTo))
-      .$dynamic();
-  }
-
-  /** The engine-neutral view of a transaction; a Drizzle one is wrapped. */
-  private view(tx: AnyCasesTx, tenantId = ''): CasesTx {
-    return 'piiFields' in tx ? tx : new PgCasesTx(tx as Tx, tenantId, this.audit);
-  }
-
-  async project(tx: AnyCasesTx, projectId: string): Promise<ProjectView> {
-    if (!('piiFields' in tx)) {
-      const known = rememberedProject(tx, projectId);
-      if (known) return known as unknown as ProjectView;
-    }
-    const p = await this.view(tx).project(projectId);
+  async project(tx: CasesTx, projectId: string): Promise<ProjectView> {
+    const p = await tx.project(projectId);
     if (!p) throw new NotFoundException('Project not found');
     return p;
   }
 
-  async piiFields(tx: AnyCasesTx, projectId: string): Promise<Set<string>> {
-    return this.view(tx).piiFields(projectId);
+  async piiFields(tx: CasesTx, projectId: string): Promise<Set<string>> {
+    return tx.piiFields(projectId);
   }
 
   canSeePii(ctx: AuthContext, projectId: string) {
@@ -149,8 +94,8 @@ export class CasesService {
    * Active members who can work cases in this project: a role with `interviews.conduct` or
    * `dataentry.key`, tenant-wide or for this project.
    */
-  async assignees(tx: AnyCasesTx, projectId: string): Promise<Assignee[]> {
-    const t = this.view(tx);
+  async assignees(tx: CasesTx, projectId: string): Promise<Assignee[]> {
+    const t = tx;
     const rows = await t.assigneeRows(projectId);
     // What each role may do in this organisation.
     const matrix = roleMatrix(await t.rolePermissions());
@@ -175,7 +120,7 @@ export class CasesService {
     return [...byUser.values()];
   }
 
-  async assertAssignee(tx: AnyCasesTx, projectId: string, userId: string) {
+  async assertAssignee(tx: CasesTx, projectId: string, userId: string) {
     const ok = (await this.assignees(tx, projectId)).some((a) => a.userId === userId);
     if (!ok) {
       throw new BadRequestException({
@@ -187,13 +132,13 @@ export class CasesService {
   }
 
   async events(
-    tx: AnyCasesTx,
+    tx: CasesTx,
     tenantId: string,
     actorUserId: string | null,
     rows: { caseId: string; type: string; details?: Record<string, unknown> }[],
   ) {
     if (!rows.length) return;
-    await this.view(tx, tenantId).events(rows.map((r) => ({ ...r, actorUserId })));
+    await tx.events(rows.map((r) => ({ ...r, actorUserId })));
   }
 
   /**
@@ -203,7 +148,7 @@ export class CasesService {
    * `only.statuses` (and, with `only.unassigned`, still held by no one) change hands.
    */
   async assign(
-    tx: AnyCasesTx,
+    tx: CasesTx,
     ctx: AuthContext,
     projectId: string,
     caseIds: string[],
@@ -212,7 +157,7 @@ export class CasesService {
     only: { statuses?: string[]; unassigned?: boolean } = {},
   ): Promise<number> {
     if (userId) await this.assertAssignee(tx, projectId, userId);
-    const changed = await this.view(tx, ctx.tenantId).assign(projectId, caseIds, userId, only);
+    const changed = await tx.assign(projectId, caseIds, userId, only);
     await this.events(
       tx,
       ctx.tenantId,
@@ -230,8 +175,8 @@ export class CasesService {
    * The questionnaire new cases, frames and plans belong to: the one asked for (it must be
    * the project's), else the project's first; null while the project has none.
    */
-  async questionnaireFor(tx: AnyCasesTx, projectId: string, wanted?: string | null) {
-    const ids = await this.view(tx).questionnaireIds(projectId);
+  async questionnaireFor(tx: CasesTx, projectId: string, wanted?: string | null) {
+    const ids = await tx.questionnaireIds(projectId);
     if (wanted) {
       if (!ids.includes(wanted))
         throw new NotFoundException({ code: 'NOT_FOUND', message: 'Questionnaire not found' });
@@ -241,7 +186,7 @@ export class CasesService {
   }
 
   /** The project's settings, with defaults. */
-  async settings(tx: AnyCasesTx, projectId: string): Promise<ProjectSettings> {
+  async settings(tx: CasesTx, projectId: string): Promise<ProjectSettings> {
     return projectSettings((await this.project(tx, projectId)).settings);
   }
 
@@ -262,14 +207,14 @@ export class CasesService {
    * views are recorded once per person and case; explicit reveals are recorded every time.
    */
   async recordAutoViews(
-    tx: AnyCasesTx,
+    tx: CasesTx,
     ctx: AuthContext,
     projectId: string,
     shown: { id: string; externalId: string }[],
     via: 'detail' | 'list',
   ) {
     if (!shown.length) return;
-    const t = this.view(tx, ctx.tenantId);
+    const t = tx;
     const seen = await t.piiViewsSeen(
       ctx.userId,
       shown.map((c) => c.id),
@@ -293,7 +238,7 @@ export class CasesService {
    * Only names and counts come back, never the matching values.
    */
   async matchesElsewhere(
-    tx: AnyCasesTx,
+    tx: CasesTx,
     projectId: string,
     items: { key: string; type: string; value: string }[],
   ): Promise<Map<string, { projectId: string; name: string; cases: number }[]>> {
@@ -308,7 +253,7 @@ export class CasesService {
     }
     const pairs = [...byValue.keys()].map((k) => k.split('\u0000') as [string, string]);
     for (const part of chunks(pairs, 500)) {
-      const rows = await this.view(tx).contactMatches(projectId, part);
+      const rows = await tx.contactMatches(projectId, part);
       for (const r of rows)
         for (const key of byValue.get(`${r.type}\u0000${r.value}`) ?? []) {
           const per = out.get(key) ?? new Map();
@@ -333,7 +278,7 @@ export class CasesService {
   }
 
   /** `matchesElsewhere` for one case's contacts. */
-  async elsewhere(tx: AnyCasesTx, projectId: string, cs: { type: string; value: string }[]) {
+  async elsewhere(tx: CasesTx, projectId: string, cs: { type: string; value: string }[]) {
     if (!cs.length) return [];
     const found = await this.matchesElsewhere(
       tx,
@@ -348,12 +293,12 @@ export class CasesService {
    * project's active assignments, each kind by its strategy. Returns the number assigned.
    */
   async applyRules(
-    tx: AnyCasesTx,
+    tx: CasesTx,
     ctx: AuthContext,
     projectId: string,
     opts: { onlyCaseIds?: string[]; ruleId?: string; questionnaireId?: string | null } = {},
   ): Promise<number> {
-    const t = this.view(tx, ctx.tenantId);
+    const t = tx;
     const eligible = new Set((await this.assignees(tx, projectId)).map((a) => a.userId));
     const rules = (
       await t.rules(projectId, {
@@ -414,7 +359,7 @@ export class CasesService {
    * Pool mode: the caller takes an unassigned fresh case. The conditional update makes two
    * simultaneous claims safe: only one finds the case still free.
    */
-  async claim(tx: AnyCasesTx, ctx: AuthContext, projectId: string, caseId: string) {
+  async claim(tx: CasesTx, ctx: AuthContext, projectId: string, caseId: string) {
     const settings = await this.settings(tx, projectId);
     if (settings.assignmentMode !== 'pool')
       throw new BadRequestException({
@@ -422,7 +367,7 @@ export class CasesService {
         message: 'Cases of this project are assigned by a supervisor',
       });
     await this.assertAssignee(tx, projectId, ctx.userId);
-    const t = this.view(tx, ctx.tenantId);
+    const t = tx;
     const row = await t.claim(projectId, caseId, ctx.userId);
     if (!row) {
       if (!(await t.caseHolder(projectId, caseId))) throw new NotFoundException('Case not found');
@@ -438,8 +383,8 @@ export class CasesService {
   }
 
   /** Returns a case to the unassigned cases. Its holder, or someone with `cases.assign`. */
-  async release(tx: AnyCasesTx, ctx: AuthContext, projectId: string, caseId: string) {
-    const t = this.view(tx, ctx.tenantId);
+  async release(tx: CasesTx, ctx: AuthContext, projectId: string, caseId: string) {
+    const t = tx;
     const c = await t.caseHolder(projectId, caseId);
     const manager = can(ctx.memberships, 'cases.assign', projectId);
     if (!c || (!manager && c.assignedTo !== ctx.userId))

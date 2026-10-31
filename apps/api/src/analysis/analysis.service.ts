@@ -3,8 +3,7 @@ import { crosstab, crosstabVariables, filterRows, topline, type Table } from '@w
 import { projectSettings } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import type { Tx } from '../db/database.js';
-import { asAnalysisTx, type AnalysisTx } from './analysis-repo.js';
+import { type AnalysisTx } from './analysis-repo.js';
 import { median } from '../metrics/metrics.js';
 import { DataFilter, DatasetService, type Dataset } from './dataset.service.js';
 
@@ -45,8 +44,8 @@ export class AnalysisService {
    * and rebuild all the interviews; instead the result is kept until the project's interviews
    * or published versions change (a cheap check on indexed columns).
    */
-  private async table(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
-    const stamp = await asAnalysisTx(tx, this.audit).dataStamp(projectId);
+  private async table(tx: AnalysisTx, projectId: string, q: AnalysisQuery) {
+    const stamp = await tx.dataStamp(projectId);
     const key = `${projectId}|${stamp}|${JSON.stringify(q)}`;
     const hit = this.cache.get(key);
     if (hit) {
@@ -60,7 +59,7 @@ export class AnalysisService {
     return built;
   }
 
-  private async build(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
+  private async build(tx: AnalysisTx, projectId: string, q: AnalysisQuery) {
     const data = await this.datasets.load(tx, projectId, q, { completesOnly: true });
     let table = this.datasets.table(data, q.lang);
     if (q.where) {
@@ -76,7 +75,7 @@ export class AnalysisService {
     return { data, table };
   }
 
-  async topline(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
+  async topline(tx: AnalysisTx, projectId: string, q: AnalysisQuery) {
     const { data, table } = await this.table(tx, projectId, q);
     return {
       questionnaire: { id: data.questionnaireId, name: data.name },
@@ -87,7 +86,7 @@ export class AnalysisService {
     };
   }
 
-  async crosstab(tx: Tx | AnalysisTx, projectId: string, q: z.infer<typeof CrosstabQuery>) {
+  async crosstab(tx: AnalysisTx, projectId: string, q: z.infer<typeof CrosstabQuery>) {
     const { table } = await this.table(tx, projectId, q);
     const x = crosstab(table, q.row, q.col);
     if (!x)
@@ -117,9 +116,9 @@ export class AnalysisService {
     };
   }
 
-  async summary(tx: Tx | AnalysisTx, projectId: string, q: AnalysisQuery) {
+  async summary(tx: AnalysisTx, projectId: string, q: AnalysisQuery) {
     const { data, table } = await this.table(tx, projectId, q);
-    const p = await asAnalysisTx(tx, this.audit).projectBrief(projectId);
+    const p = await tx.projectBrief(projectId);
     return {
       project: { name: p?.name ?? '', code: p?.code ?? '' },
       questionnaire: { id: data.questionnaireId, name: data.name },

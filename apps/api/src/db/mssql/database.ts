@@ -1,6 +1,6 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { sql, type Kysely, type Transaction } from 'kysely';
-import { isUuid } from '../database.js';
+import { isUuid } from '../common.js';
 import { createMssqlDb, mssqlNumber, type MssqlOptions } from './connection.js';
 import type { MssqlSchema } from './schema.js';
 

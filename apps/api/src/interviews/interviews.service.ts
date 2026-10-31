@@ -18,21 +18,13 @@ import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { closedCode } from '../questionnaires/state.js';
-import type { Tx } from '../db/database.js';
-import {
-  PgInterviewsTx,
-  type CaseFull,
-  type InterviewRow,
-  type InterviewsTx,
-} from './interviews-repo.js';
+import { type CaseFull, type InterviewRow, type InterviewsTx } from './interviews-repo.js';
 import type { StartBody, SubmitBody, SyncItem } from './schemas.js';
 import { compiledCache, Lru } from './compiled-cache.js';
 
 export type { InterviewRow } from './interviews-repo.js';
 
 /** A transaction of either engine; a Drizzle one is wrapped for the modules that have not moved. */
-export type AnyInterviewsTx = Tx | InterviewsTx;
-
 /** What `interviews.context` holds: the case data the interview was given at start. */
 export interface StoredContext {
   externalId?: string;
@@ -90,11 +82,6 @@ export class InterviewsService {
     private readonly cases: CasesService,
   ) {}
 
-  /** The engine-neutral view of a transaction; a Drizzle one is wrapped. */
-  private view(tx: AnyInterviewsTx, tenantId = ''): InterviewsTx {
-    return 'piiFields' in tx ? tx : new PgInterviewsTx(tx as Tx, tenantId, this.audit);
-  }
-
   /** Set by the CAPI module: creates an interview a device started offline (D2). */
   createOffline?: (
     t: InterviewsTx,
@@ -121,13 +108,13 @@ export class InterviewsService {
    * one in progress. Idempotent on the client's id.
    */
   async start(
-    tx: AnyInterviewsTx,
+    tx: InterviewsTx,
     ctx: AuthContext,
     projectId: string,
     body: StartBody,
     opts: { entryPass?: number | undefined } = {},
   ): Promise<InterviewRow> {
-    const t = this.view(tx, ctx.tenantId);
+    const t = tx;
     const settings = await this.cases.settings(t, projectId);
     const c = await t.lockCase(projectId, body.caseId);
     if (!c) throw new NotFoundException('Case not found');
@@ -215,7 +202,7 @@ export class InterviewsService {
    * (an error code, or null); `create` makes an interview the server has not seen.
    */
   async sync(
-    tx: AnyInterviewsTx,
+    tx: InterviewsTx,
     writer: Writer,
     deviceId: string,
     items: SyncItem[],
@@ -224,7 +211,7 @@ export class InterviewsService {
     /** An interview the caller already locked in this transaction (one fewer statement). */
     locked?: InterviewRow,
   ) {
-    const t = this.view(tx, writer.tenantId);
+    const t = tx;
     const acks: Record<string, number> = {};
     const errors: Record<string, string> = {};
     /** The state's new version, for the interviews whose snapshot was written. */
@@ -334,13 +321,13 @@ export class InterviewsService {
    */
   /** `known.lastSeq`: the device's last change number, when the caller read it with the lock. */
   async submit(
-    tx: AnyInterviewsTx,
+    tx: InterviewsTx,
     row: InterviewRow,
     body: SubmitBody,
     writer: Writer,
     known: { lastSeq?: number } = {},
   ) {
-    const t = this.view(tx, writer.tenantId);
+    const t = tx;
     if (!EDITABLE.has(row.status))
       throw new ConflictException({ code: 'SUBMITTED', message: 'Already submitted' });
     if (row.deviceId !== body.deviceId)
@@ -407,13 +394,13 @@ export class InterviewsService {
    * Hooks that need the case open set it back; see the PAPI module.
    */
   async finaliseCase(
-    tx: AnyInterviewsTx,
+    tx: InterviewsTx,
     writer: Writer,
     caseId: string,
     disposition: string,
     details: Record<string, unknown>,
   ) {
-    const t = this.view(tx, writer.tenantId);
+    const t = tx;
     await t.finaliseCase(caseId, disposition);
     await this.cases.events(t, writer.tenantId, writer.userId, [
       { caseId, type: 'interview_submitted', details },
@@ -426,13 +413,13 @@ export class InterviewsService {
    * new fills, unless `readOnly` (to show what an existing fill uses).
    */
   async latestVersion(
-    tx: AnyInterviewsTx,
+    tx: InterviewsTx,
     projectId: string,
     qid: string,
     mode?: Mode,
     opts: { readOnly?: boolean } = {},
   ) {
-    const t = this.view(tx);
+    const t = tx;
     // The compiled form comes from the cache (versions never change): reading it here would
     // fetch and decode the whole questionnaire on every start.
     const found = await t.latestPublished(projectId, qid);
@@ -461,8 +448,8 @@ export class InterviewsService {
   }
 
   /** Questionnaires of a project whose version in use is fielded in `mode`, by name. */
-  async questionnairesFor(tx: AnyInterviewsTx, projectId: string, mode: Mode) {
-    const rows = await this.view(tx).questionnairesWithModes(projectId);
+  async questionnairesFor(tx: InterviewsTx, projectId: string, mode: Mode) {
+    const rows = await tx.questionnairesWithModes(projectId);
     return rows
       .filter((r) => (Array.isArray(r.modes) ? r.modes.includes(mode) : true))
       .map(({ id, name }) => ({ id, name }))
@@ -470,20 +457,20 @@ export class InterviewsService {
   }
 
   /** Records that the device is on the interview; returns its last acknowledged change. */
-  async touchDevice(tx: AnyInterviewsTx, tenantId: string, interviewId: string, deviceId: string) {
-    return this.view(tx, tenantId).touchDevice(interviewId, deviceId);
+  async touchDevice(tx: InterviewsTx, tenantId: string, interviewId: string, deviceId: string) {
+    return tx.touchDevice(interviewId, deviceId);
   }
 
   /** The interview, locked for this transaction. */
-  async locked(tx: AnyInterviewsTx, id: string): Promise<InterviewRow | undefined> {
-    return (await this.view(tx).interview(id, true)) ?? undefined;
+  async locked(tx: InterviewsTx, id: string): Promise<InterviewRow | undefined> {
+    return (await tx.interview(id, true)) ?? undefined;
   }
 
   /** A version's number and questionnaire (immutable, so cached like the compiled form). */
-  async versionOf(tx: AnyInterviewsTx, versionId: string) {
+  async versionOf(tx: InterviewsTx, versionId: string) {
     const hit = versionCache.get(versionId);
     if (hit) return hit;
-    const v = await this.view(tx).versionBrief(versionId);
+    const v = await tx.versionBrief(versionId);
     if (v) versionCache.set(versionId, v);
     return v ?? undefined;
   }
@@ -494,23 +481,23 @@ export class InterviewsService {
    * and every submit need it, and it is the largest thing they read. Ids reach here only from
    * rows the caller's tenant can see (RLS), so the cache never crosses organisations.
    */
-  async compiledOf(tx: AnyInterviewsTx, versionId: string) {
+  async compiledOf(tx: InterviewsTx, versionId: string) {
     const hit = compiledCache.get(versionId);
     if (hit) return hit;
-    const compiled = (await this.view(tx).compiledRaw(versionId))!;
+    const compiled = (await tx.compiledRaw(versionId))!;
     compiledCache.set(versionId, compiled);
     return compiled;
   }
 
   /** Case data for the engine and the screen, masked as the interviewer would see it. */
   async caseContext(
-    tx: AnyInterviewsTx,
+    tx: InterviewsTx,
     ctx: AuthContext | null,
     projectId: string,
     c: CaseFull,
     reveal: boolean,
   ) {
-    const t = this.view(tx, ctx?.tenantId);
+    const t = tx;
     const show = !!ctx && reveal && this.cases.canSeePii(ctx, projectId);
     const pii = await this.cases.piiFields(t, projectId);
     const cs = await t.contacts(c.id);
@@ -560,13 +547,13 @@ export class InterviewsService {
    * when the caller has already read them (one read of the project per request).
    */
   async payload(
-    tx: AnyInterviewsTx,
+    tx: InterviewsTx,
     row: InterviewRow,
     deviceId: string,
     settings?: ProjectSettings,
     lastSeq?: number,
   ) {
-    const t = this.view(tx);
+    const t = tx;
     const seq = lastSeq !== undefined ? lastSeq : await t.deviceSeq(row.id, deviceId);
     const v = await this.versionOf(t, row.questionnaireVersionId);
     const compiled = await this.compiledOf(t, row.questionnaireVersionId);

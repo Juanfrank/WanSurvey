@@ -26,7 +26,6 @@ import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { isTransient } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import { MAX_JOB_ATTEMPTS } from '../jobs/claims.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
@@ -40,7 +39,7 @@ import {
 import { EXPORT_STORAGE, type ExportStorage, type StorageWriter } from './storage.js';
 import { EXPORTS_REPO, type ExportsRepo, type ExportsTx } from './exports-repo.js';
 import { sqlExport } from './sql-export.js';
-import { sqlExportMssql } from './sql-export.mssql.js';
+import { isTransient } from '../db/common.js';
 
 export const EXPORT_FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 
@@ -231,7 +230,7 @@ export class ExportsService implements OnModuleInit {
 
   /** The interviews of an export, page by page, each page read in its own short transaction. */
   private get sqlExportOf() {
-    return this.engine.kind === 'mssql' ? sqlExportMssql : sqlExport;
+    return sqlExport;
   }
 
   private async *pages(

@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { MSSQL } from './db.js';
 import { expectAccessible, login, PM, pickOrganisation, resultsSection, shot } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
@@ -195,6 +194,5 @@ test('exports are built by the worker and download with the expected header', as
   const sql = readFileSync(await (await sqlDownload).path(), 'utf8');
   expect(sql).toMatch(/^-- WanSurvey/);
   expect(sql).toContain('from bi.fact_respuesta r');
-  // The script is written in the dialect of the engine behind the API.
-  expect(sql).toContain(MSSQL ? 'as [A3_SEX]' : 'as "A3_SEX"');
+  expect(sql).toContain('as [A3_SEX]');
 });

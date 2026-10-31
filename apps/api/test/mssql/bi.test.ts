@@ -5,7 +5,7 @@ import { createMssqlDb } from '../../src/db/mssql/connection.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import type { Column, Table } from '@wansurvey/exporters';
-import { sqlExportMssql } from '../../src/exports/sql-export.mssql.js';
+import { sqlExport } from '../../src/exports/sql-export.js';
 import { BiStore } from '../../src/stats/bi-store.mssql.js';
 import { QuestionnaireStore } from '../../src/questionnaires/questionnaire-store.mssql.js';
 
@@ -467,7 +467,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       ],
     };
     const sheets = (labels: 'codes' | 'labels') =>
-      sqlExportMssql({
+      sqlExport({
         name: 'Encuesta',
         projectId: a.project,
         questionnaireId: q,

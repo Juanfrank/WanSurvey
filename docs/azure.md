@@ -2,19 +2,13 @@
 
 > **Deploying without the Azure CLI or containers?** Use [`docs/appservice-zip.md`](appservice-zip.md): one Node process from a zip, one instance, no Redis. What follows (and `infra/azure/main.bicep`) is the container layout, kept as a reference for now.
 
-WanSurvey runs on **one** Azure App Service: a Linux plan **Premium v3 P0v3** with a single Web App holding its three containers as sidecars (web, API, worker), next to Azure Database for PostgreSQL and Azure Cache for Redis. `infra/azure/main.bicep` creates the plan, the app, its containers, the identity that pulls the images and the autoscale rule. Production is planned on SQL Server later (see the last section).
+WanSurvey runs on **one** Azure App Service: a Linux plan **Premium v3 P0v3** with a single Web App holding its three containers as sidecars (web, API, worker), next to Azure SQL Database (or a SQL Server) and Azure Cache for Redis. `infra/azure/main.bicep` creates the plan, the app, its containers, the identity that pulls the images and the autoscale rule.
 
 ## Verdict
 
-**Compatible.** Three things stopped it working on Azure and have been fixed (they were invisible on a local Postgres, where the owner is a superuser):
+**Compatible.** The database is SQL Server (Azure SQL Database or a SQL Server): the application connects as `wansurvey_app`, a contained database user that owns nothing and is always under the security policy, so isolation by organisation is the same on Azure SQL as in the tests (job `sqlserver`). The owner (migrations, seed, nightly jobs) runs through the `DATABASE_ADMIN_URL` connection.
 
-| Problem on Azure                                                                                                                                                                                                                                                          | Fix                                                                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Azure Database for PostgreSQL has no superuser. The migrate script restated `NOSUPERUSER NOBYPASSRLS` on the application role, which only a superuser may write                                                                                                           | It creates the role with the defaults and then checks them (`apps/api/src/db/migrate.ts`)                                                                                                               |
-| Tables used `FORCE ROW LEVEL SECURITY`, which also filters the owner. Without a superuser the owner runs the migrations, the seed and the security-definer functions (sign-in lookups, e-mail dispatch, nightly jobs, share links, respondent links), so they saw no rows | Migration `0019_owner_bypasses_rls.sql` turns FORCE off. Isolation is unchanged: the application connects as `wansurvey_app`, which owns nothing and is always filtered (checked by `test/rls.test.ts`) |
-| App Service restarts a container that does not answer HTTP; the worker had no port                                                                                                                                                                                        | The worker answers `GET /health` on `WORKER_HEALTH_PORT`                                                                                                                                                |
-
-Also added: the web container takes the API's address from `API_UPSTREAM`, and `TRUST_PROXY_HOPS` sets how many proxies sit in front of the API. The API tests that need a database run on SQL Server (job `sqlserver`), where the application user owns nothing and is always under the security policy, as on Azure SQL; the PostgreSQL test suite and its "ordinary owner role" variant were retired.
+Also: the web container takes the API's address from `API_UPSTREAM`, `TRUST_PROXY_HOPS` sets how many proxies sit in front of the API, and the worker answers `GET /health` on `WORKER_HEALTH_PORT` (App Service restarts a container that does not answer HTTP).
 
 ## Layout
 
@@ -45,11 +39,11 @@ The three separate apps of the earlier setup (web, API and worker each on its ow
 
 Managed services:
 
-| Service                                                     | Size                                          | Notes                                                                                                                                                                                                                          |
-| ----------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Azure Database for PostgreSQL – Flexible Server, version 16 | Burstable B1ms for testing, B2s for fieldwork | `require_secure_transport` on; add `?sslmode=require` to both URLs. No extensions needed. User connections: B1ms 35, B2s 414                                                                                                   |
-| Azure Cache for Redis                                       | Standard C1                                   | TLS port 6380: `REDIS_URL=rediss://:<key>@<name>.redis.cache.windows.net:6380`. Set **maxmemory-policy = noeviction** (BullMQ needs it)                                                                                        |
-| Azure Storage (StorageV2, Standard LRS)                     | Pay per use                                   | Export files, container `exports`. Made by `main.bicep`: no account keys, no public blobs, reached with the app's identity (Storage Blob Data Contributor); files deleted after 7 days by the app, after 8 by a lifecycle rule |
+| Service                                 | Size                                                                  | Notes                                                                                                                                                                                                                          |
+| --------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Azure SQL Database (or SQL Server 2022) | A small vCore or DTU tier for testing; size for fieldwork by the load | Encryption on (the default); leave `trustServerCertificate` out of both URLs. Contained users need no server login. Check the tier's concurrent worker and session limits against the pool sizes below                         |
+| Azure Cache for Redis                   | Standard C1                                                           | TLS port 6380: `REDIS_URL=rediss://:<key>@<name>.redis.cache.windows.net:6380`. Set **maxmemory-policy = noeviction** (BullMQ needs it)                                                                                        |
+| Azure Storage (StorageV2, Standard LRS) | Pay per use                                                           | Export files, container `exports`. Made by `main.bicep`: no account keys, no public blobs, reached with the app's identity (Storage Blob Data Contributor); files deleted after 7 days by the app, after 8 by a lifecycle rule |
 
 Reach the database, Redis and the storage account through VNet integration and **private endpoints**: they carry no SNAT limit (App Service gives each instance 128 SNAT ports to the internet, and asks for under 100 outbound connections per remote address and port), and the pools below keep the connections few and long-lived anyway.
 
@@ -59,7 +53,7 @@ Reach the database, Redis and the storage account through VNet integration and *
 
 ```
 NODE_ENV=production
-DATABASE_URL=postgres://wansurvey_app:<password>@<server>.postgres.database.azure.com:5432/wansurvey?sslmode=require
+DATABASE_URL=mssql://wansurvey_app:<password>@<server>.database.windows.net:1433/wansurvey
 APP_ENCRYPTION_KEY=<32 bytes, base64 — from Key Vault: @Microsoft.KeyVault(SecretUri=...)>
 REDIS_URL=rediss://:<key>@<name>.redis.cache.windows.net:6380
 PUBLIC_WEB_URL=https://encuestas.example.org
@@ -105,11 +99,11 @@ Microsoft sign-in takes all of `SSO_DEFAULT_ORG`, `ENTRA_TENANT_ID`, `ENTRA_CLIE
 
 ## First deployment
 
-1. Create the database `wansurvey` on the Flexible Server, and the registry, Redis and Key Vault secrets.
+1. Create the database `wansurvey` on the Azure SQL server, and the registry, Redis and Key Vault secrets.
 2. Build and push the two images (`wansurvey-web`, `wansurvey-api`) with the same tag.
 3. Run the migrations once, from CI or your machine, with the API image:
-   `docker run --rm -e DATABASE_ADMIN_URL=… -e DATABASE_URL=… <api-image> node dist/db/migrate.js`
-   It creates the `wansurvey_app` role (password from `DATABASE_URL`) and checks it cannot bypass row-level security.
+   `docker run --rm -e DATABASE_ADMIN_URL=… -e DATABASE_URL=… <api-image> node dist/db/mssql/migrate.js`
+   It creates the contained user `wansurvey_app` (password from `DATABASE_URL`) and applies the T-SQL migrations.
 4. Optional demo data: `node dist/db/seed.js`, then `node dist/db/seed-demo.js` (needs `SEED_PASSWORD`, and `APP_ENCRYPTION_KEY` so the personal fields are sealed straight away).
 5. Deploy `infra/azure/main.bicep`; check `https://<app>/health`.
 
@@ -124,16 +118,16 @@ What changed from S1 (1 core, 1.75 GB, three apps) to P0v3 (1 vCPU on newer hard
 | Memory per instance                | 1.75 GB shared by three apps    | 4 GB shared by three containers                                                                         | Plan size                                                                                                                                                                                          |
 | Node heap (`--max-old-space-size`) | 512 MB each                     | API 1024 MB, worker 1280 MB                                                                             | About 2.3 GB of heap at most, ~3 GB with Node's memory outside the heap; the rest (≈1 GB) for the platform, nginx and `pdftoppm` while scans are read. At rest the three use about 350 MB together |
 | Exports                            | Large ones could exhaust 512 MB | Any size up to `EXPORT_MAX_BYTES` (2 GB), in about 40 MB of worker memory over its base                 | Read 500 interviews at a time and written to Blob Storage as they are built, in 4 MB blocks                                                                                                        |
-| DB connections per instance        | 15 (10 API + 5 worker)          | 16 (9 API + 5 worker + 1 health probe each)                                                             | One vCPU gains nothing from more; Burstable B1ms gives 35 user connections, so 2 instances (32) fit, 3 or more need B2s or the built-in PgBouncer                                                  |
+| DB connections per instance        | 15 (10 API + 5 worker)          | 16 (9 API + 5 worker + 1 health probe each)                                                             | One vCPU gains nothing from more; check the tier's limits for concurrent sessions and workers before adding instances                                                                              |
 | Jobs at once                       | 4 light + 1 heavy               | 4 light + 1 heavy                                                                                       | Light jobs wait on the database and e-mail, not the CPU; one heavy job (export, scan reading) at a time keeps the API responsive on the one vCPU                                                   |
 | Requests at once (load shedding)   | 200 per API                     | 50 per API                                                                                              | About 5 waiting per pooled connection; beyond that a fast 503 with Retry-After beats waiting into the front end's 230 s timeout                                                                    |
 | Health check                       | Each app on its own `/health`   | One `/health` through nginx → API → database; out of rotation after 5 failed pings                      | App Service pings once a minute and, after an hour unhealthy, replaces the instance                                                                                                                |
 | Scale-out                          | Manual or autoscale per app     | Autoscale on the plan: +1 above 70 % CPU for 10 min, −1 below 30 % for 20 min, up to `maxInstances` (2) | Each instance runs all three containers; the extra workers share the BullMQ queues and the schedules stay single (they are upserted by name)                                                       |
 | Deployment slots                   | 5                               | 20                                                                                                      | Plan tier                                                                                                                                                                                          |
 
-- **CPU**: one vCPU per instance, shared by the API, the worker and nginx. For 300 interviewers syncing or a 50-per-second web survey burst, allow 2–3 instances (raise `maxInstances`, and the database as above), or move to P1v3 (2 vCPU, 8 GB) and double `DB_POOL_MAX`. Check the numbers with `load/` (k6) before a large wave.
-- **Concurrency settings** (pool sizes, timeouts, PgBouncer, rate limits, job concurrency): see [`docs/concurrency.md`](concurrency.md), including how to size pools against the server's `max_connections`.
-- **Scale-out is safe**: sessions are in Postgres, export files in Blob Storage, and live dashboards are fanned out through Redis, so any instance can serve any request. Rate limits are counted in Redis, so they hold across instances.
+- **CPU**: one vCPU per instance, shared by the API, the worker and nginx. For 300 interviewers syncing or a 50-per-second web survey burst, allow 2–3 instances (raise `maxInstances`, and the database tier), or move to P1v3 (2 vCPU, 8 GB) and double `DB_POOL_MAX`. Measure with a load test (k6) on a staging copy before a large wave.
+- **Concurrency settings** (pool sizes, timeouts, rate limits, job concurrency): see [`docs/concurrency.md`](concurrency.md), including how to size pools against the database's connection limits.
+- **Scale-out is safe**: sessions are in the database, export files in Blob Storage, and live dashboards are fanned out through Redis, so any instance can serve any request. Rate limits are counted in Redis, so they hold across instances.
 - **Live dashboards**: Server-Sent Events work through App Service; the 15-second heartbeat stays well under the 230-second idle timeout, and nginx has buffering off for `/api/`.
 - **Files**: nothing is written to local disk (export files go to Blob Storage, streamed both ways: the worker writes them as it builds them, the API passes downloads through without holding them), so the ephemeral container storage of App Service is fine. The API refuses to start in production without `EXPORT_STORAGE=blob`.
 - **A worker that stops**: the health check goes through the API, so it does not see the worker. Watch the worker's log stream and its jobs (failed jobs are kept in Redis); a restart of the app restarts all three containers.
@@ -145,24 +139,3 @@ What changed from S1 (1 core, 1.75 GB, three apps) to P0v3 (1 vCPU on newer hard
 - Microsoft, [`Microsoft.Web/sites/sitecontainers`](https://learn.microsoft.com/en-us/azure/templates/microsoft.web/sites/slots/sitecontainers): `isMain`, `targetPort`, `startUpCommand`, `environmentVariables`, `authType`.
 - Microsoft, [health check](https://learn.microsoft.com/azure/app-service/monitor-instances-health-check): a ping a minute, `WEBSITE_HEALTHCHECK_MAXPINGFAILURES` 2–10, an instance unhealthy for an hour replaced.
 - Microsoft, [intermittent outbound connection errors](https://learn.microsoft.com/azure/app-service/troubleshoot-intermittent-outbound-connection-errors): 128 SNAT ports per instance, under 100 connections per remote endpoint, private endpoints without the limit.
-- Microsoft, [limits in Azure Database for PostgreSQL flexible server](https://learn.microsoft.com/azure/postgresql/flexible-server/concepts-limits): B1ms 50 connections (35 for users), B2s 429 (414).
-
-## Moving to SQL Server later
-
-Planned: SQL Server replaces PostgreSQL, SQLite only for test instances for a while; see [`docs/roadmap.md`](roadmap.md). The data layer is PostgreSQL-specific. Moving to Azure SQL / SQL Server means rewriting it, not changing a connection string:
-
-| PostgreSQL feature used                                                       | SQL Server counterpart                                                         |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Row-level security policies on `app.tenant_id`                                | Security policies with a predicate function on `SESSION_CONTEXT(N'tenant_id')` |
-| `jsonb` columns, `?`, `?                                                      | `, `jsonb_each`, `jsonb_object_agg`                                            | `nvarchar(max)` with `ISJSON`, `OPENJSON`, `JSON_VALUE`, `JSON_MODIFY` |
-| `text[]` columns (modes, languages, PII index) and `= any(...)`               | Child tables or JSON arrays                                                    |
-| Security-definer functions (sign-in, respondent links, nightly jobs, erasure) | Stored procedures with `EXECUTE AS OWNER`                                      |
-| plpgsql triggers keeping history append-only                                  | T-SQL `INSTEAD OF UPDATE, DELETE` triggers                                     |
-| GIN index on the PII word hashes                                              | A child table of hashes with a normal index                                    |
-| `NULLS NOT DISTINCT` unique index                                             | A filtered unique index or a computed column                                   |
-| `bytea` export files                                                          | `varbinary(max)` (or Blob Storage)                                             |
-| `AT TIME ZONE '<IANA>'`                                                       | `AT TIME ZONE '<Windows name>'` (map IANA names)                               |
-| `percentile_cont … within group`                                              | `PERCENTILE_CONT … WITHIN GROUP … OVER ()`                                     |
-| Drizzle ORM (no stable SQL Server driver)                                     | Another data layer (e.g. Prisma or Kysely with `tedious`)                      |
-
-Everything above the data layer (engine, renderer, web app, worker, Redis jobs) stays as it is.

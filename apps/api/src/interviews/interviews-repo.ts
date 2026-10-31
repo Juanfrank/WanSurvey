@@ -1,25 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import { and, asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
-import { AuditService } from '../audit/audit.service.js';
-import { MssqlCasesTx, PgCasesTx, type CasesTx } from '../cases/cases-repo.js';
+import { MssqlCasesTx, type CasesTx } from '../cases/cases-repo.js';
 import { CasesStore } from '../cases/cases-store.mssql.js';
-import { Database, Prepared, type Tx } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { instant } from '../db/mssql/instant.js';
-import {
-  cases,
-  interviewAnswerEvents,
-  interviewDevices,
-  interviewParadata,
-  interviews,
-  projects,
-  questionnaireVersions,
-  questionnaires,
-  users,
-} from '../db/schema.js';
 import { InterviewsStore } from './interviews-store.mssql.js';
 
 /**
@@ -27,8 +13,71 @@ import { InterviewsStore } from './interviews-store.mssql.js';
  * `auth/auth-repo.ts`). A transaction here is also a `CasesTx`. Rows come out in the shape
  * Drizzle returns, so the modules that have not moved (their submit hooks) read them unchanged.
  */
-export type InterviewRow = typeof interviews.$inferSelect;
-export type CaseFull = typeof cases.$inferSelect;
+export interface InterviewRow {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  caseId: string | null;
+  questionnaireVersionId: string;
+  mode: string;
+  interviewerId: string | null;
+  status: string;
+  disposition: string | null;
+  language: string;
+  context: unknown;
+  state: unknown;
+  answers: unknown;
+  stateVersion: number;
+  stateDevice: string | null;
+  position: string | null;
+  deviceId: string;
+  startedAt: Date;
+  endedAt: Date | null;
+  entryPass: number;
+  activeMs: number;
+  totalMs: number;
+  flags: unknown;
+  sampled: boolean;
+  submittedAt: Date | null;
+  submissions: number;
+  reviewedBy: string | null;
+  reviewedAt: Date | null;
+  updatedAt: Date;
+}
+export interface CaseFull {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  questionnaireId: string | null;
+  externalId: string;
+  sample: unknown;
+  samplePii: string | null;
+  samplePiiIndex: string[] | null;
+  anonymisedAt: Date | null;
+  status: string;
+  disposition: string | null;
+  priority: number;
+  modePreference: string | null;
+  assignedTo: string | null;
+  assignedAt: Date | null;
+  importId: string | null;
+  attempts: number;
+  lastAttemptAt: Date | null;
+  nextContactAt: Date | null;
+  callbackUserId: string | null;
+  callLockUserId: string | null;
+  callLockUntil: Date | null;
+  checkedOutDevice: string | null;
+  checkedOutBy: string | null;
+  checkedOutAt: Date | null;
+  frameUnitId: string | null;
+  selectionRole: string | null;
+  substituteFor: string | null;
+  inclusionProb: number | null;
+  baseWeight: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export interface AnswerEventRow {
   deviceId: string;
@@ -63,16 +112,14 @@ export interface FinishSync {
   total: number | null;
 }
 
-/** The open transaction of either engine, to build another module's view of it. */
-export type TxHandle =
-  { kind: 'pg'; tx: Tx; tenantId: string } | { kind: 'mssql'; tx: MssqlTx; tenantId: string };
+/** The open transaction, to build another module's view of it. */
+export interface TxHandle {
+  tx: MssqlTx;
+  tenantId: string;
+}
 
 export interface InterviewsTx extends CasesTx {
   handle(): TxHandle;
-  /** The Drizzle transaction, for modules not yet moved (null on SQL Server). */
-  pg(): Tx | null;
-  /** The same, where a module that has not moved needs it (throws on SQL Server). */
-  native(): Tx;
 
   // Cases
   lockCase(projectId: string, id: string): Promise<CaseFull | null>;
@@ -209,463 +256,6 @@ export interface InterviewsRepo {
   inTenant<T>(tenantId: string, fn: (t: InterviewsTx) => Promise<T>): Promise<T>;
 }
 
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-const lockInterview = new Prepared<InterviewRow>(
-  (tx) =>
-    tx
-      .select()
-      .from(interviews)
-      .where(eq(interviews.id, sql.placeholder('id')))
-      .for('update'),
-  getTableColumns(interviews),
-);
-const deviceSeqQ = new Prepared<{ lastSeq: number }>(
-  (tx) =>
-    tx
-      .select({ lastSeq: interviewDevices.lastSeq })
-      .from(interviewDevices)
-      .where(
-        and(
-          eq(interviewDevices.interviewId, sql.placeholder('id')),
-          eq(interviewDevices.deviceId, sql.placeholder('device')),
-        ),
-      ),
-  { lastSeq: interviewDevices.lastSeq },
-);
-const touchDeviceQ = new Prepared<{ lastSeq: number }>(
-  (tx) =>
-    tx
-      .insert(interviewDevices)
-      .values({
-        tenantId: sql.placeholder('tenantId'),
-        interviewId: sql.placeholder('id'),
-        deviceId: sql.placeholder('device'),
-      })
-      .onConflictDoUpdate({
-        target: [interviewDevices.interviewId, interviewDevices.deviceId],
-        set: { updatedAt: sql`now()` },
-      })
-      .returning({ lastSeq: interviewDevices.lastSeq }),
-  { lastSeq: interviewDevices.lastSeq },
-);
-/**
- * The end of a sync: the interview's snapshot and times (when `touch`; only the fields sent)
- * and the device's acknowledged number, in one statement. A new snapshot bumps the state's
- * version and keeps the codes given to "other" texts (`<VAR>_CODE`, not in the snapshot)
- * whose text is unchanged.
- */
-const finishSyncQ = new Prepared<never>(
-  () => sql`
-    with i as (
-      update interviews set
-        state = case when ${sql.placeholder('hasState')} then ${sql.placeholder('state')}::jsonb else state end,
-        answers = case when ${sql.placeholder('hasState')} then coalesce((
-            select jsonb_object_agg(k.key, k.value) from jsonb_each(answers) k
-            where k.key like '%\\_CODE'
-              and ${sql.placeholder('answers')}::jsonb -> (left(k.key, -5) || '_OTHER')
-                = answers -> (left(k.key, -5) || '_OTHER')
-          ), '{}'::jsonb) || ${sql.placeholder('answers')}::jsonb else answers end,
-        state_version = state_version + case when ${sql.placeholder('hasState')} then 1 else 0 end,
-        state_device = case when ${sql.placeholder('hasState')} then ${sql.placeholder('device')}::text else state_device end,
-        position = case when ${sql.placeholder('hasState')} then ${sql.placeholder('position')}::text else position end,
-        active_ms = coalesce(${sql.placeholder('active')}::int, active_ms),
-        total_ms = coalesce(${sql.placeholder('total')}::int, total_ms),
-        updated_at = now()
-      where id = ${sql.placeholder('id')} and ${sql.placeholder('touch')}::boolean
-    )
-    update interview_devices set last_seq = ${sql.placeholder('seq')}::int, updated_at = now()
-    where interview_id = ${sql.placeholder('id')} and device_id = ${sql.placeholder('device')}`,
-  {},
-);
-
-export class PgInterviewsTx extends PgCasesTx implements InterviewsTx {
-  constructor(
-    private readonly itx: Tx,
-    private readonly tenant: string,
-    audits: AuditService,
-  ) {
-    super(itx, tenant, audits);
-  }
-
-  handle(): TxHandle {
-    return { kind: 'pg', tx: this.itx, tenantId: this.tenant };
-  }
-
-  pg() {
-    return this.itx;
-  }
-
-  native() {
-    return this.itx;
-  }
-
-  async lockCase(projectId: string, id: string) {
-    const [c] = await this.itx
-      .select()
-      .from(cases)
-      .where(and(eq(cases.id, id), eq(cases.projectId, projectId)))
-      .for('update');
-    return c ?? null;
-  }
-
-  lockCases(projectId: string, ids: string[]) {
-    return this.itx
-      .select()
-      .from(cases)
-      .where(and(eq(cases.projectId, projectId), inArray(cases.id, ids)))
-      .for('update');
-  }
-
-  async lockCaseById(id: string) {
-    const [c] = await this.itx.select().from(cases).where(eq(cases.id, id)).for('update');
-    return c ?? null;
-  }
-
-  async setCaseInProgress(id: string) {
-    await this.itx
-      .update(cases)
-      .set({ status: 'in_progress', updatedAt: new Date() })
-      .where(eq(cases.id, id));
-  }
-
-  async finaliseCase(id: string, disposition: string) {
-    await this.itx
-      .update(cases)
-      .set({ status: 'finalised', disposition, updatedAt: new Date() })
-      .where(eq(cases.id, id));
-  }
-
-  async setCheckout(id: string, v: { device: string; by: string; at: Date } | null) {
-    await this.itx
-      .update(cases)
-      .set(
-        v
-          ? { checkedOutDevice: v.device, checkedOutBy: v.by, checkedOutAt: v.at }
-          : { checkedOutDevice: null, checkedOutBy: null, checkedOutAt: null },
-      )
-      .where(eq(cases.id, id));
-  }
-
-  async checkIn(projectId: string, ids: string[], deviceId: string, userId: string) {
-    const back = await this.itx
-      .update(cases)
-      .set({ checkedOutDevice: null, checkedOutBy: null, checkedOutAt: null })
-      .where(
-        and(
-          eq(cases.projectId, projectId),
-          inArray(cases.id, ids),
-          eq(cases.checkedOutDevice, deviceId),
-          eq(cases.checkedOutBy, userId),
-        ),
-      )
-      .returning({ id: cases.id });
-    return back.map((b) => b.id);
-  }
-
-  async caseBrief(projectId: string, id: string) {
-    const [c] = await this.itx
-      .select({ id: cases.id, assignedTo: cases.assignedTo })
-      .from(cases)
-      .where(and(eq(cases.id, id), eq(cases.projectId, projectId)));
-    return c ?? null;
-  }
-
-  async openInterview(caseId: string) {
-    const [o] = await this.itx
-      .select()
-      .from(interviews)
-      .where(and(eq(interviews.caseId, caseId), eq(interviews.status, 'in_progress')));
-    return o ?? null;
-  }
-
-  async interview(id: string, lock = false) {
-    if (lock) return (await lockInterview.run(this.itx, { id }))[0] ?? null;
-    const [r] = await this.itx.select().from(interviews).where(eq(interviews.id, id));
-    return r ?? null;
-  }
-
-  async takeOver(id: string, v: { deviceId: string; interviewerId?: string; now: Date }) {
-    const [row] = await this.itx
-      .update(interviews)
-      .set({
-        deviceId: v.deviceId,
-        ...(v.interviewerId ? { interviewerId: v.interviewerId } : {}),
-        updatedAt: v.now,
-      })
-      .where(eq(interviews.id, id))
-      .returning();
-    return row!;
-  }
-
-  async insertInterview(v: Parameters<InterviewsTx['insertInterview']>[0]) {
-    const [row] = await this.itx
-      .insert(interviews)
-      .values({ tenantId: this.tenant, ...v })
-      .returning();
-    return row!;
-  }
-
-  async ensureDevice(interviewId: string, deviceId: string) {
-    await this.itx
-      .insert(interviewDevices)
-      .values({ tenantId: this.tenant, interviewId, deviceId })
-      .onConflictDoNothing();
-  }
-
-  async deviceSeq(interviewId: string, deviceId: string) {
-    return (await deviceSeqQ.run(this.itx, { id: interviewId, device: deviceId }))[0]?.lastSeq;
-  }
-
-  async touchDevice(interviewId: string, deviceId: string) {
-    const [d] = await touchDeviceQ.run(this.itx, {
-      tenantId: this.tenant,
-      id: interviewId,
-      device: deviceId,
-    });
-    return d?.lastSeq ?? 0;
-  }
-
-  async insertAnswerEvents(
-    interviewId: string,
-    deviceId: string,
-    rows: Parameters<InterviewsTx['insertAnswerEvents']>[2],
-  ) {
-    if (!rows.length) return;
-    await this.itx
-      .insert(interviewAnswerEvents)
-      .values(rows.map((o) => ({ tenantId: this.tenant, interviewId, deviceId, ...o })))
-      .onConflictDoNothing();
-  }
-
-  async insertParadata(
-    interviewId: string,
-    deviceId: string,
-    rows: Parameters<InterviewsTx['insertParadata']>[2],
-  ) {
-    if (!rows.length) return;
-    await this.itx
-      .insert(interviewParadata)
-      .values(
-        rows.map((o) => ({
-          tenantId: this.tenant,
-          interviewId,
-          deviceId,
-          ...o,
-          payload: o.payload as Record<string, unknown>,
-        })),
-      )
-      .onConflictDoNothing();
-  }
-
-  async finishSync(v: FinishSync) {
-    await finishSyncQ.run(this.itx, {
-      id: v.id,
-      device: v.device,
-      seq: v.seq,
-      touch: v.touch,
-      hasState: v.hasState,
-      state: v.state ? JSON.stringify(v.state) : null,
-      answers: v.state ? JSON.stringify(v.state['answers'] ?? {}) : null,
-      position: v.position,
-      active: v.active,
-      total: v.total,
-    });
-  }
-
-  async markSubmitted(id: string, v: Parameters<InterviewsTx['markSubmitted']>[1]) {
-    const [done] = await this.itx
-      .update(interviews)
-      .set({
-        ...v.extra,
-        status: 'submitted',
-        disposition: v.disposition,
-        endedAt: v.endedAt ?? new Date(),
-        submittedAt: new Date(),
-        submissions: v.submissions + 1,
-        updatedAt: new Date(),
-      })
-      .where(eq(interviews.id, id))
-      .returning();
-    return done!;
-  }
-
-  async latestPublished(projectId: string, qid: string) {
-    const [found] = await this.itx
-      .select({
-        id: questionnaireVersions.id,
-        version: questionnaireVersions.version,
-        state: questionnaires.state,
-      })
-      .from(questionnaireVersions)
-      .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
-      .where(
-        and(
-          eq(questionnaires.id, qid),
-          eq(questionnaires.projectId, projectId),
-          eq(questionnaireVersions.status, 'published'),
-        ),
-      )
-      .orderBy(desc(questionnaireVersions.version))
-      .limit(1);
-    return found ?? null;
-  }
-
-  async compiledRaw(versionId: string) {
-    const [v] = await this.itx
-      .select({ compiled: questionnaireVersions.compiled })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.id, versionId));
-    return (v?.compiled as CompiledQuestionnaire | undefined) ?? null;
-  }
-
-  async versionBrief(versionId: string) {
-    const [v] = await this.itx
-      .select({
-        version: questionnaireVersions.version,
-        questionnaireId: questionnaireVersions.questionnaireId,
-      })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.id, versionId));
-    return v ?? null;
-  }
-
-  async versionRow(versionId: string) {
-    const [v] = await this.itx
-      .select({
-        id: questionnaireVersions.id,
-        version: questionnaireVersions.version,
-        compiled: questionnaireVersions.compiled,
-      })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.id, versionId));
-    return v ?? null;
-  }
-
-  async publishedVersion(projectId: string, versionId: string) {
-    const [v] = await this.itx
-      .select({
-        id: questionnaireVersions.id,
-        version: questionnaireVersions.version,
-        compiled: questionnaireVersions.compiled,
-        questionnaireId: questionnaires.id,
-        state: questionnaires.state,
-      })
-      .from(questionnaireVersions)
-      .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
-      .where(
-        and(
-          eq(questionnaireVersions.id, versionId),
-          eq(questionnaires.projectId, projectId),
-          eq(questionnaireVersions.status, 'published'),
-        ),
-      );
-    return v ?? null;
-  }
-
-  async questionnairesWithModes(projectId: string) {
-    return this.itx
-      .selectDistinctOn([questionnaires.id], {
-        id: questionnaires.id,
-        name: questionnaires.name,
-        modes: sql<
-          string[] | null
-        >`${questionnaireVersions.compiled} -> 'questionnaire' -> 'modes'`,
-      })
-      .from(questionnaires)
-      .innerJoin(
-        questionnaireVersions,
-        eq(questionnaireVersions.questionnaireId, questionnaires.id),
-      )
-      .where(
-        and(
-          eq(questionnaires.projectId, projectId),
-          eq(questionnaireVersions.status, 'published'),
-          // Disabled and completed questionnaires take no new fills.
-          eq(questionnaires.state, 'active'),
-        ),
-      )
-      .orderBy(questionnaires.id, desc(questionnaireVersions.version));
-  }
-
-  async userName(id: string) {
-    const [u] = await this.itx.select({ name: users.name }).from(users).where(eq(users.id, id));
-    return u?.name ?? null;
-  }
-
-  async projectName(projectId: string) {
-    const [p] = await this.itx
-      .select({ name: projects.name })
-      .from(projects)
-      .where(eq(projects.id, projectId));
-    return p?.name ?? null;
-  }
-
-  caseInterviews(caseId: string) {
-    return this.itx
-      .select({
-        id: interviews.id,
-        status: interviews.status,
-        mode: interviews.mode,
-        disposition: interviews.disposition,
-        language: interviews.language,
-        startedAt: interviews.startedAt,
-        endedAt: interviews.endedAt,
-        activeMs: interviews.activeMs,
-        interviewer: users.name,
-        version: questionnaireVersions.version,
-        compiled: questionnaireVersions.compiled,
-      })
-      .from(interviews)
-      .innerJoin(
-        questionnaireVersions,
-        eq(questionnaireVersions.id, interviews.questionnaireVersionId),
-      )
-      .leftJoin(users, eq(users.id, interviews.interviewerId))
-      .where(eq(interviews.caseId, caseId))
-      .orderBy(desc(interviews.startedAt));
-  }
-
-  async answerEventsOf(ids: string[]) {
-    if (!ids.length) return [];
-    return this.itx
-      .select({
-        interviewId: interviewAnswerEvents.interviewId,
-        variable: interviewAnswerEvents.variable,
-        oldValue: interviewAnswerEvents.oldValue,
-        newValue: interviewAnswerEvents.newValue,
-        at: interviewAnswerEvents.at,
-        source: interviewAnswerEvents.source,
-        reason: interviewAnswerEvents.reason,
-        by: users.name,
-        seq: interviewAnswerEvents.seq,
-      })
-      .from(interviewAnswerEvents)
-      .leftJoin(users, eq(users.id, interviewAnswerEvents.byUserId))
-      .where(inArray(interviewAnswerEvents.interviewId, ids))
-      .orderBy(asc(interviewAnswerEvents.at), asc(interviewAnswerEvents.seq));
-  }
-}
-
-@Injectable()
-export class PgInterviewsRepo implements InterviewsRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: InterviewsTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) =>
-      fn(new PgInterviewsTx(tx, tenantId, this.audits)),
-    );
-  }
-
-  /** The same operations inside a transaction someone else opened (modules not yet moved). */
-  wrap(tx: Tx, tenantId: string): InterviewsTx {
-    return new PgInterviewsTx(tx, tenantId, this.audits);
-  }
-}
-
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
 
 const low = (s: string) => s.toLowerCase();
@@ -758,15 +348,7 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
   }
 
   handle(): TxHandle {
-    return { kind: 'mssql', tx: this.itx, tenantId: this.tenant };
-  }
-
-  pg(): Tx | null {
-    return null;
-  }
-
-  native(): Tx {
-    throw new Error('This module has not moved to SQL Server yet');
+    return { tx: this.itx, tenantId: this.tenant };
   }
 
   async lockCase(projectId: string, id: string) {
@@ -850,7 +432,7 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
     return r ? this.fresh(r.id) : null;
   }
 
-  /** The row in Drizzle's shape (the store's rows are SQL Server's). */
+  /** The row as the module's views take it. */
   private async fresh(id: string) {
     const r = await this.itx
       .selectFrom('interviews')

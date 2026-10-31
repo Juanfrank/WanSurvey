@@ -28,10 +28,10 @@ import {
   totpStep,
 } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { isUuid, type UserTenant } from '../db/database.js';
 import { AUTH_REPO, type AuthRepo, type AuthTx, type TokenPurpose } from './auth-repo.js';
 import { SsoConfigs } from './sso-config.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
+import { isUuid, type UserTenant } from '../db/common.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 

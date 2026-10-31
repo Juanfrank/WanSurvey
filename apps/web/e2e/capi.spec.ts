@@ -89,11 +89,9 @@ test('download cases, interview offline after a reload, and everything arrives o
         checked_out_device: null,
       });
     const offline = await db.all(
-      `select count(*)::int as n from case_events e join cases c on c.id = e.case_id
-       where c.external_id in (${marks(ids.length)}) and e.type = 'interview_started' and (e.details->>'offline')::boolean`,
-      ids,
       `select count(*) as n from case_events e join cases c on c.id = e.case_id
        where c.external_id in (${marks(ids.length)}) and e.type = 'interview_started' and json_value(e.details, '$.offline') = 'true'`,
+      ids,
     );
     expect(Number(offline[0]!.n)).toBe(3);
   } finally {

@@ -5,15 +5,14 @@
   "type": "module",
   "files": [
     "dist",
-    "drizzle"
+    "mssql"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts",
+    "db:migrate": "tsx src/db/mssql/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",
     "test:mssql": "vitest run --config vitest.mssql.config.ts",
@@ -38,7 +37,6 @@
     "compression": "1.8.2",
     "cookie-parser": "^1.4.7",
     "csv-parse": "7.0.3",
-    "drizzle-orm": "0.45.4",
     "exceljs": "4.4.0",
     "express": "5.3.0",
     "ioredis": "5.11.1",
@@ -52,7 +50,6 @@
     "pino": "^9.7.0",
     "pino-http": "^10.5.0",
     "pngjs": "7.0.0",
-    "postgres": "^3.4.7",
     "qrcode": "1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
@@ -72,7 +69,6 @@
     "@types/qrcode": "1.5.6",
     "@types/supertest": "^6.0.3",
     "azurite": "3.37.0",
-    "drizzle-kit": "0.31.11",
     "supertest": "^7.1.1",
     "tsx": "^4.20.0",
     "unplugin-swc": "^1.5.5"

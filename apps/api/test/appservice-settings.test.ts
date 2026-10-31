@@ -12,8 +12,8 @@ const template = (env: string) =>
 
 /** What a person would write in place of each `<…>`: valid values of the right shape. */
 const FILLED: Record<string, string> = {
-  DATABASE_URL: 'postgres://wansurvey_app:x@db.example.org:5432/wansurvey?sslmode=require',
-  DATABASE_ADMIN_URL: 'postgres://owner:x@db.example.org:5432/wansurvey?sslmode=require',
+  DATABASE_URL: 'mssql://wansurvey_app:x@db.example.org:1433/wansurvey',
+  DATABASE_ADMIN_URL: 'mssql://owner:x@db.example.org:1433/wansurvey',
   APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   PUBLIC_WEB_URL: 'https://encuestas.example.org',
   SMTP_URL: 'smtps://user:pass@smtp.example.org:465',

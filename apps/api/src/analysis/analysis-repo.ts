@@ -1,18 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { ExportInterview } from '@wansurvey/exporters';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
 import { randomUUID } from 'node:crypto';
-import { AuditService } from '../audit/audit.service.js';
-import { MssqlCasesTx, PgCasesTx, type CasesTx } from '../cases/cases-repo.js';
+import { MssqlCasesTx, type CasesTx } from '../cases/cases-repo.js';
 import { CasesStore } from '../cases/cases-store.mssql.js';
 import { COUNTED } from '../common/statuses.js';
-import { Database, type Tx } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { instant } from '../db/mssql/instant.js';
-import { shareLinks } from '../db/schema.js';
 import { dayStart, nextDay } from '../stats/zoned-day.js';
 
 /**
@@ -89,7 +85,7 @@ export interface AnalysisRepo {
   inTenant<T>(tenantId: string, fn: (t: AnalysisTx) => Promise<T>): Promise<T>;
 }
 
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
+// ─── SQL Server ─────────────────────────────────────────────────────────────────────────
 
 type Row = {
   id: string;
@@ -139,182 +135,6 @@ function shape(
     })) as ExportInterview[],
   };
 }
-
-export class PgAnalysisTx extends PgCasesTx implements AnalysisTx {
-  constructor(
-    private readonly atx: Tx,
-    private readonly tn: string,
-    audits: AuditService,
-  ) {
-    super(atx, tn, audits);
-  }
-
-  async questionnairesWithVersions(projectId: string) {
-    return (await this.atx.execute(sql`
-      select q.id, q.name, max(v.version)::int as version
-      from questionnaires q join questionnaire_versions v on v.questionnaire_id = q.id
-      where q.project_id = ${projectId}
-      group by q.id, q.name order by max(v.published_at) desc`)) as unknown as {
-      id: string;
-      name: string;
-      version: number;
-    }[];
-  }
-
-  async latestVersion(projectId: string, questionnaireId: string) {
-    const rows = (await this.atx.execute(sql`
-      select v.id, q.name, v.compiled, p.timezone as tz
-      from questionnaire_versions v join questionnaires q on q.id = v.questionnaire_id
-      join projects p on p.id = q.project_id
-      where q.id = ${questionnaireId} and q.project_id = ${projectId}
-      order by v.version desc limit 1`)) as unknown as {
-      id: string;
-      name: string;
-      compiled: CompiledQuestionnaire;
-      tz: string;
-    }[];
-    return rows[0] ?? null;
-  }
-
-  async readInterviews(
-    projectId: string,
-    src: ReadSource,
-    f: ReadFilter,
-    opts: { paradata?: boolean; completesOnly?: boolean },
-    page: ReadPage | null,
-  ) {
-    const day = sql`(i.submitted_at at time zone ${src.tz})::date`;
-    const scope = sql`i.project_id = ${projectId} and v.questionnaire_id = ${src.questionnaireId} and i.entry_pass = 1
-        and i.status in ${f.approvedOnly ? ['approved'] : [...COUNTED]}
-        ${opts.completesOnly ? sql`and i.disposition = 'COMPLETE'` : sql``}
-        ${f.mode ? sql`and i.mode = ${f.mode}` : sql``}
-        ${f.interviewerId ? sql`and i.interviewer_id = ${f.interviewerId}` : sql``}
-        ${f.from ? sql`and ${day} >= ${f.from}::date` : sql``}
-        ${f.to ? sql`and ${day} <= ${f.to}::date` : sql``}`;
-    // Submission time as text keeps its microseconds, so the next page starts exactly after.
-    const at = sql`i.submitted_at`;
-    const rows = (await this.atx.execute(sql`
-      select i.id, i.case_id as "caseId", c.external_id as "caseCode", i.mode, i.status, i.disposition, u.name as interviewer,
-             c.selection_role as role, fu.stratum, c.inclusion_prob as prob, c.base_weight as weight,
-             i.started_at as "startedAt", i.submitted_at as "submittedAt", i.active_ms as "activeMs",
-             v.version, i.language, i.answers, i.flags, ${at}::text as "pageAt"
-             ${
-               opts.paradata
-                 ? sql`, pd.back, pd.notes, pd.pauses, pd.warnings`
-                 : sql`, null as back, null as notes, null as pauses, null as warnings`
-             }
-      from interviews i
-      join questionnaire_versions v on v.id = i.questionnaire_version_id
-      left join users u on u.id = i.interviewer_id
-      left join cases c on c.id = i.case_id
-      left join frame_units fu on fu.id = c.frame_unit_id
-      ${
-        opts.paradata
-          ? sql`left join lateral (
-              select count(*) filter (where type = 'navigate_back')::int as back,
-                     count(*) filter (where type = 'note_added')::int as notes,
-                     count(*) filter (where type = 'pause')::int as pauses,
-                     count(*) filter (where type = 'warning_confirmed')::int as warnings
-              from interview_paradata pd where pd.interview_id = i.id) pd on true`
-          : sql``
-      }
-      where ${scope}
-        and i.submitted_at is not null
-        ${page?.after ? sql`and (${at}, i.id) > (${page.after.at}::timestamptz, ${page.after.id}::uuid)` : sql``}
-      order by ${at}, i.id
-      ${page ? sql`limit ${page.size}` : sql``}`)) as unknown as Row[];
-    return shape(rows, opts.paradata, page);
-  }
-
-  async dataStamp(projectId: string) {
-    const rows = (await this.atx.execute(sql`
-      select concat_ws('|',
-        (select count(*) || ':' || coalesce(max(updated_at)::text, '') from interviews
-         where project_id = ${projectId}),
-        (select coalesce(max(v.published_at)::text, '') from questionnaire_versions v
-         join questionnaires qq on qq.id = v.questionnaire_id where qq.project_id = ${projectId})
-      ) as s`)) as unknown as { s: string }[];
-    return rows[0]?.s ?? '';
-  }
-
-  async projectBrief(projectId: string) {
-    const rows = (await this.atx.execute(
-      sql`select name, code, settings from projects where id = ${projectId}`,
-    )) as unknown as { name: string; code: string; settings: unknown }[];
-    return rows[0] ?? null;
-  }
-
-  shareLinks(projectId: string) {
-    return this.atx
-      .select({
-        id: shareLinks.id,
-        createdAt: shareLinks.createdAt,
-        expiresAt: shareLinks.expiresAt,
-        revokedAt: shareLinks.revokedAt,
-        tokenEnc: shareLinks.tokenEnc,
-      })
-      .from(shareLinks)
-      .where(eq(shareLinks.projectId, projectId))
-      .orderBy(desc(shareLinks.createdAt));
-  }
-
-  async createShareLink(v: Parameters<AnalysisTx['createShareLink']>[0]) {
-    const [row] = await this.atx
-      .insert(shareLinks)
-      .values({ tenantId: this.tn, ...v })
-      .returning({ id: shareLinks.id });
-    return row!.id;
-  }
-
-  async revokeShareLink(projectId: string, id: string) {
-    const rows = await this.atx
-      .update(shareLinks)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(shareLinks.id, id),
-          eq(shareLinks.projectId, projectId),
-          isNull(shareLinks.revokedAt),
-        ),
-      )
-      .returning({ id: shareLinks.id });
-    return rows.length > 0;
-  }
-
-  async shareLinkProject(id: string) {
-    const [row] = await this.atx
-      .select({ projectId: shareLinks.projectId })
-      .from(shareLinks)
-      .where(eq(shareLinks.id, id));
-    return row?.projectId ?? null;
-  }
-}
-
-/** A Drizzle transaction seen as an `AnalysisTx` (modules not yet moved); one that is already is kept. */
-export function asAnalysisTx(tx: Tx | AnalysisTx, audits: AuditService, tenantId = ''): AnalysisTx {
-  return 'dataStamp' in tx ? tx : new PgAnalysisTx(tx, tenantId, audits);
-}
-
-@Injectable()
-export class PgAnalysisRepo implements AnalysisRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: AnalysisTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) =>
-      fn(new PgAnalysisTx(tx, tenantId, this.audits)),
-    );
-  }
-
-  /** The same operations inside a transaction someone else opened (modules not yet moved). */
-  wrap(tx: Tx, tenantId: string): AnalysisTx {
-    return new PgAnalysisTx(tx, tenantId, this.audits);
-  }
-}
-
-// ─── SQL Server ─────────────────────────────────────────────────────────────────────────
 
 const low = (s: string) => s.toLowerCase();
 const parse = <T>(text: string | null): T => (text === null ? (null as T) : JSON.parse(text));

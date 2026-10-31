@@ -1,33 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { roleMatrix, type Role } from '@wansurvey/schema';
-import { and, eq, getTableColumns, gt, inArray, isNull, sql } from 'drizzle-orm';
-import { AuditService, type AuditEntry } from '../audit/audit.service.js';
+import type { AuditEntry } from '../audit/audit.service.js';
 import { AuditStore } from '../audit/audit-store.mssql.js';
 import { PeopleStore } from '../users/people-store.mssql.js';
 import { randomToken, sha256Hex } from '../common/crypto.js';
 import type { AuthContext } from '../common/auth-context.js';
-import {
-  columnsAs,
-  Database,
-  Prepared,
-  type AuthUserRow,
-  type Tx,
-  type UserTenant,
-} from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
-import {
-  memberships,
-  sessions,
-  tenantMembers,
-  tenants,
-  tenantSso,
-  userIdentities,
-  userTokens,
-  users,
-} from '../db/schema.js';
 import { IdentityStore, type SsoRow, type SsoValues } from './identity-store.mssql.js';
 import { SessionsStore } from './sessions-store.mssql.js';
+import type { AuthUserRow, UserTenant } from '../db/common.js';
 
 /**
  * What sign-in and the session guard need from the database, whichever engine runs: the business
@@ -213,399 +195,6 @@ function ended(s: LoadedSession, now: Date, idleMs: number): boolean {
     s.expiresAt <= now ||
     now.getTime() - s.lastSeenAt.getTime() > idleMs
   );
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-/**
- * Everything a request's session needs, in one statement: the session, the account and its
- * membership here, the person's roles and what each role may do in this organisation. Every
- * signed-in request runs it (devices sync every few seconds), so it is built once.
- */
-const sessionByToken = new Prepared<{
-  session: typeof sessions.$inferSelect;
-  email: string;
-  userStatus: string;
-  memberStatus: string;
-  rolePermissions: unknown;
-  grants: { role: string; projectId: string | null }[];
-}>(
-  () => sql`
-    select ${columnsAs(sessions, 's', 'session')}, u.email as "email", u.status as "userStatus",
-           m.status as "memberStatus", t.role_permissions,
-           coalesce((select json_agg(json_build_object('role', g.role, 'projectId', g.project_id))
-                     from memberships g where g.user_id = s.user_id), '[]'::json) as "grants"
-    from sessions s
-    join users u on u.id = s.user_id
-    join tenant_members m on m.user_id = s.user_id
-    join tenants t on t.id = s.tenant_id
-    where s.token_hash = ${sql.placeholder('hash')} and s.revoked_at is null
-    limit 1`,
-  {
-    session: getTableColumns(sessions),
-    email: 'raw',
-    userStatus: 'raw',
-    memberStatus: 'raw',
-    rolePermissions: tenants.rolePermissions,
-    grants: 'raw',
-  },
-);
-
-/**
- * A Microsoft identity already linked, with its account and membership here and its roles, in
- * one statement. Read in the organisation's context (row-level security applies).
- */
-const linkedAccount = new Prepared<LinkedAccount>(
-  () => sql`
-    select ui.user_id as "userId", u.status as "userStatus", u.totp_enabled as "totpEnabled",
-           u.last_tenant_id as "lastTenantId", m.status as "memberStatus",
-           array(select g.role from memberships g where g.user_id = ui.user_id) as "roles"
-    from user_identities ui
-    join users u on u.id = ui.user_id
-    join tenant_members m on m.user_id = ui.user_id
-    where ui.issuer = ${sql.placeholder('issuer')} and ui.subject = ${sql.placeholder('subject')}`,
-  {
-    userId: 'raw',
-    userStatus: 'raw',
-    totpEnabled: 'raw',
-    lastTenantId: 'raw',
-    memberStatus: 'raw',
-    roles: 'raw',
-  },
-);
-
-class PgAuthTx implements AuthTx {
-  constructor(
-    private readonly tx: Tx,
-    private readonly tenantId: string,
-    private readonly audits: AuditService,
-  ) {}
-
-  async roles(userId: string) {
-    return (
-      await this.tx
-        .select({ role: memberships.role })
-        .from(memberships)
-        .where(eq(memberships.userId, userId))
-    ).map((r) => r.role);
-  }
-
-  async account(userId: string): Promise<Account | null> {
-    const [u] = await this.tx.select().from(users).where(eq(users.id, userId));
-    if (!u) return null;
-    const [m] = await this.tx
-      .select({ idCode: tenantMembers.idCode, phoneExtension: tenantMembers.phoneExtension })
-      .from(tenantMembers)
-      .where(eq(tenantMembers.userId, userId));
-    return {
-      email: u.email,
-      name: u.name,
-      firstName: u.firstName,
-      languages: u.languages,
-      totpEnabled: u.totpEnabled,
-      idCode: m?.idCode ?? null,
-      phoneExtension: m?.phoneExtension ?? null,
-    };
-  }
-
-  async credentials(userId: string): Promise<Credentials | null> {
-    const [u] = await this.tx.select().from(users).where(eq(users.id, userId));
-    return u
-      ? {
-          email: u.email,
-          status: u.status,
-          passwordHash: u.passwordHash,
-          totpEnabled: u.totpEnabled,
-          totpSecretEnc: u.totpSecretEnc,
-        }
-      : null;
-  }
-
-  async setTotpSecret(userId: string, secretEnc: string) {
-    await this.tx.update(users).set({ totpSecretEnc: secretEnc }).where(eq(users.id, userId));
-  }
-
-  async enableTotp(userId: string, step: number) {
-    await this.tx
-      .update(users)
-      .set({ totpEnabled: true, totpLastStep: step })
-      .where(eq(users.id, userId));
-  }
-
-  async setPassword(userId: string, passwordHash: string, activate = false) {
-    await this.tx
-      .update(users)
-      .set({ passwordHash, ...(activate ? { status: 'active' } : {}) })
-      .where(eq(users.id, userId));
-  }
-
-  async issueToken(v: Parameters<AccountTx['issueToken']>[0]) {
-    const raw = randomToken();
-    await this.tx.insert(userTokens).values({
-      tenantId: v.tenantId,
-      userId: v.userId,
-      purpose: v.purpose,
-      tokenHash: sha256Hex(raw),
-      expiresAt: new Date(Date.now() + v.ttlHours * 3600_000),
-    });
-    return raw;
-  }
-
-  async useToken(raw: string) {
-    const rows = await this.tx
-      .update(userTokens)
-      .set({ usedAt: new Date() })
-      .where(and(eq(userTokens.tokenHash, sha256Hex(raw)), isNull(userTokens.usedAt)))
-      .returning({ id: userTokens.id });
-    return rows.length === 1;
-  }
-
-  async linked(issuer: string, subject: string): Promise<LinkedAccount | null> {
-    const [a] = await linkedAccount.run(this.tx, { issuer, subject });
-    return a ?? null;
-  }
-
-  async memberStatus(userId: string) {
-    const [m] = await this.tx
-      .select({ status: tenantMembers.status })
-      .from(tenantMembers)
-      .where(eq(tenantMembers.userId, userId));
-    return m?.status ?? null;
-  }
-
-  async createSsoAccount(v: { id: string; email: string; name: string; firstName: string | null }) {
-    await this.tx.insert(users).values({ ...v, status: 'active' });
-  }
-
-  async activateAccount(userId: string) {
-    await this.tx.update(users).set({ status: 'active' }).where(eq(users.id, userId));
-  }
-
-  async linkIdentity(userId: string, issuer: string, subject: string) {
-    await this.tx.insert(userIdentities).values({ userId, provider: 'entra', issuer, subject });
-  }
-
-  async addMember(userId: string) {
-    await this.tx
-      .insert(tenantMembers)
-      .values({ tenantId: this.tenantId, userId, status: 'active' });
-  }
-
-  async adminEmails() {
-    const rows = await this.tx
-      .selectDistinct({ email: users.email })
-      .from(memberships)
-      .innerJoin(users, eq(users.id, memberships.userId))
-      .where(
-        and(inArray(memberships.role, ['owner', 'admin']), eq(memberships.tenantId, this.tenantId)),
-      );
-    return rows.map((r) => r.email);
-  }
-
-  async passwordSessionUser(tokenHash: string, now: Date) {
-    const [row] = await this.tx
-      .select({ userId: sessions.userId })
-      .from(sessions)
-      .where(
-        and(
-          eq(sessions.tokenHash, tokenHash),
-          isNull(sessions.revokedAt),
-          eq(sessions.mfaState, 'ok'),
-          eq(sessions.authMethod, 'password'),
-          gt(sessions.expiresAt, now),
-        ),
-      );
-    return row?.userId ?? null;
-  }
-
-  async ssoSettings() {
-    const [row] = await this.tx
-      .select()
-      .from(tenantSso)
-      .where(eq(tenantSso.tenantId, this.tenantId));
-    return row ?? null;
-  }
-
-  async lockSsoDomains() {
-    await this.tx.execute(sql`select pg_advisory_xact_lock(hashtext('sso-domains'))`);
-  }
-
-  async ssoDomainOwners(domain: string) {
-    const owners = (await this.tx.execute(
-      sql`select tenant_id from sso_tenants_for_domain(${domain})`,
-    )) as unknown as { tenant_id: string }[];
-    return owners.map((o) => o.tenant_id);
-  }
-
-  async saveSso(v: SsoValues) {
-    const values = { ...v, updatedAt: new Date() };
-    const [row] = await this.tx
-      .insert(tenantSso)
-      .values({ tenantId: this.tenantId, ...values })
-      .onConflictDoUpdate({ target: tenantSso.tenantId, set: values })
-      .returning();
-    return row!;
-  }
-
-  async activateMember(userId: string) {
-    const rows = await this.tx
-      .update(tenantMembers)
-      .set({ status: 'active' })
-      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.status, 'invited')))
-      .returning({ id: tenantMembers.id });
-    return rows.length === 1;
-  }
-
-  async openSession(v: NewSession, lastTenantId: string | null) {
-    await this.tx.insert(sessions).values({
-      tenantId: v.tenantId,
-      userId: v.userId,
-      tokenHash: v.tokenHash,
-      csrfToken: v.csrfToken,
-      mfaState: v.mfaState,
-      mfaMethod: v.mfaMethod,
-      authMethod: v.authMethod,
-      idpTenant: v.idpTenant,
-      ip: v.ip,
-      userAgent: v.userAgent,
-      expiresAt: v.expiresAt,
-    });
-    if (lastTenantId !== v.tenantId)
-      await this.tx.update(users).set({ lastTenantId: v.tenantId }).where(eq(users.id, v.userId));
-  }
-
-  async revokeSession(id: string) {
-    await this.tx.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, id));
-  }
-
-  async setMfa(id: string, state: string, method: string | null) {
-    await this.tx
-      .update(sessions)
-      .set({ mfaState: state, mfaMethod: method })
-      .where(eq(sessions.id, id));
-  }
-
-  async acceptTotp(
-    userId: string,
-    check: (secretEnc: string, lastStep: number | null) => number | null,
-  ): Promise<boolean> {
-    const [user] = await this.tx
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      // One check at a time per account, so a code cannot be used twice in parallel.
-      .for('update');
-    const step = check(user!.totpSecretEnc!, user!.totpLastStep);
-    // Each code works once: a code seen (or stolen) after use is refused.
-    const valid = step !== null && (user!.totpLastStep ?? -1) < step;
-    if (valid) await this.tx.update(users).set({ totpLastStep: step }).where(eq(users.id, userId));
-    return valid;
-  }
-
-  audit(entry: AuditEntry) {
-    return this.audits.record(this.tx, this.tenantId, entry);
-  }
-}
-
-@Injectable()
-export class PgAuthRepo implements AuthRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  userByEmail(email: string) {
-    return this.database.authUserByEmail(email);
-  }
-  lockedUntil(userId: string) {
-    return this.database.accountLockedUntil(userId);
-  }
-  failed(userId: string, max: number, lockSeconds: number) {
-    return this.database.accountFailed(userId, max, lockSeconds);
-  }
-  succeeded(userId: string) {
-    return this.database.accountSucceeded(userId);
-  }
-  userTenants(userId: string, includeInactive = false) {
-    return this.database.userTenants(userId, includeInactive);
-  }
-
-  async contactOf(userId: string) {
-    const [row] = await this.database.withUser(userId, (tx) =>
-      tx.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, userId)),
-    );
-    return row ?? null;
-  }
-
-  async identityUser(issuer: string, subject: string) {
-    const [row] = await this.database.db
-      .select({ userId: userIdentities.userId })
-      .from(userIdentities)
-      .where(and(eq(userIdentities.issuer, issuer), eq(userIdentities.subject, subject)));
-    return row?.userId ?? null;
-  }
-
-  async peekToken(raw: string, purpose: TokenPurpose) {
-    const [row] = await this.database.db
-      .select({ userId: userTokens.userId, tenantId: userTokens.tenantId })
-      .from(userTokens)
-      .where(
-        and(
-          eq(userTokens.tokenHash, sha256Hex(raw)),
-          eq(userTokens.purpose, purpose),
-          isNull(userTokens.usedAt),
-          gt(userTokens.expiresAt, new Date()),
-        ),
-      );
-    return row ?? null;
-  }
-
-  inUser<T>(userId: string, fn: (t: AccountTx) => Promise<T>) {
-    // Only the account methods are offered here; no organisation is in context.
-    return this.database.withUser(userId, (tx) => fn(new PgAuthTx(tx, '', this.audits)));
-  }
-
-  revokeEverywhere(userId: string) {
-    return this.database.revokeAllSessions(userId);
-  }
-
-  inTenant<T>(tenantId: string, fn: (t: AuthTx) => Promise<T>, userId?: string) {
-    return this.database.withTenant(
-      tenantId,
-      (tx) => fn(new PgAuthTx(tx, tenantId, this.audits)),
-      userId,
-    );
-  }
-
-  session(tenantId: string, tokenHash: string, now: Date, idleMs: number, touchMs: number) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const [row] = await sessionByToken.run(tx, { hash: tokenHash });
-      if (!row) return null;
-      const s: LoadedSession = {
-        id: row.session.id,
-        userId: row.session.userId,
-        csrfToken: row.session.csrfToken,
-        mfaState: row.session.mfaState,
-        mfaMethod: row.session.mfaMethod,
-        authMethod: row.session.authMethod,
-        idpTenant: row.session.idpTenant,
-        expiresAt: row.session.expiresAt,
-        lastSeenAt: row.session.lastSeenAt,
-        email: row.email,
-        userStatus: row.userStatus,
-        memberStatus: row.memberStatus,
-        rolePermissions: row.rolePermissions,
-        grants: row.grants,
-      };
-      if (ended(s, now, idleMs)) {
-        await tx.update(sessions).set({ revokedAt: now }).where(eq(sessions.id, s.id));
-        return null;
-      }
-      if (now.getTime() - s.lastSeenAt.getTime() > touchMs)
-        await tx.update(sessions).set({ lastSeenAt: now }).where(eq(sessions.id, s.id));
-      return s;
-    });
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
@@ -938,4 +527,22 @@ export function grantsOf(s: LoadedSession): AuthContext['memberships'] {
         permissions: matrix[g.role as Role],
       }))
   );
+}
+
+export interface SessionRow {
+  id: string;
+  tenantId: string;
+  userId: string;
+  tokenHash: string;
+  csrfToken: string;
+  mfaState: string;
+  mfaMethod: string | null;
+  authMethod: string;
+  idpTenant: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: Date;
+  lastSeenAt: Date;
+  expiresAt: Date;
+  revokedAt: Date | null;
 }

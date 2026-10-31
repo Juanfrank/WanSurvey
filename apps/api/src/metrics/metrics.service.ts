@@ -3,8 +3,7 @@ import { DISPOSITIONS, type Disposition } from '@wansurvey/schema';
 import { z } from 'zod';
 import { can, type AuthContext } from '../common/auth-context.js';
 import { AuditService } from '../audit/audit.service.js';
-import type { Tx } from '../db/database.js';
-import { PgMetricsTx, type MetricsTx } from './metrics-repo.js';
+import { type MetricsTx } from './metrics-repo.js';
 import {
   addDisposition,
   emptyCounts,
@@ -33,9 +32,9 @@ const aaporOf = (d: string | null) =>
 export class MetricsService {
   constructor(private readonly audit: AuditService) {}
 
-  async interviewers(tx: Tx | MetricsTx, ctx: AuthContext, projectId: string, q: MetricsQuery) {
+  async interviewers(tx: MetricsTx, ctx: AuthContext, projectId: string, q: MetricsQuery) {
     const team = can(ctx.memberships, 'metrics.team', projectId);
-    const t: MetricsTx = 'userNames' in tx ? tx : new PgMetricsTx(tx, ctx.tenantId, this.audit);
+    const t = tx;
     const tz = (await t.project(projectId))?.timezone ?? 'UTC';
     const f = {
       projectId,

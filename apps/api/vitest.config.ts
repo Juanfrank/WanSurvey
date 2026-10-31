@@ -10,7 +10,7 @@ import { defineConfig } from 'vitest/config';
 const env = {
   NODE_ENV: 'test',
   // Some of these tests read the configuration, which asks for a database URL; none connects.
-  DATABASE_URL: 'postgres://wansurvey_app:unused@localhost:5432/unused',
+  DATABASE_URL: 'mssql://wansurvey_app:unused@localhost:1433/unused',
   APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   LOGIN_RATE_LIMIT: '1000',
   RATE_LIMIT_PER_IP: '100000',

@@ -1,23 +1,38 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { sql as ksql } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import { AnalysisTx } from '../analysis/analysis-repo.js';
-import { MssqlAnalysisTx, PgAnalysisTx } from '../analysis/analysis-repo.js';
-import { AuditService } from '../audit/audit.service.js';
+import { MssqlAnalysisTx } from '../analysis/analysis-repo.js';
 import { CasesStore } from '../cases/cases-store.mssql.js';
-import { Database, type Tx } from '../db/database.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { instant } from '../db/mssql/instant.js';
-import { exports } from '../db/schema.js';
-import { claimable, MAX_JOB_ATTEMPTS, STUCK_AFTER_MS } from '../jobs/claims.js';
+import { MAX_JOB_ATTEMPTS, STUCK_AFTER_MS } from '../jobs/claims.js';
 
 /**
  * The database side of data exports, whichever engine runs (the pattern of
  * `auth/auth-repo.ts`). A transaction here is also an `AnalysisTx`, which reads the data.
  */
-export type ExportRowView = typeof exports.$inferSelect;
+export interface ExportRowView {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  questionnaireId: string;
+  requestedBy: string;
+  options: unknown;
+  status: string;
+  fileName: string | null;
+  contentType: string | null;
+  file: Buffer | null;
+  storageKey: string | null;
+  size: number | null;
+  rows: number | null;
+  error: string | null;
+  createdAt: Date;
+  finishedAt: Date | null;
+  startedAt: Date | null;
+  attempts: number;
+}
 
 export interface ExportsTx extends AnalysisTx {
   createExport(v: {
@@ -67,134 +82,6 @@ export interface ExportsTx extends AnalysisTx {
 
 export interface ExportsRepo {
   inTenant<T>(tenantId: string, fn: (t: ExportsTx) => Promise<T>): Promise<T>;
-}
-
-// ─── PostgreSQL ─────────────────────────────────────────────────────────────────────────
-
-export class PgExportsTx extends PgAnalysisTx implements ExportsTx {
-  constructor(
-    private readonly etx: Tx,
-    private readonly et: string,
-    audits: AuditService,
-  ) {
-    super(etx, et, audits);
-  }
-
-  async createExport(v: Parameters<ExportsTx['createExport']>[0]) {
-    const [row] = await this.etx
-      .insert(exports)
-      .values({ tenantId: this.et, ...v })
-      .returning({ id: exports.id, status: exports.status, createdAt: exports.createdAt });
-    return row!;
-  }
-
-  listExports(projectId: string) {
-    return this.etx
-      .select({
-        id: exports.id,
-        options: exports.options,
-        status: exports.status,
-        fileName: exports.fileName,
-        size: exports.size,
-        rows: exports.rows,
-        error: exports.error,
-        createdAt: exports.createdAt,
-        finishedAt: exports.finishedAt,
-        requestedBy: exports.requestedBy,
-      })
-      .from(exports)
-      .where(eq(exports.projectId, projectId))
-      .orderBy(desc(exports.createdAt))
-      .limit(100);
-  }
-
-  async exportFile(projectId: string, id: string) {
-    const [row] = await this.etx
-      .select({
-        fileName: exports.fileName,
-        contentType: exports.contentType,
-        file: exports.file,
-        storageKey: exports.storageKey,
-        status: exports.status,
-        options: exports.options,
-      })
-      .from(exports)
-      .where(and(eq(exports.id, id), eq(exports.projectId, projectId)));
-    return row ?? null;
-  }
-
-  async exportRow(id: string) {
-    const [row] = await this.etx.select().from(exports).where(eq(exports.id, id));
-    return row ?? null;
-  }
-
-  async claimExport(id: string) {
-    const [claimed] = await this.etx
-      .update(exports)
-      .set({ status: 'running', startedAt: new Date(), attempts: sql`${exports.attempts} + 1` })
-      .where(and(eq(exports.id, id), claimable(exports)))
-      .returning();
-    return claimed ?? null;
-  }
-
-  async finishExport(id: string, v: Parameters<ExportsTx['finishExport']>[1]) {
-    await this.etx
-      .update(exports)
-      .set({
-        status: 'done',
-        fileName: v.fileName,
-        contentType: v.contentType,
-        storageKey: v.storageKey,
-        size: v.size,
-        rows: v.rows,
-        finishedAt: new Date(),
-      })
-      .where(eq(exports.id, id));
-  }
-
-  async requeueExport(id: string) {
-    await this.etx.update(exports).set({ status: 'queued' }).where(eq(exports.id, id));
-  }
-
-  async failExport(id: string, error: string) {
-    await this.etx
-      .update(exports)
-      .set({ status: 'failed', error: error.slice(0, 500), finishedAt: new Date() })
-      .where(eq(exports.id, id));
-  }
-
-  async expireExports(before: Date) {
-    const old = await this.etx
-      .select({ id: exports.id, key: exports.storageKey })
-      .from(exports)
-      .where(and(eq(exports.status, 'done'), lt(exports.finishedAt, before)))
-      .for('update');
-    if (old.length)
-      await this.etx
-        .update(exports)
-        .set({ status: 'expired', file: null, storageKey: null })
-        .where(
-          inArray(
-            exports.id,
-            old.map((r) => r.id),
-          ),
-        );
-    return old;
-  }
-}
-
-@Injectable()
-export class PgExportsRepo implements ExportsRepo {
-  constructor(
-    private readonly database: Database,
-    private readonly audits: AuditService,
-  ) {}
-
-  inTenant<T>(tenantId: string, fn: (t: ExportsTx) => Promise<T>) {
-    return this.database.withTenant(tenantId, (tx) =>
-      fn(new PgExportsTx(tx, tenantId, this.audits)),
-    );
-  }
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────

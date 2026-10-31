@@ -100,7 +100,7 @@ ENTRA_ALLOWED_DOMAINS=agency.org          # comma-separated
 - **An e-mail no organisation claims.** `sso/start?email=` with a domain that no organisation lists goes to `SSO_DEFAULT_ORG`, whose allowed domains decide at the callback.
 - **Startup checks.** `SSO_DEFAULT_ORG` and the four `ENTRA_*` settings (tenant, client, secret, redirect URI) come together or not at all, and `PASSWORD_LOGIN=false` needs them; `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID` must be GUIDs; `ENTRA_REDIRECT_URI` must be an `https` address (`http` only for localhost) ending in `/api/v1/auth/sso/callback`; an empty setting counts as not set. Otherwise the API refuses to start.
 - **One directory per session.** A session opens another of the person's organisations only if that organisation has Microsoft sign-in from the same directory; otherwise `switch-tenant` answers `SSO_REQUIRED` and the app sends the browser to that organisation's own sign-in.
-- **Start of the day.** Starting a sign-in reads only public settings (no secret); the settings are kept for a minute per process, and a change saved in the app reaches every process at once through Redis. A known account signs in with one transaction (find it by `oid`, open the session); see `load/results.md`.
+- **Start of the day.** Starting a sign-in reads only public settings (no secret); the settings are kept for a minute per process, and a change saved in the app reaches every process at once through Redis. A known account signs in with one transaction (find it by `oid`, open the session).
 
 ## Testing against a real tenant
 
