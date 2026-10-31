@@ -23,6 +23,6 @@
     "turbo": "2.11.9",
     "typescript": "~5.9.3",
     "typescript-eslint": "8.71.2",
-    "vitest": "^3.2.4"
+    "vitest": "4.1.12"
   }
 }
