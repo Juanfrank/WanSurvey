@@ -12,13 +12,16 @@ import {
   feedbackItemShown,
   type FeedbackItem,
 } from '@wansurvey/schema/feedback';
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DisplayName } from '../common/zod.js';
 import { randomToken, safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database, type Tx } from '../db/database.js';
-import { feedbackPoints, feedbackResponses } from '../db/schema.js';
+import {
+  FEEDBACK_REPO,
+  type FeedbackRepo,
+  type FeedbackTx,
+  type PointView,
+} from './feedback-repo.js';
 
 export const PointBody = z.object({
   name: DisplayName,
@@ -99,7 +102,7 @@ const SLUG = /^[A-Za-z0-9_-]{6,32}$/;
 @Injectable()
 export class FeedbackService {
   constructor(
-    private readonly database: Database,
+    @Inject(FEEDBACK_REPO) private readonly repo: FeedbackRepo,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -107,7 +110,7 @@ export class FeedbackService {
     return `${this.config.PUBLIC_WEB_URL.replace(/\/$/, '')}/f/${slug}`;
   }
 
-  private shape(p: typeof feedbackPoints.$inferSelect) {
+  private shape(p: PointView) {
     return {
       id: p.id,
       name: p.name,
@@ -124,31 +127,18 @@ export class FeedbackService {
     };
   }
 
-  private async counts(tx: Tx, pointIds: string[]) {
-    if (!pointIds.length) return new Map<string, Record<number, number>>();
-    const rows = await tx
-      .select({
-        pointId: feedbackResponses.pointId,
-        score: feedbackResponses.score,
-        n: sql<number>`count(*)::int`,
-      })
-      .from(feedbackResponses)
-      .where(inArray(feedbackResponses.pointId, pointIds))
-      .groupBy(feedbackResponses.pointId, feedbackResponses.score);
+  private async counts(t: FeedbackTx, pointIds: string[]) {
     const out = new Map<string, Record<number, number>>();
-    for (const r of rows) out.set(r.pointId, { ...(out.get(r.pointId) ?? {}), [r.score]: r.n });
+    for (const r of await t.counts(pointIds))
+      out.set(r.pointId, { ...(out.get(r.pointId) ?? {}), [r.score]: r.n });
     return out;
   }
 
   list(tenantId: string, projectId: string) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const points = await tx
-        .select()
-        .from(feedbackPoints)
-        .where(eq(feedbackPoints.projectId, projectId))
-        .orderBy(feedbackPoints.createdAt);
+    return this.repo.inTenant(tenantId, async (t) => {
+      const points = await t.points(projectId);
       const counts = await this.counts(
-        tx,
+        t,
         points.map((p) => p.id),
       );
       return points.map((p) => ({ ...this.shape(p), counts: counts.get(p.id) ?? {} }));
@@ -156,39 +146,28 @@ export class FeedbackService {
   }
 
   create(tenantId: string, projectId: string, body: z.infer<typeof PointBody>) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const [p] = await tx
-        .insert(feedbackPoints)
-        .values({
-          tenantId,
-          projectId,
-          name: body.name,
-          question: body.question,
-          faces: body.faces,
-          askComment: body.askComment,
-          items:
-            body.items ??
-            (body.askComment ? [COMMENT_ITEM(Object.keys(body.question)[0] ?? 'es')] : []),
-          slug: randomToken(9),
-        })
-        .returning();
-      return { ...this.shape(p!), counts: {} };
+    return this.repo.inTenant(tenantId, async (t) => {
+      const p = await t.insertPoint({
+        projectId,
+        name: body.name,
+        question: body.question,
+        faces: body.faces,
+        askComment: body.askComment,
+        items:
+          body.items ??
+          (body.askComment ? [COMMENT_ITEM(Object.keys(body.question)[0] ?? 'es')] : []),
+        slug: randomToken(9),
+      });
+      return { ...this.shape(p), counts: {} };
     });
   }
 
   update(tenantId: string, projectId: string, id: string, body: z.infer<typeof PointPatch>) {
-    return this.database.withTenant(tenantId, async (tx) => {
+    return this.repo.inTenant(tenantId, async (t) => {
       // A change to what is asked is a new version of the point.
       const asked =
         body.question !== undefined || body.faces !== undefined || body.items !== undefined;
-      const [p] = await tx
-        .update(feedbackPoints)
-        .set({
-          ...body,
-          ...(asked ? { version: sql`${feedbackPoints.version} + 1`, updatedAt: new Date() } : {}),
-        })
-        .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)))
-        .returning();
+      const p = await t.updatePoint(projectId, id, body, asked);
       if (!p) throw new NotFoundException('Feedback point not found');
       return this.shape(p);
     });
@@ -196,64 +175,28 @@ export class FeedbackService {
 
   /** Deletes a point nobody answered (409 IN_USE otherwise: switch it off instead). */
   remove(tenantId: string, projectId: string, id: string) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const [p] = await tx
-        .select({ id: feedbackPoints.id })
-        .from(feedbackPoints)
-        .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)))
-        .for('update');
-      if (!p) throw new NotFoundException('Feedback point not found');
-      const [answered] = await tx
-        .select({ id: feedbackResponses.id })
-        .from(feedbackResponses)
-        .where(eq(feedbackResponses.pointId, id))
-        .limit(1);
-      if (answered)
+    return this.repo.inTenant(tenantId, async (t) => {
+      if (!(await t.point(projectId, id, true)))
+        throw new NotFoundException('Feedback point not found');
+      if (await t.hasResponses(id))
         throw new ConflictException({
           code: 'IN_USE',
           message: 'This feedback point has answers; switch it off instead',
         });
-      await tx.delete(feedbackPoints).where(eq(feedbackPoints.id, id));
+      await t.deletePoint(id);
     });
   }
 
   /** Counts per face and the latest comments. */
   results(tenantId: string, projectId: string, id: string) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const [p] = await tx
-        .select()
-        .from(feedbackPoints)
-        .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)));
+    return this.repo.inTenant(tenantId, async (t) => {
+      const p = await t.point(projectId, id);
       if (!p) throw new NotFoundException('Feedback point not found');
-      const counts = (await this.counts(tx, [id])).get(id) ?? {};
-      const byChannel = await tx
-        .select({ channel: feedbackResponses.channel, n: sql<number>`count(*)::int` })
-        .from(feedbackResponses)
-        .where(eq(feedbackResponses.pointId, id))
-        .groupBy(feedbackResponses.channel);
-      const comments = await tx
-        .select({
-          score: feedbackResponses.score,
-          comment: feedbackResponses.comment,
-          ref: feedbackResponses.ref,
-          at: feedbackResponses.createdAt,
-        })
-        .from(feedbackResponses)
-        .where(and(eq(feedbackResponses.pointId, id), isNotNull(feedbackResponses.comment)))
-        .orderBy(desc(feedbackResponses.createdAt))
-        .limit(50);
+      const counts = (await this.counts(t, [id])).get(id) ?? {};
+      const byChannel = await t.channels(id);
+      const comments = await t.comments(id, 50);
       // Follow-up answers: counts per option, and the latest texts.
-      const rows = await tx
-        .select({
-          score: feedbackResponses.score,
-          answers: feedbackResponses.answers,
-          ref: feedbackResponses.ref,
-          at: feedbackResponses.createdAt,
-        })
-        .from(feedbackResponses)
-        .where(and(eq(feedbackResponses.pointId, id), isNotNull(feedbackResponses.answers)))
-        .orderBy(desc(feedbackResponses.createdAt))
-        .limit(20_000);
+      const rows = await t.answered(id, 20_000);
       const items = p.items as FeedbackItem[];
       const itemCounts: Record<string, Record<string, number>> = {};
       const texts: { item: string; score: number; text: string; ref: string | null; at: Date }[] =
@@ -286,14 +229,11 @@ export class FeedbackService {
 
   /** A slip answered on paper, keyed in the office. */
   paper(tenantId: string, projectId: string, id: string, score: number) {
-    return this.database.withTenant(tenantId, async (tx) => {
-      const [p] = await tx
-        .select()
-        .from(feedbackPoints)
-        .where(and(eq(feedbackPoints.id, id), eq(feedbackPoints.projectId, projectId)));
+    return this.repo.inTenant(tenantId, async (t) => {
+      const p = await t.point(projectId, id);
       if (!p) throw new NotFoundException('Feedback point not found');
       if (score > p.faces) throw new NotFoundException('No such face');
-      await tx.insert(feedbackResponses).values({ tenantId, pointId: id, score, channel: 'paper' });
+      await t.insertResponse({ pointId: id, score, channel: 'paper' });
       return { ok: true };
     });
   }
@@ -301,19 +241,19 @@ export class FeedbackService {
   /** The point's organisation found and set in the same transaction as the work. */
   private inPoint<T>(
     slug: string,
-    fn: (tx: Tx, found: { id: string; tenantId: string }) => Promise<T>,
+    fn: (t: FeedbackTx, found: { id: string; tenantId: string }) => Promise<T>,
   ): Promise<T> {
     if (!SLUG.test(slug)) throw new NotFoundException('Not found');
-    return this.database.withTenantOf('feedback_point_by_slug', slug, (tx, found) => {
+    return this.repo.ofSlug(slug, (t, found) => {
       if (!found) throw new NotFoundException('Not found');
-      return fn(tx, found);
+      return fn(t, found);
     });
   }
 
   /** What the public page and the widget show. */
   async publicPoint(slug: string) {
-    return this.inPoint(slug, async (tx, found) => {
-      const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
+    return this.inPoint(slug, async (t, found) => {
+      const p = await t.pointById(found.id);
       return {
         question: p!.question as Record<string, string>,
         faces: p!.faces,
@@ -326,8 +266,8 @@ export class FeedbackService {
 
   /** Records one face; the key lets the same browser add a comment to it. */
   async answer(slug: string, body: z.infer<typeof AnswerBody>) {
-    return this.inPoint(slug, async (tx, found) => {
-      const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
+    return this.inPoint(slug, async (t, found) => {
+      const p = await t.pointById(found.id);
       if (body.score > p!.faces) throw new NotFoundException('No such face');
       const items = p!.items as FeedbackItem[];
       // Questions a link parameter answers are recorded now and never shown.
@@ -340,31 +280,23 @@ export class FeedbackService {
       }
       const open = items.some((it) => !(it.id in preset) && feedbackItemShown(it, body.score));
       const key = randomToken(18);
-      const [r] = await tx
-        .insert(feedbackResponses)
-        .values({
-          tenantId: found.tenantId,
-          pointId: found.id,
-          score: body.score,
-          channel: body.channel,
-          ref: body.ref ?? null,
-          answers: Object.keys(preset).length ? preset : null,
-          editHash: open ? sha256Hex(key) : null,
-        })
-        .returning({ id: feedbackResponses.id });
-      return { id: r!.id, preset: Object.keys(preset), ...(open ? { key } : {}) };
+      const id = await t.insertResponse({
+        pointId: found.id,
+        score: body.score,
+        channel: body.channel,
+        ref: body.ref ?? null,
+        answers: Object.keys(preset).length ? preset : null,
+        editHash: open ? sha256Hex(key) : null,
+      });
+      return { id, preset: Object.keys(preset), ...(open ? { key } : {}) };
     });
   }
 
   /** The follow-up answers of one face, once (the key is spent). */
   async followUp(slug: string, body: z.infer<typeof FollowUpBody>) {
-    return this.inPoint(slug, async (tx, found) => {
-      const [p] = await tx.select().from(feedbackPoints).where(eq(feedbackPoints.id, found.id));
-      const [r] = await tx
-        .select()
-        .from(feedbackResponses)
-        .where(and(eq(feedbackResponses.id, body.id), eq(feedbackResponses.pointId, found.id)))
-        .for('update');
+    return this.inPoint(slug, async (t, found) => {
+      const p = await t.pointById(found.id);
+      const r = await t.lockResponse(found.id, body.id);
       if (!r?.editHash || !safeEqual(r.editHash, sha256Hex(body.key)))
         throw new NotFoundException('Not found');
       const before = (r.answers ?? {}) as Record<string, unknown>;
@@ -384,34 +316,24 @@ export class FeedbackService {
           problems,
         });
       const text = (p!.items as FeedbackItem[]).find((it) => it.type === 'text' && it.long);
-      await tx
-        .update(feedbackResponses)
-        .set({
-          answers,
-          editHash: null,
-          ...(text && typeof answers[text.id] === 'string'
-            ? { comment: answers[text.id] as string }
-            : {}),
-        })
-        .where(eq(feedbackResponses.id, r.id));
+      await t.updateResponse(r.id, {
+        answers,
+        editHash: null,
+        ...(text && typeof answers[text.id] === 'string'
+          ? { comment: answers[text.id] as string }
+          : {}),
+      });
       return { ok: true };
     });
   }
 
   async comment(slug: string, body: z.infer<typeof CommentBody>) {
-    return this.inPoint(slug, async (tx, found) => {
-      const [r] = await tx
-        .select()
-        .from(feedbackResponses)
-        .where(and(eq(feedbackResponses.id, body.id), eq(feedbackResponses.pointId, found.id)))
-        .for('update');
+    return this.inPoint(slug, async (t, found) => {
+      const r = await t.lockResponse(found.id, body.id);
       if (!r?.editHash || !safeEqual(r.editHash, sha256Hex(body.key)))
         throw new NotFoundException('Not found');
       // One comment per answer: the key is spent.
-      await tx
-        .update(feedbackResponses)
-        .set({ comment: body.comment, editHash: null })
-        .where(eq(feedbackResponses.id, r.id));
+      await t.updateResponse(r.id, { comment: body.comment, editHash: null });
       return { ok: true };
     });
   }
