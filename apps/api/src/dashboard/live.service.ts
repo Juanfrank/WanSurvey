@@ -2,16 +2,15 @@ import { Inject, Injectable, Logger, type MessageEvent } from '@nestjs/common';
 import {
   evaluate,
   truthy,
-  type CompiledQuestionnaire,
   type Scope,
   type Value,
 } from '@wansurvey/logic';
 import { projectSettings } from '@wansurvey/schema';
-import { sql } from 'drizzle-orm';
 import { Observable } from 'rxjs';
-import { Database, type Tx } from '../db/database.js';
+import { AuditService } from '../audit/audit.service.js';
+import type { Tx } from '../db/database.js';
+import { LIVE_REPO, PgLiveTx, type LiveRepo, type LiveTx } from './live-repo.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
-import { COUNTED_SQL } from '../common/statuses.js';
 
 /** Minutes without activity after which an interviewer no longer shows as working. */
 const ACTIVE_MINUTES = 5;
@@ -96,33 +95,25 @@ export class LiveService {
   private readonly logger = new Logger('Live');
 
   constructor(
-    private readonly database: Database,
+    @Inject(LIVE_REPO) private readonly repo: LiveRepo,
     @Inject(BUS) private readonly bus: Bus,
+    private readonly audit: AuditService,
   ) {}
 
-  async snapshot(tx: Tx, projectId: string): Promise<LiveSnapshot> {
-    const [p] = await tx.execute<{ settings: unknown; tz: string }>(
-      sql`select settings, timezone as tz from projects where id = ${projectId}`,
-    );
+  async snapshot(tx: Tx | LiveTx, projectId: string, tenantId = ''): Promise<LiveSnapshot> {
+    const t: LiveTx = 'activeInterviewers' in tx ? tx : new PgLiveTx(tx, tenantId, this.audit);
+    const p = await t.project(projectId);
     const target = projectSettings(p?.settings).fieldwork.targetCompletes;
 
-    const modes = await tx.execute<{ mode: string; n: number }>(sql`
-      select mode, sum(completes)::int as n from stats_daily where project_id = ${projectId} group by 1`);
+    const modes = await t.modeTotals(projectId);
     const byMode = Object.fromEntries(modes.map((r) => [r.mode, r.n]));
     const completes = modes.reduce((a, r) => a + r.n, 0);
 
-    const days = await tx.execute<{ day: string; n: number }>(sql`
-      select to_char(day, 'YYYY-MM-DD') as day, sum(completes)::int as n from stats_daily
-      where project_id = ${projectId} and day > (now() at time zone ${p?.tz ?? 'UTC'})::date - 30
-      group by 1 order by 1`);
+    const days = await t.recentDays(projectId, p?.timezone ?? 'UTC');
 
     // Quota cells of the latest version of each questionnaire, each counted over the
     // interviews of its own questionnaire.
-    const versions = await tx.execute<{ qid: string; compiled: CompiledQuestionnaire }>(sql`
-      select distinct on (v.questionnaire_id) v.questionnaire_id as qid, v.compiled
-      from questionnaire_versions v
-      join questionnaires q on q.id = v.questionnaire_id
-      where q.project_id = ${projectId} order by v.questionnaire_id, v.version desc`);
+    const versions = await t.latestVersions(projectId);
     const quotaDefs = versions.flatMap((v) =>
       (v.compiled.quotas ?? []).map((quota) => ({ ...quota, qid: v.qid })),
     );
@@ -130,23 +121,7 @@ export class LiveService {
     if (quotaDefs.length) {
       const refs = [...new Set(quotaDefs.flatMap((q) => q.expr.refs))];
       const fields = [...new Set(quotaDefs.flatMap((q) => caseFields(q.expr.ast)))];
-      const rows = await tx.execute<{
-        qid: string;
-        a: Record<string, unknown> | null;
-        c: Record<string, unknown> | null;
-        mode: string;
-      }>(sql`
-        select v.questionnaire_id as qid,
-               (select jsonb_object_agg(key, value) from jsonb_each(i.answers)
-                where key in ${refs.length ? refs : ['']}) as a,
-               (select jsonb_object_agg(key, value) from jsonb_each(
-                  case when jsonb_typeof(i.context->'case') = 'object'
-                       then i.context->'case' else '{}'::jsonb end)
-                where key in ${fields.length ? fields : ['']}) as c,
-               i.mode
-        from interviews i join questionnaire_versions v on v.id = i.questionnaire_version_id
-        where i.project_id = ${projectId} and i.entry_pass = 1 and i.disposition = 'COMPLETE'
-          and i.status in ${COUNTED_SQL}`);
+      const rows = await t.quotaRows(projectId, refs, fields);
       for (const r of rows) {
         const scope = answersScope(r.a ?? {}, r.c ?? {}, r.mode);
         quotaDefs.forEach((q, i) => {
@@ -156,46 +131,16 @@ export class LiveService {
       }
     }
 
-    const status = await tx.execute<{ status: string; disposition: string | null; n: number }>(sql`
-      select status, disposition, count(*)::int as n from cases where project_id = ${projectId} group by 1, 2`);
+    const status = await t.caseStatuses(projectId);
     const byStatus: Record<string, number> = {};
     const byDisposition: Record<string, number> = {};
     for (const r of status) {
       byStatus[r.status] = (byStatus[r.status] ?? 0) + r.n;
       if (r.disposition) byDisposition[r.disposition] = (byDisposition[r.disposition] ?? 0) + r.n;
     }
-    const [due] = await tx.execute<{ n: number }>(sql`
-      select count(*)::int as n from cases where project_id = ${projectId}
-        and status not in ('finalised', 'withdrawn') and next_contact_at is not null and next_contact_at <= now()`);
-
-    const [f] = await tx.execute<{
-      total: number;
-      sent: number;
-      opened: number;
-      started: number;
-      completed: number;
-      bounced: number;
-    }>(sql`
-      select count(*)::int as total, count(sent_at)::int as sent, count(opened_at)::int as opened,
-             count(started_at)::int as started, count(completed_at)::int as completed,
-             count(*) filter (where bounce_type = 'hard')::int as bounced
-      from invitations where project_id = ${projectId}`);
-
-    const active = await tx.execute<{
-      userId: string;
-      name: string;
-      mode: string;
-      caseId: string | null;
-      externalId: string | null;
-      lastAt: Date;
-    }>(sql`
-      select distinct on (i.interviewer_id) i.interviewer_id as "userId", u.name, i.mode,
-             i.case_id as "caseId", c.external_id as "externalId", i.updated_at as "lastAt"
-      from interviews i join users u on u.id = i.interviewer_id
-      left join cases c on c.id = i.case_id
-      where i.project_id = ${projectId} and i.interviewer_id is not null
-        and i.updated_at > now() - make_interval(mins => ${ACTIVE_MINUTES})
-      order by i.interviewer_id, i.updated_at desc`);
+    const due = await t.callbacksDue(projectId);
+    const f = await t.funnel(projectId);
+    const active = await t.activeInterviewers(projectId, ACTIVE_MINUTES);
 
     return {
       at: new Date().toISOString(),
@@ -208,7 +153,7 @@ export class LiveService {
         cases: status.reduce((a, r) => a + r.n, 0),
         byStatus,
         byDisposition,
-        callbacksDue: due?.n ?? 0,
+        callbacksDue: due,
       },
       funnel: f && f.total ? f : null,
       active: active.map((a) => ({ ...a, lastAt: new Date(a.lastAt).toISOString() })),
@@ -230,8 +175,8 @@ export class LiveService {
     if (r && Date.now() - r.at < SHARE_MS) return Promise.resolve(r.snap);
     let p = this.inFlight.get(key);
     if (!p) {
-      p = this.database
-        .withTenant(tenantId, (tx) => this.snapshot(tx, projectId))
+      p = this.repo
+        .inTenant(tenantId, (t) => this.snapshot(t, projectId))
         .then((snap) => {
           this.recent.set(key, { at: Date.now(), snap });
           return snap;

@@ -58,7 +58,9 @@ export class AnalysisController {
   @Get('live/snapshot')
   @RequirePermission('dashboards.read', PERM)
   snapshot(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
-    return this.database.withTenant(ctx.tenantId, (tx) => this.live.snapshot(tx, projectId));
+    return this.database.withTenant(ctx.tenantId, (tx) =>
+      this.live.snapshot(tx, projectId, ctx.tenantId),
+    );
   }
 
   /** Server-Sent Events: `snapshot` on change, `heartbeat` every 15 s (M2). */
