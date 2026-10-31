@@ -71,3 +71,17 @@ export async function setSettings(owner: Owner, projectId: string, settings: obj
     owner,
   );
 }
+
+/** A contact of a case (a phone by default). */
+export async function newContact(
+  owner: Owner,
+  tenantId: string,
+  caseId: string,
+  opts: { type?: string; value?: string; label?: string | null } = {},
+) {
+  await sql`INSERT INTO contacts (id, tenant_id, case_id, type, value, label)
+            VALUES (${randomUUID()}, ${tenantId}, ${caseId}, ${opts.type ?? 'phone'},
+              ${opts.value ?? '+51987654321'}, ${opts.label === undefined ? 'Móvil' : opts.label})`.execute(
+    owner,
+  );
+}
