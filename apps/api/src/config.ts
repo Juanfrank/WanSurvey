@@ -16,9 +16,9 @@ const optionalGuid = (message: string) =>
   );
 
 /**
- * Names that changed so that the same concept has the same name in every app. Until the
- * transition ends (RENAMED_VARIABLES_STRICT) the old name still works, with a warning;
- * afterwards an old name stops the app and says which is the new one.
+ * Names that changed so that the same concept has the same name in every app. An old name in
+ * the environment stops the app and says which name replaces it: a deployment not renamed would
+ * otherwise start with the setting silently missing (no Microsoft sign-in, local files).
  */
 export const RENAMED_VARIABLES: Record<string, string> = {
   PUBLIC_WEB_URL: 'PUBLIC_URL',
@@ -28,7 +28,6 @@ export const RENAMED_VARIABLES: Record<string, string> = {
   // EXPORT_BLOB_URL (https://<account>.blob.core.windows.net/<container>) is split in two.
   EXPORT_BLOB_URL: 'AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_CONTAINER',
 };
-export const RENAMED_VARIABLES_STRICT = false;
 
 /** Settings that are secrets, and what a placeholder looks like. */
 const SECRET_SETTINGS = new Set([
@@ -40,32 +39,6 @@ const SECRET_SETTINGS = new Set([
   'DATABASE_ADMIN_URL',
 ]);
 const EXAMPLE_SECRET = /(^|[:/@=])(dev-|change-me|admin1234)|change-me/i;
-
-/** The environment with old names read as the new ones; the old names found are returned. */
-export function applyRenamedVariables(env: NodeJS.ProcessEnv): {
-  env: NodeJS.ProcessEnv;
-  found: string[];
-} {
-  const found = Object.keys(RENAMED_VARIABLES).filter((k) => env[k] !== undefined && env[k] !== '');
-  if (found.length === 0) return { env, found };
-  const out: NodeJS.ProcessEnv = { ...env };
-  for (const old of found) {
-    const value = env[old]!;
-    if (old === 'EXPORT_BLOB_URL') {
-      try {
-        const url = new URL(value);
-        out.AZURE_STORAGE_ACCOUNT_NAME ||= url.hostname.split('.')[0];
-        out.AZURE_STORAGE_CONTAINER ||= url.pathname.replace(/^\/+|\/+$/g, '') || 'exports';
-      } catch {
-        // Left for the validation to report.
-      }
-      continue;
-    }
-    const next = RENAMED_VARIABLES[old]!;
-    if (!out[next]) out[next] = value;
-  }
-  return { env: out, found };
-}
 
 export const SSO_CALLBACK_PATH = '/api/auth/entra/callback';
 
@@ -291,15 +264,15 @@ let cached: AppConfig | null = null;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && env === process.env) return cached;
-  const renamed = applyRenamedVariables(env);
-  if (renamed.found.length) {
-    const lines = renamed.found.map((k) => `${k} is now ${RENAMED_VARIABLES[k]}`);
-    if (RENAMED_VARIABLES_STRICT)
-      throw new Error(`Invalid configuration:\n  ${lines.join('\n  ')}`);
-    console.warn(`Renamed settings, still read under their old names:\n  ${lines.join('\n  ')}`);
-  }
+  const former = Object.keys(RENAMED_VARIABLES).filter(
+    (k) => env[k] !== undefined && env[k] !== '',
+  );
+  if (former.length)
+    throw new Error(
+      `Invalid configuration:\n  ${former.map((k) => `${k}: renamed, use ${RENAMED_VARIABLES[k]}`).join('\n  ')}`,
+    );
   // App Service keeps a setting that was left empty: it counts as not set.
-  const set = Object.fromEntries(Object.entries(renamed.env).filter(([, v]) => v !== ''));
+  const set = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== ''));
   const parsed = Env.safeParse(set);
   if (parsed.success && parsed.data.GEOCODER === 'nominatim' && !parsed.data.GEOCODER_EMAIL) {
     throw new Error('Invalid configuration:\n  GEOCODER_EMAIL: required when GEOCODER=nominatim');

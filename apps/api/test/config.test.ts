@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyRenamedVariables, loadConfig, RENAMED_VARIABLES } from '../src/config.js';
+import { describe, expect, it } from 'vitest';
+import { loadConfig, RENAMED_VARIABLES } from '../src/config.js';
 
 const KEY = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=';
 const base = {
@@ -9,40 +9,18 @@ const base = {
 } as NodeJS.ProcessEnv;
 
 describe('configuration names', () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  it('reads a former name as the new one, and says so', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { ENCRYPTION_KEY: _unused, ...rest } = base;
-    const c = loadConfig({
-      ...rest,
-      APP_ENCRYPTION_KEY: KEY,
-      PUBLIC_WEB_URL: 'https://old.example.org',
-      EXPORT_DIR: '/tmp/x',
-    });
-    expect(c.ENCRYPTION_KEY).toBe(KEY);
-    expect(c.PUBLIC_URL).toBe('https://old.example.org');
-    expect(c.DATA_DIR).toBe('/tmp/x');
-    expect(String(warn.mock.calls[0]?.[0])).toContain('APP_ENCRYPTION_KEY is now ENCRYPTION_KEY');
+  it.each(Object.entries(RENAMED_VARIABLES))('%s stops the app and names %s', (old, now) => {
+    expect(() => loadConfig({ ...base, [old]: 'x' })).toThrow(`${old}: renamed, use ${now}`);
   });
 
-  it('the new name wins over the former one', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const c = loadConfig({
-      ...base,
-      PUBLIC_URL: 'https://new.example.org',
-      PUBLIC_WEB_URL: 'https://old.example.org',
-    });
-    expect(c.PUBLIC_URL).toBe('https://new.example.org');
+  it('says every former name found', () => {
+    expect(() => loadConfig({ ...base, PUBLIC_WEB_URL: 'x', EXPORT_DIR: 'y' })).toThrow(
+      /PUBLIC_WEB_URL: renamed, use PUBLIC_URL\n\s+EXPORT_DIR: renamed, use DATA_DIR/,
+    );
   });
 
-  it('splits the former blob URL into account and container', () => {
-    const { env } = applyRenamedVariables({
-      EXPORT_BLOB_URL: 'https://acct.blob.core.windows.net/exports',
-    });
-    expect(env.AZURE_STORAGE_ACCOUNT_NAME).toBe('acct');
-    expect(env.AZURE_STORAGE_CONTAINER).toBe('exports');
-    expect(Object.keys(RENAMED_VARIABLES)).toContain('EXPORT_BLOB_URL');
+  it('a former name left empty is ignored (App Service keeps empty settings)', () => {
+    expect(loadConfig({ ...base, PUBLIC_WEB_URL: '' }).PUBLIC_URL).toBe('http://localhost:5173');
   });
 
   it('an empty setting counts as not set', () => {

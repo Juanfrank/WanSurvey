@@ -130,8 +130,8 @@ removed), so a client cannot pass as another by sending that header. A refused c
 
 ## Setting names
 
-The names are the same in every app of the family. Former names (`PUBLIC_WEB_URL`,
-`APP_ENCRYPTION_KEY`, `EXPORT_DIR`, `EXPORT_BLOB_URL`, `EXPORT_BLOB_CONTAINER`) are still read, with
-a warning in the log, until the transition ends; then the app refuses to start and says which name
-replaces each one. The values do not change (`ENCRYPTION_KEY` keeps the key's value). Paste the
-whole list (`appconfig/README.md`): Advanced edit replaces it.
+The names are the same in every app of the family. A former name (`PUBLIC_WEB_URL`,
+`APP_ENCRYPTION_KEY`, `EXPORT_DIR`, `EXPORT_BLOB_URL`, `EXPORT_BLOB_CONTAINER`) in the environment
+stops the app at start and the error says which name replaces it. The values do not change
+(`ENCRYPTION_KEY` keeps the key's value). Paste the whole list (`appconfig/README.md`): Advanced
+edit replaces it.
