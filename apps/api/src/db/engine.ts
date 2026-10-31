@@ -45,6 +45,16 @@ export class Engine implements OnModuleDestroy {
     return this.mssql ? this.mssql.shareLinkByHash(hash) : this.postgres.shareLinkByHash(hash);
   }
 
+  /** The organisation of an invitation, from its id. */
+  invitationTenant(id: string): Promise<string | null> {
+    return this.mssql ? this.mssql.invitationTenant(id) : this.postgres.invitationTenant(id);
+  }
+
+  /** The organisations with invitations or reminders due. */
+  tenantsWithMailDue(): Promise<string[]> {
+    return this.mssql ? this.mssql.tenantsWithMailDue() : this.postgres.tenantsWithMailDue();
+  }
+
   /** Whether the database answers. */
   probe(): Promise<boolean> {
     return this.mssql ? this.mssql.probe() : this.postgres.probe();

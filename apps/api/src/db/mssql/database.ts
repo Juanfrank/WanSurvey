@@ -209,6 +209,20 @@ export class MssqlDatabase {
     return r ? { id: r.id.toLowerCase(), tenantId: r.tenant_id.toLowerCase() } : null;
   }
 
+  /** The organisation of an invitation (a mail provider's event carries only its id). */
+  async invitationTenant(id: string): Promise<string | null> {
+    if (!isUuid(id)) return null;
+    const res = await sql<{ tenant_id: string }>`
+      EXEC dbo.invitation_tenant @id = ${id}`.execute(this.db);
+    return res.rows[0]?.tenant_id.toLowerCase() ?? null;
+  }
+
+  /** The organisations with invitations or reminders to send. */
+  async tenantsWithMailDue(): Promise<string[]> {
+    const res = await sql<{ tenant_id: string }>`EXEC dbo.tenants_with_mail_due`.execute(this.db);
+    return res.rows.map((r) => r.tenant_id.toLowerCase());
+  }
+
   /** Every organisation, for nightly jobs. */
   async allTenantIds(): Promise<string[]> {
     const res = await sql<{ tenant_id: string }>`EXEC dbo.all_tenant_ids`.execute(this.db);

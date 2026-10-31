@@ -9,38 +9,27 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import { and, asc, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { projectSettings, type CawiTheme } from '@wansurvey/schema';
 import { z } from 'zod';
 import { DisplayName } from '../common/zod.js';
 import { AuditService } from '../audit/audit.service.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
-import { CasesService, ofQuestionnaire } from '../cases/cases.service.js';
+import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { columnsAs, Database, Prepared, type Tx } from '../db/database.js';
-import { rememberProject, type ProjectRow } from '../cases/project-memo.js';
+import { Engine } from '../db/engine.js';
+import type { InterviewRow } from '../interviews/interviews-repo.js';
+import { fieldedIn, InterviewsService } from '../interviews/interviews.service.js';
 import {
-  cases,
-  contacts,
-  emailTemplates,
-  interviewDevices,
-  interviews,
-  invitations,
-  openLinks,
-  projectLogos,
-  projects,
-  questionnaires,
-  suppressions,
-  waves,
-} from '../db/schema.js';
-import {
-  fieldedIn,
-  InterviewsService,
-  type InterviewRow,
-} from '../interviews/interviews.service.js';
+  CAWI_REPO,
+  type CawiRepo,
+  type CawiTx,
+  type InvitationView,
+  type NewInvitationRow,
+  type TargetView,
+} from './cawi-repo.js';
 import { closedCode } from '../questionnaires/state.js';
 import { DeviceId, SubmitBody, SyncItem } from '../interviews/schemas.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
@@ -98,7 +87,8 @@ export const DISPATCH_BATCH = 200;
 /** How long a dispatcher keeps the invitations it took; after that another run may take them. */
 const DISPATCH_LEASE_MS = 10 * 60_000;
 
-type InvitationRow = typeof invitations.$inferSelect;
+type InvitationRow = InvitationView;
+type TargetRow = TargetView;
 
 const lower = (e: string) => e.trim().toLowerCase();
 
@@ -112,7 +102,8 @@ export class CawiService implements OnModuleInit {
   private readonly logger = new Logger('Cawi');
 
   constructor(
-    private readonly database: Database,
+    @Inject(CAWI_REPO) private readonly repo: CawiRepo,
+    private readonly engine: Engine,
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
     private readonly audit: AuditService,
@@ -124,7 +115,7 @@ export class CawiService implements OnModuleInit {
     // A finished web interview completes its invitation.
     this.runtime.onSubmitted(async (t, row) => {
       if (row.mode !== 'CAWI') return;
-      await completeInvitation.run(t.native(), { interview: row.id });
+      await this.repo.extend(t).completeInvitation(row.id);
     });
   }
 
@@ -162,39 +153,33 @@ export class CawiService implements OnModuleInit {
   // Templates
   // -------------------------------------------------------------------------
 
-  private async languages(tx: Tx, projectId: string) {
-    const [p] = await tx
-      .select({ languages: projects.languages })
-      .from(projects)
-      .where(eq(projects.id, projectId));
-    if (!p) throw new NotFoundException('Project not found');
-    return [...new Set(['es', ...(p.languages ?? [])])];
+  private async languages(t: CawiTx, projectId: string) {
+    const languages = await t.projectLanguages(projectId);
+    if (!languages) throw new NotFoundException('Project not found');
+    return [...new Set(['es', ...languages])];
   }
 
   /** Every kind × project language, the project's own wording or the default. */
-  async templates(tx: Tx, projectId: string) {
-    const own = await tx
-      .select()
-      .from(emailTemplates)
-      .where(eq(emailTemplates.projectId, projectId));
+  async templates(t: CawiTx, projectId: string) {
+    const own = await t.ownTemplates(projectId);
     const out = [];
-    for (const language of await this.languages(tx, projectId))
+    for (const language of await this.languages(t, projectId))
       for (const kind of TEMPLATE_KINDS) {
-        const t = own.find((x) => x.kind === kind && x.language === language);
+        const x = own.find((o) => o.kind === kind && o.language === language);
         const d = defaultTemplate(kind, language);
         out.push({
           kind,
           language,
-          subject: t?.subject ?? d.subject,
-          body: t?.body ?? d.body,
-          custom: !!t,
+          subject: x?.subject ?? d.subject,
+          body: x?.body ?? d.body,
+          custom: !!x,
         });
       }
     return out;
   }
 
   async saveTemplate(
-    tx: Tx,
+    t: CawiTx,
     ctx: AuthContext,
     projectId: string,
     body: z.infer<typeof TemplateBody>,
@@ -206,96 +191,43 @@ export class CawiService implements OnModuleInit {
         message: `Unknown or missing placeholders: ${problems.join(', ')}`,
         problems,
       });
-    await tx
-      .insert(emailTemplates)
-      .values({ tenantId: ctx.tenantId, projectId, ...body, updatedBy: ctx.userId })
-      .onConflictDoUpdate({
-        target: [emailTemplates.projectId, emailTemplates.kind, emailTemplates.language],
-        set: {
-          subject: body.subject,
-          body: body.body,
-          updatedBy: ctx.userId,
-          updatedAt: new Date(),
-        },
-      });
-    return this.templates(tx, projectId);
+    await t.saveTemplate(projectId, ctx.userId, body);
+    return this.templates(t, projectId);
   }
 
-  private async templateFor(tx: Tx, projectId: string, kind: TemplateKind, language: string) {
-    const [t] = await tx
-      .select({ subject: emailTemplates.subject, body: emailTemplates.body })
-      .from(emailTemplates)
-      .where(
-        and(
-          eq(emailTemplates.projectId, projectId),
-          eq(emailTemplates.kind, kind),
-          eq(emailTemplates.language, language),
-        ),
-      );
-    return t ?? defaultTemplate(kind, language);
+  private async templateFor(t: CawiTx, projectId: string, kind: TemplateKind, language: string) {
+    return (await t.template(projectId, kind, language)) ?? defaultTemplate(kind, language);
   }
 
   // -------------------------------------------------------------------------
   // Waves
   // -------------------------------------------------------------------------
 
-  async createWave(tx: Tx, ctx: AuthContext, projectId: string, body: z.infer<typeof WaveBody>) {
+  async createWave(t: CawiTx, ctx: AuthContext, projectId: string, body: z.infer<typeof WaveBody>) {
     if (body.filter) {
       const err = ruleError(body.filter);
       if (err) throw new BadRequestException({ code: 'BAD_FILTER', message: err });
     }
-    const [q] = await tx
-      .select({ id: questionnaires.id })
-      .from(questionnaires)
-      .where(
-        and(eq(questionnaires.id, body.questionnaireId), eq(questionnaires.projectId, projectId)),
-      );
-    if (!q) throw new BadRequestException({ code: 'NOT_FOUND', message: 'Unknown questionnaire' });
-    await this.runtime.latestVersion(tx, projectId, body.questionnaireId, 'CAWI');
-    const [w] = await tx
-      .insert(waves)
-      .values({
-        tenantId: ctx.tenantId,
-        projectId,
-        questionnaireId: body.questionnaireId,
-        name: body.name,
-        filter: body.filter?.trim() || null,
-        reminderDays: [...body.reminderDays].sort((a, b) => a - b),
-        sendAt: body.sendAt ? new Date(body.sendAt) : null,
-        bouncesToCati: body.bouncesToCati,
-        channel: body.channel,
-        createdBy: ctx.userId,
-      })
-      .returning();
-    return w!;
+    if (!(await t.hasQuestionnaire(projectId, body.questionnaireId)))
+      throw new BadRequestException({ code: 'NOT_FOUND', message: 'Unknown questionnaire' });
+    await this.runtime.latestVersion(t, projectId, body.questionnaireId, 'CAWI');
+    return t.insertWave({
+      projectId,
+      questionnaireId: body.questionnaireId,
+      name: body.name,
+      filter: body.filter?.trim() || null,
+      reminderDays: [...body.reminderDays].sort((a, b) => a - b),
+      sendAt: body.sendAt ? new Date(body.sendAt) : null,
+      bouncesToCati: body.bouncesToCati,
+      channel: body.channel,
+      createdBy: ctx.userId,
+    });
   }
 
   /** Waves with their funnel: sent → delivered → opened → clicked → started → completed. */
-  async listWaves(tx: Tx, projectId: string) {
-    const ws = await tx
-      .select()
-      .from(waves)
-      .where(eq(waves.projectId, projectId))
-      .orderBy(desc(waves.createdAt));
-    const counts = await tx
-      .select({
-        waveId: invitations.waveId,
-        total: sql<number>`count(*)::int`,
-        queued: sql<number>`count(*) filter (where ${invitations.status} = 'queued')::int`,
-        sent: sql<number>`count(${invitations.sentAt})::int`,
-        delivered: sql<number>`count(${invitations.deliveredAt})::int`,
-        opened: sql<number>`count(${invitations.openedAt})::int`,
-        clicked: sql<number>`count(${invitations.clickedAt})::int`,
-        started: sql<number>`count(${invitations.startedAt})::int`,
-        completed: sql<number>`count(${invitations.completedAt})::int`,
-        bounced: sql<number>`count(*) filter (where ${invitations.bounceType} = 'hard')::int`,
-        suppressed: sql<number>`count(*) filter (where ${invitations.status} = 'suppressed')::int`,
-        failed: sql<number>`count(*) filter (where ${invitations.status} = 'failed')::int`,
-        reminders: sql<number>`coalesce(sum(${invitations.remindersSent}), 0)::int`,
-      })
-      .from(invitations)
-      .where(and(eq(invitations.projectId, projectId), sql`${invitations.waveId} is not null`))
-      .groupBy(invitations.waveId);
+  async listWaves(t: CawiTx, projectId: string) {
+    const ws = await t.waves(projectId);
+    const counts = await t.waveCounts(projectId);
     return ws.map((w) => {
       const c = counts.find((x) => x.waveId === w.id);
       return {
@@ -318,83 +250,51 @@ export class CawiService implements OnModuleInit {
     });
   }
 
+  /** The cases of a wave that its rule lets through, with their samples opened. */
+  private async candidatesOf(
+    t: CawiTx,
+    projectId: string,
+    w: { questionnaireId: string; filter: string | null },
+  ) {
+    const match = compileRule(w.filter);
+    return (await t.waveCandidates(projectId, w.questionnaireId))
+      .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
+      .filter(match);
+  }
+
+  /** The language of an invitation: the case's own when the questionnaire has it. */
+  private languageOf(sample: Record<string, unknown>, compiled: CompiledQuestionnaire) {
+    return typeof sample.language === 'string' &&
+      compiled.questionnaire.languages.includes(sample.language)
+      ? sample.language
+      : compiled.questionnaire.defaultLanguage;
+  }
+
   /**
    * Queues an invitation for every eligible case of the wave: matching its rule, not
    * finished, with a usable e-mail address that is not suppressed, and only once the project
    * has declared its lawful basis for e-mailing (W4). The dispatcher sends them.
    */
-  async sendWave(tx: Tx, ctx: AuthContext, projectId: string, waveId: string) {
-    const settings = await this.cases.settings(tx, projectId);
-    const [peek] = await tx
-      .select({ channel: waves.channel })
-      .from(waves)
-      .where(and(eq(waves.id, waveId), eq(waves.projectId, projectId)));
-    if (peek?.channel === 'links') return this.makeLinks(tx, ctx, projectId, waveId);
+  async sendWave(t: CawiTx, ctx: AuthContext, projectId: string, waveId: string) {
+    const settings = await this.cases.settings(t, projectId);
+    if ((await t.waveChannel(projectId, waveId)) === 'links')
+      return this.makeLinks(t, ctx, projectId, waveId);
     if (!settings.cawi.lawfulBasis)
       throw new BadRequestException({
         code: 'NO_LAWFUL_BASIS',
         message: 'Declare the lawful basis for e-mailing this sample first',
       });
-    const [w] = await tx
-      .select()
-      .from(waves)
-      .where(and(eq(waves.id, waveId), eq(waves.projectId, projectId)))
-      .for('update');
+    const w = await t.lockWave(projectId, waveId);
     if (!w) throw new NotFoundException('Wave not found');
     if (w.status !== 'draft')
       throw new ConflictException({ code: 'WAVE_SENT', message: 'This wave has been sent' });
-    const v = await this.runtime.latestVersion(tx, projectId, w.questionnaireId, 'CAWI');
+    const v = await this.runtime.latestVersion(t, projectId, w.questionnaireId, 'CAWI');
     const compiled = v.compiled as CompiledQuestionnaire;
-    const match = compileRule(w.filter);
-    const candidates = (
-      await tx
-        .select({
-          id: cases.id,
-          sample: cases.sample,
-          samplePii: cases.samplePii,
-          status: cases.status,
-          priority: cases.priority,
-          modePreference: cases.modePreference,
-        })
-        .from(cases)
-        .where(
-          and(
-            eq(cases.projectId, projectId),
-            // A campaign invites the cases of its own questionnaire.
-            ofQuestionnaire(w.questionnaireId),
-            inArray(cases.status, ['fresh', 'assigned']),
-          ),
-        )
-        .orderBy(asc(cases.externalId))
-    )
-      .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
-      .filter(match);
-    const emails = candidates.length
-      ? await tx
-          .select({
-            id: contacts.id,
-            caseId: contacts.caseId,
-            value: contacts.value,
-            consent: contacts.consent,
-          })
-          .from(contacts)
-          .where(
-            and(
-              inArray(
-                contacts.caseId,
-                candidates.map((c) => c.id),
-              ),
-              eq(contacts.type, 'email'),
-              eq(contacts.valid, true),
-            ),
-          )
-          .orderBy(asc(contacts.createdAt))
-      : [];
-    const suppressed = new Set(
-      (await tx.select({ email: suppressions.email }).from(suppressions)).map((s) => s.email),
-    );
+    const candidates = await this.candidatesOf(t, projectId, w);
+    const emails = await t.emailContacts(candidates.map((c) => c.id));
+    const suppressed = new Set(await t.suppressedEmails());
     const skipped = { noEmail: 0, suppressed: 0, optedOut: 0 };
-    const rows: (typeof invitations.$inferInsert)[] = [];
+    const rows: NewInvitationRow[] = [];
     for (const c of candidates) {
       const all = emails.filter((e) => e.caseId === c.id);
       const usable = all.filter((e) => (e.consent as { email?: boolean }).email !== false);
@@ -403,15 +303,8 @@ export class CawiService implements OnModuleInit {
       else if (!usable.length) skipped.optedOut++;
       else if (!e) skipped.suppressed++;
       if (!e) continue;
-      const sample = c.sample as Record<string, unknown>;
-      const language =
-        typeof sample.language === 'string' &&
-        compiled.questionnaire.languages.includes(sample.language)
-          ? sample.language
-          : compiled.questionnaire.defaultLanguage;
       const { tokenHash, tokenEnc } = this.newToken();
       rows.push({
-        tenantId: ctx.tenantId,
         projectId,
         questionnaireId: w.questionnaireId,
         waveId: w.id,
@@ -420,20 +313,16 @@ export class CawiService implements OnModuleInit {
         email: lower(e.value),
         tokenHash,
         tokenEnc,
-        language,
+        language: this.languageOf(c.sample as Record<string, unknown>, compiled),
       });
     }
-    for (let i = 0; i < rows.length; i += 500)
-      await tx
-        .insert(invitations)
-        .values(rows.slice(i, i + 500))
-        .onConflictDoNothing();
-    await tx.update(waves).set({ status: 'sending', sentAt: new Date() }).where(eq(waves.id, w.id));
+    await t.insertInvitations(rows);
+    await t.setWaveStatus(w.id, 'sending');
     await this.cases.events(
-      tx,
+      t,
       ctx.tenantId,
       ctx.userId,
-      rows.map((r) => ({ caseId: r.caseId!, type: 'invited', details: { waveId: w.id } })),
+      rows.map((r) => ({ caseId: r.caseId, type: 'invited', details: { waveId: w.id } })),
     );
     return { queued: rows.length, skipped };
   }
@@ -442,89 +331,41 @@ export class CawiService implements OnModuleInit {
    * A "links only" wave: a personal link for every eligible case matching its rule, e-mail
    * or not. Nothing is sent; the links are listed and downloaded (W7).
    */
-  private async makeLinks(tx: Tx, ctx: AuthContext, projectId: string, waveId: string) {
-    const [w] = await tx
-      .select()
-      .from(waves)
-      .where(and(eq(waves.id, waveId), eq(waves.projectId, projectId)))
-      .for('update');
+  private async makeLinks(t: CawiTx, ctx: AuthContext, projectId: string, waveId: string) {
+    const w = await t.lockWave(projectId, waveId);
     if (!w) throw new NotFoundException('Wave not found');
     if (w.status !== 'draft')
       throw new ConflictException({ code: 'WAVE_SENT', message: 'This wave has been sent' });
-    const v = await this.runtime.latestVersion(tx, projectId, w.questionnaireId, 'CAWI');
+    const v = await this.runtime.latestVersion(t, projectId, w.questionnaireId, 'CAWI');
     const compiled = v.compiled as CompiledQuestionnaire;
-    const match = compileRule(w.filter);
-    const candidates = (
-      await tx
-        .select({
-          id: cases.id,
-          sample: cases.sample,
-          samplePii: cases.samplePii,
-          status: cases.status,
-          priority: cases.priority,
-          modePreference: cases.modePreference,
-        })
-        .from(cases)
-        .where(
-          and(
-            eq(cases.projectId, projectId),
-            // A campaign invites the cases of its own questionnaire.
-            ofQuestionnaire(w.questionnaireId),
-            inArray(cases.status, ['fresh', 'assigned']),
-          ),
-        )
-        .orderBy(asc(cases.externalId))
-    )
-      .map((r) => ({ ...r, sample: this.cases.pii.read(r) }))
-      .filter(match);
-    const rows: (typeof invitations.$inferInsert)[] = candidates.map((c) => {
-      const t = this.newToken();
-      const sample = c.sample as Record<string, unknown>;
-      const language =
-        typeof sample.language === 'string' &&
-        compiled.questionnaire.languages.includes(sample.language)
-          ? sample.language
-          : compiled.questionnaire.defaultLanguage;
+    const candidates = await this.candidatesOf(t, projectId, w);
+    const rows: NewInvitationRow[] = candidates.map((c) => {
+      const token = this.newToken();
       return {
-        tenantId: ctx.tenantId,
         projectId,
         questionnaireId: w.questionnaireId,
         waveId: w.id,
         caseId: c.id,
         status: 'link',
-        tokenHash: t.tokenHash,
-        tokenEnc: t.tokenEnc,
-        language,
+        tokenHash: token.tokenHash,
+        tokenEnc: token.tokenEnc,
+        language: this.languageOf(c.sample as Record<string, unknown>, compiled),
       };
     });
-    for (let i = 0; i < rows.length; i += 500)
-      await tx
-        .insert(invitations)
-        .values(rows.slice(i, i + 500))
-        .onConflictDoNothing();
-    await tx.update(waves).set({ status: 'sent', sentAt: new Date() }).where(eq(waves.id, w.id));
+    await t.insertInvitations(rows);
+    await t.setWaveStatus(w.id, 'sent');
     await this.cases.events(
-      tx,
+      t,
       ctx.tenantId,
       ctx.userId,
-      rows.map((r) => ({ caseId: r.caseId!, type: 'link_made', details: { waveId: w.id } })),
+      rows.map((r) => ({ caseId: r.caseId, type: 'link_made', details: { waveId: w.id } })),
     );
     return { queued: 0, links: rows.length, skipped: { noEmail: 0, suppressed: 0, optedOut: 0 } };
   }
 
   /** The personal links of a wave, one per case, with how far each got. */
-  async waveLinks(tx: Tx, projectId: string, waveId: string) {
-    const rows = await tx
-      .select({
-        tokenEnc: invitations.tokenEnc,
-        externalId: cases.externalId,
-        startedAt: invitations.startedAt,
-        completedAt: invitations.completedAt,
-      })
-      .from(invitations)
-      .innerJoin(cases, eq(cases.id, invitations.caseId))
-      .where(and(eq(invitations.projectId, projectId), eq(invitations.waveId, waveId)))
-      .orderBy(asc(cases.externalId));
+  async waveLinks(t: CawiTx, projectId: string, waveId: string) {
+    const rows = await t.waveLinkRows(projectId, waveId);
     return rows.map((r) => ({
       externalId: r.externalId,
       url: this.surveyUrl(decryptField(r.tokenEnc, this.config.APP_ENCRYPTION_KEY)),
@@ -532,49 +373,45 @@ export class CawiService implements OnModuleInit {
     }));
   }
 
-  async suppressionList(tx: Tx) {
-    return tx.select().from(suppressions).orderBy(desc(suppressions.createdAt)).limit(1000);
+  suppressionList(t: CawiTx) {
+    return t.suppressionList();
   }
 
   // -------------------------------------------------------------------------
   // Open link (W6)
   // -------------------------------------------------------------------------
 
-  async openLink(tx: Tx, projectId: string) {
-    const [l] = await tx.select().from(openLinks).where(eq(openLinks.projectId, projectId));
+  async openLink(t: CawiTx, projectId: string) {
+    const l = await t.openLinkOf(projectId);
     return l ? { ...l, url: `${this.webBase}/o/${l.slug}` } : null;
   }
 
   async setOpenLink(
-    tx: Tx,
+    t: CawiTx,
     ctx: AuthContext,
     projectId: string,
     body: z.infer<typeof OpenLinkBody>,
   ) {
-    const current = await this.openLink(tx, projectId);
+    const current = await this.openLink(t, projectId);
     // The questionnaire must be this project's, in use and fielded on the web.
     if (body.questionnaireId && body.questionnaireId !== current?.questionnaireId)
-      await this.runtime.latestVersion(tx, projectId, body.questionnaireId, 'CAWI');
+      await this.runtime.latestVersion(t, projectId, body.questionnaireId, 'CAWI');
     if (current) {
-      await tx
-        .update(openLinks)
-        .set({
-          active: body.active,
-          ...(body.questionnaireId ? { questionnaireId: body.questionnaireId } : {}),
-        })
-        .where(eq(openLinks.id, current.id));
+      await t.updateOpenLink(current.id, {
+        active: body.active,
+        ...(body.questionnaireId ? { questionnaireId: body.questionnaireId } : {}),
+      });
     } else {
       if (!body.questionnaireId)
         throw new BadRequestException({ code: 'NOT_FOUND', message: 'Choose a questionnaire' });
-      await tx.insert(openLinks).values({
-        tenantId: ctx.tenantId,
+      await t.insertOpenLink({
         projectId,
         questionnaireId: body.questionnaireId,
         slug: randomToken(9),
         active: body.active,
       });
     }
-    return this.openLink(tx, projectId);
+    return this.openLink(t, projectId);
   }
 
   // -------------------------------------------------------------------------
@@ -589,61 +426,7 @@ export class CawiService implements OnModuleInit {
    */
   async dispatch(tenantId: string, now = new Date(), limit = DISPATCH_BATCH) {
     const lease = new Date(now.getTime() + DISPATCH_LEASE_MS);
-    const free = sql`(${invitations.leaseUntil} is null or ${invitations.leaseUntil} < ${now.toISOString()}::timestamptz)`;
-    const active = sql`exists (select 1 from questionnaires qq where qq.id = ${invitations.questionnaireId}
-                and qq.state = 'active')`;
-    const batch = await this.database.withTenant(tenantId, async (tx) => {
-      const queued = await tx
-        .select({ inv: invitations })
-        .from(invitations)
-        .innerJoin(waves, eq(waves.id, invitations.waveId))
-        .where(
-          and(
-            eq(invitations.status, 'queued'),
-            free,
-            sql`(${waves.sendAt} is null or ${waves.sendAt} <= ${now.toISOString()}::timestamptz)`,
-            // A disabled or completed questionnaire sends nothing; queued mail waits.
-            active,
-          ),
-        )
-        .orderBy(asc(invitations.queuedAt))
-        .limit(limit)
-        .for('update', { of: invitations, skipLocked: true });
-      const due = await tx
-        .select({ inv: invitations })
-        .from(invitations)
-        .innerJoin(waves, eq(waves.id, invitations.waveId))
-        .where(
-          and(
-            eq(invitations.status, 'sent'),
-            isNull(invitations.completedAt),
-            free,
-            active,
-            // A case finished another way (by telephone, say) or withdrawn is not reminded.
-            sql`not exists (select 1 from cases cc where cc.id = ${invitations.caseId}
-                and cc.status in ('finalised', 'withdrawn'))`,
-            sql`${invitations.remindersSent} < cardinality(${waves.reminderDays})`,
-            sql`${invitations.sentAt} + (${waves.reminderDays}[${invitations.remindersSent} + 1] * interval '1 day') <= ${now.toISOString()}::timestamptz`,
-          ),
-        )
-        .limit(limit)
-        .for('update', { of: invitations, skipLocked: true });
-      const items = [
-        ...queued.map((r) => ({ inv: r.inv, kind: 'invitation' as TemplateKind })),
-        ...due.map((r) => ({ inv: r.inv, kind: 'reminder' as TemplateKind })),
-      ];
-      if (items.length)
-        await tx
-          .update(invitations)
-          .set({ leaseUntil: lease })
-          .where(
-            inArray(
-              invitations.id,
-              items.map((i) => i.inv.id),
-            ),
-          );
-      return items;
-    });
+    const batch = await this.repo.inTenant(tenantId, (t) => t.leaseBatch(now, limit, lease));
 
     let sent = 0;
     const memo = new Map<string, Promise<unknown>>();
@@ -657,12 +440,7 @@ export class CawiService implements OnModuleInit {
     }
 
     // Waves whose invitations have all left are sent.
-    await this.database.withTenant(tenantId, (tx) =>
-      tx.execute(sql`
-        update waves set status = 'sent'
-        where status = 'sending' and not exists (
-          select 1 from invitations i where i.wave_id = waves.id and i.status = 'queued')`),
-    );
+    await this.repo.inTenant(tenantId, (t) => t.markWavesSent());
     return sent;
   }
 
@@ -678,29 +456,17 @@ export class CawiService implements OnModuleInit {
       if (!memo.has(key)) memo.set(key, load());
       return memo.get(key) as Promise<T>;
     };
-    const prepared = await this.database.withTenant(tenantId, async (tx) => {
-      const [s] = await tx
-        .select({ id: suppressions.id })
-        .from(suppressions)
-        .where(eq(suppressions.email, inv.email!));
-      if (s) {
-        await tx
-          .update(invitations)
-          .set({ status: 'suppressed', leaseUntil: null })
-          .where(eq(invitations.id, inv.id));
+    const prepared = await this.repo.inTenant(tenantId, async (t) => {
+      if (await t.isSuppressed(inv.email!)) {
+        await t.patchInvitation(inv.id, { status: 'suppressed', leaseUntil: null });
         return null;
       }
-      const [c] = inv.caseId
-        ? await tx
-            .select({ sample: cases.sample, samplePii: cases.samplePii })
-            .from(cases)
-            .where(eq(cases.id, inv.caseId))
-        : [];
+      const c = inv.caseId ? await t.caseSample(inv.caseId) : null;
       const settings = await once(`settings:${inv.projectId}`, () =>
-        this.cases.settings(tx, inv.projectId),
+        this.cases.settings(t, inv.projectId),
       );
       const template = await once(`template:${inv.projectId}:${kind}:${inv.language}`, () =>
-        this.templateFor(tx, inv.projectId, kind, inv.language),
+        this.templateFor(t, inv.projectId, kind, inv.language),
       );
       return { case: c ? this.cases.pii.read(c) : {}, settings, template };
     });
@@ -729,28 +495,23 @@ export class CawiService implements OnModuleInit {
       });
     } catch (e) {
       const attempts = inv.sendAttempts + 1;
-      await this.database.withTenant(tenantId, (tx) =>
-        tx
-          .update(invitations)
-          .set({
-            sendAttempts: attempts,
-            lastError: (e as Error).message.slice(0, 500),
-            leaseUntil: null,
-            ...(attempts >= MAX_SEND_ATTEMPTS && kind === 'invitation' ? { status: 'failed' } : {}),
-          })
-          .where(eq(invitations.id, inv.id)),
+      await this.repo.inTenant(tenantId, (t) =>
+        t.patchInvitation(inv.id, {
+          sendAttempts: attempts,
+          lastError: (e as Error).message.slice(0, 500),
+          leaseUntil: null,
+          ...(attempts >= MAX_SEND_ATTEMPTS && kind === 'invitation' ? { status: 'failed' } : {}),
+        }),
       );
       return false;
     }
-    await this.database.withTenant(tenantId, (tx) =>
-      tx
-        .update(invitations)
-        .set(
-          kind === 'invitation'
-            ? { status: 'sent', sentAt: now, lastError: null, leaseUntil: null }
-            : { remindersSent: inv.remindersSent + 1, lastReminderAt: now, leaseUntil: null },
-        )
-        .where(eq(invitations.id, inv.id)),
+    await this.repo.inTenant(tenantId, (t) =>
+      t.patchInvitation(
+        inv.id,
+        kind === 'invitation'
+          ? { status: 'sent', sentAt: now, lastError: null, leaseUntil: null }
+          : { remindersSent: inv.remindersSent + 1, lastReminderAt: now, leaseUntil: null },
+      ),
     );
     return true;
   }
@@ -760,19 +521,13 @@ export class CawiService implements OnModuleInit {
   // -------------------------------------------------------------------------
 
   /** One transaction per respondent request: the token's organisation, then its invitation, locked. */
-  private async byToken<T>(token: string, fn: (tx: Tx, inv: InvitationRow) => Promise<T>) {
+  private async byToken<T>(token: string, fn: (t: CawiTx, inv: InvitationRow) => Promise<T>) {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) throw new NotFoundException('Link not found');
-    return this.database.withTenantOf(
-      'invitation_by_token',
-      sha256Hex(token),
-      async (tx, found) => {
-        if (!found) throw new NotFoundException('Link not found');
-        const [r] = await lockLink.run(tx, { id: found.id });
-        // The project comes with the link: the request reads it once (settings, logo, hooks).
-        rememberProject(tx, r!.project);
-        return fn(tx, r!.inv);
-      },
-    );
+    return this.repo.ofToken(sha256Hex(token), async (t, found) => {
+      if (!found) throw new NotFoundException('Link not found');
+      // The project comes with the link: the request reads it once (settings, logo, hooks).
+      return fn(t, await t.lockLink(found.id));
+    });
   }
 
   /**
@@ -782,20 +537,15 @@ export class CawiService implements OnModuleInit {
   private async surveyByToken<T>(
     token: string,
     deviceId: string,
-    fn: (tx: Tx, inv: InvitationRow, row: InterviewRow, lastSeq: number | null) => Promise<T>,
+    fn: (t: CawiTx, inv: InvitationRow, row: InterviewRow, lastSeq: number | null) => Promise<T>,
   ) {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) throw new NotFoundException('Link not found');
-    return this.database.withTenantOf(
-      'invitation_by_token',
-      sha256Hex(token),
-      async (tx, found) => {
-        if (!found) throw new NotFoundException('Link not found');
-        const [r] = await lockSurvey.run(tx, { id: found.id, device: deviceId });
-        if (!r) throw new NotFoundException('Survey not started');
-        rememberProject(tx, r.project);
-        return fn(tx, r.inv, r.interview, r.lastSeq);
-      },
-    );
+    return this.repo.ofToken(sha256Hex(token), async (t, found) => {
+      if (!found) throw new NotFoundException('Link not found');
+      const r = await t.lockSurvey(found.id, deviceId);
+      if (!r) throw new NotFoundException('Survey not started');
+      return fn(t, r.inv, r.interview, r.lastSeq);
+    });
   }
 
   /**
@@ -804,7 +554,7 @@ export class CawiService implements OnModuleInit {
    * (continuation, closed questionnaire, errors), as `respondentTarget` and `latestVersion`.
    */
   private async startTarget(
-    tx: Tx,
+    t: CawiTx,
     projectId: string,
     questionnaireId: string,
     known?: TargetRow,
@@ -812,15 +562,17 @@ export class CawiService implements OnModuleInit {
     questionnaireId: string;
     version: { id: string; version: number; compiled: CompiledQuestionnaire };
   }> {
-    const t =
-      known ?? (await questionnaireTarget.run(tx, { qid: questionnaireId, project: projectId }))[0];
-    if (t && !closedCode(t.state) && t.versionId) {
-      const compiled = await this.runtime.compiledOf(tx, t.versionId);
+    const row = known ?? (await t.questionnaireTarget(questionnaireId, projectId));
+    if (row && !closedCode(row.state) && row.versionId) {
+      const compiled = await this.runtime.compiledOf(t, row.versionId);
       if (fieldedIn(compiled, 'CAWI'))
-        return { questionnaireId, version: { id: t.versionId, version: t.version!, compiled } };
+        return {
+          questionnaireId,
+          version: { id: row.versionId, version: row.version!, compiled },
+        };
     }
-    const target = await this.respondentTarget(tx, questionnaireId, projectId);
-    const v = await this.runtime.latestVersion(tx, projectId, target, 'CAWI');
+    const target = await this.respondentTarget(t, questionnaireId, projectId);
+    const v = await this.runtime.latestVersion(t, projectId, target, 'CAWI');
     return {
       questionnaireId: target,
       version: { id: v.id, version: v.version, compiled: v.compiled as CompiledQuestionnaire },
@@ -830,16 +582,14 @@ export class CawiService implements OnModuleInit {
   /** The open pixel (approximate: image blocking and proxies distort it, W2) and the click. */
   async track(token: string, kind: 'open' | 'click') {
     try {
-      await this.byToken(token, async (tx, inv) => {
+      await this.byToken(token, async (t, inv) => {
         const now = new Date();
-        await tx
-          .update(invitations)
-          .set(
-            kind === 'open'
-              ? { openedAt: inv.openedAt ?? now }
-              : { clickedAt: inv.clickedAt ?? now, openedAt: inv.openedAt ?? now },
-          )
-          .where(eq(invitations.id, inv.id));
+        await t.patchInvitation(
+          inv.id,
+          kind === 'open'
+            ? { openedAt: inv.openedAt ?? now }
+            : { clickedAt: inv.clickedAt ?? now, openedAt: inv.openedAt ?? now },
+        );
       });
     } catch {
       // Tracking never fails the respondent.
@@ -851,45 +601,30 @@ export class CawiService implements OnModuleInit {
   async webhook(body: z.infer<typeof WebhookBody>) {
     let applied = 0;
     for (const ev of body.events) {
-      const tenantId = await this.database.invitationTenant(ev.invitationId);
+      const tenantId = await this.engine.invitationTenant(ev.invitationId);
       if (!tenantId) continue;
-      await this.database.withTenant(tenantId, async (tx) => {
-        const [inv] = await tx
-          .select()
-          .from(invitations)
-          .where(eq(invitations.id, ev.invitationId))
-          .for('update');
+      await this.repo.inTenant(tenantId, async (t) => {
+        const inv = await t.lockInvitation(ev.invitationId);
         if (!inv) return;
         const now = new Date();
         if (ev.type === 'delivered') {
-          await tx
-            .update(invitations)
-            .set({ deliveredAt: inv.deliveredAt ?? now })
-            .where(eq(invitations.id, inv.id));
+          await t.patchInvitation(inv.id, { deliveredAt: inv.deliveredAt ?? now });
         } else if (ev.type === 'bounce' && ev.bounceType !== 'hard') {
-          await tx
-            .update(invitations)
-            .set({ bounceType: inv.bounceType ?? 'soft', lastError: ev.reason ?? 'soft bounce' })
-            .where(eq(invitations.id, inv.id));
+          await t.patchInvitation(inv.id, {
+            bounceType: inv.bounceType ?? 'soft',
+            lastError: ev.reason ?? 'soft bounce',
+          });
         } else {
-          await this.suppress(
-            tx,
-            tenantId,
-            inv.email,
-            ev.type === 'complaint' ? 'complaint' : 'hard_bounce',
-          );
-          await tx
-            .update(invitations)
-            .set({
-              status: inv.status === 'completed' ? inv.status : 'bounced',
-              bouncedAt: now,
-              bounceType: ev.type === 'complaint' ? 'complaint' : 'hard',
-              lastError: ev.reason ?? null,
-            })
-            .where(eq(invitations.id, inv.id));
+          await this.suppress(t, inv.email, ev.type === 'complaint' ? 'complaint' : 'hard_bounce');
+          await t.patchInvitation(inv.id, {
+            status: inv.status === 'completed' ? inv.status : 'bounced',
+            bouncedAt: now,
+            bounceType: ev.type === 'complaint' ? 'complaint' : 'hard',
+            lastError: ev.reason ?? null,
+          });
           if (ev.type === 'bounce' && inv.caseId && inv.waveId) {
-            const [w] = await tx.select().from(waves).where(eq(waves.id, inv.waveId));
-            await this.bounced(tx, tenantId, inv.caseId, !!w?.bouncesToCati);
+            const w = await t.wave(inv.waveId);
+            await this.bounced(t, tenantId, inv.caseId, !!w?.bouncesToCati);
           }
         }
         applied++;
@@ -899,45 +634,31 @@ export class CawiService implements OnModuleInit {
   }
 
   /** A hard bounce: the case is marked, and optionally moved to telephone interviewing. */
-  private async bounced(tx: Tx, tenantId: string, caseId: string, toCati: boolean) {
-    const [c] = await tx.select().from(cases).where(eq(cases.id, caseId));
-    if (!c || c.status === 'finalised' || c.status === 'withdrawn') return;
-    await tx
-      .update(cases)
-      .set({
-        disposition: 'EMAIL_BOUNCED',
-        ...(toCati ? { modePreference: 'CATI', nextContactAt: new Date() } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(cases.id, caseId));
-    await this.cases.events(tx, tenantId, null, [
+  private async bounced(t: CawiTx, tenantId: string, caseId: string, toCati: boolean) {
+    if (!(await t.markBounced(caseId, toCati))) return;
+    await this.cases.events(t, tenantId, null, [
       { caseId, type: 'email_bounced', details: { toCati } },
     ]);
   }
 
-  private async suppress(tx: Tx, tenantId: string, email: string | null, reason: string) {
+  private async suppress(t: CawiTx, email: string | null, reason: string) {
     if (!email) return;
-    await tx
-      .insert(suppressions)
-      .values({ tenantId, email: lower(email), reason })
-      .onConflictDoNothing();
+    await t.suppress(lower(email), reason);
   }
 
   /** What the unsubscribe page shows. */
   async unsubscribeInfo(token: string) {
-    return this.byToken(token, async (tx, inv) => {
-      const [s] = inv.email
-        ? await tx.select().from(suppressions).where(eq(suppressions.email, inv.email))
-        : [];
-      return { email: maskEmail(inv.email), unsubscribed: !!s };
+    return this.byToken(token, async (t, inv) => {
+      const unsubscribed = inv.email ? await t.isSuppressed(inv.email) : false;
+      return { email: maskEmail(inv.email), unsubscribed };
     });
   }
 
   async unsubscribe(token: string) {
-    return this.byToken(token, async (tx, inv) => {
-      await this.suppress(tx, inv.tenantId, inv.email, 'unsubscribe');
+    return this.byToken(token, async (t, inv) => {
+      await this.suppress(t, inv.email, 'unsubscribe');
       if (inv.caseId)
-        await this.cases.events(tx, inv.tenantId, null, [
+        await this.cases.events(t, inv.tenantId, null, [
           { caseId: inv.caseId, type: 'unsubscribed', details: { invitationId: inv.id } },
         ]);
       return { email: maskEmail(inv.email), unsubscribed: true };
@@ -962,35 +683,24 @@ export class CawiService implements OnModuleInit {
       const project = await this.cases.project(tx, inv.projectId);
       const settings = projectSettings(project.settings);
       let row: InterviewRow | undefined;
-      if (inv.interviewId)
-        [row] = await tx.select().from(interviews).where(eq(interviews.id, inv.interviewId));
+      if (inv.interviewId) row = (await tx.interview(inv.interviewId)) ?? undefined;
       if (!row) {
         if (inv.caseId) {
-          const [c] = await tx
-            .select({ status: cases.status })
-            .from(cases)
-            .where(eq(cases.id, inv.caseId));
-          if (c?.status === 'finalised' || c?.status === 'withdrawn')
+          const status = await tx.caseStatusOf(inv.caseId);
+          if (status === 'finalised' || status === 'withdrawn')
             throw new GoneException({ code: 'CASE_CLOSED', message: 'This survey is closed' });
         }
         const target = await this.startTarget(tx, inv.projectId, inv.questionnaireId);
         // A completed questionnaire's respondents who had not started go to its continuation.
         if (target.questionnaireId !== inv.questionnaireId) {
-          await tx
-            .update(invitations)
-            .set({ questionnaireId: target.questionnaireId })
-            .where(eq(invitations.id, inv.id));
+          await tx.patchInvitation(inv.id, { questionnaireId: target.questionnaireId });
           inv = { ...inv, questionnaireId: target.questionnaireId };
         }
         row = await this.createInterview(tx, inv, deviceId, target.version);
         // createInterview set the invitation's interview and start time.
         inv = { ...inv, startedAt: inv.startedAt ?? new Date() };
       } else if (row.status === 'in_progress' && row.deviceId !== deviceId) {
-        [row] = (await tx
-          .update(interviews)
-          .set({ deviceId, updatedAt: new Date() })
-          .where(eq(interviews.id, row.id))
-          .returning()) as [InterviewRow];
+        row = await tx.takeOver(row.id, { deviceId, now: new Date() });
       }
       const completion = {
         message: settings.cawi.completionMessage,
@@ -1021,11 +731,7 @@ export class CawiService implements OnModuleInit {
           branding,
         };
       const lastSeq = await this.runtime.touchDevice(tx, inv.tenantId, row.id, deviceId);
-      if (!inv.startedAt)
-        await tx
-          .update(invitations)
-          .set({ startedAt: new Date() })
-          .where(eq(invitations.id, inv.id));
+      if (!inv.startedAt) await tx.patchInvitation(inv.id, { startedAt: new Date() });
       const p = await this.runtime.payload(tx, row, deviceId, settings, lastSeq);
       const params = await this.keepParams(tx, row, p.compiled, linkQuery);
       return {
@@ -1065,10 +771,7 @@ export class CawiService implements OnModuleInit {
   /** The logo of the link's project, for the respondent's page. */
   respondentLogo(token: string) {
     return this.byToken(token, async (tx, inv) => {
-      const [logo] = await tx
-        .select({ contentType: projectLogos.contentType, image: projectLogos.image })
-        .from(projectLogos)
-        .where(eq(projectLogos.projectId, inv.projectId));
+      const logo = await tx.logo(inv.projectId);
       if (!logo) throw new NotFoundException('No logo');
       return logo;
     });
@@ -1080,7 +783,7 @@ export class CawiService implements OnModuleInit {
    * none, or from another device) get the same ones, so the answers they give cannot change.
    */
   private async keepParams(
-    tx: Tx,
+    tx: CawiTx,
     row: InterviewRow,
     compiled: CompiledQuestionnaire,
     linkQuery: string,
@@ -1098,37 +801,32 @@ export class CawiService implements OnModuleInit {
       if (names.has(k) && !(k in params)) params[k] = v.slice(0, 200);
     });
     if (!Object.keys(params).length) return {};
-    await tx
-      .update(interviews)
-      .set({ context: { ...context, params } })
-      .where(eq(interviews.id, row.id));
+    await tx.setInterviewContext(row.id, { ...context, params });
     return params;
   }
 
   private async createInterview(
-    tx: Tx,
+    tx: CawiTx,
     inv: InvitationRow,
     deviceId: string,
     version: { id: string; version: number; compiled: CompiledQuestionnaire },
   ) {
     let sample: Record<string, unknown> = {};
     if (inv.caseId) {
-      const [c] = await tx
-        .select({ sample: cases.sample, samplePii: cases.samplePii, externalId: cases.externalId })
-        .from(cases)
-        .where(eq(cases.id, inv.caseId));
+      const c = await tx.casePiping(inv.caseId);
       // The respondent's own record, for piping (W1): only the fields the questionnaire uses,
       // so a forwarded link shows nothing else of the case.
       sample = c
         ? caseFieldsFor(version.compiled as CompiledQuestionnaire, this.cases.pii.read(c))
         : {};
     }
-    const [row] = await insertInterview.run(tx, {
+    const row = await tx.insertInterview({
       id: uuidv7(),
-      tenantId: inv.tenantId,
       projectId: inv.projectId,
       caseId: inv.caseId,
-      versionId: version.id,
+      questionnaireVersionId: version.id,
+      mode: 'CAWI',
+      interviewerId: null,
       language: inv.language,
       // Sealed as the case's personal fields are (`InterviewsService.contextOf` opens it).
       context: Object.keys(sample).length
@@ -1140,21 +838,18 @@ export class CawiService implements OnModuleInit {
       deviceId,
     });
     // The interview and the start time in one update of the invitation.
-    await startInvitation.run(tx, { id: inv.id, interview: row!.id });
+    await tx.startInvitation(inv.id, row.id);
     if (inv.caseId) {
-      await tx
-        .update(cases)
-        .set({ status: 'in_progress', updatedAt: new Date() })
-        .where(and(eq(cases.id, inv.caseId), inArray(cases.status, ['fresh', 'assigned'])));
+      await tx.setCaseInProgress(inv.caseId);
       await this.cases.events(tx, inv.tenantId, null, [
         {
           caseId: inv.caseId,
           type: 'interview_started',
-          details: { interviewId: row!.id, mode: 'CAWI', version: version.version },
+          details: { interviewId: row.id, mode: 'CAWI', version: version.version },
         },
       ]);
     }
-    return row!;
+    return row;
   }
 
   async respondentSync(token: string, body: z.infer<typeof RespondentSync>) {
@@ -1183,25 +878,18 @@ export class CawiService implements OnModuleInit {
    * it continues in. A disabled one, or a completed one without continuation, answers 410 with
    * the reason and, when the project's open link leads somewhere open, where to go on (`next`).
    */
-  private async respondentTarget(tx: Tx, questionnaireId: string, projectId: string) {
-    const state = async (id: string) =>
-      (
-        await tx
-          .select({ state: questionnaires.state, successorId: questionnaires.successorId })
-          .from(questionnaires)
-          .where(eq(questionnaires.id, id))
-      )[0];
-    const q = await state(questionnaireId);
+  private async respondentTarget(tx: CawiTx, questionnaireId: string, projectId: string) {
+    const q = await tx.questionnaireState(questionnaireId);
     const code = closedCode(q?.state);
     if (!code) return questionnaireId;
     if (code === 'QUESTIONNAIRE_COMPLETED' && q!.successorId) {
-      const next = await state(q!.successorId);
+      const next = await tx.questionnaireState(q!.successorId);
       if (next?.state === 'active') return q!.successorId;
     }
     let next: string | null = null;
     const link = await this.openLink(tx, projectId);
     if (link?.active && link.questionnaireId !== questionnaireId) {
-      const l = await state(link.questionnaireId);
+      const l = await tx.questionnaireState(link.questionnaireId);
       if (l?.state === 'active') next = `/o/${link.slug}`;
     }
     throw new GoneException({ code, message: 'This survey is closed', next });
@@ -1210,22 +898,20 @@ export class CawiService implements OnModuleInit {
   /** Starts an anonymous interview from an open link; the browser keeps the token (W6). */
   async openLinkStart(slug: string) {
     if (!/^[A-Za-z0-9_-]{6,32}$/.test(slug)) throw new NotFoundException('Link not found');
-    return this.database.withTenantOf('open_link_by_slug', slug, async (tx, found) => {
+    return this.repo.ofOpenLink(slug, async (tx, found) => {
       if (!found) throw new NotFoundException('Link not found');
       // The link, its questionnaire's state and latest version, in one query.
-      const [l] = await openLinkTarget.run(tx, { id: found.id });
+      const l = (await tx.openLinkTarget(found.id))!;
       // A completed questionnaire's link goes on with its continuation.
       const { questionnaireId, version } = await this.startTarget(
         tx,
-        l!.projectId,
-        l!.questionnaireId,
+        l.projectId,
+        l.questionnaireId,
         l,
       );
       const { token, tokenHash, tokenEnc } = this.newToken();
-      await insertOpenInvitation.run(tx, {
-        id: uuidv7(),
-        tenantId: found.tenantId,
-        projectId: l!.projectId,
+      await tx.insertOpenInvitation({
+        projectId: l.projectId,
         questionnaireId,
         tokenHash,
         tokenEnc,
@@ -1235,143 +921,6 @@ export class CawiService implements OnModuleInit {
     });
   }
 }
-
-// The queries of every respondent request, built once (see Prepared).
-
-/** The invitation, locked, with its project. */
-const lockLink = new Prepared<{ inv: InvitationRow; project: ProjectRow }>(
-  () => sql`
-    select ${columnsAs(invitations, 'inv', 'inv')}, ${columnsAs(projects, 'p', 'project')}
-    from invitations inv join projects p on p.id = inv.project_id
-    where inv.id = ${sql.placeholder('id')}
-    for update of inv`,
-  { inv: getTableColumns(invitations), project: getTableColumns(projects) },
-);
-
-/** For syncs and submissions: the invitation and its interview, locked, the project and the device's number. */
-const lockSurvey = new Prepared<{
-  inv: InvitationRow;
-  interview: InterviewRow;
-  project: ProjectRow;
-  lastSeq: number | null;
-}>(
-  () => sql`
-    select ${columnsAs(invitations, 'inv', 'inv')}, ${columnsAs(interviews, 'i', 'interview')},
-           ${columnsAs(projects, 'p', 'project')}, d.last_seq
-    from invitations inv
-    join interviews i on i.id = inv.interview_id
-    join projects p on p.id = inv.project_id
-    left join interview_devices d on d.interview_id = i.id and d.device_id = ${sql.placeholder('device')}
-    where inv.id = ${sql.placeholder('id')}
-    for update of inv, i`,
-  {
-    inv: getTableColumns(invitations),
-    interview: getTableColumns(interviews),
-    project: getTableColumns(projects),
-    lastSeq: interviewDevices.lastSeq,
-  },
-);
-
-type TargetRow = {
-  state: string;
-  successorId: string | null;
-  versionId: string | null;
-  version: number | null;
-};
-
-/** A questionnaire's state and its latest published version. */
-const questionnaireTarget = new Prepared<TargetRow>(
-  () => sql`
-    select q.state as "state", q.successor_id as "successorId", v.id as "versionId", v.version as "version"
-    from questionnaires q
-    left join lateral (
-      select id, version from questionnaire_versions
-      where questionnaire_id = q.id and status = 'published'
-      order by version desc limit 1
-    ) v on true
-    where q.id = ${sql.placeholder('qid')} and q.project_id = ${sql.placeholder('project')}`,
-  { state: 'raw', successorId: 'raw', versionId: 'raw', version: 'raw' },
-);
-
-/** An open link with its questionnaire's state and latest published version. */
-const openLinkTarget = new Prepared<TargetRow & { projectId: string; questionnaireId: string }>(
-  () => sql`
-    select l.project_id as "projectId", l.questionnaire_id as "questionnaireId",
-           q.state as "state", q.successor_id as "successorId", v.id as "versionId", v.version as "version"
-    from open_links l
-    join questionnaires q on q.id = l.questionnaire_id
-    left join lateral (
-      select id, version from questionnaire_versions
-      where questionnaire_id = q.id and status = 'published'
-      order by version desc limit 1
-    ) v on true
-    where l.id = ${sql.placeholder('id')}`,
-  {
-    projectId: 'raw',
-    questionnaireId: 'raw',
-    state: 'raw',
-    successorId: 'raw',
-    versionId: 'raw',
-    version: 'raw',
-  },
-);
-
-const insertOpenInvitation = new Prepared<never>(
-  (tx) =>
-    tx.insert(invitations).values({
-      id: sql.placeholder('id'),
-      tenantId: sql.placeholder('tenantId'),
-      projectId: sql.placeholder('projectId'),
-      questionnaireId: sql.placeholder('questionnaireId'),
-      tokenHash: sql.placeholder('tokenHash'),
-      tokenEnc: sql.placeholder('tokenEnc'),
-      language: sql.placeholder('language'),
-      status: 'sent',
-      sentAt: sql`now()`,
-    }),
-  {},
-);
-
-const insertInterview = new Prepared<InterviewRow>(
-  (tx) =>
-    tx
-      .insert(interviews)
-      .values({
-        id: sql.placeholder('id'),
-        tenantId: sql.placeholder('tenantId'),
-        projectId: sql.placeholder('projectId'),
-        caseId: sql.placeholder('caseId'),
-        questionnaireVersionId: sql.placeholder('versionId'),
-        mode: 'CAWI',
-        interviewerId: null,
-        language: sql.placeholder('language'),
-        context: sql.placeholder('context'),
-        deviceId: sql.placeholder('deviceId'),
-      })
-      .returning(),
-  getTableColumns(interviews),
-);
-
-const startInvitation = new Prepared<never>(
-  (tx) =>
-    tx
-      .update(invitations)
-      .set({
-        interviewId: sql`${sql.placeholder('interview')}`,
-        startedAt: sql`coalesce(started_at, now())`,
-      })
-      .where(eq(invitations.id, sql.placeholder('id'))),
-  {},
-);
-
-const completeInvitation = new Prepared<never>(
-  (tx) =>
-    tx
-      .update(invitations)
-      .set({ status: 'completed', completedAt: sql`now()` })
-      .where(eq(invitations.interviewId, sql.placeholder('interview'))),
-  {},
-);
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

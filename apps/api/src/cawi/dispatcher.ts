@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { CONFIG, type AppConfig } from '../config.js';
-import { Database } from '../db/database.js';
+import { Engine } from '../db/engine.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { CawiService } from './cawi.service.js';
 
@@ -15,7 +15,7 @@ export class WaveDispatcher implements OnModuleInit {
   private running = false;
 
   constructor(
-    private readonly database: Database,
+    private readonly engine: Engine,
     private readonly cawi: CawiService,
     private readonly jobs: JobsService,
     @Inject(CONFIG) private readonly config: AppConfig,
@@ -35,7 +35,7 @@ export class WaveDispatcher implements OnModuleInit {
     try {
       let due: string[] = [];
       try {
-        due = await this.database.tenantsWithMailDue();
+        due = await this.engine.tenantsWithMailDue();
       } catch (e) {
         // The database may be unavailable (or not migrated yet); the next run tries again.
         this.logger.warn(`Dispatch skipped: ${(e as Error).message}`);

@@ -711,7 +711,7 @@ export function toCase(r: Record<string, unknown> & { sample: string }): CaseFul
   } as unknown as CaseFull;
 }
 
-function toInterview(r: Record<string, unknown>): InterviewRow {
+export function toInterview(r: Record<string, unknown>): InterviewRow {
   const g = (k: string) => r[k] as never;
   const id = (k: string) => lowOrNull((r[k] as string | null) ?? null);
   return {

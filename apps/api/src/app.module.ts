@@ -52,6 +52,7 @@ import { MssqlTeamsRepo, PgTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
 import { ProjectPeopleController } from './projects/project-people.controller.js';
 import { EXPORTS_REPO, MssqlExportsRepo, PgExportsRepo } from './exports/exports-repo.js';
 import { MssqlSweepRepo, PgSweepRepo, SWEEP_REPO } from './jobs/sweep-repo.js';
+import { CAWI_REPO, MssqlCawiRepo, PgCawiRepo } from './cawi/cawi-repo.js';
 import { AnalysisService } from './analysis/analysis.service.js';
 import { DatasetService } from './analysis/dataset.service.js';
 import { ShareService } from './analysis/share.service.js';
@@ -334,6 +335,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgSweepRepo, ms: MssqlSweepRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgSweepRepo, MssqlSweepRepo],
+        },
+        PgCawiRepo,
+        MssqlCawiRepo,
+        {
+          provide: CAWI_REPO,
+          useFactory: (engine: Engine, pg: PgCawiRepo, ms: MssqlCawiRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgCawiRepo, MssqlCawiRepo],
         },
         PgExportsRepo,
         MssqlExportsRepo,

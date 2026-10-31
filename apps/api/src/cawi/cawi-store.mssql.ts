@@ -30,8 +30,8 @@ export interface NewInvitation {
   tokenHash: string;
   tokenEnc: string;
   language: string;
-  /** 'queued' to send; 'sent' for a link nothing is sent to. */
-  status?: 'queued' | 'sent';
+  /** 'queued' to send; 'sent' for a link nothing is sent to (or 'link'). */
+  status?: string;
 }
 
 export class CawiStore {
