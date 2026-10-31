@@ -110,8 +110,10 @@ audit listing, people of the organisation and of a project (`UsersRepo`), the re
 `0013_tokens.sql` adds the owner procedures for tokens and identities that run before any
 context), questionnaires, collaboration and the question library (`QuestionnairesRepo`), cases,
 assignment rules and expiry (`CasesRepo`; `CasesService` takes a transaction of either engine, and
-wraps a Drizzle one for modules that have not moved). **Still on PostgreSQL:** sample imports and
-the sampling selector, interviews and CAPI, CATI, review, web surveys (CAWI, dispatcher,
+wraps a Drizzle one for modules that have not moved), sample imports and the sampling selector
+(`SampleTx`), interviews and CAPI (`InterviewsTx`; submit hooks now receive the transaction of either
+engine, and a module that has not moved reaches Drizzle through `t.pg()`), and CATI (`CatiTx`,
+with `CatiRepo.extend(t)` to see a hook's transaction as its own). **Still on PostgreSQL:** review, web surveys (CAWI, dispatcher,
 feedback), paper (PAPI, scans), metrics and goals, the live dashboard, geolocation, privacy,
 analysis and sharing, statistics and the bi service, exports, background jobs (sweeper, claims,
 worker). Production keeps refusing `mssql` until they move.
