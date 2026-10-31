@@ -1,19 +1,21 @@
 import { allTypes, household } from '@wansurvey/fixtures';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import ExcelJS from 'exceljs';
-import { uuidv7 } from 'uuidv7';
+import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { simulateInterview } from '../src/db/simulate.js';
-import { JobsService } from '../src/jobs/jobs.service.js';
+import { simulateInterview } from '../../src/db/simulate.js';
+import { JobsService } from '../../src/jobs/jobs.service.js';
+import { createQuestionnaire } from './fixtures.js';
 import {
   bootstrap,
+  configured,
   createProject,
-  createQuestionnaire,
   createTenant,
   createUser,
   login,
   type Session,
-  type TestApp,
+  type MssqlTestApp,
 } from './harness.js';
 
 type Cell = string | number | null;
@@ -32,8 +34,8 @@ const norm = (v: unknown): Cell => {
  * The SQL export rebuilds the Excel export from the analysis model (schema bi): same sheets,
  * columns, order and cells, whatever the options and the questionnaire.
  */
-describe('SQL export, the counterpart of Excel', () => {
-  let t: TestApp;
+describe.skipIf(!configured)('SQL Server: SQL export, the counterpart of Excel', () => {
+  let t: MssqlTestApp;
   let tenant: { id: string; slug: string };
   let project: string;
   let pm: Session;
@@ -41,22 +43,28 @@ describe('SQL export, the counterpart of Excel', () => {
 
   beforeAll(async () => {
     t = await bootstrap();
-    tenant = await createTenant(t.admin);
-    project = await createProject(t.admin, tenant.id);
-    pm = await login(t.app, await createUser(t.admin, tenant.id, [{ role: 'project_manager' }]));
-    const interviewer = await createUser(t.admin, tenant.id, [
+    tenant = await createTenant(t.owner);
+    project = await createProject(t.owner, tenant.id);
+    pm = await login(t, await createUser(t.owner, tenant.id, [{ role: 'project_manager' }]));
+    const interviewer = await createUser(t.owner, tenant.id, [
       { role: 'interviewer', projectId: project },
     ]);
     const modes = ['CATI', 'CAPI', 'CAWI', 'PAPI'];
     for (const [key, def] of Object.entries({ household, allTypes })) {
-      const qid = await createQuestionnaire(t.admin, tenant.id, project, {
+      const qid = await createQuestionnaire(t.owner, tenant.id, project, {
         publish: true,
         definition: def,
       });
       questionnaires[key] = qid;
-      const [v] =
-        await t.admin`select id, compiled from questionnaire_versions where questionnaire_id = ${qid}`;
-      const compiled = v!.compiled as CompiledQuestionnaire;
+      const v = (
+        (await sql<{
+          id: string;
+          compiled: string;
+        }>`SELECT id, compiled FROM questionnaire_versions WHERE questionnaire_id = ${qid}`.execute(
+          t.owner,
+        )) as { rows: { id: string; compiled: string }[] }
+      ).rows[0]!;
+      const compiled = JSON.parse(v.compiled) as CompiledQuestionnaire;
       for (let n = 0; n < 14; n++) {
         const s = simulateInterview(compiled, { mode: modes[n % 4]!, seed: `${key}-${n}` });
         const answers = s.getAnswers() as Record<string, unknown>;
@@ -68,20 +76,25 @@ describe('SQL export, the counterpart of Excel', () => {
         if (n === 3)
           for (const k of ['D6_GRID', 'GRID', 'MULTI', 'RANK'])
             if (k in answers) answers[k] = { $special: 'RF' };
-        const id = uuidv7();
-        const caseId = uuidv7();
-        await t.admin`insert into cases (id, tenant_id, project_id, questionnaire_id, external_id, status)
-          values (${caseId}, ${tenant.id}, ${project}, ${qid}, ${`${key}-${n}`}, 'finalised')`;
+        const id = randomUUID();
+        const caseId = randomUUID();
+        await sql`INSERT INTO cases (id, tenant_id, project_id, questionnaire_id, external_id, status)
+          VALUES (${caseId}, ${tenant.id}, ${project}, ${qid}, ${`${key}-${n}`}, 'finalised')`.execute(
+          t.owner,
+        );
         // One returned interview and one second keying, which the exports leave out.
         const status = n === 5 ? 'returned' : n % 3 === 0 ? 'approved' : 'submitted';
         const at = new Date(Date.UTC(2026, 9, 1 + n, 15, n, 7, 123));
-        await t.admin`insert into interviews (id, tenant_id, project_id, case_id, questionnaire_version_id,
+        const instant = (d: Date) => sql`CAST(${d.toISOString()} AS datetimeoffset(3))`;
+        await sql`INSERT INTO interviews (id, tenant_id, project_id, case_id, questionnaire_version_id,
             mode, interviewer_id, status, disposition, language, device_id, answers, flags,
             entry_pass, started_at, submitted_at, active_ms)
-          values (${id}, ${tenant.id}, ${project}, ${caseId}, ${v!.id}, ${modes[n % 4]!}, ${interviewer.id},
-            ${status}, ${s.status().disposition ?? 'COMPLETE'}, 'es', 'd1', ${t.admin.json(answers as never)},
-            ${t.admin.json(n % 4 === 0 ? { speeding: {}, straightlining: {} } : {})},
-            ${n === 6 ? 2 : 1}, ${new Date(at.getTime() - 600_500)}, ${at}, ${600_500 + n})`;
+          VALUES (${id}, ${tenant.id}, ${project}, ${caseId}, ${v.id}, ${modes[n % 4]!}, ${interviewer.id},
+            ${status}, ${s.status().disposition ?? 'COMPLETE'}, 'es', 'd1', ${JSON.stringify(answers)},
+            ${JSON.stringify(n % 4 === 0 ? { speeding: {}, straightlining: {} } : {})},
+            ${n === 6 ? 2 : 1}, ${instant(new Date(at.getTime() - 600_500))}, ${instant(at)}, ${600_500 + n})`.execute(
+          t.owner,
+        );
         for (const [seq, type] of [
           'enter_question',
           'navigate_back',
@@ -91,9 +104,9 @@ describe('SQL export, the counterpart of Excel', () => {
         ]
           .slice(0, n % 6)
           .entries())
-          await t.admin`insert into interview_paradata (id, tenant_id, interview_id, device_id, seq, type, at, payload)
-            values (${uuidv7()}, ${tenant.id}, ${id}, 'd1', ${seq + 1}, ${type}, ${at},
-              ${t.admin.json({ key: 'HH[1].M_AGE', ms: 1500 })})`;
+          await sql`INSERT INTO interview_paradata (id, tenant_id, interview_id, device_id, seq, type, at, payload)
+            VALUES (${randomUUID()}, ${tenant.id}, ${id}, 'd1', ${seq + 1}, ${type}, CAST(${at.toISOString()} AS datetimeoffset(3)),
+              ${JSON.stringify({ key: 'HH[1].M_AGE', ms: 1500 })})`.execute(t.owner);
       }
     }
     await t.app.get(JobsService).run('bi.refresh', {});
@@ -127,7 +140,9 @@ describe('SQL export, the counterpart of Excel', () => {
   it('keeps a questionnaire name on its comment line, and refuses such names', async () => {
     const qid = questionnaires.household!;
     // A name stored before names were checked: its line break must not become a statement.
-    await t.admin`update questionnaires set name = ${'Hogares\nupdate users set name = 1;--'} where id = ${qid}`;
+    await sql`UPDATE questionnaires SET name = ${'Hogares\nupdate users set name = 1;--'} WHERE id = ${qid}`.execute(
+      t.owner,
+    );
     const e = await pm.agent
       .post(`/api/v1/projects/${project}/exports`)
       .set('x-csrf-token', pm.csrf)
@@ -142,7 +157,7 @@ describe('SQL export, the counterpart of Excel', () => {
       .set('x-csrf-token', pm.csrf)
       .send({ name: 'Uno\ndos' });
     expect(renamed.status).toBe(400);
-    await t.admin`update questionnaires set name = 'Hogares' where id = ${qid}`;
+    await sql`UPDATE questionnaires SET name = 'Hogares' WHERE id = ${qid}`.execute(t.owner);
   });
 
   it.each(cases)(
@@ -156,17 +171,17 @@ describe('SQL export, the counterpart of Excel', () => {
           .send({ ...body, format })
           .expect(201);
       const xlsx = await post('xlsx');
-      const sql = await post('sql');
+      const sqlExport = await post('sql');
       await t.app.get(JobsService).drain();
       const list = await pm.agent.get(`/api/v1/projects/${project}/exports`).expect(200);
       const done = (id: string) => list.body.find((e: { id: string }) => e.id === id);
-      expect(done(sql.body.id), JSON.stringify(done(sql.body.id))).toMatchObject({
+      expect(done(sqlExport.body.id), JSON.stringify(done(sqlExport.body.id))).toMatchObject({
         status: 'done',
       });
 
       const wb = new ExcelJS.Workbook();
       await wb.xlsx.load((await download(xlsx.body.id)) as never);
-      const text = (await download(sql.body.id)).toString('utf8');
+      const text = (await download(sqlExport.body.id)).toString('utf8');
       expect(text).toMatch(/^-- WanSurvey/);
       // One query per data sheet (the variables and values sheets are the codebook).
       const statements = text
@@ -183,11 +198,16 @@ describe('SQL export, the counterpart of Excel', () => {
           excel.push(Array.from({ length: width }, (_, k) => norm(row.getCell(k + 1).value)));
         });
         const [header, ...rows] = excel;
-        const result = await t.admin.unsafe(statements[i]!);
-        expect(
-          result.columns.map((c) => c.name),
-          ws.name,
-        ).toEqual(header);
+        // The columns come from the statement itself, so a sheet with no rows still has its header.
+        const columns = (
+          (await sql<{ name: string }>`
+            SELECT name FROM sys.dm_exec_describe_first_result_set(${statements[i]!}, NULL, 0)
+            ORDER BY column_ordinal`.execute(t.owner)) as { rows: { name: string }[] }
+        ).rows.map((c) => c.name);
+        expect(columns, ws.name).toEqual(header);
+        const result = (
+          (await sql.raw(statements[i]!).execute(t.owner)) as { rows: Record<string, unknown>[] }
+        ).rows;
         expect(result.length, ws.name).toBe(rows.length);
         if (i === 0) expect(result.length).toBeGreaterThan(0);
         // The special answers and the empty multiple choice are there, not only empty cells.
@@ -203,7 +223,7 @@ describe('SQL export, the counterpart of Excel', () => {
         }
         result.forEach((r, n) =>
           expect(
-            result.columns.map((c) => norm(r[c.name])),
+            columns.map((c) => norm(r[c])),
             `${ws.name} row ${n + 1}`,
           ).toEqual(rows[n]),
         );
