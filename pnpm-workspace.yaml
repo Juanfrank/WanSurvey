@@ -7,13 +7,16 @@ onlyBuiltDependencies:
   - esbuild
 overrides:
   # One Vite for the app and Vitest, pinned to a release at least two weeks old.
-  vite: 7.3.6
+  vite: 7.3.7
   # One set of Node types: apache-arrow (Blob Storage SDK) and mysql2 (Azurite) ask for newer
   # ones, and two copies split Vite's types.
   '@types/node': 24.19.2
   # tedious (SQL Server) brings @azure/identity, which brings an MSAL with a high advisory
   # (GHSA-xcx6-jx8p-x3h5, fixed in 7.1.0, released 2026-10-13). Only SQL logins are used here.
   '@azure/msal-node': 7.1.0
+  # Advisories fixed on 2026-10-14 (qs) and 2026-10-18 (seroval), both over two weeks old.
+  qs: 6.16.1
+  seroval: 1.6.11
 auditConfig:
   # The fixes came out on 2026-10-22, under two weeks ago; upgrade from 2026-11-05 and remove
   # these. body-parser: compressed request bodies are refused before parsing (plain-body.ts).

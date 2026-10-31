@@ -20,9 +20,9 @@
     "eslint": "^9.39.0",
     "eslint-plugin-react-hooks": "5.2.0",
     "prettier": "^3.6.0",
-    "turbo": "^2.5.0",
+    "turbo": "2.11.9",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.46.0",
+    "typescript-eslint": "8.71.2",
     "vitest": "^3.2.4"
   }
 }

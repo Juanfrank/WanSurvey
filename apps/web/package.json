@@ -14,9 +14,9 @@
     "bundle-budget": "node scripts/bundle-budget.mjs"
   },
   "dependencies": {
-    "@radix-ui/react-tabs": "1.1.21",
-    "@tanstack/react-query": "5.104.0",
-    "@tanstack/react-router": "1.170.40",
+    "@radix-ui/react-tabs": "1.2.1",
+    "@tanstack/react-query": "5.104.4",
+    "@tanstack/react-router": "1.170.45",
     "@wansurvey/fixtures": "workspace:*",
     "@wansurvey/logic": "workspace:*",
     "@wansurvey/renderer": "workspace:*",
@@ -29,24 +29,24 @@
     "react-i18next": "15.7.4"
   },
   "devDependencies": {
-    "@node-rs/argon2": "2.0.2",
+    "@node-rs/argon2": "2.2.2",
     "@playwright/test": "1.56.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/react": "16.3.3",
-    "@testing-library/user-event": "14.6.7",
+    "@testing-library/user-event": "14.6.8",
     "@types/leaflet": "1.9.22",
-    "@types/qrcode": "1.5.5",
+    "@types/qrcode": "1.5.6",
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.2.0",
     "@wansurvey/api": "workspace:*",
-    "axe-core": "4.13.0",
+    "axe-core": "4.14.0",
     "exceljs": "4.4.0",
-    "fake-indexeddb": "6.2.5",
+    "fake-indexeddb": "6.2.6",
     "jsdom": "26.1.0",
     "postgres": "3.4.7",
     "tailwindcss": "4.3.3",
-    "uuidv7": "1.0.2",
-    "vite": "7.3.6"
+    "uuidv7": "1.2.1",
+    "vite": "7.3.7"
   }
 }
