@@ -145,8 +145,8 @@ importers:
         specifier: 3.1.2
         version: 3.1.2
       tedious:
-        specifier: 19.2.2
-        version: 19.2.2
+        specifier: 20.3.8
+        version: 20.3.8
       uuidv7:
         specifier: ^1.2.1
         version: 1.2.1
@@ -4445,9 +4445,6 @@ packages:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
 
-  sprintf-js@1.1.3:
-    resolution: {integrity: sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA==}
-
   sql-escaper@1.5.2:
     resolution: {integrity: sha512-6CKD38c31SENivxOADeMNLdukOnUxUcflKtzVWzace7Riv1v7cAEym5Cx9Q7gYZ3ezIJI7ZpqecQq8cqNeSSFg==}
     engines: {bun: '>=1.0.0', deno: '>=2.0.0', node: '>=12.0.0'}
@@ -4553,10 +4550,6 @@ packages:
   tarn@3.1.2:
     resolution: {integrity: sha512-3RTvqKZcK/17jnJ8rMKFXbyNogywTs1z0gVPPwFsJGX46rkmUHOdIaSQ/aVO1rS7nH+soiXiWk7rvUXxndm8Dg==}
     engines: {node: '>=8.0.0'}
-
-  tedious@19.2.2:
-    resolution: {integrity: sha512-ITsLV/XXXAuJ/+pgnod4lcJH83WPK7+y2aqOwK/ERoC4zX73wfRIVc7BofuHCqDTqpd6j1RwTBtjKNuuOLEvfw==}
-    engines: {node: '>=18.17'}
 
   tedious@20.3.8:
     resolution: {integrity: sha512-ZrJiwyGn340Sa0V0g37Xqj5bvmJ1riYwvEtg7zdm/lpw70f2ZNIQ2fvHmntU5fEOorWDa48Jo1oKYAuUP+rh7Q==}
@@ -9427,8 +9420,6 @@ snapshots:
 
   split2@4.2.0: {}
 
-  sprintf-js@1.1.3: {}
-
   sql-escaper@1.5.2: {}
 
   stack-trace@0.0.10: {}
@@ -9551,21 +9542,6 @@ snapshots:
       readable-stream: 3.6.2
 
   tarn@3.1.2: {}
-
-  tedious@19.2.2:
-    dependencies:
-      '@azure/core-auth': 1.11.0
-      '@azure/identity': 4.13.3
-      '@azure/keyvault-keys': 4.10.2
-      '@js-joda/core': 6.3.0
-      '@types/node': 24.19.2
-      bl: 6.1.6
-      iconv-lite: 0.7.3
-      js-md4: 0.3.2
-      native-duplexpair: 1.0.0
-      sprintf-js: 1.1.3
-    transitivePeerDependencies:
-      - supports-color
 
   tedious@20.3.8:
     dependencies:
