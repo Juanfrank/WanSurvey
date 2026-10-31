@@ -1,8 +1,8 @@
 import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Database } from '../src/db/database.js';
 import { JobsService } from '../src/jobs/jobs.service.js';
 import { BiService } from '../src/stats/bi.service.js';
+import { PRIVACY_REPO, type PrivacyRepo } from '../src/privacy/privacy-repo.js';
 import { PrivacyService, stripKeys } from '../src/privacy/privacy.service.js';
 import {
   bootstrap,
@@ -104,7 +104,9 @@ describe('personal data: sealing, retention and data subject requests', () => {
     return id;
   }
   const seal = () =>
-    t.app.get(Database).withTenant(tenant.id, (tx) => privacy.sealProject(tx, tenant.id, project));
+    t.app
+      .get<PrivacyRepo>(PRIVACY_REPO)
+      .inTenant(tenant.id, (tx) => privacy.sealProject(tx, project));
 
   it('seals personal sample fields, still shown on reveal and found by name', async () => {
     const id = await newCase({ first_name: 'Rosa María', last_name: 'Quispe', region: 2 });

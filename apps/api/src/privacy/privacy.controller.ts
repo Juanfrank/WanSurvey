@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Inject,
   ForbiddenException,
   Get,
   HttpCode,
@@ -12,7 +13,7 @@ import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { Auth, can, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
+import { PRIVACY_REPO, type PrivacyRepo } from './privacy-repo.js';
 import { PrivacyService } from './privacy.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -26,7 +27,7 @@ const EraseBody = z.object({
 @Controller('projects/:projectId/cases/:caseId')
 export class PrivacyController {
   constructor(
-    private readonly database: Database,
+    @Inject(PRIVACY_REPO) private readonly repo: PrivacyRepo,
     private readonly privacy: PrivacyService,
   ) {}
 
@@ -39,8 +40,8 @@ export class PrivacyController {
   ) {
     if (!can(ctx.memberships, 'cases.read_all', projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not do this' });
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.privacy.subjectData(tx, ctx, projectId, caseId),
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.privacy.subjectData(t, ctx, projectId, caseId),
     );
   }
 
@@ -56,8 +57,8 @@ export class PrivacyController {
   ) {
     if (!can(ctx.memberships, 'pii.view', projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not do this' });
-    const out = await this.database.withTenant(ctx.tenantId, (tx) =>
-      this.privacy.anonymise(tx, ctx.tenantId, ctx, projectId, caseId, 'request', body.note),
+    const out = await this.repo.inTenant(ctx.tenantId, (t) =>
+      this.privacy.anonymise(t, ctx, projectId, caseId, 'request', body.note),
     );
     await this.privacy.refreshAnalysis();
     return out;

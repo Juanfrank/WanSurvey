@@ -45,6 +45,7 @@ import { CATI_REPO, MssqlCatiRepo, PgCatiRepo } from './cati/cati-repo.js';
 import { MssqlReviewRepo, PgReviewRepo, REVIEW_REPO } from './review/review-repo.js';
 import { METRICS_REPO, MssqlMetricsRepo, PgMetricsRepo } from './metrics/metrics-repo.js';
 import { LIVE_REPO, MssqlLiveRepo, PgLiveRepo } from './dashboard/live-repo.js';
+import { MssqlPrivacyRepo, PgPrivacyRepo, PRIVACY_REPO } from './privacy/privacy-repo.js';
 import { TeamsController } from './teams/teams.controller.js';
 import { MssqlTeamsRepo, PgTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
 import { ProjectPeopleController } from './projects/project-people.controller.js';
@@ -306,6 +307,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgLiveRepo, ms: MssqlLiveRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgLiveRepo, MssqlLiveRepo],
+        },
+        PgPrivacyRepo,
+        MssqlPrivacyRepo,
+        {
+          provide: PRIVACY_REPO,
+          useFactory: (engine: Engine, pg: PgPrivacyRepo, ms: MssqlPrivacyRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgPrivacyRepo, MssqlPrivacyRepo],
         },
         AuditService,
         AuthService,

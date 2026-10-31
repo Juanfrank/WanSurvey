@@ -9,27 +9,11 @@ import {
 } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import type { Question } from '@wansurvey/schema';
-import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
 import { CasesService } from '../cases/cases.service.js';
-import { Database, type Tx } from '../db/database.js';
-import {
-  auditLog,
-  callAttempts,
-  caseEvents,
-  cases,
-  contacts,
-  entryMismatches,
-  frameUnits,
-  interviews,
-  invitations,
-  papiScanForms,
-  papiScanPages,
-  projects,
-  questionnaireVersions,
-  sampleImports,
-} from '../db/schema.js';
+import { Engine } from '../db/engine.js';
+import { PRIVACY_REPO, type PrivacyRepo, type PrivacyTx } from './privacy-repo.js';
 import { ImportMapping, type ImportReport } from '../cases/sample-mapping.js';
 import { JobsService, PROCESS_ROLE, type ProcessRole } from '../jobs/jobs.service.js';
 
@@ -70,7 +54,8 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
   private readonly logger = new Logger('Privacy');
 
   constructor(
-    private readonly database: Database,
+    private readonly engine: Engine,
+    @Inject(PRIVACY_REPO) private readonly repo: PrivacyRepo,
     private readonly cases: CasesService,
     private readonly audit: AuditService,
     private readonly jobs: JobsService,
@@ -92,23 +77,23 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
   }
 
   /** Seals the personal fields still held in plain text in one project. */
-  async sealProject(tx: Tx, tenantId: string, projectId: string): Promise<number> {
-    const pii = [...(await this.cases.piiFields(tx, projectId))];
+  async sealProject(t: PrivacyTx, projectId: string): Promise<number> {
+    const pii = [...(await this.cases.piiFields(t, projectId))];
     if (!pii.length) return 0;
-    const rows = await tx
-      .select({ id: cases.id, sample: cases.sample, samplePii: cases.samplePii })
-      .from(cases)
-      .where(
-        and(eq(cases.projectId, projectId), sql`${cases.sample} ?| ${sql.param(pii)}::text[]`),
-      );
+    const rows = await t.unsealed(projectId, pii);
     const fields = new Set(pii);
-    for (const r of rows)
-      await tx
-        .update(cases)
-        .set(this.cases.pii.seal(this.cases.pii.read(r), fields))
-        .where(eq(cases.id, r.id));
+    for (const r of rows) {
+      const sealed = this.cases.pii.seal(this.cases.pii.read(r), fields);
+      await t.updateCase(r.id, {
+        sample: {
+          sample: sealed.sample,
+          samplePii: sealed.samplePii,
+          index: sealed.samplePiiIndex,
+        },
+      });
+    }
     if (rows.length)
-      await this.audit.record(tx, tenantId, {
+      await t.audit({
         action: 'cases.pii_sealed',
         targetType: 'project',
         targetId: projectId,
@@ -119,11 +104,10 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
 
   async sealAll(): Promise<number> {
     let n = 0;
-    for (const tenantId of await this.database.allTenantIds())
-      n += await this.database.withTenant(tenantId, async (tx) => {
+    for (const tenantId of await this.engine.allTenantIds())
+      n += await this.repo.inTenant(tenantId, async (t) => {
         let m = 0;
-        for (const p of await tx.select({ id: projects.id }).from(projects))
-          m += await this.sealProject(tx, tenantId, p.id);
+        for (const id of await t.projectIds()) m += await this.sealProject(t, id);
         return m;
       });
     if (n) this.logger.log(`Sealed personal fields of ${n} cases`);
@@ -133,27 +117,19 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
   /** Nightly: cases finished longer ago than their project keeps personal data. */
   async retentionAll(now = new Date()): Promise<number> {
     let n = 0;
-    for (const tenantId of await this.database.allTenantIds()) {
+    for (const tenantId of await this.engine.allTenantIds()) {
       try {
-        n += await this.database.withTenant(tenantId, async (tx) => {
+        n += await this.repo.inTenant(tenantId, async (t) => {
           let m = 0;
-          for (const p of await tx.select().from(projects)) {
-            const days = (await this.cases.settings(tx, p.id)).retention.anonymiseAfterDays;
+          for (const projectId of await t.projectIds()) {
+            const days = (await this.cases.settings(t, projectId)).retention.anonymiseAfterDays;
             if (!days) continue;
-            const due = await tx
-              .select({ id: cases.id })
-              .from(cases)
-              .where(
-                and(
-                  eq(cases.projectId, p.id),
-                  inArray(cases.status, ['finalised', 'withdrawn']),
-                  isNull(cases.anonymisedAt),
-                  lt(cases.updatedAt, new Date(now.getTime() - days * 86_400_000)),
-                ),
-              )
-              .orderBy(asc(cases.updatedAt))
-              .limit(5000);
-            for (const c of due) await this.anonymise(tx, tenantId, null, p.id, c.id, 'retention');
+            const due = await t.dueForRetention(
+              projectId,
+              new Date(now.getTime() - days * 86_400_000),
+              5000,
+            );
+            for (const id of due) await this.anonymise(t, null, projectId, id, 'retention');
             m += due.length;
           }
           return m;
@@ -182,131 +158,51 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
    * personal values shown as examples in the report of the import it came from.
    */
   async anonymise(
-    tx: Tx,
-    tenantId: string,
+    t: PrivacyTx,
     ctx: AuthContext | null,
     projectId: string,
     caseId: string,
     reason: 'retention' | 'request',
     note?: string,
   ): Promise<{ interviews: number; contacts: number }> {
-    const [c] = await tx
-      .select()
-      .from(cases)
-      .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)));
+    const c = await t.caseRow(projectId, caseId);
     if (!c) throw new NotFoundException('Case not found');
-    const pii = await this.cases.piiFields(tx, projectId);
-    const plain = Object.fromEntries(
-      Object.entries((c.sample ?? {}) as Record<string, unknown>).filter(([k]) => !pii.has(k)),
-    );
+    const pii = await this.cases.piiFields(t, projectId);
+    const withoutPii = (sample: unknown) =>
+      Object.fromEntries(
+        Object.entries((sample ?? {}) as Record<string, unknown>).filter(([k]) => !pii.has(k)),
+      );
     const now = new Date();
-    await tx
-      .update(cases)
-      .set({
-        sample: plain,
-        samplePii: null,
-        samplePiiIndex: null,
-        anonymisedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(cases.id, caseId));
-    const gone = await tx
-      .delete(contacts)
-      .where(eq(contacts.caseId, caseId))
-      .returning({ id: contacts.id });
-    await tx
-      .update(callAttempts)
-      .set({ note: null, numberMasked: null })
-      .where(eq(callAttempts.caseId, caseId));
-    await tx.update(invitations).set({ email: null }).where(eq(invitations.caseId, caseId));
-    const units = await tx
-      .select({ id: frameUnits.id, sample: frameUnits.sample, importId: frameUnits.importId })
-      .from(frameUnits)
-      .where(
-        and(
-          eq(frameUnits.projectId, projectId),
-          or(
-            eq(frameUnits.caseId, caseId),
-            ...(c.frameUnitId ? [eq(frameUnits.id, c.frameUnitId)] : []),
-          ),
-        ),
-      );
-    for (const u of units)
-      await tx
-        .update(frameUnits)
-        .set({
-          sample: Object.fromEntries(
-            Object.entries((u.sample ?? {}) as Record<string, unknown>).filter(
-              ([k]) => !pii.has(k),
-            ),
-          ),
-          samplePii: null,
-          contacts: [],
-        })
-        .where(eq(frameUnits.id, u.id));
+    await t.anonymiseCase(caseId, withoutPii(c.sample), now);
+    const gone = await t.deleteContacts(caseId);
+    await t.scrubCalls(caseId);
+    await t.scrubInvitations(caseId);
+    const units = await t.unitsOfCase(projectId, caseId, c.frameUnitId);
+    for (const u of units) await t.scrubUnit(u.id, withoutPii(u.sample));
     const imports = [c.importId, ...units.map((u) => u.importId)].filter((x): x is string => !!x);
-    await this.scrubImportReports(tx, projectId, [...new Set(imports)], pii);
+    await this.scrubImportReports(t, projectId, [...new Set(imports)], pii);
     // Scanned pages show the whole form, handwriting and all.
-    await tx
-      .delete(papiScanPages)
-      .where(
-        inArray(
-          papiScanPages.formId,
-          tx
-            .select({ id: papiScanForms.id })
-            .from(papiScanForms)
-            .where(eq(papiScanForms.caseId, caseId)),
-        ),
-      );
+    await t.deleteScanPages(caseId);
 
-    const ivs = await tx
-      .select({
-        id: interviews.id,
-        answers: interviews.answers,
-        state: interviews.state,
-        compiled: questionnaireVersions.compiled,
-      })
-      .from(interviews)
-      .innerJoin(
-        questionnaireVersions,
-        eq(questionnaireVersions.id, interviews.questionnaireVersionId),
-      )
-      .where(eq(interviews.caseId, caseId));
+    const ivs = await t.interviewsOfCase(caseId);
     const personal = new Set<string>();
     for (const iv of ivs) {
       const names = personalVariables(iv.compiled as CompiledQuestionnaire);
       names.forEach((n) => personal.add(n));
-      await tx
-        .update(interviews)
-        .set({
-          answers: stripKeys(iv.answers, names) as Record<string, unknown>,
-          state: stripKeys(iv.state, names) as Record<string, unknown>,
-          context: {},
-          // Seen as a change by the analysis model, which is then refreshed.
-          updatedAt: now,
-        })
-        .where(eq(interviews.id, iv.id));
-      await tx.execute(
-        sql`select erase_interview_history(${iv.id}::uuid, ${sql.param([...names])}::text[])`,
-      );
+      await t.scrubInterview(iv.id, stripKeys(iv.answers, names), stripKeys(iv.state, names), now);
+      await t.eraseHistory(iv.id, [...names]);
     }
     // Double-entry differences keep both keyed values: personal ones go, rosters lose theirs.
-    for (const m of await tx
-      .select()
-      .from(entryMismatches)
-      .where(eq(entryMismatches.caseId, caseId))) {
-      const gone = personal.has(m.variable);
-      const strip = (v: unknown) => (gone ? null : stripKeys(v, personal));
-      await tx
-        .update(entryMismatches)
-        .set({
-          firstValue: strip(m.firstValue),
-          secondValue: strip(m.secondValue),
-          resolvedValue: strip(m.resolvedValue),
-        })
-        .where(eq(entryMismatches.id, m.id));
+    for (const m of await t.mismatches(caseId)) {
+      const isGone = personal.has(m.variable);
+      const strip = (v: unknown) => (isGone ? null : stripKeys(v, personal));
+      await t.setMismatch(m.id, {
+        firstValue: strip(m.firstValue),
+        secondValue: strip(m.secondValue),
+        resolvedValue: strip(m.resolvedValue),
+      });
     }
-    await this.cases.events(tx, tenantId, ctx?.userId ?? null, [
+    await this.cases.events(t, '', ctx?.userId ?? null, [
       { caseId, type: 'anonymised', details: { reason } },
     ]);
     const entry = {
@@ -317,12 +213,12 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
         projectId,
         reason,
         interviews: ivs.length,
-        contacts: gone.length,
+        contacts: gone,
         ...(note ? { note } : {}),
       },
     };
-    await this.audit.record(tx, tenantId, ctx ? this.audit.fromContext(ctx, entry) : entry);
-    return { interviews: ivs.length, contacts: gone.length };
+    await t.audit(ctx ? this.audit.fromContext(ctx, entry) : entry);
+    return { interviews: ivs.length, contacts: gone };
   }
 
   /**
@@ -330,21 +226,13 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
    * the validation reports of these imports.
    */
   private async scrubImportReports(
-    tx: Tx,
+    t: PrivacyTx,
     projectId: string,
     importIds: string[],
     pii: ReadonlySet<string>,
   ) {
     if (!importIds.length) return;
-    const rows = await tx
-      .select({
-        id: sampleImports.id,
-        headers: sampleImports.headers,
-        mapping: sampleImports.mapping,
-        report: sampleImports.report,
-      })
-      .from(sampleImports)
-      .where(and(eq(sampleImports.projectId, projectId), inArray(sampleImports.id, importIds)));
+    const rows = await t.importsToScrub(projectId, importIds);
     for (const r of rows) {
       const report = r.report as ImportReport | null;
       if (!report?.issues?.length) continue;
@@ -363,72 +251,24 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
           !mapping.success || personal.has(e.column) ? { ...e, value: '' } : e,
         ),
       }));
-      await tx
-        .update(sampleImports)
-        .set({ report: { ...report, issues } })
-        .where(eq(sampleImports.id, r.id));
+      await t.setImportReport(r.id, { ...report, issues });
     }
   }
 
   /** Everything held about a case's respondent, for a data subject access request (H3). */
-  async subjectData(tx: Tx, ctx: AuthContext, projectId: string, caseId: string) {
+  async subjectData(t: PrivacyTx, ctx: AuthContext, projectId: string, caseId: string) {
     if (!can(ctx.memberships, 'pii.view', projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not see personal data' });
-    const [c] = await tx
-      .select()
-      .from(cases)
-      .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)));
+    const c = await t.caseRow(projectId, caseId);
     if (!c) throw new NotFoundException('Case not found');
     const [cs, ivs, calls, invs, events] = await Promise.all([
-      tx
-        .select({
-          type: contacts.type,
-          value: contacts.value,
-          label: contacts.label,
-          consent: contacts.consent,
-        })
-        .from(contacts)
-        .where(eq(contacts.caseId, caseId)),
-      tx
-        .select({
-          id: interviews.id,
-          mode: interviews.mode,
-          status: interviews.status,
-          language: interviews.language,
-          startedAt: interviews.startedAt,
-          submittedAt: interviews.submittedAt,
-          answers: interviews.answers,
-        })
-        .from(interviews)
-        .where(eq(interviews.caseId, caseId)),
-      tx
-        .select({
-          startedAt: callAttempts.startedAt,
-          outcome: callAttempts.outcome,
-          note: callAttempts.note,
-          number: callAttempts.numberMasked,
-        })
-        .from(callAttempts)
-        .where(eq(callAttempts.caseId, caseId)),
-      tx
-        .select({
-          email: invitations.email,
-          status: invitations.status,
-          sentAt: invitations.sentAt,
-          openedAt: invitations.openedAt,
-          completedAt: invitations.completedAt,
-        })
-        .from(invitations)
-        .where(eq(invitations.caseId, caseId)),
-      tx
-        .select({ type: caseEvents.type, at: caseEvents.at })
-        .from(caseEvents)
-        .where(eq(caseEvents.caseId, caseId))
-        .orderBy(asc(caseEvents.at)),
+      t.subjectContacts(caseId),
+      t.subjectInterviews(caseId),
+      t.subjectCalls(caseId),
+      t.subjectInvitations(caseId),
+      t.subjectEvents(caseId),
     ]);
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'case.subject_exported',
         targetType: 'case',
@@ -436,10 +276,7 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
         details: { projectId },
       }),
     );
-    const views = await tx
-      .select({ at: auditLog.at })
-      .from(auditLog)
-      .where(and(eq(auditLog.targetId, caseId), eq(auditLog.action, 'case.pii_viewed')));
+    const views = await t.piiViews(caseId);
     return {
       generatedAt: new Date().toISOString(),
       case: {
@@ -455,7 +292,7 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
       invitations: invs,
       history: events,
       /** When staff looked at this person's data. */
-      personalDataViews: views.map((v) => v.at),
+      personalDataViews: views,
     };
   }
 }
