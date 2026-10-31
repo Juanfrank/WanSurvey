@@ -30,11 +30,12 @@ Accepted on the way:
   removed with it. Measure again, with new scripts, on the real tier before large waves; size
   `DB_POOL_MAX` and `DB_WORKER_POOL_MAX` against that tier's session and worker limits
   ([`concurrency.md`](concurrency.md)).
-- **SQLite for test instances (undecided).** The idea was a file database for trial deployments
-  and demos while SQL Server environments are prepared. It would never be production and never
-  hold real data (no row-level security, no row locks). With SQL Server 2022 available as a
-  container (`docker compose up -d mssql mssql-init`), it is probably not worth a second dialect;
-  it stays here until someone needs a server-less instance.
+- **SQLite is discarded.** There is no second dialect and no file database. Trial deployments and
+  demos use a SQL Server in a container, for development and demos only (`docker compose up -d
+mssql mssql-init`; the sa password in `docker-compose.yml` is public and must never be used
+  anywhere else). Production and staging use Azure SQL.
+- **Maintenance steps, prepared and not yet run**: comments, lint warnings and dead code, in
+  [`maintenance-plan.md`](maintenance-plan.md).
 - **Lint warnings.** 16 `react-hooks/exhaustive-deps` warnings remain in the web app and the
   renderer: effects that run on purpose only when one value changes. Each needs a look on its
   own before dependencies are added, so none was changed blindly.
