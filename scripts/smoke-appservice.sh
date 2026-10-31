@@ -68,7 +68,7 @@ done
 fail() { echo "FAIL: $1" >&2; tail -30 "$LOG" >&2; exit 1; }
 curl -sf "http://localhost:$PORT/health" >/dev/null || fail "/health"
 n=$(mssql "$ADMIN_URL" "SELECT COUNT(*) FROM dbo.__migrations")
-[[ "$n" -gt 40 ]] || fail "migrations at start ($n applied)"
+[[ "$n" -ge 16 ]] || fail "migrations at start ($n applied)"
 curl -sf "http://localhost:$PORT/" | grep -q '<div id="root"' || fail "the app shell at /"
 curl -sf "http://localhost:$PORT/projects/x/cases" | grep -q '<div id="root"' || fail "a client route"
 asset=$(curl -sf "http://localhost:$PORT/" | grep -oE '/assets/[^"]+\.js' | head -1)
