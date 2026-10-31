@@ -24,7 +24,8 @@ export function connectDb(): E2eDb {
   if (MSSQL) {
     const raw = openRaw(adminUrl);
     return {
-      all: (text, params = [], mssql) => raw.query(mssql ?? text, params),
+      all: async (text, params = [], mssql) =>
+        (await raw.query(mssql ?? text, params)).map(lowerGuids),
       run: async (text, params = [], mssql) => void (await raw.query(mssql ?? text, params)),
       end: () => raw.end(),
     };
@@ -41,6 +42,16 @@ export function connectDb(): E2eDb {
     end: () => sql.end(),
   };
 }
+
+/** SQL Server writes GUIDs in capitals; the API and the tests use them in lower case. */
+const GUID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/;
+const lowerGuids = (row: Row): Row =>
+  Object.fromEntries(
+    Object.entries(row).map(([k, v]) => [
+      k,
+      typeof v === 'string' && GUID.test(v) ? v.toLowerCase() : v,
+    ]),
+  );
 
 /** `?, ?, ?` for an IN list. */
 export const marks = (n: number) => Array(n).fill('?').join(', ');
