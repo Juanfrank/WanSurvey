@@ -13,28 +13,25 @@ import {
   type InterviewOptions,
 } from '@wansurvey/logic';
 import type { ContainerItem, Mode, ProjectSettings } from '@wansurvey/schema';
-import { and, asc, desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { closedCode } from '../questionnaires/state.js';
-import { Prepared, type Tx } from '../db/database.js';
+import type { Tx } from '../db/database.js';
 import {
-  cases,
-  contacts,
-  interviewAnswerEvents,
-  interviewDevices,
-  interviewParadata,
-  interviews,
-  questionnaireVersions,
-  questionnaires,
-  users,
-} from '../db/schema.js';
+  PgInterviewsTx,
+  type CaseFull,
+  type InterviewRow,
+  type InterviewsTx,
+} from './interviews-repo.js';
 import type { StartBody, SubmitBody, SyncItem } from './schemas.js';
 import { compiledCache, Lru } from './compiled-cache.js';
 
-export type InterviewRow = typeof interviews.$inferSelect;
+export type { InterviewRow } from './interviews-repo.js';
+
+/** A transaction of either engine; a Drizzle one is wrapped for the modules that have not moved. */
+export type AnyInterviewsTx = Tx | InterviewsTx;
 
 /** What `interviews.context` holds: the case data the interview was given at start. */
 export interface StoredContext {
@@ -48,75 +45,6 @@ export interface StoredContext {
 
 /** A version's number and questionnaire, by version id (immutable rows), per process. */
 const versionCache = new Lru<string, { version: number; questionnaireId: string }>(200);
-
-// The queries every device and respondent request runs, built once (see Prepared).
-const lockInterview = new Prepared<InterviewRow>(
-  (tx) =>
-    tx
-      .select()
-      .from(interviews)
-      .where(eq(interviews.id, sql.placeholder('id')))
-      .for('update'),
-  getTableColumns(interviews),
-);
-const deviceSeq = new Prepared<{ lastSeq: number }>(
-  (tx) =>
-    tx
-      .select({ lastSeq: interviewDevices.lastSeq })
-      .from(interviewDevices)
-      .where(
-        and(
-          eq(interviewDevices.interviewId, sql.placeholder('id')),
-          eq(interviewDevices.deviceId, sql.placeholder('device')),
-        ),
-      ),
-  { lastSeq: interviewDevices.lastSeq },
-);
-const touchDevice = new Prepared<{ lastSeq: number }>(
-  (tx) =>
-    tx
-      .insert(interviewDevices)
-      .values({
-        tenantId: sql.placeholder('tenantId'),
-        interviewId: sql.placeholder('id'),
-        deviceId: sql.placeholder('device'),
-      })
-      .onConflictDoUpdate({
-        target: [interviewDevices.interviewId, interviewDevices.deviceId],
-        set: { updatedAt: sql`now()` },
-      })
-      .returning({ lastSeq: interviewDevices.lastSeq }),
-  { lastSeq: interviewDevices.lastSeq },
-);
-/**
- * The end of a sync: the interview's snapshot and times (when `touch`; only the fields sent)
- * and the device's acknowledged number, in one statement. A new snapshot bumps the state's
- * version and keeps the codes given to "other" texts (`<VAR>_CODE`, not in the snapshot)
- * whose text is unchanged.
- */
-const finishSync = new Prepared<never>(
-  () => sql`
-    with i as (
-      update interviews set
-        state = case when ${sql.placeholder('hasState')} then ${sql.placeholder('state')}::jsonb else state end,
-        answers = case when ${sql.placeholder('hasState')} then coalesce((
-            select jsonb_object_agg(k.key, k.value) from jsonb_each(answers) k
-            where k.key like '%\\_CODE'
-              and ${sql.placeholder('answers')}::jsonb -> (left(k.key, -5) || '_OTHER')
-                = answers -> (left(k.key, -5) || '_OTHER')
-          ), '{}'::jsonb) || ${sql.placeholder('answers')}::jsonb else answers end,
-        state_version = state_version + case when ${sql.placeholder('hasState')} then 1 else 0 end,
-        state_device = case when ${sql.placeholder('hasState')} then ${sql.placeholder('device')}::text else state_device end,
-        position = case when ${sql.placeholder('hasState')} then ${sql.placeholder('position')}::text else position end,
-        active_ms = coalesce(${sql.placeholder('active')}::int, active_ms),
-        total_ms = coalesce(${sql.placeholder('total')}::int, total_ms),
-        updated_at = now()
-      where id = ${sql.placeholder('id')} and ${sql.placeholder('touch')}::boolean
-    )
-    update interview_devices set last_seq = ${sql.placeholder('seq')}::int, updated_at = now()
-    where interview_id = ${sql.placeholder('id')} and device_id = ${sql.placeholder('device')}`,
-  {},
-);
 
 /** Statuses in which the interviewer can still change answers: open, or returned by review. */
 export const EDITABLE = new Set(['in_progress', 'returned']);
@@ -162,9 +90,14 @@ export class InterviewsService {
     private readonly cases: CasesService,
   ) {}
 
+  /** The engine-neutral view of a transaction; a Drizzle one is wrapped. */
+  private view(tx: AnyInterviewsTx, tenantId = ''): InterviewsTx {
+    return 'piiFields' in tx ? tx : new PgInterviewsTx(tx as Tx, tenantId, this.audit);
+  }
+
   /** Set by the CAPI module: creates an interview a device started offline (D2). */
   createOffline?: (
-    tx: Tx,
+    t: InterviewsTx,
     ctx: AuthContext,
     deviceId: string,
     item: SyncItem,
@@ -188,18 +121,15 @@ export class InterviewsService {
    * one in progress. Idempotent on the client's id.
    */
   async start(
-    tx: Tx,
+    tx: AnyInterviewsTx,
     ctx: AuthContext,
     projectId: string,
     body: StartBody,
     opts: { entryPass?: number | undefined } = {},
   ): Promise<InterviewRow> {
-    const settings = await this.cases.settings(tx, projectId);
-    const [c] = await tx
-      .select()
-      .from(cases)
-      .where(and(eq(cases.id, body.caseId), eq(cases.projectId, projectId)))
-      .for('update');
+    const t = this.view(tx, ctx.tenantId);
+    const settings = await this.cases.settings(t, projectId);
+    const c = await t.lockCase(projectId, body.caseId);
     if (!c) throw new NotFoundException('Case not found');
     if (c.status === 'finalised' || c.status === 'withdrawn')
       throw new ConflictException({
@@ -213,17 +143,14 @@ export class InterviewsService {
       });
     // C10: in pool mode, starting on a free case takes it.
     if (!c.assignedTo && settings.assignmentMode === 'pool') {
-      await this.cases.claim(tx, ctx, projectId, c.id);
+      await this.cases.claim(t, ctx, projectId, c.id);
       c.assignedTo = ctx.userId;
     }
     const pass = opts.entryPass ?? 1;
     // A second data-entry pass is keyed by another clerk, who does not hold the case.
     if (pass === 1 && c.assignedTo !== ctx.userId) throw new NotFoundException('Case not found');
 
-    const [open] = await tx
-      .select()
-      .from(interviews)
-      .where(and(eq(interviews.caseId, c.id), eq(interviews.status, 'in_progress')));
+    const open = await t.openInterview(c.id);
     let row: InterviewRow;
     if (open) {
       if (open.entryPass !== pass)
@@ -239,45 +166,38 @@ export class InterviewsService {
           mode: open.mode,
         });
       // Resuming: the person holding the case now works it, on this device.
-      [row] = (await tx
-        .update(interviews)
-        .set({ interviewerId: ctx.userId, deviceId: body.deviceId, updatedAt: new Date() })
-        .where(eq(interviews.id, open.id))
-        .returning()) as [InterviewRow];
+      row = await t.takeOver(open.id, {
+        deviceId: body.deviceId,
+        interviewerId: ctx.userId,
+        now: new Date(),
+      });
     } else {
-      const [taken] = await tx.select().from(interviews).where(eq(interviews.id, body.id));
-      if (taken) throw new ConflictException({ code: 'ID_IN_USE', message: 'Interview id in use' });
+      if (await t.interview(body.id))
+        throw new ConflictException({ code: 'ID_IN_USE', message: 'Interview id in use' });
       // A case is interviewed with the questionnaire it belongs to.
       if (c.questionnaireId && c.questionnaireId !== body.questionnaireId)
         throw new ConflictException({
           code: 'OTHER_QUESTIONNAIRE',
           message: 'This case belongs to another questionnaire',
         });
-      const version = await this.latestVersion(tx, projectId, body.questionnaireId, body.mode);
-      const context = await this.caseContext(tx, ctx, projectId, c, settings.revealToInterviewers);
-      [row] = (await tx
-        .insert(interviews)
-        .values({
-          id: body.id,
-          tenantId: ctx.tenantId,
-          projectId,
-          caseId: c.id,
-          questionnaireVersionId: version.id,
-          mode: body.mode,
-          interviewerId: ctx.userId,
-          language:
-            body.language ??
-            (version.compiled as CompiledQuestionnaire).questionnaire.defaultLanguage,
-          context,
-          deviceId: body.deviceId,
-          entryPass: pass,
-        })
-        .returning()) as [InterviewRow];
-      await tx
-        .update(cases)
-        .set({ status: 'in_progress', updatedAt: new Date() })
-        .where(eq(cases.id, c.id));
-      await this.cases.events(tx, ctx.tenantId, ctx.userId, [
+      const version = await this.latestVersion(t, projectId, body.questionnaireId, body.mode);
+      const context = await this.caseContext(t, ctx, projectId, c, settings.revealToInterviewers);
+      row = await t.insertInterview({
+        id: body.id,
+        projectId,
+        caseId: c.id,
+        questionnaireVersionId: version.id,
+        mode: body.mode,
+        interviewerId: ctx.userId,
+        language:
+          body.language ??
+          (version.compiled as CompiledQuestionnaire).questionnaire.defaultLanguage,
+        context,
+        deviceId: body.deviceId,
+        entryPass: pass,
+      });
+      await t.setCaseInProgress(c.id);
+      await this.cases.events(t, ctx.tenantId, ctx.userId, [
         {
           caseId: c.id,
           type: 'interview_started',
@@ -285,10 +205,7 @@ export class InterviewsService {
         },
       ]);
     }
-    await tx
-      .insert(interviewDevices)
-      .values({ tenantId: ctx.tenantId, interviewId: row.id, deviceId: body.deviceId })
-      .onConflictDoNothing();
+    await t.ensureDevice(row.id, body.deviceId);
     return row;
   }
 
@@ -298,7 +215,7 @@ export class InterviewsService {
    * (an error code, or null); `create` makes an interview the server has not seen.
    */
   async sync(
-    tx: Tx,
+    tx: AnyInterviewsTx,
     writer: Writer,
     deviceId: string,
     items: SyncItem[],
@@ -307,6 +224,7 @@ export class InterviewsService {
     /** An interview the caller already locked in this transaction (one fewer statement). */
     locked?: InterviewRow,
   ) {
+    const t = this.view(tx, writer.tenantId);
     const acks: Record<string, number> = {};
     const errors: Record<string, string> = {};
     /** The state's new version, for the interviews whose snapshot was written. */
@@ -315,7 +233,7 @@ export class InterviewsService {
     // interviews at once wait for each other instead of deadlocking.
     const ordered = [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     for (const item of ordered) {
-      let [row] = locked?.id === item.id ? [locked] : await lockInterview.run(tx, { id: item.id });
+      let row = locked?.id === item.id ? locked : await t.interview(item.id, true);
       if (!row && item.start && create) {
         const made = await create(item);
         if (typeof made === 'string') {
@@ -337,12 +255,7 @@ export class InterviewsService {
         errors[item.id] = 'NOT_THIS_DEVICE';
         continue;
       }
-      const [dev] = await touchDevice.run(tx, {
-        tenantId: writer.tenantId,
-        id: row.id,
-        device: deviceId,
-      });
-      let last = dev!.lastSeq;
+      let last = await t.touchDevice(row.id, deviceId);
       if (!EDITABLE.has(row.status)) {
         acks[item.id] = last;
         errors[item.id] = 'SUBMITTED';
@@ -357,41 +270,31 @@ export class InterviewsService {
       }
       const answers = run.filter((o) => o.kind === 'answer');
       const para = run.filter((o) => o.kind === 'paradata');
-      if (answers.length)
-        await tx
-          .insert(interviewAnswerEvents)
-          .values(
-            answers.map((o) => ({
-              tenantId: writer.tenantId,
-              interviewId: row.id,
-              deviceId,
-              seq: o.seq,
-              variable: o.variable,
-              oldValue: o.oldValue ?? null,
-              newValue: o.newValue ?? null,
-              at: new Date(o.at),
-              byUserId: o.source === 'system' ? null : writer.userId,
-              source: o.source,
-              reason: o.reason ?? null,
-            })),
-          )
-          .onConflictDoNothing();
-      if (para.length)
-        await tx
-          .insert(interviewParadata)
-          .values(
-            para.map((o) => ({
-              tenantId: writer.tenantId,
-              interviewId: row.id,
-              deviceId,
-              seq: o.seq,
-              type: o.type,
-              at: new Date(o.at),
-              monotonicMs: o.monotonicMs ?? null,
-              payload: o.payload,
-            })),
-          )
-          .onConflictDoNothing();
+      await t.insertAnswerEvents(
+        row.id,
+        deviceId,
+        answers.map((o) => ({
+          seq: o.seq,
+          variable: o.variable,
+          oldValue: o.oldValue ?? null,
+          newValue: o.newValue ?? null,
+          at: new Date(o.at),
+          byUserId: o.source === 'system' ? null : writer.userId,
+          source: o.source,
+          reason: o.reason ?? null,
+        })),
+      );
+      await t.insertParadata(
+        row.id,
+        deviceId,
+        para.map((o) => ({
+          seq: o.seq,
+          type: o.type,
+          at: new Date(o.at),
+          monotonicMs: o.monotonicMs ?? null,
+          payload: o.payload,
+        })),
+      );
       last += run.length;
       // The snapshot belongs to the end of the batch: keep it only when nothing was missed and
       // the batch brought new changes (a late or repeated batch carries an older snapshot). A
@@ -407,14 +310,13 @@ export class InterviewsService {
         row.stateDevice !== deviceId;
       const hasState = fresh && !!item.state && !stale;
       // The interview and the device's number are written by one statement.
-      await finishSync.run(tx, {
+      await t.finishSync({
         id: row.id,
         device: deviceId,
         seq: last,
         touch: fresh && (!!item.state || run.length > 0),
         hasState,
-        state: item.state ? JSON.stringify(item.state) : null,
-        answers: item.state ? JSON.stringify(item.state.answers ?? {}) : null,
+        state: item.state ?? null,
         position: item.position ?? null,
         active: item.activeMs ?? null,
         total: item.totalMs ?? null,
@@ -432,12 +334,13 @@ export class InterviewsService {
    */
   /** `known.lastSeq`: the device's last change number, when the caller read it with the lock. */
   async submit(
-    tx: Tx,
+    tx: AnyInterviewsTx,
     row: InterviewRow,
     body: SubmitBody,
     writer: Writer,
     known: { lastSeq?: number } = {},
   ) {
+    const t = this.view(tx, writer.tenantId);
     if (!EDITABLE.has(row.status))
       throw new ConflictException({ code: 'SUBMITTED', message: 'Already submitted' });
     if (row.deviceId !== body.deviceId)
@@ -445,14 +348,13 @@ export class InterviewsService {
         code: 'NOT_THIS_DEVICE',
         message: 'This interview is open on another device',
       });
-    const lastSeq =
-      known.lastSeq ?? (await deviceSeq.run(tx, { id: row.id, device: body.deviceId }))[0]?.lastSeq;
+    const lastSeq = known.lastSeq ?? (await t.deviceSeq(row.id, body.deviceId));
     if ((lastSeq ?? 0) < body.seq)
       throw new ConflictException({
         code: 'NOT_SYNCED',
         message: 'Some changes have not reached the server yet',
       });
-    const compiled = await this.compiledOf(tx, row.questionnaireVersionId);
+    const compiled = await this.compiledOf(t, row.questionnaireVersionId);
     const opts = this.engineOptions(row);
     const state = row.state as InterviewOptions['state'];
     const session = createInterview(compiled, { ...opts, state });
@@ -472,32 +374,24 @@ export class InterviewsService {
         offPathAnswers: check.offPathAnswers.slice(0, 50),
       });
     const disposition = status.disposition ?? 'COMPLETE';
+    // Modules not yet moved hook in with a Drizzle transaction.
     const extra = {};
-    for (const c of this.contributors) Object.assign(extra, await c(tx, row));
-    const [done] = (await tx
-      .update(interviews)
-      .set({
-        ...extra,
-        status: 'submitted',
-        disposition,
-        endedAt: row.endedAt ?? new Date(),
-        submittedAt: new Date(),
-        submissions: row.submissions + 1,
-        updatedAt: new Date(),
-      })
-      .where(eq(interviews.id, row.id))
-      .returning()) as [InterviewRow];
+    for (const c of this.contributors) Object.assign(extra, await c(t.native(), row));
+    const done = await t.markSubmitted(row.id, {
+      extra,
+      disposition,
+      endedAt: row.endedAt,
+      submissions: row.submissions,
+    });
     if (row.caseId) {
-      await this.finaliseCase(tx, writer, row.caseId, disposition, {
+      await this.finaliseCase(t, writer, row.caseId, disposition, {
         interviewId: row.id,
         disposition,
       });
     }
-    for (const hook of this.hooks) await hook(tx, done, disposition, writer);
+    for (const hook of this.hooks) await hook(t.native(), done, disposition, writer);
     if (writer.ctx)
-      await this.audit.record(
-        tx,
-        writer.tenantId,
+      await t.audit(
         this.audit.fromContext(writer.ctx, {
           action: 'interview.submitted',
           targetType: 'interview',
@@ -513,17 +407,15 @@ export class InterviewsService {
    * Hooks that need the case open set it back; see the PAPI module.
    */
   async finaliseCase(
-    tx: Tx,
+    tx: AnyInterviewsTx,
     writer: Writer,
     caseId: string,
     disposition: string,
     details: Record<string, unknown>,
   ) {
-    await tx
-      .update(cases)
-      .set({ status: 'finalised', disposition, updatedAt: new Date() })
-      .where(eq(cases.id, caseId));
-    await this.cases.events(tx, writer.tenantId, writer.userId, [
+    const t = this.view(tx, writer.tenantId);
+    await t.finaliseCase(caseId, disposition);
+    await this.cases.events(t, writer.tenantId, writer.userId, [
       { caseId, type: 'interview_submitted', details },
     ]);
   }
@@ -534,32 +426,17 @@ export class InterviewsService {
    * new fills, unless `readOnly` (to show what an existing fill uses).
    */
   async latestVersion(
-    tx: Tx,
+    tx: AnyInterviewsTx,
     projectId: string,
     qid: string,
     mode?: Mode,
     opts: { readOnly?: boolean } = {},
   ) {
+    const t = this.view(tx);
     // The compiled form comes from the cache (versions never change): reading it here would
     // fetch and decode the whole questionnaire on every start.
-    const [found] = await tx
-      .select({
-        id: questionnaireVersions.id,
-        version: questionnaireVersions.version,
-        state: questionnaires.state,
-      })
-      .from(questionnaireVersions)
-      .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
-      .where(
-        and(
-          eq(questionnaires.id, qid),
-          eq(questionnaires.projectId, projectId),
-          eq(questionnaireVersions.status, 'published'),
-        ),
-      )
-      .orderBy(desc(questionnaireVersions.version))
-      .limit(1);
-    const v = found && { ...found, compiled: await this.compiledOf(tx, found.id) };
+    const found = await t.latestPublished(projectId, qid);
+    const v = found && { ...found, compiled: await this.compiledOf(t, found.id) };
     if (!v)
       throw new BadRequestException({
         code: 'NO_PUBLISHED_VERSION',
@@ -584,33 +461,31 @@ export class InterviewsService {
   }
 
   /** Questionnaires of a project whose version in use is fielded in `mode`, by name. */
-  async questionnairesFor(tx: Tx, projectId: string, mode: Mode) {
-    const rows = await tx
-      .selectDistinctOn([questionnaires.id], {
-        id: questionnaires.id,
-        name: questionnaires.name,
-        modes: sql<
-          string[] | null
-        >`${questionnaireVersions.compiled} -> 'questionnaire' -> 'modes'`,
-      })
-      .from(questionnaires)
-      .innerJoin(
-        questionnaireVersions,
-        eq(questionnaireVersions.questionnaireId, questionnaires.id),
-      )
-      .where(
-        and(
-          eq(questionnaires.projectId, projectId),
-          eq(questionnaireVersions.status, 'published'),
-          // Disabled and completed questionnaires take no new fills.
-          eq(questionnaires.state, 'active'),
-        ),
-      )
-      .orderBy(questionnaires.id, desc(questionnaireVersions.version));
+  async questionnairesFor(tx: AnyInterviewsTx, projectId: string, mode: Mode) {
+    const rows = await this.view(tx).questionnairesWithModes(projectId);
     return rows
       .filter((r) => (Array.isArray(r.modes) ? r.modes.includes(mode) : true))
       .map(({ id, name }) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** Records that the device is on the interview; returns its last acknowledged change. */
+  async touchDevice(tx: AnyInterviewsTx, tenantId: string, interviewId: string, deviceId: string) {
+    return this.view(tx, tenantId).touchDevice(interviewId, deviceId);
+  }
+
+  /** The interview, locked for this transaction. */
+  async locked(tx: AnyInterviewsTx, id: string): Promise<InterviewRow | undefined> {
+    return (await this.view(tx).interview(id, true)) ?? undefined;
+  }
+
+  /** A version's number and questionnaire (immutable, so cached like the compiled form). */
+  async versionOf(tx: AnyInterviewsTx, versionId: string) {
+    const hit = versionCache.get(versionId);
+    if (hit) return hit;
+    const v = await this.view(tx).versionBrief(versionId);
+    if (v) versionCache.set(versionId, v);
+    return v ?? undefined;
   }
 
   /**
@@ -619,62 +494,29 @@ export class InterviewsService {
    * and every submit need it, and it is the largest thing they read. Ids reach here only from
    * rows the caller's tenant can see (RLS), so the cache never crosses organisations.
    */
-  /** Records that the device is on the interview; returns its last acknowledged change. */
-  async touchDevice(tx: Tx, tenantId: string, interviewId: string, deviceId: string) {
-    const [d] = await touchDevice.run(tx, { tenantId, id: interviewId, device: deviceId });
-    return d?.lastSeq ?? 0;
-  }
-
-  /** The interview, locked for this transaction (a prepared query). */
-  async locked(tx: Tx, id: string): Promise<InterviewRow | undefined> {
-    return (await lockInterview.run(tx, { id }))[0];
-  }
-
-  /** A version's number and questionnaire (immutable, so cached like the compiled form). */
-  async versionOf(tx: Tx, versionId: string) {
-    const hit = versionCache.get(versionId);
-    if (hit) return hit;
-    const [v] = await tx
-      .select({
-        version: questionnaireVersions.version,
-        questionnaireId: questionnaireVersions.questionnaireId,
-      })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.id, versionId));
-    if (v) versionCache.set(versionId, v);
-    return v;
-  }
-
-  async compiledOf(tx: Tx, versionId: string) {
+  async compiledOf(tx: AnyInterviewsTx, versionId: string) {
     const hit = compiledCache.get(versionId);
     if (hit) return hit;
-    const [v] = await tx
-      .select({ compiled: questionnaireVersions.compiled })
-      .from(questionnaireVersions)
-      .where(eq(questionnaireVersions.id, versionId));
-    const compiled = v!.compiled as CompiledQuestionnaire;
+    const compiled = (await this.view(tx).compiledRaw(versionId))!;
     compiledCache.set(versionId, compiled);
     return compiled;
   }
 
   /** Case data for the engine and the screen, masked as the interviewer would see it. */
   async caseContext(
-    tx: Tx,
+    tx: AnyInterviewsTx,
     ctx: AuthContext | null,
     projectId: string,
-    c: typeof cases.$inferSelect,
+    c: CaseFull,
     reveal: boolean,
   ) {
+    const t = this.view(tx, ctx?.tenantId);
     const show = !!ctx && reveal && this.cases.canSeePii(ctx, projectId);
-    const pii = await this.cases.piiFields(tx, projectId);
-    const cs = await tx
-      .select({ type: contacts.type, value: contacts.value, label: contacts.label })
-      .from(contacts)
-      .where(eq(contacts.caseId, c.id))
-      .orderBy(asc(contacts.createdAt));
+    const pii = await this.cases.piiFields(t, projectId);
+    const cs = await t.contacts(c.id);
     if (show && ctx)
       await this.cases.recordAutoViews(
-        tx,
+        t,
         ctx,
         projectId,
         [{ id: c.id, externalId: c.externalId }],
@@ -713,27 +555,22 @@ export class InterviewsService {
     };
   }
 
-  /** Everything a device needs to show and continue an interview. */
   /**
-   * `settings` is the project's, when the caller has already read them (one read of the
-   * project per request).
+   * Everything a device needs to show and continue an interview. `settings` is the project's,
+   * when the caller has already read them (one read of the project per request).
    */
   async payload(
-    tx: Tx,
+    tx: AnyInterviewsTx,
     row: InterviewRow,
     deviceId: string,
     settings?: ProjectSettings,
     lastSeq?: number,
   ) {
-    const [dev] =
-      lastSeq !== undefined
-        ? [{ lastSeq }]
-        : await deviceSeq.run(tx, { id: row.id, device: deviceId });
-    const v = await this.versionOf(tx, row.questionnaireVersionId);
-    const compiled = await this.compiledOf(tx, row.questionnaireVersionId);
-    const [who] = row.interviewerId
-      ? await tx.select({ name: users.name }).from(users).where(eq(users.id, row.interviewerId))
-      : [];
+    const t = this.view(tx);
+    const seq = lastSeq !== undefined ? lastSeq : await t.deviceSeq(row.id, deviceId);
+    const v = await this.versionOf(t, row.questionnaireVersionId);
+    const compiled = await this.compiledOf(t, row.questionnaireVersionId);
+    const who = row.interviewerId ? await t.userName(row.interviewerId) : null;
     return {
       interview: {
         id: row.id,
@@ -755,14 +592,14 @@ export class InterviewsService {
         totalMs: row.totalMs,
         deviceId: row.deviceId,
         entryPass: row.entryPass,
-        interviewer: who?.name ?? null,
+        interviewer: who,
       },
       context: this.contextOf(row),
       compiled,
       settings: await (
-        settings ? Promise.resolve(settings) : this.cases.settings(tx, row.projectId)
+        settings ? Promise.resolve(settings) : this.cases.settings(t, row.projectId)
       ).then((x) => ({ capi: x.capi, shortcuts: x.shortcuts })),
-      lastSeq: dev?.lastSeq ?? 0,
+      lastSeq: seq ?? 0,
       serverTime: new Date().toISOString(),
     };
   }

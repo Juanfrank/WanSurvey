@@ -1,9 +1,9 @@
-import { Body, Controller, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Inject, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database } from '../db/database.js';
+import { INTERVIEWS_REPO, type InterviewsRepo } from '../interviews/interviews-repo.js';
 import { CapiService, CheckinBody, CheckoutBody } from './capi.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -13,7 +13,7 @@ const PERM = { projectParam: 'projectId' } as const;
 @Controller()
 export class CapiController {
   constructor(
-    private readonly database: Database,
+    @Inject(INTERVIEWS_REPO) private readonly repo: InterviewsRepo,
     private readonly capi: CapiService,
   ) {}
 
@@ -27,9 +27,7 @@ export class CapiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(CheckoutBody)) body: CheckoutBody,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.capi.checkout(tx, ctx, projectId, body),
-    );
+    return this.repo.inTenant(ctx.tenantId, (t) => this.capi.checkout(t, ctx, projectId, body));
   }
 
   /** Gives cases back from this device. */
@@ -42,8 +40,8 @@ export class CapiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(CheckinBody)) body: z.infer<typeof CheckinBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.capi.checkin(tx, ctx, projectId, body.deviceId, body.caseIds),
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.capi.checkin(t, ctx, projectId, body.deviceId, body.caseIds),
     );
   }
 
@@ -56,8 +54,8 @@ export class CapiController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('caseId', ParseUUIDPipe) caseId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
-      this.capi.forceRelease(tx, ctx, projectId, caseId),
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.capi.forceRelease(t, ctx, projectId, caseId),
     );
   }
 }

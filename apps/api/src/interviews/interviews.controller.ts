@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -11,21 +12,17 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { MASK } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
-import { Database, type Tx } from '../db/database.js';
 import {
-  cases,
-  interviewAnswerEvents,
-  interviewDevices,
-  interviews,
-  questionnaireVersions,
-  users,
-} from '../db/schema.js';
+  INTERVIEWS_REPO,
+  type InterviewRow,
+  type InterviewsRepo,
+  type InterviewsTx,
+} from './interviews-repo.js';
 import { DeviceId, StartBody, SubmitBody, SyncBody } from './schemas.js';
 
 const TakeoverBody = z.object({ deviceId: DeviceId });
@@ -47,7 +44,7 @@ const CONDUCT_OR_KEY = ['interviews.conduct', 'dataentry.key'] as const;
 @Controller()
 export class InterviewsController {
   constructor(
-    private readonly database: Database,
+    @Inject(INTERVIEWS_REPO) private readonly repo: InterviewsRepo,
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
     private readonly papi: PapiService,
@@ -63,7 +60,7 @@ export class InterviewsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodPipe(StartBody)) body: StartBody,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
       // Clerks only key paper forms; interviewers conduct the other modes.
       const allowed =
         body.mode === 'PAPI'
@@ -74,14 +71,13 @@ export class InterviewsController {
       // Paper forms: the entry in progress continues, otherwise the next one (P3).
       let entryPass: number | undefined;
       if (body.mode === 'PAPI') {
-        const [open] = await tx
-          .select({ pass: interviews.entryPass })
-          .from(interviews)
-          .where(and(eq(interviews.caseId, body.caseId), eq(interviews.status, 'in_progress')));
-        entryPass = open?.pass ?? (await this.papi.nextPass(tx, ctx, projectId, body.caseId));
+        const open = await t.openInterview(body.caseId);
+        // Paper entry has not moved to SQL Server yet.
+        entryPass =
+          open?.entryPass ?? (await this.papi.nextPass(t.native(), ctx, projectId, body.caseId));
       }
-      const row = await this.runtime.start(tx, ctx, projectId, body, { entryPass });
-      return this.runtime.payload(tx, row, body.deviceId);
+      const row = await this.runtime.start(t, ctx, projectId, body, { entryPass });
+      return this.runtime.payload(t, row, body.deviceId);
     });
   }
 
@@ -89,9 +85,9 @@ export class InterviewsController {
   @Get('interviews/:id')
   @RequirePermission(CONDUCT_OR_KEY, { anyProject: true })
   get(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const row = await this.own(tx, ctx, id);
-      return this.runtime.payload(tx, row, row.deviceId);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await this.own(t, ctx, id);
+      return this.runtime.payload(t, row, row.deviceId);
     });
   }
 
@@ -105,16 +101,16 @@ export class InterviewsController {
   @RequirePermission(CONDUCT_OR_KEY, { anyProject: true })
   @ApiBody({ schema: z.toJSONSchema(SyncBody, { io: 'input' }) as object })
   sync(@Auth() ctx: AuthContext, @Body(new ZodPipe(SyncBody)) body: z.infer<typeof SyncBody>) {
-    return this.database.withTenant(ctx.tenantId, (tx) =>
+    return this.repo.inTenant(ctx.tenantId, (t) =>
       this.runtime.sync(
-        tx,
+        t,
         { tenantId: ctx.tenantId, userId: ctx.userId, ctx },
         body.deviceId,
         body.interviews,
         // As `own`: the caller's interview, in a project where they still conduct or key.
         (row) => (this.mayWrite(ctx, row) ? null : 'NOT_FOUND'),
         this.runtime.createOffline
-          ? (item) => this.runtime.createOffline!(tx, ctx, body.deviceId, item)
+          ? (item) => this.runtime.createOffline!(t, ctx, body.deviceId, item)
           : undefined,
       ),
     );
@@ -133,9 +129,9 @@ export class InterviewsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(SubmitBody)) body: SubmitBody,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const row = await this.own(tx, ctx, id, true);
-      return this.runtime.submit(tx, row, body, {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await this.own(t, ctx, id, true);
+      return this.runtime.submit(t, row, body, {
         tenantId: ctx.tenantId,
         userId: ctx.userId,
         ctx,
@@ -156,20 +152,13 @@ export class InterviewsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(TakeoverBody)) body: z.infer<typeof TakeoverBody>,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const row = await this.own(tx, ctx, id, true);
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const row = await this.own(t, ctx, id, true);
       if (!EDITABLE.has(row.status))
         throw new ConflictException({ code: 'SUBMITTED', message: 'Already submitted' });
-      const [moved] = await tx
-        .update(interviews)
-        .set({ deviceId: body.deviceId, updatedAt: new Date() })
-        .where(eq(interviews.id, id))
-        .returning();
-      await tx
-        .insert(interviewDevices)
-        .values({ tenantId: ctx.tenantId, interviewId: id, deviceId: body.deviceId })
-        .onConflictDoNothing();
-      return this.runtime.payload(tx, moved!, body.deviceId);
+      const moved = await t.takeOver(id, { deviceId: body.deviceId, now: new Date() });
+      await t.ensureDevice(id, body.deviceId);
+      return this.runtime.payload(t, moved, body.deviceId);
     });
   }
 
@@ -181,53 +170,12 @@ export class InterviewsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('caseId', ParseUUIDPipe) caseId: string,
   ) {
-    return this.database.withTenant(ctx.tenantId, async (tx) => {
-      const [c] = await tx
-        .select({ id: cases.id, assignedTo: cases.assignedTo })
-        .from(cases)
-        .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const c = await t.caseBrief(projectId, caseId);
       if (!c || (this.cases.restrictedToOwn(ctx, projectId) && c.assignedTo !== ctx.userId))
         throw new NotFoundException('Case not found');
-      const rows = await tx
-        .select({
-          id: interviews.id,
-          status: interviews.status,
-          mode: interviews.mode,
-          disposition: interviews.disposition,
-          language: interviews.language,
-          startedAt: interviews.startedAt,
-          endedAt: interviews.endedAt,
-          activeMs: interviews.activeMs,
-          interviewer: users.name,
-          version: questionnaireVersions.version,
-          compiled: questionnaireVersions.compiled,
-        })
-        .from(interviews)
-        .innerJoin(
-          questionnaireVersions,
-          eq(questionnaireVersions.id, interviews.questionnaireVersionId),
-        )
-        .leftJoin(users, eq(users.id, interviews.interviewerId))
-        .where(eq(interviews.caseId, caseId))
-        .orderBy(desc(interviews.startedAt));
-      const ids = rows.map((r) => r.id);
-      const events = ids.length
-        ? await tx
-            .select({
-              interviewId: interviewAnswerEvents.interviewId,
-              variable: interviewAnswerEvents.variable,
-              oldValue: interviewAnswerEvents.oldValue,
-              newValue: interviewAnswerEvents.newValue,
-              at: interviewAnswerEvents.at,
-              source: interviewAnswerEvents.source,
-              reason: interviewAnswerEvents.reason,
-              by: users.name,
-            })
-            .from(interviewAnswerEvents)
-            .leftJoin(users, eq(users.id, interviewAnswerEvents.byUserId))
-            .where(inArray(interviewAnswerEvents.interviewId, ids))
-            .orderBy(asc(interviewAnswerEvents.at), asc(interviewAnswerEvents.seq))
-        : [];
+      const rows = await t.caseInterviews(caseId);
+      const events = await t.answerEventsOf(rows.map((r) => r.id));
       const canSee = this.cases.canSeePii(ctx, projectId);
       return rows.map(({ compiled, ...r }) => {
         // Answers to questions marked personal are masked without `pii.view`.
@@ -239,7 +187,7 @@ export class InterviewsController {
           ...r,
           events: events
             .filter((e) => e.interviewId === r.id)
-            .map(({ interviewId: _i, ...e }) =>
+            .map(({ interviewId: _i, seq: _s, ...e }) =>
               personal.has(e.variable.replace(/\[.*$/, ''))
                 ? { ...e, oldValue: hide(e.oldValue), newValue: hide(e.newValue) }
                 : e,
@@ -251,14 +199,13 @@ export class InterviewsController {
 
   // -------------------------------------------------------------------------------------------
 
-  private async own(tx: Tx, ctx: AuthContext, id: string, lock = false) {
-    const q = tx.select().from(interviews).where(eq(interviews.id, id));
-    const [row] = lock ? await q.for('update') : await q;
+  private async own(t: InterviewsTx, ctx: AuthContext, id: string, lock = false) {
+    const row = await t.interview(id, lock);
     if (!row || !this.mayWrite(ctx, row)) throw new NotFoundException('Interview not found');
     return row;
   }
 
-  private mayWrite(ctx: AuthContext, row: { interviewerId: string | null; projectId: string }) {
+  private mayWrite(ctx: AuthContext, row: Pick<InterviewRow, 'interviewerId' | 'projectId'>) {
     return (
       row.interviewerId === ctx.userId &&
       (can(ctx.memberships, CONDUCT, row.projectId) ||

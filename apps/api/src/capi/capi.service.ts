@@ -1,24 +1,11 @@
 import { Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
-import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
-import type { Tx } from '../db/database.js';
-import {
-  cases,
-  interviewDevices,
-  interviews,
-  projects,
-  questionnaireVersions,
-  questionnaires,
-} from '../db/schema.js';
-import {
-  fieldedIn,
-  InterviewsService,
-  type InterviewRow,
-} from '../interviews/interviews.service.js';
+import type { InterviewRow, InterviewsTx } from '../interviews/interviews-repo.js';
+import { fieldedIn, InterviewsService } from '../interviews/interviews.service.js';
 import { DeviceId, type SyncItem } from '../interviews/schemas.js';
 import { closedCode } from '../questionnaires/state.js';
 
@@ -52,8 +39,8 @@ export class CapiService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.runtime.createOffline = (tx, ctx, deviceId, item) =>
-      this.createOffline(tx, ctx, deviceId, item);
+    this.runtime.createOffline = (t, ctx, deviceId, item) =>
+      this.createOffline(t, ctx, deviceId, item);
   }
 
   /**
@@ -62,15 +49,12 @@ export class CapiService implements OnModuleInit {
    * to interview offline: each version once, the case data, and any interview in progress
    * (which moves to this device).
    */
-  async checkout(tx: Tx, ctx: AuthContext, projectId: string, body: CheckoutBody) {
-    const settings = await this.cases.settings(tx, projectId);
-    const [project] = await tx
-      .select({ name: projects.name })
-      .from(projects)
-      .where(eq(projects.id, projectId));
-    if (!project) throw new NotFoundException('Project not found');
+  async checkout(t: InterviewsTx, ctx: AuthContext, projectId: string, body: CheckoutBody) {
+    const settings = await this.cases.settings(t, projectId);
+    const projectName = await t.projectName(projectId);
+    if (projectName === null) throw new NotFoundException('Project not found');
     // Only questionnaires fielded face to face (Q1).
-    const usable = await this.runtime.questionnairesFor(tx, projectId, 'CAPI');
+    const usable = await this.runtime.questionnairesFor(t, projectId, 'CAPI');
     const qid = usable.find((q) => q.id === body.questionnaireId)?.id ?? usable[0]?.id;
     // Each case is interviewed with its own questionnaire; the one asked for is for the rest.
     const latestOf = new Map<string, Awaited<ReturnType<InterviewsService['latestVersion']>>>();
@@ -78,15 +62,11 @@ export class CapiService implements OnModuleInit {
       const id = q ? usable.find((u) => u.id === q)?.id : qid;
       if (!id) return null;
       if (!latestOf.has(id))
-        latestOf.set(id, await this.runtime.latestVersion(tx, projectId, id, 'CAPI'));
+        latestOf.set(id, await this.runtime.latestVersion(t, projectId, id, 'CAPI'));
       return latestOf.get(id) ?? null;
     };
 
-    const rows = await tx
-      .select()
-      .from(cases)
-      .where(and(eq(cases.projectId, projectId), inArray(cases.id, body.caseIds)))
-      .for('update');
+    const rows = await t.lockCases(projectId, body.caseIds);
     const refused: { caseId: string; code: string }[] = [];
     const out: unknown[] = [];
     const versions = new Map<string, { id: string; version: number; compiled: unknown }>();
@@ -110,17 +90,14 @@ export class CapiService implements OnModuleInit {
         continue;
       }
       if (!c.assignedTo && settings.assignmentMode === 'pool') {
-        await this.cases.claim(tx, ctx, projectId, c.id);
+        await this.cases.claim(t, ctx, projectId, c.id);
         c.assignedTo = ctx.userId;
       }
       if (c.assignedTo !== ctx.userId) {
         refused.push({ caseId: id, code: 'NOT_FOUND' });
         continue;
       }
-      const [open] = await tx
-        .select()
-        .from(interviews)
-        .where(and(eq(interviews.caseId, c.id), eq(interviews.status, 'in_progress')));
+      const open = await t.openInterview(c.id);
       if (open && open.mode !== 'CAPI') {
         refused.push({ caseId: id, code: 'IN_PROGRESS_OTHER_MODE' });
         continue;
@@ -131,44 +108,31 @@ export class CapiService implements OnModuleInit {
         continue;
       }
       if (latest && !open) versions.set(latest.id, latest);
-      await tx
-        .update(cases)
-        .set({ checkedOutDevice: body.deviceId, checkedOutBy: ctx.userId, checkedOutAt: now })
-        .where(eq(cases.id, c.id));
+      await t.setCheckout(c.id, { device: body.deviceId, by: ctx.userId, at: now });
       if (c.checkedOutDevice !== body.deviceId)
-        await this.cases.events(tx, ctx.tenantId, ctx.userId, [
+        await this.cases.events(t, ctx.tenantId, ctx.userId, [
           { caseId: c.id, type: 'checked_out', details: { deviceId: body.deviceId } },
         ]);
       let interview: Awaited<ReturnType<InterviewsService['payload']>>['interview'] | null = null;
       let lastSeq = 0;
       if (open) {
         // The interview continues on this device; the other device's copy is refused (I7).
-        const [moved] = (await tx
-          .update(interviews)
-          .set({ deviceId: body.deviceId, interviewerId: ctx.userId, updatedAt: now })
-          .where(eq(interviews.id, open.id))
-          .returning()) as [InterviewRow];
-        await tx
-          .insert(interviewDevices)
-          .values({ tenantId: ctx.tenantId, interviewId: open.id, deviceId: body.deviceId })
-          .onConflictDoNothing();
-        const p = await this.runtime.payload(tx, moved, body.deviceId);
+        const moved = await t.takeOver(open.id, {
+          deviceId: body.deviceId,
+          interviewerId: ctx.userId,
+          now,
+        });
+        await t.ensureDevice(open.id, body.deviceId);
+        const p = await this.runtime.payload(t, moved, body.deviceId);
         interview = p.interview;
         lastSeq = p.lastSeq;
         if (!versions.has(moved.questionnaireVersionId)) {
-          const [v] = await tx
-            .select({
-              id: questionnaireVersions.id,
-              version: questionnaireVersions.version,
-              compiled: questionnaireVersions.compiled,
-            })
-            .from(questionnaireVersions)
-            .where(eq(questionnaireVersions.id, moved.questionnaireVersionId));
+          const v = await t.versionRow(moved.questionnaireVersionId);
           versions.set(v!.id, v!);
         }
       }
       const context = await this.runtime.caseContext(
-        tx,
+        t,
         ctx,
         projectId,
         c,
@@ -184,7 +148,7 @@ export class CapiService implements OnModuleInit {
       });
     }
     return {
-      project: { id: projectId, name: project.name },
+      project: { id: projectId, name: projectName },
       settings: { capi: settings.capi, shortcuts: settings.shortcuts },
       versions: [...versions.values()].map((v) => ({
         id: v.id,
@@ -198,108 +162,69 @@ export class CapiService implements OnModuleInit {
   }
 
   /** Gives cases back from a device. Interviews in progress stay as they are on the server. */
-  async checkin(tx: Tx, ctx: AuthContext, projectId: string, deviceId: string, ids: string[]) {
-    const back = await tx
-      .update(cases)
-      .set({ checkedOutDevice: null, checkedOutBy: null, checkedOutAt: null })
-      .where(
-        and(
-          eq(cases.projectId, projectId),
-          inArray(cases.id, ids),
-          eq(cases.checkedOutDevice, deviceId),
-          eq(cases.checkedOutBy, ctx.userId),
-        ),
-      )
-      .returning({ id: cases.id });
+  async checkin(
+    t: InterviewsTx,
+    ctx: AuthContext,
+    projectId: string,
+    deviceId: string,
+    ids: string[],
+  ) {
+    const back = await t.checkIn(projectId, ids, deviceId, ctx.userId);
     await this.cases.events(
-      tx,
+      t,
       ctx.tenantId,
       ctx.userId,
-      back.map((b) => ({ caseId: b.id, type: 'checked_in', details: { deviceId } })),
+      back.map((id) => ({ caseId: id, type: 'checked_in', details: { deviceId } })),
     );
-    return { checkedIn: back.map((b) => b.id) };
+    return { checkedIn: back };
   }
 
   /** A supervisor frees a case from a lost or broken device (D5). Audited. */
-  async forceRelease(tx: Tx, ctx: AuthContext, projectId: string, caseId: string) {
-    const [c] = await tx
-      .select({ id: cases.id, device: cases.checkedOutDevice, by: cases.checkedOutBy })
-      .from(cases)
-      .where(and(eq(cases.id, caseId), eq(cases.projectId, projectId)))
-      .for('update');
+  async forceRelease(t: InterviewsTx, ctx: AuthContext, projectId: string, caseId: string) {
+    const c = await t.lockCase(projectId, caseId);
     if (!c) throw new NotFoundException('Case not found');
-    if (!c.device) return { released: false };
-    await tx
-      .update(cases)
-      .set({ checkedOutDevice: null, checkedOutBy: null, checkedOutAt: null })
-      .where(eq(cases.id, caseId));
-    await this.cases.events(tx, ctx.tenantId, ctx.userId, [
-      { caseId, type: 'checkout_released', details: { deviceId: c.device, from: c.by } },
+    const device = c.checkedOutDevice;
+    if (!device) return { released: false };
+    await t.setCheckout(caseId, null);
+    await this.cases.events(t, ctx.tenantId, ctx.userId, [
+      { caseId, type: 'checkout_released', details: { deviceId: device, from: c.checkedOutBy } },
     ]);
-    await this.audit.record(
-      tx,
-      ctx.tenantId,
+    await t.audit(
       this.audit.fromContext(ctx, {
         action: 'case.checkout_released',
         targetType: 'case',
         targetId: caseId,
-        details: { deviceId: c.device, from: c.by },
+        details: { deviceId: device, from: c.checkedOutBy },
       }),
     );
     return { released: true };
   }
 
-  /**
-   * Creates an interview a device started offline (D2): only on a case checked out to that
-   * device by the caller, with no other interview in progress, on a published version of the
-   * case's questionnaire, while that questionnaire takes new fills. The id is the device's, so
-   * a repeated sync finds it.
-   */
   private async createOffline(
-    tx: Tx,
+    t: InterviewsTx,
     ctx: AuthContext,
     deviceId: string,
     item: SyncItem,
   ): Promise<InterviewRow | string> {
     const start = item.start!;
     if (start.mode !== 'CAPI') return 'BAD_START';
-    const [c] = await tx.select().from(cases).where(eq(cases.id, start.caseId)).for('update');
+    const c = await t.lockCaseById(start.caseId);
     if (!c || c.checkedOutDevice !== deviceId || c.checkedOutBy !== ctx.userId)
       return 'NOT_THIS_DEVICE';
     // Downloading needed the permission; interviewing still does (it may have been taken away).
     if (!can(ctx.memberships, 'interviews.conduct', c.projectId)) return 'NOT_FOUND';
     if (c.status === 'finalised' || c.status === 'withdrawn') return 'CASE_CLOSED';
-    const [open] = await tx
-      .select({ id: interviews.id })
-      .from(interviews)
-      .where(and(eq(interviews.caseId, c.id), eq(interviews.status, 'in_progress')));
-    if (open) return 'CASE_IN_PROGRESS';
-    const [v] = await tx
-      .select({
-        id: questionnaireVersions.id,
-        version: questionnaireVersions.version,
-        compiled: questionnaireVersions.compiled,
-        questionnaireId: questionnaires.id,
-        state: questionnaires.state,
-      })
-      .from(questionnaireVersions)
-      .innerJoin(questionnaires, eq(questionnaires.id, questionnaireVersions.questionnaireId))
-      .where(
-        and(
-          eq(questionnaireVersions.id, start.questionnaireVersionId),
-          eq(questionnaires.projectId, c.projectId),
-          eq(questionnaireVersions.status, 'published'),
-        ),
-      );
+    if (await t.openInterview(c.id)) return 'CASE_IN_PROGRESS';
+    const v = await t.publishedVersion(c.projectId, start.questionnaireVersionId);
     if (!v) return 'NO_PUBLISHED_VERSION';
     // As when starting online: the case's own questionnaire, and one that takes new fills.
     if (c.questionnaireId && c.questionnaireId !== v.questionnaireId) return 'OTHER_QUESTIONNAIRE';
     const closed = closedCode(v.state);
     if (closed) return closed;
     if (!fieldedIn(v.compiled as CompiledQuestionnaire, 'CAPI')) return 'MODE_NOT_IN_QUESTIONNAIRE';
-    const settings = await this.cases.settings(tx, c.projectId);
+    const settings = await this.cases.settings(t, c.projectId);
     const context = await this.runtime.caseContext(
-      tx,
+      t,
       ctx,
       c.projectId,
       c,
@@ -308,27 +233,20 @@ export class CapiService implements OnModuleInit {
     const startedAt = new Date(
       Math.min(new Date(start.startedAt).getTime(), Date.now() + CLOCK_SKEW_MS),
     );
-    const [row] = (await tx
-      .insert(interviews)
-      .values({
-        id: item.id,
-        tenantId: ctx.tenantId,
-        projectId: c.projectId,
-        caseId: c.id,
-        questionnaireVersionId: v.id,
-        mode: 'CAPI',
-        interviewerId: ctx.userId,
-        language: start.language,
-        context,
-        deviceId,
-        startedAt,
-      })
-      .returning()) as [InterviewRow];
-    await tx
-      .update(cases)
-      .set({ status: 'in_progress', updatedAt: new Date() })
-      .where(eq(cases.id, c.id));
-    await this.cases.events(tx, ctx.tenantId, ctx.userId, [
+    const row = await t.insertInterview({
+      id: item.id,
+      projectId: c.projectId,
+      caseId: c.id,
+      questionnaireVersionId: v.id,
+      mode: 'CAPI',
+      interviewerId: ctx.userId,
+      language: start.language,
+      context,
+      deviceId,
+      startedAt,
+    });
+    await t.setCaseInProgress(c.id);
+    await this.cases.events(t, ctx.tenantId, ctx.userId, [
       {
         caseId: c.id,
         type: 'interview_started',
