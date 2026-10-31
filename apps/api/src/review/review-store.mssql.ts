@@ -283,10 +283,19 @@ export class ReviewStore {
         AND a.type = 1 AND a.[key] LIKE '%[_]OTHER' AND LEN(LTRIM(RTRIM(a.[value]))) > 0`.execute(
       tx,
     );
-    const base = (k: string) => k.replace(/_OTHER$/, '');
+    // The variable is named with or without its `_OTHER` suffix; a roster row's key is
+    // `HH[1].NAME_OTHER`, whose variable is the last part without the row number.
+    const last = (k: string) =>
+      k
+        .replace(/\[\d+\]/g, '')
+        .split('.')
+        .pop()!;
     return res.rows
       .map((r) => ({ key: r.key, value: r.value, interview_id: r.interview_id.toLowerCase() }))
-      .filter((r) => !variable || base(r.key) === variable);
+      .filter(
+        (r) =>
+          !variable || last(r.key) === variable || last(r.key).replace(/_OTHER$/, '') === variable,
+      );
   }
 
   async codes(tx: MssqlTx, projectId: string, variable: string) {
