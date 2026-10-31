@@ -200,7 +200,6 @@ export class PgExportsRepo implements ExportsRepo {
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
 
 const low = (s: string) => s.toLowerCase();
-const lowOrNull = (s: string | null) => (s === null ? null : s.toLowerCase());
 const parse = <T>(text: string | null): T => (text === null ? (null as T) : JSON.parse(text));
 
 function toExport(r: Record<string, unknown>): ExportRowView {
