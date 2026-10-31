@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { loadConfig } from './config.js';
-import { Database } from './db/database.js';
+import { Engine } from './db/engine.js';
 import { initObservability } from './observability.js';
 
 /**
@@ -26,7 +26,7 @@ await app.init();
 
 // Health for hosts that expect every container to answer HTTP (Azure App Service).
 if (config.WORKER_HEALTH_PORT) {
-  const database = app.get(Database);
+  const database = app.get(Engine);
   const server = createServer((req, res) => {
     if (req.url !== '/health') {
       res.writeHead(404).end();

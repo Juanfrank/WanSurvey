@@ -51,6 +51,7 @@ import { TeamsController } from './teams/teams.controller.js';
 import { MssqlTeamsRepo, PgTeamsRepo, TEAMS_REPO } from './teams/teams-repo.js';
 import { ProjectPeopleController } from './projects/project-people.controller.js';
 import { EXPORTS_REPO, MssqlExportsRepo, PgExportsRepo } from './exports/exports-repo.js';
+import { MssqlSweepRepo, PgSweepRepo, SWEEP_REPO } from './jobs/sweep-repo.js';
 import { AnalysisService } from './analysis/analysis.service.js';
 import { DatasetService } from './analysis/dataset.service.js';
 import { ShareService } from './analysis/share.service.js';
@@ -325,6 +326,14 @@ export class AppModule {
           useFactory: (engine: Engine, pg: PgAnalysisRepo, ms: MssqlAnalysisRepo) =>
             engine.kind === 'mssql' ? ms : pg,
           inject: [Engine, PgAnalysisRepo, MssqlAnalysisRepo],
+        },
+        PgSweepRepo,
+        MssqlSweepRepo,
+        {
+          provide: SWEEP_REPO,
+          useFactory: (engine: Engine, pg: PgSweepRepo, ms: MssqlSweepRepo) =>
+            engine.kind === 'mssql' ? ms : pg,
+          inject: [Engine, PgSweepRepo, MssqlSweepRepo],
         },
         PgExportsRepo,
         MssqlExportsRepo,
