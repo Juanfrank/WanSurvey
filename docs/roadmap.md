@@ -136,11 +136,22 @@ repository. The stores already written for these modules (`interviews-store.mssq
 `cati-store.mssql.ts`, `review-store.mssql.ts`, `cawi-store.mssql.ts`, `papi-store.mssql.ts`)
 follow the services one to one, so the SQL Server side of each repository leans on them.
 
-**Left:** the tests. The modules are tested over HTTP on SQL Server, the core first (sign-in,
-users, organisations, projects, teams, audit), then questionnaires, cases and sampling, interviews
-and CATI, web surveys, paper, review, statistics and exports. A fixtures helper that works on both
-engines replaces the raw PostgreSQL SQL the integration tests use today. Then the data copy, load
-measurements and the removal of PostgreSQL (phases 4 and 5).
+**The tests (done): the PostgreSQL suite is retired.** Every module is tested over HTTP on SQL Server
+(`apps/api/test/mssql/`, job `sqlserver`): about 770 tests, from sign-in, accounts and single
+sign-on, through questionnaires, cases and sampling, interviews, CAPI, CATI, web surveys, paper
+(including scanned forms), review, statistics, exports (the SQL export against Excel sheet by sheet),
+privacy and the role-by-endpoint matrix, to concurrency (deadlock retry, `503 BUSY` on a held lock),
+resilience and the browser tests (`pnpm e2e` with `E2E_ENGINE=mssql`, job `e2e-mssql`). The
+PostgreSQL fixtures files were removed with their harness; what remains in `apps/api/test/` needs
+no database (pure logic, the call queue, the job queue with and without Redis, Blob Storage against
+Azurite, the Microsoft settings cache) and runs in job `check`. The browser tests still run on
+PostgreSQL too (job `e2e`) and the package smoke test as well, until the code goes.
+
+Found while porting, and fixed: `SET LOCK_TIMEOUT` sent as its own statement does not outlast its
+`sp_executesql` batch, so the lock limit was never in force; every statement now carries it.
+
+**Left:** the data copy from PostgreSQL, load measurements on Azure SQL, the production cutover,
+and the removal of PostgreSQL (phases 4 and 5).
 
 More lessons: a `Date` parameter travels as `datetime`, which rounds to 3.33 ms, so what is
 written to or compared with a `datetimeoffset(3)` can land a millisecond off: send instants

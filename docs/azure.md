@@ -14,7 +14,7 @@ WanSurvey runs on **one** Azure App Service: a Linux plan **Premium v3 P0v3** wi
 | Tables used `FORCE ROW LEVEL SECURITY`, which also filters the owner. Without a superuser the owner runs the migrations, the seed and the security-definer functions (sign-in lookups, e-mail dispatch, nightly jobs, share links, respondent links), so they saw no rows | Migration `0019_owner_bypasses_rls.sql` turns FORCE off. Isolation is unchanged: the application connects as `wansurvey_app`, which owns nothing and is always filtered (checked by `test/rls.test.ts`) |
 | App Service restarts a container that does not answer HTTP; the worker had no port                                                                                                                                                                                        | The worker answers `GET /health` on `WORKER_HEALTH_PORT`                                                                                                                                                |
 
-Also added: the web container takes the API's address from `API_UPSTREAM`, and `TRUST_PROXY_HOPS` sets how many proxies sit in front of the API. CI runs the whole API test suite a second time against a database owned by an ordinary role, as on Azure (`apps/api/scripts/azure-like-db.sh`).
+Also added: the web container takes the API's address from `API_UPSTREAM`, and `TRUST_PROXY_HOPS` sets how many proxies sit in front of the API. The API tests that need a database run on SQL Server (job `sqlserver`), where the application user owns nothing and is always under the security policy, as on Azure SQL; the PostgreSQL test suite and its "ordinary owner role" variant were retired.
 
 ## Layout
 

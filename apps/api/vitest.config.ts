@@ -3,14 +3,14 @@ import { join } from 'node:path';
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
+/**
+ * The tests that need no database. Those that do run on SQL Server (`vitest.mssql.config.ts`, CI
+ * job `sqlserver`); the files in test/mssql are skipped here.
+ */
 const env = {
   NODE_ENV: 'test',
-  DATABASE_URL:
-    process.env.TEST_DATABASE_URL ??
-    'postgres://wansurvey_app:wansurvey_app@localhost:5432/wansurvey_test',
-  DATABASE_ADMIN_URL:
-    process.env.TEST_DATABASE_ADMIN_URL ??
-    'postgres://postgres:postgres@localhost:5432/wansurvey_test',
+  // Some of these tests read the configuration, which asks for a database URL; none connects.
+  DATABASE_URL: 'postgres://wansurvey_app:unused@localhost:5432/unused',
   APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   LOGIN_RATE_LIMIT: '1000',
   RATE_LIMIT_PER_IP: '100000',
@@ -20,7 +20,6 @@ const env = {
   // Export files of the tests, kept out of the repository.
   EXPORT_DIR: join(tmpdir(), 'wansurvey-test-exports'),
 };
-// globalSetup runs in the main process, so it needs the same variables.
 Object.assign(process.env, env);
 
 export default defineConfig({
@@ -28,7 +27,7 @@ export default defineConfig({
   plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     include: ['test/**/*.test.ts'],
-    globalSetup: ['./test/global-setup.ts'],
+    exclude: ['test/mssql/**', '**/node_modules/**'],
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 60_000,
