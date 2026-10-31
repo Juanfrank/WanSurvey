@@ -183,7 +183,7 @@ var entraSettings = empty(ssoDefaultOrg)
       ENTRA_TENANT_ID: entraTenantId
       ENTRA_CLIENT_ID: entraClientId
       ENTRA_CLIENT_SECRET: entraClientSecret
-      ENTRA_REDIRECT_URI: '${publicUrl}/api/v1/auth/sso/callback'
+      ENTRA_REDIRECT_URI: '${publicUrl}/api/auth/entra/callback'
       ENTRA_ALLOWED_DOMAINS: entraAllowedDomains
       ENTRA_ENFORCE: entraEnforce ? 'true' : 'false'
     }
@@ -195,14 +195,15 @@ var settings = union(
     NODE_ENV: 'production'
     DATABASE_URL: databaseUrl
     REDIS_URL: redisUrl
-    APP_ENCRYPTION_KEY: encryptionKey
-    PUBLIC_WEB_URL: publicUrl
+    ENCRYPTION_KEY: encryptionKey
+    PUBLIC_URL: publicUrl
     MAILER: empty(smtpUrl) ? 'console' : 'smtp'
     SMTP_URL: smtpUrl
     MAIL_FROM: mailFrom
     // Export files in Blob Storage (AZURE_CLIENT_ID, the identity reaching it, is set below).
     EXPORT_STORAGE: 'blob'
-    EXPORT_BLOB_URL: 'https://${storageName}.blob.${environment().suffixes.storage}/exports'
+    AZURE_STORAGE_ACCOUNT_NAME: storageName
+    AZURE_STORAGE_CONTAINER: 'exports'
     PASSWORD_LOGIN: passwordLogin ? 'true' : 'false'
     // nginx → API on the same host; App Service front end → nginx → API.
     API_UPSTREAM: 'http://localhost:3000'

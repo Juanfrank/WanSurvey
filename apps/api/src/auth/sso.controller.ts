@@ -26,7 +26,8 @@ import { SsoConfigs } from './sso-config.js';
 import { SsoError, SsoService } from './sso.service.js';
 
 export const SSO_STATE_COOKIE = 'ws_sso';
-const SSO_COOKIE_PATH = '/api/v1/auth/sso';
+// Set by /api/v1/auth/sso/start, read by the callback (/api/auth/entra/callback): their common root.
+const SSO_COOKIE_PATH = '/api';
 
 const StartQuery = z.object({
   org: z.string().min(1).max(64).optional(),
@@ -68,15 +69,43 @@ function client(req: Request): ClientInfo {
   return { ip: req.ip ?? null, userAgent: req.headers['user-agent'] ?? null };
 }
 
-/** Browser-facing Microsoft sign-in. Both endpoints answer with redirects, never JSON. */
-@ApiTags('auth')
-@Controller('auth/sso')
-export class SsoController {
+/** What both addresses of the callback do. */
+abstract class SsoCallbackBase {
   constructor(
-    private readonly sso: SsoService,
-    @Inject(CONFIG) private readonly config: AppConfig,
+    protected readonly sso: SsoService,
+    @Inject(CONFIG) protected readonly config: AppConfig,
   ) {}
 
+  protected failRedirect(res: Response, code: string) {
+    res.clearCookie(SSO_STATE_COOKIE, { path: SSO_COOKIE_PATH });
+    res.redirect(302, `${this.config.PUBLIC_URL}/login?sso_error=${encodeURIComponent(code)}`);
+  }
+
+  protected async finish(q: z.infer<typeof CallbackQuery>, req: Request, res: Response) {
+    let tenantId: string | null = null;
+    try {
+      const st = this.sso.readState(req.cookies?.[SSO_STATE_COOKIE], q.state);
+      tenantId = st.tenantId;
+      if (q.error || !q.code)
+        throw new SsoError(q.error ? 'microsoft_error' : 'missing_code', st.tenantId);
+      const result = await this.sso.callback(st, q.code, client(req), () =>
+        this.sso.signedInUser(req.cookies?.[SESSION_COOKIE]),
+      );
+      res.clearCookie(SSO_STATE_COOKIE, { path: SSO_COOKIE_PATH });
+      setSessionCookies(res, this.config, result.cookie, result.csrfToken);
+      res.redirect(302, `${this.config.PUBLIC_URL}${result.returnTo}`);
+    } catch (e) {
+      if (!(e instanceof SsoError)) throw e;
+      await this.sso.recordFailure(e.tenantId ?? tenantId, e.code, client(req));
+      this.failRedirect(res, e.code);
+    }
+  }
+}
+
+/** Browser-facing Microsoft sign-in: the start, and the callback's former address. */
+@ApiTags('auth')
+@Controller('auth/sso')
+export class SsoController extends SsoCallbackBase {
   private stateCookieOptions() {
     return {
       httpOnly: true,
@@ -84,11 +113,6 @@ export class SsoController {
       secure: this.config.NODE_ENV === 'production',
       path: SSO_COOKIE_PATH,
     };
-  }
-
-  private failRedirect(res: Response, code: string) {
-    res.clearCookie(SSO_STATE_COOKIE, { path: SSO_COOKIE_PATH });
-    res.redirect(302, `${this.config.PUBLIC_WEB_URL}/login?sso_error=${encodeURIComponent(code)}`);
   }
 
   /** `?org=<slug>` or `?email=<address>` (organisation found from the e-mail domain). */
@@ -106,31 +130,35 @@ export class SsoController {
     }
   }
 
+  /**
+   * The callback's former address (/api/v1/auth/sso/callback), kept for a cycle so that sign-ins
+   * under way during the deployment are not cut. Removed with the transition.
+   */
   @Public()
   @Throttle(ssoLimit)
   @Get('callback')
-  async callback(
+  legacyCallback(
     @Query(new ZodPipe(CallbackQuery)) q: z.infer<typeof CallbackQuery>,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    let tenantId: string | null = null;
-    try {
-      const st = this.sso.readState(req.cookies?.[SSO_STATE_COOKIE], q.state);
-      tenantId = st.tenantId;
-      if (q.error || !q.code)
-        throw new SsoError(q.error ? 'microsoft_error' : 'missing_code', st.tenantId);
-      const result = await this.sso.callback(st, q.code, client(req), () =>
-        this.sso.signedInUser(req.cookies?.[SESSION_COOKIE]),
-      );
-      res.clearCookie(SSO_STATE_COOKIE, { path: SSO_COOKIE_PATH });
-      setSessionCookies(res, this.config, result.cookie, result.csrfToken);
-      res.redirect(302, `${this.config.PUBLIC_WEB_URL}${result.returnTo}`);
-    } catch (e) {
-      if (!(e instanceof SsoError)) throw e;
-      await this.sso.recordFailure(e.tenantId ?? tenantId, e.code, client(req));
-      this.failRedirect(res, e.code);
-    }
+    return this.finish(q, req, res);
+  }
+}
+
+/** Where Microsoft sends the person back (ENTRA_REDIRECT_URI): the same address in every app. */
+@ApiTags('auth')
+@Controller('api/auth/entra')
+export class EntraCallbackController extends SsoCallbackBase {
+  @Public()
+  @Throttle(ssoLimit)
+  @Get('callback')
+  callback(
+    @Query(new ZodPipe(CallbackQuery)) q: z.infer<typeof CallbackQuery>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    return this.finish(q, req, res);
   }
 }
 
@@ -200,7 +228,7 @@ export class SsoSettingsController {
       }
       const current = await t.ssoSettings();
       const secretEnc = body.clientSecret
-        ? encryptField(body.clientSecret, this.config.APP_ENCRYPTION_KEY)
+        ? encryptField(body.clientSecret, this.config.ENCRYPTION_KEY)
         : (current?.clientSecretEnc ?? null);
       if (body.enabled && !secretEnc) {
         throw new BadRequestException('Add the client secret from the Entra app registration');

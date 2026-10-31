@@ -48,7 +48,7 @@ Mac.
    - Configuration → General: **Always On** on, HTTP 2.0, minimum TLS 1.2, FTP off, startup
      command `npm start` (or empty: App Service runs `npm start` itself).
    - Health check: path `/health`, with `HEALTH_ALLOWED_IPS` set (see below).
-   - Environment variables → **Advanced edit**: paste `appconfig/appservice.production.template.json`
+   - Environment variables → **Advanced edit**: paste `appconfig/app-settings.production.template.json`
      filled in (see [`docs/azure.md`](azure.md#settings-by-hand-no-bicep)).
 
 ## What each setting is
@@ -67,9 +67,9 @@ data or alter tables. Keep both in Key Vault. To keep the owner's password off t
 `DATABASE_ADMIN_URL` out and run the migrations by hand from the SSH console
 (`DATABASE_ADMIN_URL=… node dist/db/migrate.js`) before each release.
 
-**One public address:** `PUBLIC_WEB_URL` is every link a person opens (invitations, password
+**One public address:** `PUBLIC_URL` is every link a person opens (invitations, password
 reset, survey links, shared summaries) and the Microsoft redirect URI registered in Entra
-(`ENTRA_REDIRECT_URI`, normally `{PUBLIC_WEB_URL}/api/v1/auth/sso/callback`). The API answers `/api` on that same address: from
+(`ENTRA_REDIRECT_URI`, normally `{PUBLIC_URL}/api/auth/entra/callback`). The API answers `/api` on that same address: from
 the zip it serves the web app itself; in development Vite passes `/api` on to it.
 
 **`/health` only for the platform:** `HEALTH_ALLOWED_IPS` lists the addresses that may call it,
@@ -93,13 +93,14 @@ removed), so a client cannot pass as another by sending that header. A refused c
 
 **The rest:**
 
-- `APP_ENCRYPTION_KEY`: seals personal data and secrets in the database; 32 random bytes in base64,
+- `ENCRYPTION_KEY`: seals personal data and secrets in the database; 32 random bytes in base64,
   one per environment, never changed once data exists.
 - `NODE_ENV`: `production` turns on the production checks (Blob Storage required, HSTS).
 - `PASSWORD_LOGIN`, `SSO_DEFAULT_ORG`, `ENTRA_*` (tenant, client, secret and `ENTRA_REDIRECT_URI`): sign-in (`docs/sso-entra.md`).
 - `MAILER`, `SMTP_URL`, `MAIL_FROM`: e-mail; `console` writes it to the log instead.
-- `EXPORT_STORAGE`, `EXPORT_BLOB_URL`, `AZURE_CLIENT_ID`: export files in Blob Storage, reached with
-  the managed identity whose client id this is.
+- `EXPORT_STORAGE`, `AZURE_STORAGE_ACCOUNT_NAME`, `AZURE_STORAGE_CONTAINER`, `AZURE_CLIENT_ID`: export
+  files in Blob Storage (account and container come together), reached with the managed identity
+  whose client id this is. Without Blob Storage, `DATA_DIR` is a local directory.
 - `NODE_OPTIONS`, `DB_POOL_MAX`, `JOB_CONCURRENCY`, `HEAVY_JOB_CONCURRENCY`,
   `MAX_CONCURRENT_REQUESTS`: memory and concurrency of the one process.
 - `WEB_DIST`, `TRUST_PROXY_HOPS=1`, `WEBSITE_RUN_FROM_PACKAGE=1`,
@@ -126,3 +127,11 @@ removed), so a client cannot pass as another by sending that header. A refused c
 - **Rate limits** are counted in memory: correct with one instance, and reset on restart.
 - **No slots swap without care**: a staging slot is a second process on the same database; it may
   run, but do not start two production instances (scale-out needs Redis and the worker again).
+
+## Setting names
+
+The names are the same in every app of the family. Former names (`PUBLIC_WEB_URL`,
+`APP_ENCRYPTION_KEY`, `EXPORT_DIR`, `EXPORT_BLOB_URL`, `EXPORT_BLOB_CONTAINER`) are still read, with
+a warning in the log, until the transition ends; then the app refuses to start and says which name
+replaces each one. The values do not change (`ENCRYPTION_KEY` keeps the key's value). Paste the
+whole list (`appconfig/README.md`): Advanced edit replaces it.

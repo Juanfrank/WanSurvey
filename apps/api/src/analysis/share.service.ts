@@ -23,7 +23,7 @@ export class ShareService {
   ) {}
 
   private url(token: string) {
-    return `${this.config.PUBLIC_WEB_URL}/share/${token}`;
+    return `${this.config.PUBLIC_URL}/share/${token}`;
   }
 
   async list(t: AnalysisTx, projectId: string) {
@@ -33,7 +33,7 @@ export class ShareService {
       createdAt: r.createdAt,
       expiresAt: r.expiresAt,
       revokedAt: r.revokedAt,
-      url: r.revokedAt ? null : this.url(decryptField(r.tokenEnc, this.config.APP_ENCRYPTION_KEY)),
+      url: r.revokedAt ? null : this.url(decryptField(r.tokenEnc, this.config.ENCRYPTION_KEY)),
     }));
   }
 
@@ -48,7 +48,7 @@ export class ShareService {
     const id = await t.createShareLink({
       projectId,
       tokenHash: sha256Hex(token),
-      tokenEnc: encryptField(token, this.config.APP_ENCRYPTION_KEY),
+      tokenEnc: encryptField(token, this.config.ENCRYPTION_KEY),
       createdBy: ctx.userId,
       expiresAt,
     });

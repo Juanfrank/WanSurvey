@@ -74,7 +74,11 @@ import { CasesController } from './cases/cases.controller.js';
 import { CasesService } from './cases/cases.service.js';
 import { CASES_REPO, MssqlCasesRepo } from './cases/cases-repo.js';
 import { ImportsController } from './cases/imports.controller.js';
-import { SsoController, SsoSettingsController } from './auth/sso.controller.js';
+import {
+  EntraCallbackController,
+  SsoController,
+  SsoSettingsController,
+} from './auth/sso.controller.js';
 import { SsoConfigs } from './auth/sso-config.js';
 import { SsoService } from './auth/sso.service.js';
 import { CONFIG, loadConfig } from './config.js';
@@ -155,6 +159,7 @@ export class AppModule {
         HealthController,
         AuthController,
         SsoController,
+        EntraCallbackController,
         SsoSettingsController,
         UsersController,
         TenantsController,

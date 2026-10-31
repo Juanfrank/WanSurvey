@@ -58,7 +58,7 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 
    ```bash
    cp apps/api/.env.example apps/api/.env
-   # set APP_ENCRYPTION_KEY to the output of: openssl rand -base64 32
+   # set ENCRYPTION_KEY to the output of: openssl rand -base64 32
    ```
 
    Deploying to Azure App Service without containers: [`docs/appservice-zip.md`](docs/appservice-zip.md)

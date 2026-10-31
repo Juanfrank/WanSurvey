@@ -29,7 +29,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
   beforeAll(async () => {
     await entra.start();
     process.env.ENTRA_AUTHORITY_HOST = entra.host;
-    process.env.PUBLIC_WEB_URL = WEB;
+    process.env.PUBLIC_URL = WEB;
     resetConfigCache();
     t = await bootstrap();
     admin = ownerQuery(t.owner);
@@ -38,7 +38,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
     await t?.close();
     await entra.stop();
     delete process.env.ENTRA_AUTHORITY_HOST;
-    delete process.env.PUBLIC_WEB_URL;
+    delete process.env.PUBLIC_URL;
     resetConfigCache();
   });
 
@@ -50,7 +50,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
     const entraTenantId = opts.entraTenantId ?? randomUUID();
     await admin`
       insert into tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, enforce_sso, allowed_domains)
-      values (${tenant.id}, ${entraTenantId}, ${CLIENT_ID}, ${encryptField('s3cret', process.env.APP_ENCRYPTION_KEY!)},
+      values (${tenant.id}, ${entraTenantId}, ${CLIENT_ID}, ${encryptField('s3cret', process.env.ENCRYPTION_KEY!)},
               1, ${opts.enforce ? 1 : 0}, ${JSON.stringify(opts.domains ?? ['agency.org'])})`;
     return { ...tenant, entraTenantId };
   }
@@ -78,7 +78,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
       ...tamper,
     });
     const callback = await agent
-      .get('/api/v1/auth/sso/callback')
+      .get('/api/auth/entra/callback')
       .query({ code, state: tamper.state ?? p.get('state') });
     return { agent, start, authorize, callback };
   }
@@ -102,7 +102,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
       client_id: CLIENT_ID,
       response_type: 'code',
       code_challenge_method: 'S256',
-      redirect_uri: `${WEB}/api/v1/auth/sso/callback`,
+      redirect_uri: `${WEB}/api/auth/entra/callback`,
       scope: 'openid profile email',
     });
     const cookie = (start.headers['set-cookie'] as unknown as string[]).find((c) =>
@@ -265,7 +265,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
     );
     const backs = await Promise.all(
       legs.map((l) =>
-        l.agent.get('/api/v1/auth/sso/callback').query({ code: l.code, state: l.state }),
+        l.agent.get('/api/auth/entra/callback').query({ code: l.code, state: l.state }),
       ),
     );
     for (const b of backs) expect(b.headers.location, b.text).toBe(`${WEB}/`);
@@ -395,7 +395,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
       const empty = await a.agent.get('/api/v1/tenant/sso');
       expect(empty.body).toMatchObject({
         configured: false,
-        redirectUri: `${WEB}/api/v1/auth/sso/callback`,
+        redirectUri: `${WEB}/api/auth/entra/callback`,
       });
 
       const put = (body: object) =>

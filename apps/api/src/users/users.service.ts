@@ -119,7 +119,7 @@ export class UsersService {
     // Without passwords the invitation is accepted by signing in with Microsoft to the
     // organisation that sent it; the link carries the organisation, not the token.
     if (!this.config.PASSWORD_LOGIN) {
-      const link = `${this.config.PUBLIC_WEB_URL}/accept-invitation?org=${encodeURIComponent(org)}`;
+      const link = `${this.config.PUBLIC_URL}/accept-invitation?org=${encodeURIComponent(org)}`;
       await this.mailer.send({
         to: member.email,
         subject: existingAccount
@@ -130,7 +130,7 @@ export class UsersService {
       });
       return;
     }
-    const link = `${this.config.PUBLIC_WEB_URL}/accept-invitation?token=${encodeURIComponent(token)}`;
+    const link = `${this.config.PUBLIC_URL}/accept-invitation?token=${encodeURIComponent(token)}`;
     await this.mailer.send({
       to: member.email,
       subject: existingAccount

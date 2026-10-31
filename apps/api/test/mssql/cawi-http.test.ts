@@ -57,7 +57,7 @@ describe.skipIf(!configured)('SQL Server: web surveys by e-mail over HTTP', () =
 
   beforeAll(async () => {
     process.env.MAIL_WEBHOOK_SECRET = SECRET;
-    process.env.PUBLIC_WEB_URL = 'http://survey.test';
+    process.env.PUBLIC_URL = 'http://survey.test';
     resetConfigCache();
     t = await bootstrap();
     dispatcher = t.app.get(WaveDispatcher);
@@ -72,7 +72,7 @@ describe.skipIf(!configured)('SQL Server: web surveys by e-mail over HTTP', () =
   });
   afterAll(async () => {
     delete process.env.MAIL_WEBHOOK_SECRET;
-    delete process.env.PUBLIC_WEB_URL;
+    delete process.env.PUBLIC_URL;
     resetConfigCache();
     await t?.close();
   });

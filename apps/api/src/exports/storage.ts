@@ -71,16 +71,18 @@ export class BlobStorage implements ExportStorage {
   constructor(private readonly container: ContainerClient) {}
 
   static fromConfig(c: AppConfig) {
+    const name = c.AZURE_STORAGE_CONTAINER ?? 'exports';
     if (c.AZURE_STORAGE_CONNECTION_STRING)
       return new BlobStorage(
         BlobServiceClient.fromConnectionString(
           c.AZURE_STORAGE_CONNECTION_STRING,
-        ).getContainerClient(c.EXPORT_BLOB_CONTAINER),
+        ).getContainerClient(name),
       );
-    // The URL names the container; AZURE_CLIENT_ID picks a user-assigned identity.
-    const url = new URL(c.EXPORT_BLOB_URL!);
-    const name = url.pathname.replace(/^\/+|\/+$/g, '') || c.EXPORT_BLOB_CONTAINER;
-    const service = new BlobServiceClient(url.origin, new ManagedIdentity(c.AZURE_CLIENT_ID));
+    // AZURE_CLIENT_ID picks a user-assigned identity.
+    const service = new BlobServiceClient(
+      `https://${c.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net`,
+      new ManagedIdentity(c.AZURE_CLIENT_ID),
+    );
     return new BlobStorage(service.getContainerClient(name));
   }
 
@@ -202,5 +204,5 @@ export class LocalStorage implements ExportStorage {
 
 export function exportStorage(c: AppConfig): ExportStorage {
   if (c.EXPORT_STORAGE === 'blob') return BlobStorage.fromConfig(c);
-  return new LocalStorage(c.EXPORT_DIR ?? join(process.cwd(), '.exports'));
+  return new LocalStorage(c.DATA_DIR ?? join(process.cwd(), '.exports'));
 }

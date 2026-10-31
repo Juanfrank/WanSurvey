@@ -1,0 +1,317 @@
+[
+  {
+    "name": "NODE_ENV",
+    "value": "production",
+    "slotSetting": false
+  },
+  {
+    "name": "PORT",
+    "value": "8080",
+    "slotSetting": false
+  },
+  {
+    "name": "DATABASE_URL",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-url/) \u2014 mssql://wansurvey_app:...@<server>.database.windows.net:1433/wansurvey>",
+    "slotSetting": false
+  },
+  {
+    "name": "DATABASE_ADMIN_URL",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-admin-url/) \u2014 the owner login, for the migrations applied at start>",
+    "slotSetting": false
+  },
+  {
+    "name": "DB_POOL_MAX",
+    "value": "12",
+    "slotSetting": false
+  },
+  {
+    "name": "DB_WORKER_POOL_MAX",
+    "value": "5",
+    "slotSetting": false
+  },
+  {
+    "name": "DB_STATEMENT_TIMEOUT_MS",
+    "value": "30000",
+    "slotSetting": false
+  },
+  {
+    "name": "DB_WORKER_STATEMENT_TIMEOUT_MS",
+    "value": "600000",
+    "slotSetting": false
+  },
+  {
+    "name": "DB_LOCK_TIMEOUT_MS",
+    "value": "5000",
+    "slotSetting": false
+  },
+  {
+    "name": "MAX_CONCURRENT_REQUESTS",
+    "value": "50",
+    "slotSetting": false
+  },
+  {
+    "name": "HTTP_KEEPALIVE_MS",
+    "value": "65000",
+    "slotSetting": false
+  },
+  {
+    "name": "ENCRYPTION_KEY",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/encryption-key/) \u2014 32 bytes, base64>",
+    "slotSetting": false
+  },
+  {
+    "name": "PUBLIC_URL",
+    "value": "<https://encuestas.example.org>",
+    "slotSetting": false
+  },
+  {
+    "name": "PUBLIC_SURVEY_URL",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_AUTHORITY_HOST",
+    "value": "https://login.microsoftonline.com",
+    "slotSetting": false
+  },
+  {
+    "name": "PASSWORD_LOGIN",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "SSO_DEFAULT_ORG",
+    "value": "<organisation slug>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_TENANT_ID",
+    "value": "<directory (tenant) id, a GUID>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_CLIENT_ID",
+    "value": "<application (client) id, a GUID>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_CLIENT_SECRET",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/entra-client-secret/)>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_REDIRECT_URI",
+    "value": "<https://encuestas.example.org/api/auth/entra/callback \u2014 the redirect URI registered in Entra>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_ALLOWED_DOMAINS",
+    "value": "<example.org>",
+    "slotSetting": false
+  },
+  {
+    "name": "ENTRA_ENFORCE",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "SESSION_IDLE_MINUTES",
+    "value": "60",
+    "slotSetting": false
+  },
+  {
+    "name": "SESSION_ABSOLUTE_HOURS",
+    "value": "12",
+    "slotSetting": false
+  },
+  {
+    "name": "LOGIN_RATE_LIMIT",
+    "value": "10",
+    "slotSetting": false
+  },
+  {
+    "name": "LOGIN_LOCK_AFTER",
+    "value": "10",
+    "slotSetting": false
+  },
+  {
+    "name": "LOGIN_LOCK_MINUTES",
+    "value": "15",
+    "slotSetting": false
+  },
+  {
+    "name": "RATE_LIMIT_PER_IP",
+    "value": "5000",
+    "slotSetting": false
+  },
+  {
+    "name": "IMPORT_MAX_MB",
+    "value": "20",
+    "slotSetting": false
+  },
+  {
+    "name": "IMPORT_MAX_ROWS",
+    "value": "200000",
+    "slotSetting": false
+  },
+  {
+    "name": "GEOCODER",
+    "value": "none",
+    "slotSetting": false
+  },
+  {
+    "name": "GEOCODER_URL",
+    "value": "https://nominatim.openstreetmap.org",
+    "slotSetting": false
+  },
+  {
+    "name": "GEOCODER_EMAIL",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "GEOCODE_MAX",
+    "value": "5000",
+    "slotSetting": false
+  },
+  {
+    "name": "MAILER",
+    "value": "smtp",
+    "slotSetting": false
+  },
+  {
+    "name": "MAIL_OUTBOX_DIR",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "SMTP_URL",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/smtp-url/) \u2014 smtps://user:password@smtp.example.org:465>",
+    "slotSetting": false
+  },
+  {
+    "name": "MAIL_FROM",
+    "value": "<WanSurvey <encuestas@example.org>>",
+    "slotSetting": false
+  },
+  {
+    "name": "MAIL_WEBHOOK_SECRET",
+    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/mail-webhook-secret/) \u2014 at least 16 characters>",
+    "slotSetting": false
+  },
+  {
+    "name": "DISPATCH_INTERVAL_MS",
+    "value": "15000",
+    "slotSetting": false
+  },
+  {
+    "name": "EXPORT_STORAGE",
+    "value": "blob",
+    "slotSetting": false
+  },
+  {
+    "name": "DATA_DIR",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "AZURE_STORAGE_ACCOUNT_NAME",
+    "value": "<storage account name>",
+    "slotSetting": false
+  },
+  {
+    "name": "AZURE_STORAGE_CONTAINER",
+    "value": "exports",
+    "slotSetting": false
+  },
+  {
+    "name": "AZURE_CLIENT_ID",
+    "value": "<client id of the app's user-assigned managed identity>",
+    "slotSetting": false
+  },
+  {
+    "name": "AZURE_STORAGE_CONNECTION_STRING",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "EXPORT_MAX_BYTES",
+    "value": "2000000000",
+    "slotSetting": false
+  },
+  {
+    "name": "EXPORT_RETENTION_DAYS",
+    "value": "7",
+    "slotSetting": false
+  },
+  {
+    "name": "BI_REFRESH_CRON",
+    "value": "40 */6 * * *",
+    "slotSetting": false
+  },
+  {
+    "name": "JOB_CONCURRENCY",
+    "value": "4",
+    "slotSetting": false
+  },
+  {
+    "name": "HEAVY_JOB_CONCURRENCY",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "JOB_RETRY_MS",
+    "value": "2000",
+    "slotSetting": false
+  },
+  {
+    "name": "TRUST_PROXY_HOPS",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "HEALTH_ALLOWED_IPS",
+    "value": "169.254.0.0/16",
+    "slotSetting": false
+  },
+  {
+    "name": "WEB_DIST",
+    "value": "/home/site/wwwroot/public",
+    "slotSetting": false
+  },
+  {
+    "name": "LOG_LEVEL",
+    "value": "info",
+    "slotSetting": false
+  },
+  {
+    "name": "SENTRY_DSN",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "NODE_OPTIONS",
+    "value": "--max-old-space-size=2048",
+    "slotSetting": false
+  },
+  {
+    "name": "WEBSITE_RUN_FROM_PACKAGE",
+    "value": "1",
+    "slotSetting": false
+  },
+  {
+    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "WEBSITE_HEALTHCHECK_MAXPINGFAILURES",
+    "value": "5",
+    "slotSetting": false
+  }
+]

@@ -91,7 +91,7 @@ export async function createUser(
     const email = opts.email ?? `${unique('u')}@example.org`;
     const needsTotp = opts.totp ?? grants.some((g) => g.role === 'owner' || g.role === 'admin');
     const secret = needsTotp ? generateTotpSecret() : null;
-    const enc = secret ? encryptField(secret, process.env.APP_ENCRYPTION_KEY!) : null;
+    const enc = secret ? encryptField(secret, process.env.ENCRYPTION_KEY!) : null;
     const hash = await (passwordHash ??= hashPassword(PASSWORD));
     await sql`INSERT INTO users (id, email, name, status, password_hash, totp_secret_enc, totp_enabled)
               VALUES (${id}, ${email}, ${email}, 'active', ${hash}, ${enc}, ${needsTotp ? 1 : 0})`.execute(

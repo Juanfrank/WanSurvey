@@ -43,7 +43,7 @@ export class CasesService {
     private readonly audit: AuditService,
     @Inject(CONFIG) config: AppConfig,
   ) {
-    this.pii = new PiiCipher(config.APP_ENCRYPTION_KEY);
+    this.pii = new PiiCipher(config.ENCRYPTION_KEY);
   }
 
   /** Rows with the whole sample: plain fields and the sealed personal ones (H1). */

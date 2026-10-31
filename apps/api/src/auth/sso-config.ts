@@ -182,7 +182,7 @@ export class SsoConfigs implements OnModuleDestroy {
           entraTenantId: row.entraTenantId,
           clientId: row.clientId,
           clientSecret: row.clientSecretEnc
-            ? decryptField(row.clientSecretEnc, this.config.APP_ENCRYPTION_KEY)
+            ? decryptField(row.clientSecretEnc, this.config.ENCRYPTION_KEY)
             : null,
           enabled: row.enabled,
           enforceSso: row.enforceSso,

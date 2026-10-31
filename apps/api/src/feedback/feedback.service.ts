@@ -107,7 +107,7 @@ export class FeedbackService {
   ) {}
 
   private url(slug: string) {
-    return `${this.config.PUBLIC_WEB_URL.replace(/\/$/, '')}/f/${slug}`;
+    return `${this.config.PUBLIC_URL.replace(/\/$/, '')}/f/${slug}`;
   }
 
   private shape(p: PointView) {

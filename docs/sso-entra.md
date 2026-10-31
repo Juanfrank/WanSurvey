@@ -6,11 +6,11 @@ Each WanSurvey organisation can let its staff sign in with their Microsoft work 
 
 In the Microsoft Entra admin center, go to **App registrations → New registration**:
 
-| Setting                 | Value                                                                                                                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Name                    | `WanSurvey`                                                                                                                                                               |
-| Supported account types | _Accounts in this organizational directory only_ (single tenant)                                                                                                          |
-| Redirect URI            | Platform **Web**, set to the `redirectUri` shown by `GET /api/v1/tenant/sso`, for example `https://encuestas.example.org/api/v1/auth/sso/callback` (`ENTRA_REDIRECT_URI`) |
+| Setting                 | Value                                                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Name                    | `WanSurvey`                                                                                                                                                              |
+| Supported account types | _Accounts in this organizational directory only_ (single tenant)                                                                                                         |
+| Redirect URI            | Platform **Web**, set to the `redirectUri` shown by `GET /api/v1/tenant/sso`, for example `https://encuestas.example.org/api/auth/entra/callback` (`ENTRA_REDIRECT_URI`) |
 
 Then, in the new app registration:
 
@@ -58,7 +58,7 @@ PUT /api/v1/tenant/sso
    | Deactivated | Refused                            |
    | None        | Added as a member **with no role** |
 
-5. The browser returns to `PUBLIC_WEB_URL + returnTo` with a session. On failure it goes to `PUBLIC_WEB_URL/login?sso_error=<code>`. Possible codes:
+5. The browser returns to `PUBLIC_URL + returnTo` with a session. On failure it goes to `PUBLIC_URL/login?sso_error=<code>`. Possible codes:
    - `sso_not_configured`
    - `choose_organisation`
    - `invalid_state`
@@ -88,7 +88,7 @@ SSO_DEFAULT_ORG=<slug of the organisation>
 ENTRA_TENANT_ID=<Directory (tenant) ID>
 ENTRA_CLIENT_ID=<Application (client) ID>
 ENTRA_CLIENT_SECRET=<secret value, from Key Vault>
-ENTRA_REDIRECT_URI=https://encuestas.example.org/api/v1/auth/sso/callback   # as registered in Entra
+ENTRA_REDIRECT_URI=https://encuestas.example.org/api/auth/entra/callback   # as registered in Entra
 ENTRA_ALLOWED_DOMAINS=agency.org          # comma-separated
 # ENTRA_ENFORCE=true                      # with passwords on: require Microsoft here too
 ```
@@ -98,7 +98,8 @@ ENTRA_ALLOWED_DOMAINS=agency.org          # comma-separated
 - **Linking by e-mail.** A token's e-mail proves nothing by itself: whoever runs a directory can put any address in it. An existing account that also belongs to other organisations is linked by e-mail only through the deployment's own directory (`ENTRA_*`, run by those who run the installation). Through a directory an organisation configured itself it is refused with `link_not_allowed` (with passwords on, `link_required`: sign in with the password first); an administrator adds the person instead. After the first link, every sign-in finds the account by its Entra `oid`.
 - **The deployment's settings win.** For `SSO_DEFAULT_ORG`, `GET /tenant/sso` shows the deployment's values with `managedByDeployment: true` and `PUT` answers 409 `SSO_MANAGED_BY_DEPLOYMENT`. With passwords on it still accepts passwords unless `ENTRA_ENFORCE=true` (default `false`), which requires Microsoft for everyone but its owners, as with `enforceSso`.
 - **An e-mail no organisation claims.** `sso/start?email=` with a domain that no organisation lists goes to `SSO_DEFAULT_ORG`, whose allowed domains decide at the callback.
-- **Startup checks.** `SSO_DEFAULT_ORG` and the four `ENTRA_*` settings (tenant, client, secret, redirect URI) come together or not at all, and `PASSWORD_LOGIN=false` needs them; `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID` must be GUIDs; `ENTRA_REDIRECT_URI` must be an `https` address (`http` only for localhost) ending in `/api/v1/auth/sso/callback`; an empty setting counts as not set. Otherwise the API refuses to start.
+- **Callback address.** Every app of the family (KPITracker, CienciaDeDatos, WanSurvey) answers Microsoft at `/api/auth/entra/callback`. WanSurvey's former address, `/api/v1/auth/sso/callback`, still answers for one cycle; register the new URI in each Entra app (the deployment's and every organisation's own) before deploying, and remove the old one after.
+- **Startup checks.** `SSO_DEFAULT_ORG` and the four `ENTRA_*` settings (tenant, client, secret, redirect URI) come together or not at all, and `PASSWORD_LOGIN=false` needs them; `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID` must be GUIDs; `ENTRA_REDIRECT_URI` must be an `https` address (`http` only for localhost) ending in `/api/auth/entra/callback`; an empty setting counts as not set. Otherwise the API refuses to start.
 - **One directory per session.** A session opens another of the person's organisations only if that organisation has Microsoft sign-in from the same directory; otherwise `switch-tenant` answers `SSO_REQUIRED` and the app sends the browser to that organisation's own sign-in.
 - **Start of the day.** Starting a sign-in reads only public settings (no secret); the settings are kept for a minute per process, and a change saved in the app reaches every process at once through Redis. A known account signs in with one transaction (find it by `oid`, open the session).
 
@@ -106,7 +107,7 @@ ENTRA_ALLOWED_DOMAINS=agency.org          # comma-separated
 
 Set these in the API environment:
 
-- `ENTRA_REDIRECT_URI`: Microsoft redirects there; it must match the registered redirect URI exactly. Organisations that use their own directory instead (no deployment settings) get `{PUBLIC_WEB_URL}/api/v1/auth/sso/callback`.
-- `PUBLIC_WEB_URL`: where the browser lands afterwards.
+- `ENTRA_REDIRECT_URI`: Microsoft redirects there; it must match the registered redirect URI exactly. Organisations that use their own directory instead (no deployment settings) get `{PUBLIC_URL}/api/auth/entra/callback`.
+- `PUBLIC_URL`: where the browser lands afterwards.
 
 `ENTRA_AUTHORITY_HOST` defaults to `https://login.microsoftonline.com`. Change it only for sovereign clouds (for example `https://login.microsoftonline.us`) or tests. The automated tests use a local mock of Microsoft's token and key endpoints, so they never reach Microsoft.

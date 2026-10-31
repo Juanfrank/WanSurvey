@@ -104,7 +104,7 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
                       VALUES (${uuidv7()}, ${tenantId}, ${projectId}, ${name}, ${type}, ${pii ? 1 : 0}, ${i})`);
       }
       const interviewer = userIds.interviewer!;
-      const key = process.env.APP_ENCRYPTION_KEY;
+      const key = process.env.ENCRYPTION_KEY;
       const cipher = key ? new PiiCipher(key) : null;
       const pii = new Set(fields.filter(([, , p]) => p).map(([n]) => n));
       const now = new Date();

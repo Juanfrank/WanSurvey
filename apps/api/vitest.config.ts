@@ -11,14 +11,14 @@ const env = {
   NODE_ENV: 'test',
   // Some of these tests read the configuration, which asks for a database URL; none connects.
   DATABASE_URL: 'mssql://wansurvey_app:unused@localhost:1433/unused',
-  APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+  ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   LOGIN_RATE_LIMIT: '1000',
   RATE_LIMIT_PER_IP: '100000',
   LOG_LEVEL: 'silent',
   // Failed jobs are tried again at once (tests drain the queue and wait for the last try).
   JOB_RETRY_MS: '0',
   // Export files of the tests, kept out of the repository.
-  EXPORT_DIR: join(tmpdir(), 'wansurvey-test-exports'),
+  DATA_DIR: join(tmpdir(), 'wansurvey-test-exports'),
 };
 Object.assign(process.env, env);
 

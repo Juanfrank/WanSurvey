@@ -25,7 +25,7 @@ How WanSurvey meets spec §12, checked against the [OWASP ASVS 4.0.3](https://ow
 | 1.2 Authentication architecture  | ✅     | One auth module (`apps/api/src/auth`); every route is protected unless marked `@Public()`                 |
 | 1.4 Access control architecture  | ✅     | Permissions checked server-side by a global guard; the web app only hides what the server forbids         |
 | 1.5 Input/output architecture    | ✅     | Every body and query is parsed by a Zod schema (`ZodPipe`); outputs are JSON                              |
-| 1.6 Cryptographic architecture   | ✅     | One key (`APP_ENCRYPTION_KEY`) for field encryption; keyed hashes derived from it with HKDF               |
+| 1.6 Cryptographic architecture   | ✅     | One key (`ENCRYPTION_KEY`) for field encryption; keyed hashes derived from it with HKDF                   |
 | 1.8 Data classification          | ✅     | Sample fields and questions are marked personal; masking, encryption, exports and erasure follow the mark |
 | 1.14 Configuration               | ✅     | Configuration validated at start (`config.ts`); the application connects as a restricted role             |
 

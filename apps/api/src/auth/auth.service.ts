@@ -327,7 +327,7 @@ export class AuthService {
     return new ForbiddenException({
       code: 'SSO_REQUIRED',
       message: `${t.name} requires signing in with Microsoft`,
-      ssoStartUrl: `${this.config.PUBLIC_WEB_URL}/api/v1/auth/sso/start?org=${encodeURIComponent(t.slug)}`,
+      ssoStartUrl: `${this.config.PUBLIC_URL}/api/v1/auth/sso/start?org=${encodeURIComponent(t.slug)}`,
     });
   }
 
@@ -396,7 +396,7 @@ export class AuthService {
         if (user!.totpEnabled)
           throw new ConflictException('Two-factor authentication is already enabled');
         const secret = generateTotpSecret();
-        await t.setTotpSecret(ctx.userId, encryptField(secret, this.config.APP_ENCRYPTION_KEY));
+        await t.setTotpSecret(ctx.userId, encryptField(secret, this.config.ENCRYPTION_KEY));
         return { secret, otpauthUrl: otpauthUrl(secret, user!.email) };
       },
       ctx.userId,
@@ -411,7 +411,7 @@ export class AuthService {
         if (user!.totpEnabled)
           throw new ConflictException('Two-factor authentication is already enabled');
         if (!user!.totpSecretEnc) throw new BadRequestException('Start the setup first');
-        const secret = decryptField(user!.totpSecretEnc, this.config.APP_ENCRYPTION_KEY);
+        const secret = decryptField(user!.totpSecretEnc, this.config.ENCRYPTION_KEY);
         const step = totpStep(secret, code);
         if (step === null)
           throw new UnauthorizedException({ code: 'INVALID_CODE', message: 'Invalid code' });
@@ -438,7 +438,7 @@ export class AuthService {
       ctx.tenantId,
       async (t) => {
         const valid = await t.acceptTotp(ctx.userId, (secretEnc) =>
-          totpStep(decryptField(secretEnc, this.config.APP_ENCRYPTION_KEY), code),
+          totpStep(decryptField(secretEnc, this.config.ENCRYPTION_KEY), code),
         );
         if (valid) await t.setMfa(ctx.sessionId, 'ok', 'totp');
         await t.audit(
@@ -553,7 +553,7 @@ export class AuthService {
     await this.mailer.send({
       to: token.email,
       subject: 'Reset your WanSurvey password',
-      text: `Use this link within 2 hours to choose a new password:\n${this.config.PUBLIC_WEB_URL}/reset-password?token=${encodeURIComponent(token.raw)}`,
+      text: `Use this link within 2 hours to choose a new password:\n${this.config.PUBLIC_URL}/reset-password?token=${encodeURIComponent(token.raw)}`,
       idempotencyKey: `reset:${sha256Hex(token.raw)}`,
     });
   }

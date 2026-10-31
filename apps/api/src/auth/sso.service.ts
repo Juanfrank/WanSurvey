@@ -74,7 +74,7 @@ export class SsoService {
   ) {}
 
   get redirectUri(): string {
-    return this.config.ENTRA_REDIRECT_URI ?? `${this.config.PUBLIC_WEB_URL}${SSO_CALLBACK_PATH}`;
+    return this.config.ENTRA_REDIRECT_URI ?? `${this.config.PUBLIC_URL}${SSO_CALLBACK_PATH}`;
   }
 
   private authority(entraTenantId: string): string {
@@ -130,7 +130,7 @@ export class SsoService {
     }).toString();
     return {
       url: url.toString(),
-      cookie: encryptField(JSON.stringify(st), this.config.APP_ENCRYPTION_KEY),
+      cookie: encryptField(JSON.stringify(st), this.config.ENCRYPTION_KEY),
     };
   }
 
@@ -139,7 +139,7 @@ export class SsoService {
       throw new SsoError('invalid_state');
     let st: SsoState;
     try {
-      st = JSON.parse(decryptField(cookie, this.config.APP_ENCRYPTION_KEY)) as SsoState;
+      st = JSON.parse(decryptField(cookie, this.config.ENCRYPTION_KEY)) as SsoState;
     } catch {
       throw new SsoError('invalid_state');
     }

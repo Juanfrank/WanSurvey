@@ -15,7 +15,59 @@ const optionalGuid = (message: string) =>
       .optional(),
   );
 
-export const SSO_CALLBACK_PATH = '/api/v1/auth/sso/callback';
+/**
+ * Names that changed so that the same concept has the same name in every app. Until the
+ * transition ends (RENAMED_VARIABLES_STRICT) the old name still works, with a warning;
+ * afterwards an old name stops the app and says which is the new one.
+ */
+export const RENAMED_VARIABLES: Record<string, string> = {
+  PUBLIC_WEB_URL: 'PUBLIC_URL',
+  APP_ENCRYPTION_KEY: 'ENCRYPTION_KEY',
+  EXPORT_DIR: 'DATA_DIR',
+  EXPORT_BLOB_CONTAINER: 'AZURE_STORAGE_CONTAINER',
+  // EXPORT_BLOB_URL (https://<account>.blob.core.windows.net/<container>) is split in two.
+  EXPORT_BLOB_URL: 'AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_CONTAINER',
+};
+export const RENAMED_VARIABLES_STRICT = false;
+
+/** Settings that are secrets, and what a placeholder looks like. */
+const SECRET_SETTINGS = new Set([
+  'ENCRYPTION_KEY',
+  'ENTRA_CLIENT_SECRET',
+  'MAIL_WEBHOOK_SECRET',
+  'SMTP_URL',
+  'DATABASE_URL',
+  'DATABASE_ADMIN_URL',
+]);
+const EXAMPLE_SECRET = /(^|[:/@=])(dev-|change-me|admin1234)|change-me/i;
+
+/** The environment with old names read as the new ones; the old names found are returned. */
+export function applyRenamedVariables(env: NodeJS.ProcessEnv): {
+  env: NodeJS.ProcessEnv;
+  found: string[];
+} {
+  const found = Object.keys(RENAMED_VARIABLES).filter((k) => env[k] !== undefined && env[k] !== '');
+  if (found.length === 0) return { env, found };
+  const out: NodeJS.ProcessEnv = { ...env };
+  for (const old of found) {
+    const value = env[old]!;
+    if (old === 'EXPORT_BLOB_URL') {
+      try {
+        const url = new URL(value);
+        out.AZURE_STORAGE_ACCOUNT_NAME ||= url.hostname.split('.')[0];
+        out.AZURE_STORAGE_CONTAINER ||= url.pathname.replace(/^\/+|\/+$/g, '') || 'exports';
+      } catch {
+        // Left for the validation to report.
+      }
+      continue;
+    }
+    const next = RENAMED_VARIABLES[old]!;
+    if (!out[next]) out[next] = value;
+  }
+  return { env: out, found };
+}
+
+export const SSO_CALLBACK_PATH = '/api/auth/entra/callback';
 
 /**
  * Who may call /health: IP addresses and CIDR ranges, comma-separated ("10.0.0.0/8,::1").
@@ -72,15 +124,15 @@ const Env = z.object({
    */
   HTTP_KEEPALIVE_MS: z.coerce.number().int().min(1000).default(65_000),
   /** 32-byte key (base64) for field-level encryption of secrets such as TOTP seeds. */
-  APP_ENCRYPTION_KEY: z
+  ENCRYPTION_KEY: z
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'Must be 32 bytes, base64'),
   /**
    * The app's public address: links in e-mails and the Microsoft redirect URI
-   * ({PUBLIC_WEB_URL}/api/v1/auth/sso/callback). The API answers /api on this same address:
+   * ({PUBLIC_URL}/api/auth/entra/callback). The API answers /api on this same address:
    * itself from the zip, through Vite's proxy in development.
    */
-  PUBLIC_WEB_URL: z.string().url().default('http://localhost:5173'),
+  PUBLIC_URL: z.string().url().default('http://localhost:5173'),
   /** Microsoft identity platform host; overridable for tests or sovereign clouds. */
   ENTRA_AUTHORITY_HOST: z.string().url().default('https://login.microsoftonline.com'),
   /**
@@ -102,9 +154,9 @@ const Env = z.object({
   ENTRA_CLIENT_ID: optionalGuid('Application (client) ID, a GUID'),
   ENTRA_CLIENT_SECRET: optionalText(500),
   /**
-   * The redirect URI registered in the Entra app, exactly: {public address}/api/v1/auth/sso/callback.
-   * Without the deployment's Microsoft sign-in, organisations' own directories use
-   * PUBLIC_WEB_URL + that path.
+   * The redirect URI registered in the Entra app, exactly: {public address}/api/auth/entra/callback
+   * (the same path in every app). Without the deployment's Microsoft sign-in, organisations'
+   * own directories use PUBLIC_URL + that path.
    */
   ENTRA_REDIRECT_URI: z.preprocess(
     (v) => (v === '' ? undefined : v),
@@ -210,18 +262,20 @@ const Env = z.object({
    * development and tests on one machine).
    */
   EXPORT_STORAGE: z.enum(['blob', 'local']).optional(),
-  /** 'local': the directory (created if missing). */
-  EXPORT_DIR: optionalText(1000),
+  /** 'local': the directory for files (created if missing). */
+  DATA_DIR: optionalText(1000),
   /**
-   * 'blob': the container's URL (https://<account>.blob.core.windows.net/exports), reached
-   * with the app's managed identity (AZURE_CLIENT_ID for a user-assigned one)…
+   * 'blob': the storage account (https://<account>.blob.core.windows.net), reached with the
+   * app's managed identity (AZURE_CLIENT_ID for a user-assigned one). Both account and
+   * container, or neither.
    */
-  EXPORT_BLOB_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
+  AZURE_STORAGE_ACCOUNT_NAME: optionalText(24),
+  /** The container; with a connection string (Azurite) alone, 'exports' if not given. */
+  AZURE_STORAGE_CONTAINER: optionalText(63),
   /** The user-assigned managed identity's client id (App Service sets no default one). */
   AZURE_CLIENT_ID: optionalText(100),
-  /** …or a connection string (Azurite in development and tests), with EXPORT_BLOB_CONTAINER. */
+  /** …or a connection string (Azurite in development and tests). */
   AZURE_STORAGE_CONNECTION_STRING: optionalText(2000),
-  EXPORT_BLOB_CONTAINER: z.string().min(3).max(63).default('exports'),
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -229,13 +283,24 @@ const Env = z.object({
   SENTRY_DSN: z.string().optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
 });
+/** Every setting the app reads, for the checks that the templates and examples list them all. */
+export const CONFIG_KEYS = Object.keys(Env.shape);
 export type AppConfig = z.infer<typeof Env>;
 
 let cached: AppConfig | null = null;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && env === process.env) return cached;
-  const parsed = Env.safeParse(env);
+  const renamed = applyRenamedVariables(env);
+  if (renamed.found.length) {
+    const lines = renamed.found.map((k) => `${k} is now ${RENAMED_VARIABLES[k]}`);
+    if (RENAMED_VARIABLES_STRICT)
+      throw new Error(`Invalid configuration:\n  ${lines.join('\n  ')}`);
+    console.warn(`Renamed settings, still read under their old names:\n  ${lines.join('\n  ')}`);
+  }
+  // App Service keeps a setting that was left empty: it counts as not set.
+  const set = Object.fromEntries(Object.entries(renamed.env).filter(([, v]) => v !== ''));
+  const parsed = Env.safeParse(set);
   if (parsed.success && parsed.data.GEOCODER === 'nominatim' && !parsed.data.GEOCODER_EMAIL) {
     throw new Error('Invalid configuration:\n  GEOCODER_EMAIL: required when GEOCODER=nominatim');
   }
@@ -252,10 +317,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     // The API and the worker run in separate containers: only Blob Storage is shared.
     if (d.NODE_ENV === 'production' && d.EXPORT_STORAGE !== 'blob')
       throw new Error('Invalid configuration:\n  EXPORT_STORAGE: must be blob in production');
-    if (d.EXPORT_STORAGE === 'blob' && !d.EXPORT_BLOB_URL && !d.AZURE_STORAGE_CONNECTION_STRING)
+    if (d.AZURE_STORAGE_ACCOUNT_NAME && !d.AZURE_STORAGE_CONTAINER)
       throw new Error(
-        'Invalid configuration:\n  EXPORT_BLOB_URL or AZURE_STORAGE_CONNECTION_STRING: required when EXPORT_STORAGE=blob',
+        'Invalid configuration:\n  AZURE_STORAGE_CONTAINER: required with AZURE_STORAGE_ACCOUNT_NAME (both or neither)',
       );
+    if (
+      d.AZURE_STORAGE_CONTAINER &&
+      !d.AZURE_STORAGE_ACCOUNT_NAME &&
+      !d.AZURE_STORAGE_CONNECTION_STRING
+    )
+      throw new Error(
+        'Invalid configuration:\n  AZURE_STORAGE_ACCOUNT_NAME: required with AZURE_STORAGE_CONTAINER (both or neither)',
+      );
+    if (
+      d.EXPORT_STORAGE === 'blob' &&
+      !d.AZURE_STORAGE_ACCOUNT_NAME &&
+      !d.AZURE_STORAGE_CONNECTION_STRING
+    )
+      throw new Error(
+        'Invalid configuration:\n  AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_CONTAINER (or AZURE_STORAGE_CONNECTION_STRING): required when EXPORT_STORAGE=blob',
+      );
+    if (d.NODE_ENV === 'production') {
+      const examples = Object.entries(d)
+        .filter(
+          ([k, v]) => SECRET_SETTINGS.has(k) && typeof v === 'string' && EXAMPLE_SECRET.test(v),
+        )
+        .map(([k]) => k);
+      if (examples.length)
+        throw new Error(
+          `Invalid configuration:\n  ${examples.join(', ')}: still has an example value; use a real secret in production`,
+        );
+    }
     // The deployment's Microsoft sign-in comes whole, or not at all.
     const deployment = {
       SSO_DEFAULT_ORG: d.SSO_DEFAULT_ORG,

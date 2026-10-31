@@ -80,9 +80,7 @@ export async function seedDemoData(adminUrl: string, password: string, count = 6
       const piiRows = await sql<{ name: string }>`
         SELECT name FROM sample_fields WHERE project_id = ${p.id} AND pii = 1`.execute(tx);
       const pii = new Set(piiRows.rows.map((r) => r.name));
-      const cipher = process.env.APP_ENCRYPTION_KEY
-        ? new PiiCipher(process.env.APP_ENCRYPTION_KEY)
-        : null;
+      const cipher = process.env.ENCRYPTION_KEY ? new PiiCipher(process.env.ENCRYPTION_KEY) : null;
       const seal = (sample: Record<string, unknown>) =>
         cipher ? cipher.seal(sample, pii) : { sample, samplePii: null, samplePiiIndex: null };
       const day = 86_400_000;

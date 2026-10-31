@@ -24,9 +24,9 @@ API and worker read the same environment (validated at start; see `apps/api/.env
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                                                       | Restricted role `wansurvey_app` (row-level security applies)                                                                                                                             |
 | `DATABASE_ADMIN_URL`                                                 | Owner role, for migrations only                                                                                                                                                          |
-| `APP_ENCRYPTION_KEY`                                                 | 32 bytes, base64. Encrypts TOTP secrets, SSO secrets, respondent and share tokens, and personal sample fields. **Losing it loses that data**: keep it in a secrets manager with a backup |
+| `ENCRYPTION_KEY`                                                     | 32 bytes, base64. Encrypts TOTP secrets, SSO secrets, respondent and share tokens, and personal sample fields. **Losing it loses that data**: keep it in a secrets manager with a backup |
 | `REDIS_URL`                                                          | Jobs and live updates. Required for the worker                                                                                                                                           |
-| `PUBLIC_WEB_URL`                                                     | Links in e-mails; the Microsoft redirect                                                                                                                                                 |
+| `PUBLIC_URL`                                                         | Links in e-mails; the Microsoft redirect                                                                                                                                                 |
 | `MAILER`, `SMTP_URL`, `MAIL_FROM`, `MAIL_WEBHOOK_SECRET`             | E-mail and the bounce webhook                                                                                                                                                            |
 | `SESSION_IDLE_MINUTES`, `SESSION_ABSOLUTE_HOURS`, `LOGIN_RATE_LIMIT` | Session and login limits                                                                                                                                                                 |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`                          | Optional error and trace export                                                                                                                                                          |
@@ -59,7 +59,7 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 
 - SQL Server: daily full backups and point-in-time recovery (automatic on Azure SQL Database), kept 30 days, encrypted at rest. Test a restore every quarter into a separate database and run `pnpm --filter @wansurvey/api test:mssql` against it.
 - Redis holds only queues and pub/sub; it can be lost. Scheduled jobs are re-created when the worker starts, and a nightly recompute rebuilds the figures.
-- `APP_ENCRYPTION_KEY` is backed up separately from the database backups.
+- `ENCRYPTION_KEY` is backed up separately from the database backups.
 
 ## Retention and data subject requests
 

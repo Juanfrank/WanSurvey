@@ -122,16 +122,16 @@ export class CawiService implements OnModuleInit {
   // -------------------------------------------------------------------------
 
   private get webBase() {
-    return this.config.PUBLIC_SURVEY_URL ?? this.config.PUBLIC_WEB_URL;
+    return this.config.PUBLIC_SURVEY_URL ?? this.config.PUBLIC_URL;
   }
   surveyUrl(token: string) {
     return `${this.webBase}/s/${token}`;
   }
   private clickUrl(token: string) {
-    return `${this.config.PUBLIC_WEB_URL}/api/v1/t/c/${token}`;
+    return `${this.config.PUBLIC_URL}/api/v1/t/c/${token}`;
   }
   private pixelUrl(token: string) {
-    return `${this.config.PUBLIC_WEB_URL}/api/v1/t/o/${token}.gif`;
+    return `${this.config.PUBLIC_URL}/api/v1/t/o/${token}.gif`;
   }
   private unsubscribeUrl(token: string) {
     return `${this.webBase}/u/${token}`;
@@ -143,7 +143,7 @@ export class CawiService implements OnModuleInit {
     return {
       token,
       tokenHash: sha256Hex(token),
-      tokenEnc: encryptField(token, this.config.APP_ENCRYPTION_KEY),
+      tokenEnc: encryptField(token, this.config.ENCRYPTION_KEY),
     };
   }
 
@@ -364,7 +364,7 @@ export class CawiService implements OnModuleInit {
     const rows = await t.waveLinkRows(projectId, waveId);
     return rows.map((r) => ({
       externalId: r.externalId,
-      url: this.surveyUrl(decryptField(r.tokenEnc, this.config.APP_ENCRYPTION_KEY)),
+      url: this.surveyUrl(decryptField(r.tokenEnc, this.config.ENCRYPTION_KEY)),
       status: r.completedAt ? 'completed' : r.startedAt ? 'started' : 'notStarted',
     }));
   }
@@ -462,7 +462,7 @@ export class CawiService implements OnModuleInit {
       return { case: c ? this.cases.pii.read(c) : {}, settings, template };
     });
     if (!prepared) return false;
-    const token = decryptField(inv.tokenEnc, this.config.APP_ENCRYPTION_KEY);
+    const token = decryptField(inv.tokenEnc, this.config.ENCRYPTION_KEY);
     const t = renderTemplate(prepared.template, {
       case: prepared.case,
       link: this.clickUrl(token),
@@ -821,7 +821,7 @@ export class CawiService implements OnModuleInit {
       context: Object.keys(sample).length
         ? {
             case: {},
-            casePii: encryptField(JSON.stringify(sample), this.config.APP_ENCRYPTION_KEY),
+            casePii: encryptField(JSON.stringify(sample), this.config.ENCRYPTION_KEY),
           }
         : { case: {} },
       deviceId,

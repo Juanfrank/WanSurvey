@@ -35,13 +35,13 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     await entra.start();
     Object.assign(process.env, {
       ENTRA_AUTHORITY_HOST: entra.host,
-      PUBLIC_WEB_URL: WEB,
+      PUBLIC_URL: WEB,
       PASSWORD_LOGIN: 'false',
       SSO_DEFAULT_ORG: slug,
       ENTRA_TENANT_ID: entraTenantId,
       ENTRA_CLIENT_ID: CLIENT_ID,
       ENTRA_CLIENT_SECRET: 'deploy-secret',
-      ENTRA_REDIRECT_URI: 'http://localhost:5173/api/v1/auth/sso/callback',
+      ENTRA_REDIRECT_URI: 'http://localhost:5173/api/auth/entra/callback',
       ENTRA_ALLOWED_DOMAINS: 'court.gov',
     });
     resetConfigCache();
@@ -54,7 +54,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     await entra.stop();
     for (const k of [
       'ENTRA_AUTHORITY_HOST',
-      'PUBLIC_WEB_URL',
+      'PUBLIC_URL',
       'PASSWORD_LOGIN',
       'SSO_DEFAULT_ORG',
       'ENTRA_TENANT_ID',
@@ -82,7 +82,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
       clientId: p.get('client_id')!,
     });
     const callback = await agent
-      .get('/api/v1/auth/sso/callback')
+      .get('/api/auth/entra/callback')
       .query({ code, state: p.get('state') });
     return { agent, authorize, callback };
   }
@@ -191,7 +191,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     const other = await createTenant(t.owner);
     await q`
       INSERT INTO tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, allowed_domains)
-      VALUES (${other.id}, ${randomUUID()}, ${CLIENT_ID}, ${encryptField('x', process.env.APP_ENCRYPTION_KEY!)}, 0, ${JSON.stringify(['elsewhere.org'])})`;
+      VALUES (${other.id}, ${randomUUID()}, ${CLIENT_ID}, ${encryptField('x', process.env.ENCRYPTION_KEY!)}, 0, ${JSON.stringify(['elsewhere.org'])})`;
     const owner = await createUser(t.owner, other.id, [{ role: 'owner' }]);
     // Owners sign in through their organisation's directory here too; the setting is what is tested.
     const res = await t.app
@@ -212,7 +212,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     const directory = randomUUID();
     await q`
       INSERT INTO tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, allowed_domains)
-      VALUES (${a.id}, ${directory}, ${CLIENT_ID}, ${encryptField('a-secret', process.env.APP_ENCRYPTION_KEY!)}, 1, ${JSON.stringify(['unclaimed.net'])})`;
+      VALUES (${a.id}, ${directory}, ${CLIENT_ID}, ${encryptField('a-secret', process.env.ENCRYPTION_KEY!)}, 1, ${JSON.stringify(['unclaimed.net'])})`;
     const agent = request.agent(t.app.getHttpServer());
     const start = await agent.get('/api/v1/auth/sso/start').query({ org: a.slug });
     const p = new URL(start.headers.location!).searchParams;
@@ -221,9 +221,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
       codeChallenge: p.get('code_challenge')!,
       clientId: p.get('client_id')!,
     });
-    const back = await agent
-      .get('/api/v1/auth/sso/callback')
-      .query({ code, state: p.get('state') });
+    const back = await agent.get('/api/auth/entra/callback').query({ code, state: p.get('state') });
     expect(back.headers.location).toBe(`${WEB}/login?sso_error=link_not_allowed`);
     const ids = await q`SELECT COUNT(*) as n FROM user_identities WHERE user_id = ${victim.id}`;
     expect(Number(ids[0]!.n)).toBe(0);
@@ -278,7 +276,7 @@ describe.skipIf(!configured).each([false, true])(
         ENTRA_TENANT_ID: randomUUID(),
         ENTRA_CLIENT_ID: CLIENT_ID,
         ENTRA_CLIENT_SECRET: 'deploy-secret',
-        ENTRA_REDIRECT_URI: 'http://localhost:5173/api/v1/auth/sso/callback',
+        ENTRA_REDIRECT_URI: 'http://localhost:5173/api/auth/entra/callback',
         ENTRA_ALLOWED_DOMAINS: 'court.gov',
         ENTRA_ENFORCE: String(enforce),
       });
@@ -332,7 +330,7 @@ describe('configuration of Microsoft-only sign-in', () => {
     ENTRA_TENANT_ID: randomUUID(),
     ENTRA_CLIENT_ID: CLIENT_ID,
     ENTRA_CLIENT_SECRET: 'x',
-    ENTRA_REDIRECT_URI: 'http://localhost:5173/api/v1/auth/sso/callback',
+    ENTRA_REDIRECT_URI: 'http://localhost:5173/api/auth/entra/callback',
   };
 
   it('refuses to start without passwords and without the deployment’s directory', () => {
@@ -373,13 +371,13 @@ describe('configuration of Microsoft-only sign-in', () => {
     );
     for (const bad of [
       'https://app.example.org/auth/callback',
-      'http://app.example.org/api/v1/auth/sso/callback',
+      'http://app.example.org/api/auth/entra/callback',
       'not a url',
     ])
       expect(() => loadConfig({ ...base(), ...deployment, ENTRA_REDIRECT_URI: bad })).toThrow(
         /ENTRA_REDIRECT_URI/,
       );
-    const ok = 'https://app.example.org/api/v1/auth/sso/callback';
+    const ok = 'https://app.example.org/api/auth/entra/callback';
     expect(
       loadConfig({ ...base(), ...deployment, ENTRA_REDIRECT_URI: ok }).ENTRA_REDIRECT_URI,
     ).toBe(ok);

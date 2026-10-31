@@ -14,8 +14,8 @@ function apiEnv(): Record<string, string> {
     DATABASE_URL: appUrl,
     // No DATABASE_ADMIN_URL: the API would migrate at start, before global setup has made the
     // database; global setup migrates it.
-    APP_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-    PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
+    ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+    PUBLIC_URL: `http://localhost:${WEB_PORT}`,
     LOGIN_RATE_LIMIT: '1000',
     RATE_LIMIT_PER_IP: '100000',
     GEOCODER: 'nominatim',

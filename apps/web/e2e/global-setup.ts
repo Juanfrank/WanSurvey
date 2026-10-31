@@ -53,7 +53,7 @@ async function createDatabase() {
 
 async function seedAll(adminUrl: string) {
   // The API's key, so the seed seals personal fields as the API would.
-  process.env.APP_ENCRYPTION_KEY ??= 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=';
+  process.env.ENCRYPTION_KEY ??= 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=';
   await seed(adminUrl, PASSWORD);
   // Completed fieldwork for the dashboards, metrics, results and exports.
   await seedDemoData(adminUrl, PASSWORD, 60);

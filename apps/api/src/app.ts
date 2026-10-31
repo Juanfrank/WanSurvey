@@ -61,7 +61,8 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
-  app.setGlobalPrefix('api/v1', { exclude: ['health'] });
+  // Microsoft's callback has the same address in every app (outside /api/v1).
+  app.setGlobalPrefix('api/v1', { exclude: ['health', 'api/auth/entra/callback'] });
   app.enableShutdownHooks();
 
   const doc = new DocumentBuilder()

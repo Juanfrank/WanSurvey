@@ -54,14 +54,15 @@ Reach the database, Redis and the storage account through VNet integration and *
 ```
 NODE_ENV=production
 DATABASE_URL=mssql://wansurvey_app:<password>@<server>.database.windows.net:1433/wansurvey
-APP_ENCRYPTION_KEY=<32 bytes, base64 — from Key Vault: @Microsoft.KeyVault(SecretUri=...)>
+ENCRYPTION_KEY=<32 bytes, base64 — from Key Vault: @Microsoft.KeyVault(SecretUri=...)>
 REDIS_URL=rediss://:<key>@<name>.redis.cache.windows.net:6380
-PUBLIC_WEB_URL=https://encuestas.example.org
+PUBLIC_URL=https://encuestas.example.org
 MAILER=smtp
 SMTP_URL=smtps://<user>:<password>@smtp.example.org:465
 MAIL_FROM=WanSurvey <encuestas@example.org>
 EXPORT_STORAGE=blob                # export files in Blob Storage
-EXPORT_BLOB_URL=https://<account>.blob.core.windows.net/exports
+AZURE_STORAGE_ACCOUNT_NAME=<account>
+AZURE_STORAGE_CONTAINER=exports
 AZURE_CLIENT_ID=<the user-assigned identity's client id>
 PASSWORD_LOGIN=false               # the Microsoft button only
 SSO_DEFAULT_ORG=<slug>             # with ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET
@@ -86,12 +87,12 @@ WEBSITE_HEALTHCHECK_MAXPINGFAILURES=5
 
 `appconfig/` has the settings ready for App Service's **Environment variables → Advanced edit**, which takes JSON:
 
-| Template                                         | For                                                                                              |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `appconfig/appservice.development.template.json` | A development app: passwords and Microsoft, e-mail to the log, smaller pools and heaps           |
-| `appconfig/appservice.production.template.json`  | Production: the same settings `main.bicep` sets (Microsoft only, SMTP, Blob Storage, P0v3 sizes) |
+| Template                                           | For                                                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `appconfig/app-settings.development.template.json` | A development app: passwords and Microsoft, e-mail to the log, smaller pools and heaps           |
+| `appconfig/app-settings.production.template.json`  | Production: the same settings `main.bicep` sets (Microsoft only, SMTP, Blob Storage, P0v3 sizes) |
 
-1. Copy the template without `.template` (`appservice.production.json`): git ignores everything in `appconfig/` but the templates, so the filled copy never reaches the repository.
+1. Copy the template without `.template` (`app-settings.production.json`): git ignores everything in `appconfig/` but the templates, so the filled copy never reaches the repository.
 2. Replace every `<…>` value. Secrets are best as Key Vault references (`@Microsoft.KeyVault(SecretUri=…)`).
 3. Paste the whole array into Advanced edit and save (the app restarts).
 
@@ -104,7 +105,7 @@ Microsoft sign-in takes all of `SSO_DEFAULT_ORG`, `ENTRA_TENANT_ID`, `ENTRA_CLIE
 3. Run the migrations once, from CI or your machine, with the API image:
    `docker run --rm -e DATABASE_ADMIN_URL=… -e DATABASE_URL=… <api-image> node dist/db/mssql/migrate.js`
    It creates the contained user `wansurvey_app` (password from `DATABASE_URL`) and applies the T-SQL migrations.
-4. Optional demo data: `node dist/db/seed.js`, then `node dist/db/seed-demo.js` (needs `SEED_PASSWORD`, and `APP_ENCRYPTION_KEY` so the personal fields are sealed straight away).
+4. Optional demo data: `node dist/db/seed.js`, then `node dist/db/seed-demo.js` (needs `SEED_PASSWORD`, and `ENCRYPTION_KEY` so the personal fields are sealed straight away).
 5. Deploy `infra/azure/main.bicep`; check `https://<app>/health`.
 
 Before each later release, run step 3 with the new images, then deploy the new tag to a staging slot and swap (Premium v3 includes 20 slots).
