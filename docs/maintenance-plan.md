@@ -68,8 +68,9 @@ Run with `knip@6.41.0` and the entry points above; nothing was deleted.
 - **Unused devDependencies (6), to check one by one before removing**: `azurite` (started by
   `test/support/azurite.ts`), `tailwindcss` (used by the build's PostCSS configuration),
   `@wansurvey/api` in `apps/web` (the browser tests import its `dist`), `@types/multer`,
-  `@wansurvey/fixtures` in `packages/exporters`, `axe-core` in `packages/renderer`. Probably only
-  the last three are real.
+  `@wansurvey/fixtures` in `packages/exporters`, `axe-core` in `packages/renderer`. Checked: `@types/multer` (no use of
+  its types), `@wansurvey/fixtures` in `exporters` (nothing imports it) were removed; `axe-core` stays
+  (`packages/renderer/test/axe.ts` imports it).
 - **Unused exports (108)**: mostly the `export` keyword on things used only inside their file
   (the `Mssql*Tx` classes, helpers like `distribute`, `shuffle`, `hotp`), or exported for tests. Not
   dead code; removing the keyword is optional tidiness, not a priority. The few that look like real
