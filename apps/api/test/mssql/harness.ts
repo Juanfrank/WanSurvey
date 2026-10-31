@@ -4,6 +4,7 @@ import type { Role } from '@wansurvey/schema';
 import { sql } from 'kysely';
 import request from 'supertest';
 import { createApp } from '../../src/app.js';
+import type { AppModuleOptions } from '../../src/app.module.js';
 import { hashPassword } from '../../src/auth/auth.service.js';
 import { encryptField, generateTotpSecret, totp } from '../../src/common/crypto.js';
 import { createMssqlDb } from '../../src/db/mssql/connection.js';
@@ -35,10 +36,12 @@ export interface MssqlTestApp {
   close(): Promise<void>;
 }
 
-export async function bootstrap(): Promise<MssqlTestApp> {
+export async function bootstrap(
+  opts: Omit<AppModuleOptions, 'mailer'> = {},
+): Promise<MssqlTestApp> {
   await runMssqlMigrations(ADMIN_URL!, APP_URL!);
   const mailer = new MemoryMailer();
-  const app = await createApp({ mailer });
+  const app = await createApp({ ...opts, mailer });
   await app.init();
   const owner = createMssqlDb<Record<string, never>>(ADMIN_URL!, { max: 2 });
   return {
