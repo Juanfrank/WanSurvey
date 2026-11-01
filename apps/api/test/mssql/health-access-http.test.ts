@@ -68,3 +68,33 @@ describe.skipIf(!configured)('SQL Server: /health restricted by address', () => 
     await request(t.app.getHttpServer()).get('/api/v1/auth/me').expect(401);
   });
 });
+
+describe.skipIf(!configured)('SQL Server: /health and TRUST_PROXY_HOPS', () => {
+  let t: MssqlTestApp;
+  beforeAll(async () => {
+    process.env.HEALTH_ALLOWED_IPS = '203.0.113.0/24';
+    // More hops than proxies really in front of the API: the setting is wrong on purpose.
+    process.env.TRUST_PROXY_HOPS = '2';
+    resetConfigCache();
+    t = await bootstrap();
+  });
+  afterAll(async () => {
+    await t.close();
+    delete process.env.HEALTH_ALLOWED_IPS;
+    delete process.env.TRUST_PROXY_HOPS;
+    resetConfigCache();
+  });
+
+  it('with more hops than proxies, a client can forge an allowed address: the setting must match', async () => {
+    // With one real proxy, the client's own header is the entry two hops back: it is believed.
+    const forged = await request(t.app.getHttpServer())
+      .get('/health')
+      .set('x-forwarded-for', '203.0.113.1, 192.0.2.50');
+    expect(forged.status).toBe(200);
+    // …and the honest case still works the same.
+    const outside = await request(t.app.getHttpServer())
+      .get('/health')
+      .set('x-forwarded-for', '192.0.2.50');
+    expect(outside.status).toBe(404);
+  });
+});
