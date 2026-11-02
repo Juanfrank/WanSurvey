@@ -148,6 +148,11 @@ const ENDPOINTS: Endpoint[] = [
     call: (s) => s.agent.get('/api/v1/audit-log'),
   },
   {
+    name: 'GET /api-keys',
+    permission: 'apikeys.manage',
+    call: (s) => s.agent.get('/api/v1/api-keys'),
+  },
+  {
     name: 'GET /audit-log/export',
     permission: 'audit.export',
     call: (s) =>

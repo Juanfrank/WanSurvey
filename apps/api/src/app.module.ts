@@ -12,6 +12,9 @@ import {
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import { ApiKeysController } from './apikeys/api-keys.controller.js';
+import { ApiKeysService } from './apikeys/api-keys.service.js';
+import { ExtController } from './apikeys/ext.controller.js';
 import { AuditController } from './audit/audit.controller.js';
 import { AuditService } from './audit/audit.service.js';
 import { AuthController } from './auth/auth.controller.js';
@@ -157,6 +160,8 @@ export class AppModule {
       ],
       controllers: [
         HealthController,
+        ApiKeysController,
+        ExtController,
         AuthController,
         SsoController,
         EntraCallbackController,
@@ -225,6 +230,7 @@ export class AppModule {
         { provide: PAPI_REPO, useClass: MssqlPapiRepo },
         { provide: EXPORTS_REPO, useClass: MssqlExportsRepo },
         AuditService,
+        ApiKeysService,
         AuthService,
         SsoService,
         SsoConfigs,

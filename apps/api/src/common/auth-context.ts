@@ -1,5 +1,11 @@
 import { createParamDecorator, SetMetadata, type ExecutionContext } from '@nestjs/common';
-import { roleHasPermission, ROLE_RANK, type Permission, type Role } from '@wansurvey/schema';
+import {
+  roleHasPermission,
+  ROLE_RANK,
+  type ApiKeyScope,
+  type Permission,
+  type Role,
+} from '@wansurvey/schema';
 import type { Request } from 'express';
 
 export interface MembershipGrant {
@@ -22,12 +28,14 @@ export interface AuthContext {
   mfaState: 'ok' | 'pending' | 'enroll';
   /** How the second factor was verified; null when none was ('ok' may mean none was needed). */
   mfaMethod: MfaMethod | null;
-  authMethod: 'password' | 'sso';
+  authMethod: 'password' | 'sso' | 'apikey';
   /** Entra tenant that authenticated an SSO session. */
   idpTenant: string | null;
   csrfToken: string;
   ip: string | null;
   userAgent: string | null;
+  /** Set when a key of the integration API made the request (no person, no session). */
+  apiKey?: { id: string; scopes: ApiKeyScope[]; projectId: string | null };
 }
 
 export type AuthedRequest = Request & { auth?: AuthContext };
@@ -61,8 +69,15 @@ export function tenantRank(memberships: MembershipGrant[]): number {
 }
 
 export const IS_PUBLIC = 'ws:public';
+export const EXT_API = 'ws:ext';
+export const EXT_SCOPE = 'ws:ext-scope';
 export const ALLOW_PENDING_MFA = 'ws:allowPendingMfa';
 export const REQUIRED_PERMISSION = 'ws:permission';
+
+/** The integration API: authenticated by an API key (bearer), never by a session or cookie. */
+export const ExtApi = () => SetMetadata(EXT_API, true);
+/** The scope a key needs for this route. */
+export const RequireScope = (scope: ApiKeyScope) => SetMetadata(EXT_SCOPE, scope);
 
 /** No session needed (login, password reset, health). */
 export const Public = () => SetMetadata(IS_PUBLIC, true);

@@ -38,11 +38,13 @@ describe('request logging', () => {
     const lines = await logged('/api/v1/auth/me', {
       cookie: 'session=abc-secret-cookie',
       'x-csrf-token': 'csrf-secret-value',
+      authorization: 'Bearer wsk_0123456789ab_secret-of-a-key',
     });
     const text = JSON.stringify(lines);
     expect(lines.length).toBeGreaterThan(0);
     expect(text).not.toContain('abc-secret-cookie');
     expect(text).not.toContain('csrf-secret-value');
+    expect(text).not.toContain('secret-of-a-key');
     expect(text).not.toContain('secret-session-value');
   });
 

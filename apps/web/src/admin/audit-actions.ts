@@ -73,4 +73,7 @@ export const AUDIT_ACTIONS = [
   'assignment.created',
   'assignment.updated',
   'assignment.deleted',
+  'audit.exported',
+  'apikey.created',
+  'apikey.revoked',
 ] as const;

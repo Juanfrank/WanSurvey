@@ -242,6 +242,22 @@ export class MssqlDatabase {
     return res.rows[0] ?? null;
   }
 
+  /** The key a request presents, before any organisation is known (the caller checks it). */
+  async apiKeyLookup(keyId: string) {
+    const res = await sql<{
+      id: string;
+      tenant_id: string;
+      secret_hash: string;
+      scopes: string;
+      project_id: string | null;
+      allowed_ips: string | null;
+      expires_at: Date;
+      created_by: string;
+      revoked_at: Date | null;
+    }>`EXEC dbo.api_key_lookup @key_id = ${keyId}`.execute(this.db);
+    return res.rows[0] ?? null;
+  }
+
   /** Until when the account is locked after failed attempts; null when it is not. */
   async accountLockedUntil(userId: string): Promise<Date | null> {
     const res = await sql<{ until: Date | null }>`

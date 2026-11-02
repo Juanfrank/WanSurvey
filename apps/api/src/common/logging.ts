@@ -8,7 +8,12 @@ import { maskTokens } from './mask.js';
 export function requestLogOptions(level: string): Options {
   return {
     level,
-    redact: ['req.headers.cookie', 'req.headers["x-csrf-token"]', 'res.headers["set-cookie"]'],
+    redact: [
+      'req.headers.cookie',
+      'req.headers.authorization',
+      'req.headers["x-csrf-token"]',
+      'res.headers["set-cookie"]',
+    ],
     serializers: {
       req: (req: { url?: string }) => ({ ...req, url: maskTokens(req.url) }),
     },

@@ -134,6 +134,11 @@ const adminAuditRoute = createRoute({
   path: 'audit',
   component: lazyRouteComponent(() => import('./admin/AuditPage.js'), 'AuditPage'),
 });
+const adminApiKeysRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'api-keys',
+  component: lazyRouteComponent(() => import('./admin/ApiKeysPage.js'), 'ApiKeysPage'),
+});
 // The old address of the people page.
 const teamRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -271,6 +276,7 @@ const routeTree = rootRoute.addChildren([
       adminRolesRoute,
       adminOrganisationRoute,
       adminAuditRoute,
+      adminApiKeysRoute,
     ]),
     projectsRoute,
     projectRoute,

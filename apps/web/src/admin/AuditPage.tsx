@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { inputCls } from '../designer/fields.js';
+import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card } from '../routes/ui.js';
 import { AUDIT_ACTIONS } from './audit-actions.js';
@@ -46,6 +46,17 @@ export function AuditPage() {
   // Whole days in the viewer's time zone.
   if (from) params.set('from', new Date(`${from}T00:00:00`).toISOString());
   if (to) params.set('to', new Date(`${to}T23:59:59.999`).toISOString());
+  // The export takes the dates above, or the last 30 days.
+  const exportParams = new URLSearchParams({
+    from: (from
+      ? new Date(`${from}T00:00:00`)
+      : new Date(Date.now() - 30 * 86_400_000)
+    ).toISOString(),
+    to: (to ? new Date(`${to}T23:59:59.999`) : new Date()).toISOString(),
+    format: 'csv',
+  });
+  if (action) exportParams.set('action', action);
+  if (actor) exportParams.set('actorUserId', actor);
   const log = useQuery({
     queryKey: ['audit', me.data?.tenantId, params.toString()],
     queryFn: () => api<Entry[]>(`/audit-log?${params.toString()}`),
@@ -112,6 +123,18 @@ export function AuditPage() {
             />
           </label>
         </div>
+        {me.data?.permissions.includes('audit.export') ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              className={smallBtn}
+              data-testid="audit-export"
+              href={`/api/v1/audit-log/export?${exportParams.toString()}`}
+            >
+              {t('admin.log.export')}
+            </a>
+            <span className="text-xs text-slate-600">{t('admin.log.exportHint')}</span>
+          </div>
+        ) : null}
         {log.data ? (
           <p className="text-xs text-slate-600" role="status">
             {log.data.length

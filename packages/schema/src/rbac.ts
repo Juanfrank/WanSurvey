@@ -48,6 +48,8 @@ export const PERMISSIONS = [
   'cawi.waves',
   'audit.read',
   'audit.export',
+  /** Create and revoke the keys of the integration API. */
+  'apikeys.manage',
   'pii.view',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
@@ -61,7 +63,13 @@ const ALL: readonly Permission[] = PERMISSIONS;
  */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: ALL,
-  admin: ALL.filter((p) => p !== 'tenant.billing' && p !== 'tenant.delete' && p !== 'audit.export'),
+  admin: ALL.filter(
+    (p) =>
+      p !== 'tenant.billing' &&
+      p !== 'tenant.delete' &&
+      p !== 'audit.export' &&
+      p !== 'apikeys.manage',
+  ),
   project_manager: [
     'tenant.read',
     'users.read',

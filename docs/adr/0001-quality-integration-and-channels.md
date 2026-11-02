@@ -1,6 +1,6 @@
 # ADR 0001: Audit, fraud signals, integrations and new channels
 
-- **Status:** accepted; Decisions 1 (audit export, RLS coverage test, erasure scan) and 2 (fraud risk score) implemented, the rest pending
+- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) and 3 phase A (API keys, read only; see [the integration API](../integration-api.md)); the rest pending
 - **Date:** 2026-11-02
 - **Deciders:** product owner
 - **Scope:** what to build next, in which order and in which form. Decisions are built in the order given below.
@@ -76,6 +76,7 @@ Not decided here, and kept out on purpose: survey weighting and calibration, SCI
 - The key acts inside the organisation's row-level security as every request does. Bearer authentication, no cookie, no CSRF.
 - A rate limit per key (shared through Redis when it exists, in memory otherwise: documented as one instance only). The `Authorization` header joins the redacted headers of the request log.
 - Writes (create cases, change statuses) come later, scope by scope.
+- _As built:_ the scopes are `projects:read`, `cases:read`, `interviews:read` and `audit:read`; `pii:read` and `exports:read` are left out of this step. Personal data never leaves through a key (masked sample fields, interviews without answers), which keeps the first release free of the question of which variables of which questionnaire version are personal. Answers will come with `exports:read` or a masked answers route.
 
 ### Phase B: outgoing webhooks
 

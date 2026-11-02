@@ -554,6 +554,22 @@ export interface MssqlSchema {
     active: Generated<boolean>;
     created_at: Instant;
   };
+  api_keys: {
+    id: string;
+    tenant_id: string;
+    key_id: string;
+    secret_hash: string;
+    name: string;
+    scopes: string;
+    project_id: string | null;
+    allowed_ips: string | null;
+    expires_at: Instant;
+    created_by: string;
+    created_at: Generated<Instant>;
+    last_used_at: InstantOrNull;
+    revoked_at: InstantOrNull;
+    revoked_by: string | null;
+  };
   teams: {
     id: string;
     tenant_id: string;

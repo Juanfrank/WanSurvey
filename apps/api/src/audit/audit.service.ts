@@ -77,7 +77,9 @@ export type AuditAction =
   | 'assignment.created'
   | 'assignment.updated'
   | 'assignment.deleted'
-  | 'audit.exported';
+  | 'audit.exported'
+  | 'apikey.created'
+  | 'apikey.revoked';
 
 export interface AuditEntry {
   action: AuditAction;
@@ -114,6 +116,15 @@ export class AuditService {
     },
   ) {
     return this.engine.sql.withTenant(ctx.tenantId, (tx) => this.store.list(tx, filter));
+  }
+
+  /** Appends an entry inside the caller's own tenant transaction. */
+  async recordIn(
+    tx: Parameters<AuditStore['record']>[0],
+    ctx: AuthContext,
+    entry: Omit<AuditEntry, 'actorUserId' | 'ip' | 'userAgent'>,
+  ) {
+    await this.store.record(tx, ctx.tenantId, this.fromContext(ctx, entry));
   }
 
   async record(ctx: AuthContext, entry: Omit<AuditEntry, 'actorUserId' | 'ip' | 'userAgent'>) {

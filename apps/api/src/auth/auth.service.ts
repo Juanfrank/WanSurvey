@@ -233,7 +233,7 @@ export class AuthService {
                   (adOnly && ctx.idpTenant === targetSso?.entraTenantId))
               ? 'entra'
               : null,
-      authMethod: ctx.authMethod,
+      authMethod: ctx.authMethod === 'sso' ? 'sso' : 'password',
       idpTenant: ctx.idpTenant,
       action: 'auth.login',
       client,

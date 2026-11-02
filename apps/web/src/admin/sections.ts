@@ -5,6 +5,7 @@ export const ADMIN_SECTIONS = [
   { to: '/admin/roles', key: 'roles', permission: 'tenant.manage' },
   { to: '/admin/organisation', key: 'organisation', permission: 'tenant.manage' },
   { to: '/admin/audit', key: 'audit', permission: 'audit.read' },
+  { to: '/admin/api-keys', key: 'apiKeys', permission: 'apikeys.manage' },
 ] as const;
 
 export const adminSectionsFor = (permissions: readonly string[] = []) =>

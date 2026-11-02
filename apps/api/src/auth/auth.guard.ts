@@ -7,10 +7,13 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Permission } from '@wansurvey/schema';
+import type { ApiKeyScope, Permission } from '@wansurvey/schema';
+import { ApiKeysService } from '../apikeys/api-keys.service.js';
 import {
   ALLOW_PENDING_MFA,
   can,
+  EXT_API,
+  EXT_SCOPE,
   IS_PUBLIC,
   REQUIRED_PERMISSION,
   type AuthContext,
@@ -47,6 +50,7 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     @Inject(CONFIG) private readonly config: AppConfig,
+    private readonly keys: ApiKeysService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -54,6 +58,14 @@ export class AuthGuard implements CanActivate {
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
 
     const req = context.switchToHttp().getRequest<AuthedRequest>();
+    // The integration API: a bearer key and nothing else (no cookie, no CSRF, no person).
+    if (this.reflector.getAllAndOverride<boolean>(EXT_API, targets)) {
+      req.auth = await this.loadKey(
+        req,
+        this.reflector.get<ApiKeyScope>(EXT_SCOPE, context.getHandler()),
+      );
+      return true;
+    }
     const auth = await this.loadSession(req);
     req.auth = auth;
 
@@ -95,6 +107,31 @@ export class AuthGuard implements CanActivate {
       }
     }
     return true;
+  }
+
+  private async loadKey(req: AuthedRequest, scope: ApiKeyScope | undefined): Promise<AuthContext> {
+    const key = await this.keys.authenticate(req.headers.authorization, req.ip ?? null);
+    if (scope && !key.scopes.includes(scope))
+      throw new ForbiddenException({
+        code: 'MISSING_SCOPE',
+        message: `This key does not have the scope ${scope}`,
+      });
+    return {
+      tenantId: key.tenantId,
+      // Whatever the key writes (its audit entries) is attributed to the person who made it.
+      userId: key.createdBy,
+      sessionId: key.id,
+      email: 'api-key',
+      memberships: [],
+      mfaState: 'ok',
+      mfaMethod: null,
+      authMethod: 'apikey',
+      idpTenant: null,
+      csrfToken: '',
+      ip: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+      apiKey: { id: key.id, scopes: key.scopes, projectId: key.projectId },
+    };
   }
 
   private async loadSession(req: AuthedRequest): Promise<AuthContext> {
