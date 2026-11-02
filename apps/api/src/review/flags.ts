@@ -14,6 +14,14 @@ export interface Flags {
   otherText?: number;
   /** PAPI double-entry differences found. */
   doubleEntry?: number;
+  /** Questions answered far faster than the project's median: how many of how many timed. */
+  shortPages?: { short: number; of: number };
+  /** Interviews of the same interviewer started within a few metres of this one (this included). */
+  positionCluster?: { interviews: number; metres: number };
+  /** Metres between the interview's position and the case's geocoded address. */
+  farFromAddress?: { metres: number };
+  /** Sum of the weights of the fired risk flags (0–100+); the reviewer sees the flags as reasons. */
+  risk?: number;
 }
 
 export const FLAG_KINDS = [
@@ -22,6 +30,9 @@ export const FLAG_KINDS = [
   'warningsOverridden',
   'otherText',
   'doubleEntry',
+  'shortPages',
+  'positionCluster',
+  'farFromAddress',
 ] as const;
 export type FlagKind = (typeof FLAG_KINDS)[number];
 

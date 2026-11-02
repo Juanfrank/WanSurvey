@@ -6,6 +6,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ReviewService } from '../../src/review/review.service.js';
 import { createQuestionnaire, newCase as mkCase } from './fixtures.js';
 import {
   bootstrap,
@@ -439,5 +440,92 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
     s.setAnswer('OCC_OTHER', 'Gasfitero');
     await send();
     expect(await code()).toBeUndefined();
+  });
+});
+
+/** Fraud-risk score (ADR 0001): the nightly recompute and the queue ordered by risk. */
+describe.skipIf(!configured)('SQL Server: fraud-risk score', () => {
+  let t: MssqlTestApp;
+  let tenant: { id: string; slug: string };
+  let project: string;
+  let version: string;
+  let iUser: TestUser;
+  let reviewer: Session;
+
+  const exec = (q: ReturnType<typeof sql>) => q.execute(t.owner);
+  const rows = async (q: ReturnType<typeof sql>) =>
+    ((await q.execute(t.owner)) as { rows: Record<string, unknown>[] }).rows;
+
+  beforeAll(async () => {
+    t = await bootstrap();
+    tenant = await createTenant(t.owner);
+    project = await createProject(t.owner, tenant.id);
+    const qid = await createQuestionnaire(t.owner, tenant.id, project, {
+      definition,
+      publish: true,
+    });
+    version = (
+      (await rows(sql`SELECT id FROM questionnaire_versions WHERE questionnaire_id = ${qid}`))[0]!
+        .id as string
+    ).toLowerCase();
+    iUser = await createUser(t.owner, tenant.id, [{ role: 'interviewer', projectId: project }]);
+    reviewer = await login(
+      t,
+      await createUser(t.owner, tenant.id, [{ role: 'reviewer', projectId: project }]),
+      tenant.slug,
+    );
+  });
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  async function submitted(at: { lat: number; lng: number } | null, minutesAgo = 5) {
+    const id = randomUUID();
+    await exec(sql`INSERT INTO interviews (id, tenant_id, project_id, questionnaire_version_id, mode,
+        interviewer_id, status, language, answers, state, context, device_id, started_at, submitted_at)
+      VALUES (${id}, ${tenant.id}, ${project}, ${version}, 'CAPI', ${iUser.id}, 'submitted', 'es',
+        '{}', '{}', '{}', 'dev', DATEADD(minute, ${-minutesAgo}, SYSDATETIMEOFFSET()),
+        DATEADD(minute, ${-minutesAgo}, SYSDATETIMEOFFSET()))`);
+    if (at)
+      await exec(sql`INSERT INTO interview_paradata (id, tenant_id, interview_id, device_id, seq, type, at, payload)
+        VALUES (${randomUUID()}, ${tenant.id}, ${id}, 'dev', 1, 'gps', SYSDATETIMEOFFSET(),
+          ${JSON.stringify({ when: 'start', ...at })})`);
+    return id;
+  }
+  const flagsOf = async (id: string) =>
+    JSON.parse(
+      (await rows(sql`SELECT flags FROM interviews WHERE id = ${id}`))[0]!.flags as string,
+    );
+
+  it('flags interviews of one interviewer started in the same place, and orders the queue by risk', async () => {
+    const spot = { lat: -12.0464, lng: -77.0428 };
+    const clustered = [] as string[];
+    for (let i = 0; i < 4; i++)
+      clustered.push(await submitted({ lat: spot.lat + i * 0.00005, lng: spot.lng }, 10 - i));
+    const alone = await submitted({ lat: -13.5, lng: -71.97 }, 1);
+
+    const n = await t.app.get(ReviewService).riskAll();
+    expect(n).toBe(4);
+    for (const id of clustered) {
+      const f = await flagsOf(id);
+      expect(f.positionCluster).toEqual({ interviews: 4, metres: 50 });
+      expect(f.risk).toBe(35);
+    }
+    expect((await flagsOf(alone)).risk).toBeUndefined();
+    // A second pass changes nothing.
+    expect(await t.app.get(ReviewService).riskAll()).toBe(0);
+
+    const byRisk = await reviewer.agent
+      .get(`/api/v1/projects/${project}/review/queue`)
+      .query({ sort: 'risk' });
+    expect(byRisk.status, JSON.stringify(byRisk.body)).toBe(200);
+    expect(
+      byRisk.body.rows.slice(0, 4).every((r: { flags: { risk?: number } }) => r.flags.risk === 35),
+    ).toBe(true);
+    expect(byRisk.body.rows.at(-1).id).toBe(alone);
+    const filtered = await reviewer.agent
+      .get(`/api/v1/projects/${project}/review/queue`)
+      .query({ flag: 'positionCluster' });
+    expect(filtered.body.total).toBe(4);
   });
 });

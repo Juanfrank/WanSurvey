@@ -1,6 +1,6 @@
 # ADR 0001: Audit, fraud signals, integrations and new channels
 
-- **Status:** accepted; Decision 1 implemented (audit export, RLS coverage test, erasure scan), the rest pending
+- **Status:** accepted; Decisions 1 (audit export, RLS coverage test, erasure scan) and 2 (fraud risk score) implemented, the rest pending
 - **Date:** 2026-11-02
 - **Deciders:** product owner
 - **Scope:** what to build next, in which order and in which form. Decisions are built in the order given below.

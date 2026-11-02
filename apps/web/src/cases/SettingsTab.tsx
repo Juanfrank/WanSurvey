@@ -321,6 +321,33 @@ export function SettingsTab({ project }: { project: Project }) {
                     {t(`review.settings.${label}`)}
                   </label>
                 ))}
+                {(
+                  [
+                    ['shortPageShare', 'shortPageShare', 100, 5, 100],
+                    ['clusterMetres', 'clusterMetres', 1, 5, 5000],
+                    ['clusterMin', 'clusterMinInterviews', 1, 2, 100],
+                  ] as const
+                ).map(([label, key, scale, min, max]) => (
+                  <label key={key} className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={min}
+                      max={max}
+                      className={`${controlCls} w-24`}
+                      value={Math.round(form.review.risk[key] * scale)}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          review: {
+                            ...form.review,
+                            risk: { ...form.review.risk, [key]: Number(e.target.value) / scale },
+                          },
+                        })
+                      }
+                    />
+                    {t(`review.settings.${label}`)}
+                  </label>
+                ))}
                 <label className="flex items-start gap-2">
                   <input
                     type="checkbox"

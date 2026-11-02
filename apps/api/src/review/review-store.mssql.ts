@@ -24,6 +24,8 @@ export interface QueueFilter {
   /** Only interviews that carry this quality flag. */
   flag?: string;
   sampled?: boolean;
+  /** Highest fraud-risk score first (ADR 0001) instead of newest first. */
+  sort?: 'risk';
   /** Submission dates, inclusive, as YYYY-MM-DD. */
   from?: string;
   to?: string;
@@ -73,7 +75,11 @@ export class ReviewStore {
       LEFT JOIN dbo.cases c ON c.id = i.case_id
       LEFT JOIN dbo.users u ON u.id = i.interviewer_id
       WHERE ${where}
-      ORDER BY i.submitted_at DESC, i.id
+      ORDER BY ${
+        f.sort === 'risk'
+          ? sql`ISNULL(TRY_CAST(JSON_VALUE(i.flags, '$.risk') AS int), 0) DESC, i.submitted_at DESC, i.id`
+          : sql`i.submitted_at DESC, i.id`
+      }
       OFFSET ${(f.page - 1) * f.limit} ROWS FETCH NEXT ${f.limit} ROWS ONLY`.execute(tx);
     return {
       total: total.rows[0]?.n ?? 0,
@@ -85,6 +91,80 @@ export class ReviewStore {
         flags: parse<Record<string, unknown>>(r.flags),
       })),
     };
+  }
+
+  // Fraud-risk signals (ADR 0001)
+
+  /** Time on each question of the latest counted interviews of a questionnaire version. */
+  async dwellSample(tx: MssqlTx, versionId: string, excludeId: string, interviews: number) {
+    const res = await sql<{ payload: string }>`
+      SELECT p.payload FROM dbo.interview_paradata p
+      WHERE p.type = 'leave_question' AND p.interview_id IN (
+        SELECT TOP (${interviews}) i.id FROM dbo.interviews i
+        WHERE i.questionnaire_version_id = ${versionId} AND i.id <> ${excludeId}
+          AND i.status IN (${sql.join(COUNTED)})
+        ORDER BY i.submitted_at DESC)`.execute(tx);
+    return res.rows.flatMap((r) => {
+      const p = parse<{ key?: string; ms?: number }>(r.payload);
+      return typeof p?.key === 'string' && typeof p.ms === 'number'
+        ? [{ key: p.key, ms: p.ms }]
+        : [];
+    });
+  }
+
+  /** Start positions of an interviewer's other recent interviews (same project). */
+  async interviewerPositions(
+    tx: MssqlTx,
+    projectId: string,
+    interviewerId: string,
+    excludeId: string,
+    since: Date,
+  ) {
+    const res = await sql<{ lat: number; lng: number }>`
+      SELECT TRY_CAST(JSON_VALUE(p.payload, '$.lat') AS float) AS lat,
+             TRY_CAST(JSON_VALUE(p.payload, '$.lng') AS float) AS lng
+      FROM dbo.interview_paradata p
+      JOIN dbo.interviews i ON i.id = p.interview_id
+      WHERE p.type = 'gps' AND JSON_VALUE(p.payload, '$.when') = 'start'
+        AND i.project_id = ${projectId} AND i.interviewer_id = ${interviewerId}
+        AND i.id <> ${excludeId} AND i.status IN (${sql.join(COUNTED)})
+        AND i.started_at >= ${since.toISOString()}`.execute(tx);
+    return res.rows.filter((r) => r.lat !== null && r.lng !== null);
+  }
+
+  /** The first geocoded contact of a case, as the address to compare an interview's position to. */
+  async caseAddress(tx: MssqlTx, caseId: string) {
+    const res = await sql<{ lat: number; lng: number }>`
+      SELECT TOP (1) lat, lng FROM dbo.contacts
+      WHERE case_id = ${caseId} AND lat IS NOT NULL AND lng IS NOT NULL`.execute(tx);
+    return res.rows[0] ?? null;
+  }
+
+  /** Counted interviews of a project submitted since `since`, for the nightly recompute. */
+  async riskCandidates(tx: MssqlTx, projectId: string, since: Date) {
+    const res = await sql<{
+      id: string;
+      interviewer_id: string | null;
+      case_id: string | null;
+      questionnaire_version_id: string;
+      flags: string;
+    }>`
+      SELECT id, interviewer_id, case_id, questionnaire_version_id, flags FROM dbo.interviews
+      WHERE project_id = ${projectId} AND status IN (${sql.join(COUNTED)})
+        AND submitted_at >= ${since.toISOString()}`.execute(tx);
+    return res.rows.map((r) => ({
+      id: r.id.toLowerCase(),
+      interviewerId: r.interviewer_id ? r.interviewer_id.toLowerCase() : null,
+      caseId: r.case_id ? r.case_id.toLowerCase() : null,
+      versionId: r.questionnaire_version_id.toLowerCase(),
+      flags: parse<Record<string, unknown>>(r.flags) ?? {},
+    }));
+  }
+
+  async setFlags(tx: MssqlTx, id: string, flags: Record<string, unknown>) {
+    await sql`UPDATE dbo.interviews SET flags = ${JSON.stringify(flags)} WHERE id = ${id}`.execute(
+      tx,
+    );
   }
 
   /** The person's interviews sent back for fixing, with the latest comment of each. */

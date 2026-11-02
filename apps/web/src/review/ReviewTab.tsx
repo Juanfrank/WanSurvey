@@ -14,6 +14,9 @@ export const FLAG_KINDS = [
   'warningsOverridden',
   'otherText',
   'doubleEntry',
+  'shortPages',
+  'positionCluster',
+  'farFromAddress',
 ] as const;
 
 interface QueueRow {
@@ -50,8 +53,17 @@ export function FlagChips({ flags }: { flags: Record<string, unknown> }) {
   const { t } = useTranslation();
   const set = FLAG_KINDS.filter((k) => flags[k] !== undefined);
   if (!set.length) return null;
+  const risk = typeof flags.risk === 'number' ? flags.risk : 0;
   return (
     <span className="flex flex-wrap gap-1">
+      {risk > 0 ? (
+        <span
+          className="rounded bg-rose-100 px-1.5 py-0.5 text-xs font-semibold text-rose-900"
+          data-risk={risk}
+        >
+          {t('review.risk', { n: risk })}
+        </span>
+      ) : null}
       {set.map((k) => (
         <span
           key={k}
@@ -84,12 +96,14 @@ function Queue({ projectId }: { projectId: string }) {
   const [flag, setFlag] = useState('');
   const [mode, setMode] = useState('');
   const [sampled, setSampled] = useState(false);
+  const [byRisk, setByRisk] = useState(false);
   const [active, setActive] = useState(0);
   const table = useRef<HTMLTableSectionElement>(null);
   const params = new URLSearchParams({ status });
   if (flag) params.set('flag', flag);
   if (mode) params.set('mode', mode);
   if (sampled) params.set('sampled', 'true');
+  if (byRisk) params.set('sort', 'risk');
   const q = useQuery({
     queryKey: ['review-queue', projectId, params.toString()],
     queryFn: () =>
@@ -157,6 +171,10 @@ function Queue({ projectId }: { projectId: string }) {
               </option>
             ))}
           </select>
+        </label>
+        <label className="flex items-center gap-2 self-end">
+          <input type="checkbox" checked={byRisk} onChange={(e) => setByRisk(e.target.checked)} />
+          {t('review.queue.byRisk')}
         </label>
         <label className="flex items-center gap-2 pb-2">
           <input type="checkbox" checked={sampled} onChange={(e) => setSampled(e.target.checked)} />

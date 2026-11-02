@@ -13,6 +13,7 @@ export const reviewEn = {
     },
     flag: 'Flag',
     anyFlag: 'Any',
+    byRisk: 'Highest risk first',
     mode: 'Mode',
     anyMode: 'Any',
     sampled: 'Only the random sample',
@@ -29,12 +30,16 @@ export const reviewEn = {
     sampleBadge: 'sample',
     round: 'round {{n}}',
   },
+  risk: 'Risk {{n}}',
   flags: {
     speeding: 'Speeding',
     straightlining: 'Straight-lining',
     warningsOverridden: 'Warnings overridden',
     otherText: '“Other” text',
     doubleEntry: 'Double-entry differences',
+    shortPages: 'Questions answered very quickly',
+    positionCluster: 'Interviews started in the same place',
+    farFromAddress: 'Far from the address',
   },
   screen: {
     title: 'Review · case {{id}}',
@@ -110,6 +115,10 @@ export const reviewEn = {
     sample: 'Random sample to review (% of each interviewer’s interviews)',
     speeding: 'Speeding below (seconds per question)',
     straight: 'Straight-lining from (items with the same answer)',
+    shortPageShare:
+      'Fast answers: flag when this % of timed questions were answered in under a quarter of the usual time',
+    clusterMetres: 'Same place: interviews of one interviewer within this many metres',
+    clusterMin: 'Same place: flag from this many interviews',
     rejectReopens: 'A rejected interview sends its case back to be interviewed again',
   },
 };
@@ -130,6 +139,7 @@ export const reviewEs: ReviewCatalogue = {
     },
     flag: 'Alerta',
     anyFlag: 'Cualquiera',
+    byRisk: 'Mayor riesgo primero',
     mode: 'Modo',
     anyMode: 'Cualquiera',
     sampled: 'Solo la muestra aleatoria',
@@ -146,12 +156,16 @@ export const reviewEs: ReviewCatalogue = {
     sampleBadge: 'muestra',
     round: 'ronda {{n}}',
   },
+  risk: 'Riesgo {{n}}',
   flags: {
     speeding: 'Demasiado rápida',
     straightlining: 'Respuestas en línea',
     warningsOverridden: 'Advertencias confirmadas',
     otherText: 'Texto en “otro”',
     doubleEntry: 'Diferencias de doble digitación',
+    shortPages: 'Preguntas respondidas muy rápido',
+    positionCluster: 'Entrevistas iniciadas en el mismo lugar',
+    farFromAddress: 'Lejos de la dirección',
   },
   screen: {
     title: 'Revisión · caso {{id}}',
@@ -227,6 +241,10 @@ export const reviewEs: ReviewCatalogue = {
     sample: 'Muestra aleatoria a revisar (% de las entrevistas de cada entrevistador)',
     speeding: 'Demasiado rápida por debajo de (segundos por pregunta)',
     straight: 'Respuestas en línea desde (ítems con la misma respuesta)',
+    shortPageShare:
+      'Respuestas rápidas: alertar cuando este % de las preguntas cronometradas se respondió en menos de un cuarto del tiempo habitual',
+    clusterMetres: 'Mismo lugar: entrevistas de un entrevistador dentro de estos metros',
+    clusterMin: 'Mismo lugar: alertar desde esta cantidad de entrevistas',
     rejectReopens: 'Una entrevista rechazada devuelve su caso para entrevistarlo de nuevo',
   },
 };

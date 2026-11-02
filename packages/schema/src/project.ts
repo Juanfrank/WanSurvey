@@ -50,7 +50,32 @@ export const PapiSettings = z.object({
 });
 export type PapiSettings = z.infer<typeof PapiSettings>;
 
+/** Fraud-risk signals (ADR 0001): thresholds and the weight each fired flag adds to the score. */
+export const RiskSettings = z.object({
+  /** A question answered in less than this share of the project's median time is "short". */
+  shortPageFraction: z.number().min(0.01).max(1).default(0.25),
+  /** An interview is flagged when at least this share of its timed questions were short. */
+  shortPageShare: z.number().min(0.05).max(1).default(0.5),
+  /** Interviews of one interviewer started within this many metres of each other... */
+  clusterMetres: z.number().int().min(5).max(5000).default(50),
+  /** ...at least this many (this one included) are a position cluster. */
+  clusterMinInterviews: z.number().int().min(2).max(100).default(4),
+  /** Farther than this from the case's geocoded address is flagged; null: not checked. */
+  farFromAddressMetres: z.number().int().min(50).max(100_000).nullable().default(null),
+  weights: z
+    .object({
+      speeding: z.number().int().min(0).max(100).default(30),
+      straightlining: z.number().int().min(0).max(100).default(20),
+      shortPages: z.number().int().min(0).max(100).default(25),
+      positionCluster: z.number().int().min(0).max(100).default(35),
+      farFromAddress: z.number().int().min(0).max(100).default(30),
+    })
+    .prefault({}),
+});
+export type RiskSettings = z.infer<typeof RiskSettings>;
+
 export const ReviewSettings = z.object({
+  risk: RiskSettings.default(RiskSettings.parse({})),
   /** Share of each interviewer's completes picked at random for review (R2). */
   samplePercent: z.number().int().min(0).max(100).default(10),
   /** Faster than this per answered question is flagged as speeding. */

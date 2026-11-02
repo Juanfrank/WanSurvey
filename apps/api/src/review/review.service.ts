@@ -4,11 +4,12 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
 import { createInterview } from '@wansurvey/logic';
-import type { Permission } from '@wansurvey/schema';
+import type { Permission, ReviewSettings } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService, type AuditAction } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
@@ -17,8 +18,18 @@ import { MASK, maskContact, maskSample } from '../cases/case-logic.js';
 import type { InterviewRow } from '../interviews/interviews-repo.js';
 import { InterviewsService, personalVariables } from '../interviews/interviews.service.js';
 import { REVIEW_REPO, type ReviewRepo, type ReviewTx } from './review-repo.js';
+import { Engine } from '../db/engine.js';
+import { JobsService } from '../jobs/jobs.service.js';
 import { StatsService } from '../stats/stats.service.js';
-import { FLAG_KINDS, computeFlags, inSample } from './flags.js';
+import { FLAG_KINDS, computeFlags, inSample, type Flags } from './flags.js';
+import {
+  farFromAddress,
+  medianDwell,
+  positionCluster,
+  riskOf,
+  shortPages,
+  type Point,
+} from './risk.js';
 
 export const QueueQuery = z.object({
   status: z
@@ -29,6 +40,7 @@ export const QueueQuery = z.object({
   interviewerId: z.uuid().optional(),
   mode: z.enum(['CATI', 'CAPI', 'CAWI', 'PAPI']).optional(),
   flag: z.enum(FLAG_KINDS).optional(),
+  sort: z.enum(['risk']).optional(),
   sampled: z
     .enum(['true', 'false'])
     .optional()
@@ -136,12 +148,120 @@ export class ReviewService implements OnModuleInit {
     private readonly runtime: InterviewsService,
     private readonly audit: AuditService,
     private readonly stats: StatsService,
+    private readonly engine: Engine,
+    private readonly jobs: JobsService,
     @Inject(REVIEW_REPO) private readonly repo: ReviewRepo,
   ) {}
 
   onModuleInit() {
     // The flags are written by the submission's own update.
     this.runtime.onSubmitting((t, row) => this.flags(this.repo.extend(t), row));
+    this.jobs.register('review.risk', () => this.riskAll());
+    this.jobs.schedule('review.risk', { cron: '45 3 * * *' });
+  }
+
+  private readonly logger = new Logger(ReviewService.name);
+
+  /**
+   * Fraud signals (ADR 0001) added to the flags: questions answered far faster than the
+   * project's median, interviews started close together, and distance to the case's address.
+   * They only point a reviewer at an interview; nothing is decided here. A failure to read
+   * them never stops a submission.
+   */
+  async riskSignals(
+    t: ReviewTx,
+    row: {
+      id: string;
+      projectId: string;
+      interviewerId: string | null;
+      caseId: string | null;
+      versionId: string;
+    },
+    risk: ReviewSettings['risk'],
+    flags: Flags,
+  ): Promise<Flags> {
+    const out: Flags = { ...flags };
+    delete out.shortPages;
+    delete out.positionCluster;
+    delete out.farFromAddress;
+    delete out.risk;
+    try {
+      const own = (await t.paradataOf(row.id, ['leave_question']))
+        .map((p) => p.payload as { key?: string; ms?: number })
+        .flatMap((p) =>
+          typeof p?.key === 'string' && typeof p.ms === 'number' ? [{ key: p.key, ms: p.ms }] : [],
+        );
+      const sp = shortPages(
+        own,
+        medianDwell(await t.dwellSample(row.versionId, row.id, 200)),
+        risk,
+      );
+      if (sp) out.shortPages = sp;
+
+      const gps = (await t.paradataOf(row.id, ['gps']))
+        .map((p) => p.payload as { when?: string; lat?: number; lng?: number })
+        .find((p) => p.when === 'start' && typeof p.lat === 'number' && typeof p.lng === 'number');
+      if (gps) {
+        const mine: Point = { lat: gps.lat!, lng: gps.lng! };
+        if (row.interviewerId) {
+          const others = await t.interviewerPositions(
+            row.projectId,
+            row.interviewerId,
+            row.id,
+            new Date(Date.now() - 30 * 86_400_000),
+          );
+          const pc = positionCluster(mine, others, risk);
+          if (pc) out.positionCluster = pc;
+        }
+        const far = farFromAddress(mine, row.caseId ? await t.caseAddress(row.caseId) : null, risk);
+        if (far) out.farFromAddress = far;
+      }
+    } catch (e) {
+      this.logger.warn(`Risk signals of ${row.id} not computed: ${(e as Error).message}`);
+    }
+    const score = riskOf(out, risk.weights);
+    if (score > 0) out.risk = score;
+    return out;
+  }
+
+  /** Nightly: the cluster signal needs the other interviews, so the last 30 days are redone. */
+  async riskAll(now = new Date()): Promise<number> {
+    let n = 0;
+    for (const tenantId of await this.engine.allTenantIds()) {
+      try {
+        n += await this.repo.inTenant(tenantId, async (t) => {
+          let m = 0;
+          for (const projectId of await t.projectIds()) {
+            const risk = (await this.cases.settings(t, projectId)).review.risk;
+            for (const c of await t.riskCandidates(
+              projectId,
+              new Date(now.getTime() - 30 * 86_400_000),
+            )) {
+              const next = await this.riskSignals(
+                t,
+                {
+                  id: c.id,
+                  projectId,
+                  interviewerId: c.interviewerId,
+                  caseId: c.caseId,
+                  versionId: c.versionId,
+                },
+                risk,
+                c.flags as Flags,
+              );
+              if (JSON.stringify(next) !== JSON.stringify(c.flags)) {
+                await t.setFlags(c.id, next as Record<string, unknown>);
+                m++;
+              }
+            }
+          }
+          return m;
+        });
+      } catch (e) {
+        this.logger.error(`Risk recompute failed for ${tenantId}: ${(e as Error).message}`);
+      }
+    }
+    return n;
   }
 
   /** Flags and the sample, computed at each submission (R2, R3). */
@@ -162,7 +282,19 @@ export class ReviewService implements OnModuleInit {
       doubleEntryDifferences: c.differences,
       settings,
     });
-    return { flags, sampled: inSample(row.id, settings.samplePercent) };
+    const withRisk = await this.riskSignals(
+      t,
+      {
+        id: row.id,
+        projectId: row.projectId,
+        interviewerId: row.interviewerId,
+        caseId: row.caseId,
+        versionId: row.questionnaireVersionId,
+      },
+      settings.risk,
+      flags,
+    );
+    return { flags: withRisk, sampled: inSample(row.id, settings.samplePercent) };
   }
 
   private reviewer(ctx: AuthContext, projectId: string) {

@@ -19,6 +19,7 @@ export interface ReviewQuery {
   mode?: string;
   flag?: string;
   sampled?: boolean;
+  sort?: 'risk';
   from?: string;
   to?: string;
   page: number;
@@ -64,6 +65,32 @@ export interface ReviewTx extends InterviewsTx {
     }[];
   }>;
   externalIdOf(caseId: string): Promise<string | null>;
+  dwellSample(
+    versionId: string,
+    excludeId: string,
+    interviews: number,
+  ): Promise<{ key: string; ms: number }[]>;
+  interviewerPositions(
+    projectId: string,
+    interviewerId: string,
+    excludeId: string,
+    since: Date,
+  ): Promise<{ lat: number; lng: number }[]>;
+  caseAddress(caseId: string): Promise<{ lat: number; lng: number } | null>;
+  riskCandidates(
+    projectId: string,
+    since: Date,
+  ): Promise<
+    {
+      id: string;
+      interviewerId: string | null;
+      caseId: string | null;
+      versionId: string;
+      flags: Record<string, unknown>;
+    }[]
+  >;
+  setFlags(id: string, flags: Record<string, unknown>): Promise<void>;
+  projectIds(): Promise<string[]>;
   paradataOf(
     interviewId: string,
     types: string[],
@@ -174,6 +201,22 @@ export class MssqlReviewTx extends MssqlInterviewsTx implements ReviewTx {
         comments: x.comments,
       })),
     };
+  }
+
+  dwellSample(versionId: string, excludeId: string, interviews: number) {
+    return this.review.dwellSample(this.mtx, versionId, excludeId, interviews);
+  }
+  interviewerPositions(projectId: string, interviewerId: string, excludeId: string, since: Date) {
+    return this.review.interviewerPositions(this.mtx, projectId, interviewerId, excludeId, since);
+  }
+  caseAddress(caseId: string) {
+    return this.review.caseAddress(this.mtx, caseId);
+  }
+  riskCandidates(projectId: string, since: Date) {
+    return this.review.riskCandidates(this.mtx, projectId, since);
+  }
+  setFlags(id: string, flags: Record<string, unknown>) {
+    return this.review.setFlags(this.mtx, id, flags);
   }
 
   async externalIdOf(caseId: string) {
