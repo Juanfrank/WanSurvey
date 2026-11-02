@@ -505,7 +505,8 @@ describe.skipIf(!configured)('SQL Server: fraud-risk score', () => {
     const alone = await submitted({ lat: -13.5, lng: -71.97 }, 1);
 
     const n = await t.app.get(ReviewService).riskAll();
-    expect(n).toBe(4);
+    // Every organisation in the shared database is recomputed, not only this one.
+    expect(n).toBeGreaterThanOrEqual(4);
     for (const id of clustered) {
       const f = await flagsOf(id);
       expect(f.positionCluster).toEqual({ interviews: 4, metres: 50 });
