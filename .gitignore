@@ -14,3 +14,6 @@ load/sync-users.json
 apps/api/.exports/
 out/
 .exports/
+
+# SonarQube scanner work folder
+.scannerwork/
