@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { encryptField } from '../../src/common/crypto.js';
 import { loadConfig, resetConfigCache } from '../../src/config.js';
 import { ownerQuery } from './fixtures.js';
 import {
@@ -19,9 +18,9 @@ const WEB = 'http://localhost:5173';
 const CLIENT_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
 /**
- * Production with Microsoft only (PASSWORD_LOGIN=false): one button, the default organisation's
- * sign-in from the deployment's settings, no password route, and sessions bound to the
- * directory that issued them.
+ * Production with Microsoft only (PASSWORD_LOGIN=false): the sign-in asks for the e-mail, finds the
+ * organisation from its domain and uses the deployment's directory, no password route, and
+ * sessions bound to the directory that issued them.
  */
 describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
   const entra = new MockEntra();
@@ -37,7 +36,6 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
       ENTRA_AUTHORITY_HOST: entra.host,
       PUBLIC_URL: WEB,
       PASSWORD_LOGIN: 'false',
-      SSO_DEFAULT_ORG: slug,
       ENTRA_TENANT_ID: entraTenantId,
       ENTRA_CLIENT_ID: CLIENT_ID,
       ENTRA_CLIENT_SECRET: 'deploy-secret',
@@ -48,6 +46,10 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     t = await bootstrap();
     q = ownerQuery(t.owner);
     org = await createTenant(t.owner, slug);
+    // The organisation turns Microsoft on and lists its domain; the directory is the deployment's.
+    await q`
+      INSERT INTO tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, allowed_domains)
+      VALUES (${org.id}, ${entraTenantId}, ${CLIENT_ID}, NULL, 1, ${JSON.stringify(['court.gov'])})`;
   });
   afterAll(async () => {
     await t.close();
@@ -56,7 +58,6 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
       'ENTRA_AUTHORITY_HOST',
       'PUBLIC_URL',
       'PASSWORD_LOGIN',
-      'SSO_DEFAULT_ORG',
       'ENTRA_TENANT_ID',
       'ENTRA_CLIENT_ID',
       'ENTRA_CLIENT_SECRET',
@@ -67,12 +68,12 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     resetConfigCache();
   });
 
-  /** The sign-in button: start with nothing, Microsoft, callback. */
+  /** The sign-in: start with the e-mail (its domain finds the organisation), Microsoft, callback. */
   async function button(
     claims: Record<string, unknown>,
     agent = request.agent(t.app.getHttpServer()),
   ) {
-    const start = await agent.get('/api/v1/auth/sso/start');
+    const start = await agent.get('/api/v1/auth/sso/start').query({ email: String(claims.email) });
     expect(start.status).toBe(302);
     const authorize = new URL(start.headers.location!);
     const p = authorize.searchParams;
@@ -87,9 +88,9 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     return { agent, authorize, callback };
   }
 
-  it('tells the sign-in page to show the Microsoft button alone', async () => {
+  it('tells the sign-in page to show the Microsoft button alone, asking for the e-mail first', async () => {
     const res = await request(t.app.getHttpServer()).get('/api/v1/auth/methods').expect(200);
-    expect(res.body).toEqual({ password: false, microsoftNeedsEmail: false });
+    expect(res.body).toEqual({ password: false, microsoftNeedsEmail: true });
   });
 
   it('refuses every password route', async () => {
@@ -106,7 +107,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     }
   });
 
-  it('signs in with the button through the deployment’s directory, the same way every morning', async () => {
+  it('signs in through the deployment’s directory, the same way every morning', async () => {
     const user = await createUser(t.owner, org.id, [{ role: 'interviewer' }], {
       email: `ana.${Date.now()}@court.gov`,
     });
@@ -130,11 +131,15 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     expect(Number(logins[0]!.n)).toBe(2);
   });
 
-  it('starts at the default organisation for an e-mail whose domain no organisation claims', async () => {
-    const res = await request(t.app.getHttpServer())
+  it('asks for the e-mail when there is none, and refuses one whose domain no organisation claims', async () => {
+    const http = request(t.app.getHttpServer());
+    expect((await http.get('/api/v1/auth/sso/start')).headers.location).toBe(
+      `${WEB}/login?sso_error=choose_organisation`,
+    );
+    const res = await http
       .get('/api/v1/auth/sso/start')
       .query({ email: `x@unclaimed-${Date.now()}.net` });
-    expect(res.headers.location).toContain(`/${entraTenantId}/oauth2/v2.0/authorize`);
+    expect(res.headers.location).toBe(`${WEB}/login?sso_error=sso_not_configured`);
   });
 
   it('invites to sign in with Microsoft, and the sign-in accepts the invitation', async () => {
@@ -187,50 +192,19 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
     expect(res.body.code).toBe('SSO_REQUIRED');
   });
 
-  it('keeps the deployment’s e-mail domain for the default organisation', async () => {
+  it('lets in only the domains both the deployment and the organisation list', async () => {
     const other = await createTenant(t.owner);
     await q`
       INSERT INTO tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, allowed_domains)
-      VALUES (${other.id}, ${randomUUID()}, ${CLIENT_ID}, ${encryptField('x', process.env.ENCRYPTION_KEY!)}, 0, ${JSON.stringify(['elsewhere.org'])})`;
-    const owner = await createUser(t.owner, other.id, [{ role: 'owner' }]);
-    // Owners sign in through their organisation's directory here too; the setting is what is tested.
-    const res = await t.app
-      .get((await import('../../src/auth/sso-config.js')).SsoConfigs)
-      .deploymentTenantForDomain('court.gov');
-    expect(res).toBe(org.id);
-    expect(owner.id).toBeTruthy();
+      VALUES (${other.id}, ${randomUUID()}, ${CLIENT_ID}, NULL, 1, ${JSON.stringify(['elsewhere.org'])})`;
+    // elsewhere.org is the organisation's, but the deployment's directory does not serve it.
+    const res = await request(t.app.getHttpServer())
+      .get('/api/v1/auth/sso/start')
+      .query({ email: 'a@elsewhere.org' });
+    expect(res.headers.location).toBe(`${WEB}/login?sso_error=sso_not_configured`);
   });
 
-  it('does not link by e-mail through a directory another organisation runs', async () => {
-    // Organisation A runs its own directory and claims a domain nobody else claimed; someone
-    // of organisation B has an address there. A's directory can say anything about e-mails.
-    const a = await createTenant(t.owner);
-    const b = await createTenant(t.owner);
-    const victim = await createUser(t.owner, b.id, [{ role: 'interviewer' }], {
-      email: `victim.${Date.now()}@unclaimed.net`,
-    });
-    const directory = randomUUID();
-    await q`
-      INSERT INTO tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, allowed_domains)
-      VALUES (${a.id}, ${directory}, ${CLIENT_ID}, ${encryptField('a-secret', process.env.ENCRYPTION_KEY!)}, 1, ${JSON.stringify(['unclaimed.net'])})`;
-    const agent = request.agent(t.app.getHttpServer());
-    const start = await agent.get('/api/v1/auth/sso/start').query({ org: a.slug });
-    const p = new URL(start.headers.location!).searchParams;
-    const code = entra.issueCode({
-      claims: { nonce: p.get('nonce'), oid: randomUUID(), email: victim.email, amr: ['mfa'] },
-      codeChallenge: p.get('code_challenge')!,
-      clientId: p.get('client_id')!,
-    });
-    const back = await agent.get('/api/auth/entra/callback').query({ code, state: p.get('state') });
-    expect(back.headers.location).toBe(`${WEB}/login?sso_error=link_not_allowed`);
-    const ids = await q`SELECT COUNT(*) as n FROM user_identities WHERE user_id = ${victim.id}`;
-    expect(Number(ids[0]!.n)).toBe(0);
-    const members = await q`
-      SELECT COUNT(*) as n from tenant_members WHERE user_id = ${victim.id} and tenant_id = ${a.id}`;
-    expect(Number(members[0]!.n)).toBe(0);
-  });
-
-  it('shows the deployment’s settings to the organisation’s admins and refuses to save others', async () => {
+  it('shows the deployment’s directory, and saves what is the organisation’s own', async () => {
     const owner = await createUser(t.owner, org.id, [{ role: 'owner' }], {
       email: `jefa.${Date.now()}@court.gov`,
     });
@@ -241,30 +215,47 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
       managedByDeployment: true,
       entraTenantId: entraTenantId,
       clientId: CLIENT_ID,
+      hasClientSecret: true,
+      enabled: true,
       allowedDomains: ['court.gov'],
+      deploymentDomains: ['court.gov'],
     });
     expect(JSON.stringify(view.body)).not.toContain('deploy-secret');
+    const csrf = me.body.csrfToken as string;
+    // A directory and secret sent along are not used: the deployment's are.
     const put = await agent
       .put('/api/v1/tenant/sso')
-      .set('x-csrf-token', me.body.csrfToken as string)
+      .set('x-csrf-token', csrf)
       .send({
         entraTenantId: randomUUID(),
         clientId: CLIENT_ID,
         clientSecret: 'other',
-        enabled: false,
+        enabled: true,
         enforceSso: false,
         allowedDomains: ['court.gov'],
       });
-    expect(put.status).toBe(409);
-    expect(put.body.code).toBe('SSO_MANAGED_BY_DEPLOYMENT');
+    expect(put.status).toBe(200);
+    expect(put.body).toMatchObject({ entraTenantId, managedByDeployment: true });
+    const [row] = await q`
+      SELECT entra_tenant_id, client_secret_enc FROM tenant_sso WHERE tenant_id = ${org.id}`;
+    expect(String(row!.entra_tenant_id).toLowerCase()).toBe(entraTenantId.toLowerCase());
+    expect(row!.client_secret_enc).toBeNull();
+    // A domain the deployment's directory does not serve cannot be listed.
+    const outside = await agent
+      .put('/api/v1/tenant/sso')
+      .set('x-csrf-token', csrf)
+      .send({ enabled: true, enforceSso: false, allowedDomains: ['court.gov', 'other.net'] });
+    expect(outside.status).toBe(400);
+    expect(outside.body.code).toBe('DOMAIN_NOT_ALLOWED');
   });
 });
 
 describe.skipIf(!configured).each([false, true])(
-  'SQL Server: the deployment’s Microsoft sign-in, with passwords on (ENTRA_ENFORCE=%s)',
+  'SQL Server: the deployment’s Microsoft directory, with passwords on (the organisation requires Microsoft: %s)',
   (enforce) => {
     const entra = new MockEntra();
     const slug = `adp-${enforce ? 'e' : 'o'}-${Date.now().toString(36)}`;
+    const entraTenantId = randomUUID();
     let t: MssqlTestApp;
     let org: { id: string; slug: string };
 
@@ -272,30 +263,29 @@ describe.skipIf(!configured).each([false, true])(
       await entra.start();
       Object.assign(process.env, {
         ENTRA_AUTHORITY_HOST: entra.host,
-        SSO_DEFAULT_ORG: slug,
-        ENTRA_TENANT_ID: randomUUID(),
+        ENTRA_TENANT_ID: entraTenantId,
         ENTRA_CLIENT_ID: CLIENT_ID,
         ENTRA_CLIENT_SECRET: 'deploy-secret',
         ENTRA_REDIRECT_URI: 'http://localhost:5173/api/auth/entra/callback',
         ENTRA_ALLOWED_DOMAINS: 'court.gov',
-        ENTRA_ENFORCE: String(enforce),
       });
       resetConfigCache();
       t = await bootstrap();
       org = await createTenant(t.owner, slug);
+      await ownerQuery(t.owner)`
+        INSERT INTO tenant_sso (tenant_id, entra_tenant_id, client_id, client_secret_enc, enabled, enforce_sso, allowed_domains)
+        VALUES (${org.id}, ${entraTenantId}, ${CLIENT_ID}, NULL, 1, ${enforce ? 1 : 0}, ${JSON.stringify(['court.gov'])})`;
     });
     afterAll(async () => {
       await t.close();
       await entra.stop();
       for (const k of [
         'ENTRA_AUTHORITY_HOST',
-        'SSO_DEFAULT_ORG',
         'ENTRA_TENANT_ID',
         'ENTRA_CLIENT_ID',
         'ENTRA_CLIENT_SECRET',
         'ENTRA_REDIRECT_URI',
         'ENTRA_ALLOWED_DOMAINS',
-        'ENTRA_ENFORCE',
       ])
         delete process.env[k];
       resetConfigCache();
@@ -303,8 +293,8 @@ describe.skipIf(!configured).each([false, true])(
 
     it(
       enforce
-        ? 'requires Microsoft for the default organisation, except for its owners'
-        : 'still accepts passwords in the default organisation unless told to require Microsoft',
+        ? 'requires Microsoft for the organisation, except for its owners'
+        : 'still accepts passwords in the organisation unless it requires Microsoft',
       async () => {
         const interviewer = await createUser(t.owner, org.id, [{ role: 'interviewer' }]);
         const res = await request(t.app.getHttpServer())
@@ -326,7 +316,6 @@ describe.skipIf(!configured).each([false, true])(
 describe('configuration of Microsoft-only sign-in', () => {
   const base = () => ({ ...process.env, PASSWORD_LOGIN: 'true' }) as NodeJS.ProcessEnv;
   const deployment = {
-    SSO_DEFAULT_ORG: 'pj',
     ENTRA_TENANT_ID: randomUUID(),
     ENTRA_CLIENT_ID: CLIENT_ID,
     ENTRA_CLIENT_SECRET: 'x',
@@ -353,7 +342,6 @@ describe('configuration of Microsoft-only sign-in', () => {
 
   it('takes empty settings as not set, and the directory whole or not at all', () => {
     const empty = {
-      SSO_DEFAULT_ORG: '',
       ENTRA_TENANT_ID: '',
       ENTRA_CLIENT_ID: '',
       ENTRA_CLIENT_SECRET: '',
@@ -381,5 +369,23 @@ describe('configuration of Microsoft-only sign-in', () => {
     expect(
       loadConfig({ ...base(), ...deployment, ENTRA_REDIRECT_URI: ok }).ENTRA_REDIRECT_URI,
     ).toBe(ok);
+  });
+
+  it('stops at a setting that no longer exists: the organisation is found from the e-mail', () => {
+    expect(() => loadConfig({ ...base(), ...deployment, SSO_DEFAULT_ORG: 'pj' })).toThrow(
+      /SSO_DEFAULT_ORG: removed or renamed/,
+    );
+    expect(() => loadConfig({ ...base(), ...deployment, ENTRA_ENFORCE: 'true' })).toThrow(
+      /ENTRA_ENFORCE: removed or renamed/,
+    );
+  });
+
+  it('takes the secret written in the setting or a Key Vault reference to it', () => {
+    expect(loadConfig({ ...base(), ...deployment }).ENTRA_CLIENT_SECRET).toBe('x');
+    const reference =
+      '@Microsoft.KeyVault(SecretUri=https://vault.vault.azure.net/secrets/entra-client-secret/)';
+    expect(
+      loadConfig({ ...base(), ...deployment, ENTRA_CLIENT_SECRET: reference }).ENTRA_CLIENT_SECRET,
+    ).toBe(reference);
   });
 });

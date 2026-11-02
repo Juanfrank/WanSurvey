@@ -129,7 +129,7 @@ export const adminEn = {
     saveSso: 'Save sign-in settings',
     ssoSaved: 'Sign-in settings saved.',
     ssoManaged:
-      'Microsoft sign-in for this organisation is set in the deployment (ENTRA_* settings), not here. To change it, change those settings.',
+      'The Microsoft directory, application and secret are set in the deployment (ENTRA_* settings), not here. Here you turn sign-in on, list your e-mail domains and choose whether to require it.',
   },
   log: {
     intro:
@@ -302,7 +302,7 @@ export const adminEs: typeof adminEn = {
     saveSso: 'Guardar inicio de sesión',
     ssoSaved: 'Inicio de sesión guardado.',
     ssoManaged:
-      'El ingreso con Microsoft de esta organización se configura en el despliegue (ajustes ENTRA_*), no aquí. Para cambiarlo, cambie esos ajustes.',
+      'El directorio, la aplicación y el secreto de Microsoft se configuran en el despliegue (ajustes ENTRA_*), no aquí. Aquí se activa el ingreso, se listan los dominios de correo y se elige si se exige.',
   },
   log: {
     intro:

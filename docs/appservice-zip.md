@@ -96,7 +96,7 @@ removed), so a client cannot pass as another by sending that header. A refused c
 - `ENCRYPTION_KEY`: seals personal data and secrets in the database; 32 random bytes in base64,
   one per environment, never changed once data exists.
 - `NODE_ENV`: `production` turns on the production checks (Blob Storage required, HSTS).
-- `PASSWORD_LOGIN`, `SSO_DEFAULT_ORG`, `ENTRA_*` (tenant, client, secret and `ENTRA_REDIRECT_URI`): sign-in (`docs/sso-entra.md`).
+- `PASSWORD_LOGIN`, `ENTRA_*` (tenant, client, secret and `ENTRA_REDIRECT_URI`): sign-in (`docs/sso-entra.md`).
 - `MAILER`, `SMTP_URL`, `MAIL_FROM`: e-mail; `console` writes it to the log instead.
 - `EXPORT_STORAGE`, `AZURE_STORAGE_ACCOUNT_NAME`, `AZURE_STORAGE_CONTAINER`, `AZURE_CLIENT_ID`: export
   files in Blob Storage (account and container come together), reached with the managed identity
@@ -132,6 +132,6 @@ removed), so a client cannot pass as another by sending that header. A refused c
 
 The names are the same in every app of the family. A former name (`PUBLIC_WEB_URL`,
 `APP_ENCRYPTION_KEY`, `EXPORT_DIR`, `EXPORT_BLOB_URL`, `EXPORT_BLOB_CONTAINER`) in the environment
-stops the app at start and the error says which name replaces it. The values do not change
+stops the app at start and the error says which name replaces it (`SSO_DEFAULT_ORG` and `ENTRA_ENFORCE` no longer exist). The values do not change
 (`ENCRYPTION_KEY` keeps the key's value). Paste the whole list (`appconfig/README.md`): Advanced
 edit replaces it.

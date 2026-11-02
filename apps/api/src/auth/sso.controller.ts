@@ -43,8 +43,15 @@ const CallbackQuery = z.object({
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SsoSettings = z
   .object({
-    entraTenantId: z.string().regex(GUID, 'Directory (tenant) ID from the Entra app registration'),
-    clientId: z.string().regex(GUID, 'Application (client) ID from the Entra app registration'),
+    /** Not needed (ignored) when the deployment sets the directory (ENTRA_*). */
+    entraTenantId: z
+      .string()
+      .regex(GUID, 'Directory (tenant) ID from the Entra app registration')
+      .optional(),
+    clientId: z
+      .string()
+      .regex(GUID, 'Application (client) ID from the Entra app registration')
+      .optional(),
     /** Omit to keep the stored secret. */
     clientSecret: z.string().min(1).max(512).optional(),
     enabled: z.boolean(),
@@ -162,19 +169,6 @@ export class SsoSettingsController {
   @Get()
   @RequirePermission('tenant.manage')
   async get(@Auth() ctx: AuthContext) {
-    const deployment = await this.configs.deploymentSettings();
-    if (deployment?.tenantId === ctx.tenantId)
-      return {
-        configured: true,
-        managedByDeployment: true,
-        entraTenantId: deployment.entraTenantId,
-        clientId: deployment.clientId,
-        hasClientSecret: true,
-        enabled: true,
-        enforceSso: deployment.enforceSso,
-        allowedDomains: deployment.allowedDomains,
-        redirectUri: this.sso.redirectUri,
-      };
     return this.repo.inTenant(ctx.tenantId, async (t) => this.present(await t.ssoSettings()));
   }
 
@@ -185,12 +179,16 @@ export class SsoSettingsController {
     @Auth() ctx: AuthContext,
     @Body(new ZodPipe(SsoSettings)) body: z.infer<typeof SsoSettings>,
   ) {
-    // The deployment's settings (ENTRA_*) are the ones used: saving others would change nothing.
-    if (await this.configs.isDeploymentTenant(ctx.tenantId))
-      throw new ConflictException({
-        code: 'SSO_MANAGED_BY_DEPLOYMENT',
-        message: 'Microsoft sign-in of this organisation is set in the deployment (ENTRA_*)',
-      });
+    // With the deployment's directory (ENTRA_*) the organisation keeps what is its own: on or off,
+    // its domains, whether Microsoft is required; the directory and secret saved with them are the
+    // deployment's.
+    const directory = this.configs.deploymentDirectory();
+    const entraTenantId = directory?.entraTenantId ?? body.entraTenantId;
+    const clientId = directory?.clientId ?? body.clientId;
+    if (!entraTenantId || !clientId)
+      throw new BadRequestException(
+        'Add the directory (tenant) ID and the application (client) ID',
+      );
     // A domain belongs to one organisation: two would make e-mail sign-in ambiguous, and one
     // could claim another's addresses.
     const domains = [...new Set(body.allowedDomains.map((d) => d.toLowerCase()))];
@@ -199,10 +197,14 @@ export class SsoSettingsController {
         code: 'DOMAIN_TAKEN',
         message: `The domain ${domain} is already used by another organisation`,
       });
-    for (const domain of domains) {
-      const deployment = await this.configs.deploymentTenantForDomain(domain);
-      if (deployment !== null && deployment !== ctx.tenantId) throw taken(domain);
-    }
+    const outside = directory?.allowedDomains.length
+      ? domains.filter((d) => !directory.allowedDomains.includes(d))
+      : [];
+    if (outside.length)
+      throw new BadRequestException({
+        code: 'DOMAIN_NOT_ALLOWED',
+        message: `The deployment's directory does not serve: ${outside.join(', ')}`,
+      });
     const saved = await this.repo.inTenant(ctx.tenantId, async (t) => {
       // One organisation saves its domains at a time, and checks them once the saves before it
       // have committed: two saving the same domain at once cannot both get it.
@@ -212,15 +214,17 @@ export class SsoSettingsController {
         if (owners.some((id) => id !== ctx.tenantId)) throw taken(domain);
       }
       const current = await t.ssoSettings();
-      const secretEnc = body.clientSecret
-        ? encryptField(body.clientSecret, this.config.ENCRYPTION_KEY)
-        : (current?.clientSecretEnc ?? null);
-      if (body.enabled && !secretEnc) {
+      const secretEnc = directory
+        ? null
+        : body.clientSecret
+          ? encryptField(body.clientSecret, this.config.ENCRYPTION_KEY)
+          : (current?.clientSecretEnc ?? null);
+      if (body.enabled && !directory && !secretEnc) {
         throw new BadRequestException('Add the client secret from the Entra app registration');
       }
       const row = await t.saveSso({
-        entraTenantId: body.entraTenantId.toLowerCase(),
-        clientId: body.clientId.toLowerCase(),
+        entraTenantId: entraTenantId.toLowerCase(),
+        clientId: clientId.toLowerCase(),
         clientSecretEnc: secretEnc,
         enabled: body.enabled,
         enforceSso: body.enforceSso,
@@ -243,15 +247,19 @@ export class SsoSettingsController {
   }
 
   private present(row: SsoRow | null) {
+    const directory = this.configs.deploymentDirectory();
     return {
       configured: !!row,
-      managedByDeployment: false,
-      entraTenantId: row?.entraTenantId ?? null,
-      clientId: row?.clientId ?? null,
-      hasClientSecret: !!row?.clientSecretEnc,
+      /** The directory and its secret are the deployment's (ENTRA_*): shown, not edited. */
+      managedByDeployment: !!directory,
+      entraTenantId: directory?.entraTenantId ?? row?.entraTenantId ?? null,
+      clientId: directory?.clientId ?? row?.clientId ?? null,
+      hasClientSecret: !!directory || !!row?.clientSecretEnc,
       enabled: row?.enabled ?? false,
       enforceSso: row?.enforceSso ?? false,
       allowedDomains: row?.allowedDomains ?? [],
+      /** Domains the deployment's directory serves, when it limits them (empty: any). */
+      deploymentDomains: directory?.allowedDomains ?? [],
       /** Register this exact URL as a Web redirect URI in the Entra app registration. */
       redirectUri: this.sso.redirectUri,
     };

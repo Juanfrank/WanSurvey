@@ -83,8 +83,7 @@ export class SsoService {
 
   /**
    * Builds the Microsoft authorize URL and the encrypted state cookie value. The organisation
-   * comes from `org`, or from the e-mail's domain, or else is the default one (SSO_DEFAULT_ORG:
-   * the sign-in button alone, or an e-mail whose domain no organisation claims).
+   * comes from `org` or from the e-mail's domain; with neither, the person has to say which.
    */
   async start(input: { org?: string; email?: string; returnTo?: string }) {
     // Public settings only (no secret): the authorize address needs the directory and client.
@@ -94,15 +93,9 @@ export class SsoService {
     } else if (input.email && input.email.includes('@')) {
       const found = await this.configs.startByDomain(input.email.split('@').pop()!.trim());
       if (found === 'ambiguous') throw new SsoError('choose_organisation');
-      // The default organisation's directory decides at the callback whether it knows them.
-      config =
-        found ??
-        (this.config.SSO_DEFAULT_ORG
-          ? await this.configs.startBySlug(this.config.SSO_DEFAULT_ORG)
-          : null);
+      config = found;
     } else {
-      if (!this.config.SSO_DEFAULT_ORG) throw new SsoError('choose_organisation');
-      config = await this.configs.startBySlug(this.config.SSO_DEFAULT_ORG);
+      throw new SsoError('choose_organisation');
     }
     if (!config || !config.enabled)
       throw new SsoError('sso_not_configured', config?.tenantId ?? null);
@@ -257,8 +250,7 @@ export class SsoService {
       const elsewhere = (await this.repo.userTenants(existingId, true)).filter(
         (t) => t.id !== st.tenantId,
       );
-      if (elsewhere.length)
-        throw fail(this.config.PASSWORD_LOGIN ? 'link_required' : 'link_not_allowed');
+      if (elsewhere.length) throw fail('link_required');
     }
     const userId = existingId ?? uuidv7();
 

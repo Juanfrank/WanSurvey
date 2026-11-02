@@ -27,6 +27,9 @@ export const RENAMED_VARIABLES: Record<string, string> = {
   EXPORT_BLOB_CONTAINER: 'AZURE_STORAGE_CONTAINER',
   // EXPORT_BLOB_URL (https://<account>.blob.core.windows.net/<container>) is split in two.
   EXPORT_BLOB_URL: 'AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_CONTAINER',
+  // The organisation is found from the e-mail's domain: nothing replaces these.
+  SSO_DEFAULT_ORG: 'nothing (the organisation is found from the e-mail domain; docs/sso-entra.md)',
+  ENTRA_ENFORCE: 'nothing (each organisation requires Microsoft in its own settings)',
 };
 
 /** Settings that are secrets, and what a placeholder looks like. */
@@ -116,12 +119,11 @@ const Env = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
-  /** The organisation (slug) the Microsoft button signs in to when no e-mail is given. */
-  SSO_DEFAULT_ORG: optionalText(64),
   /**
-   * Microsoft sign-in of SSO_DEFAULT_ORG from the deployment (App Service settings), used
-   * instead of the organisation's own settings: with password sign-in off, nobody could sign
-   * in to configure it otherwise. The secret should come from Key Vault.
+   * The deployment's Microsoft directory (App Service settings), used by every organisation
+   * that turns Microsoft sign-in on instead of a directory of its own: the organisation is found
+   * from the e-mail's domain. ENTRA_CLIENT_SECRET is the secret itself or a Key Vault reference
+   * (`@Microsoft.KeyVault(SecretUri=...)`, resolved by App Service, or by the app elsewhere).
    */
   ENTRA_TENANT_ID: optionalGuid('Directory (tenant) ID, a GUID'),
   ENTRA_CLIENT_ID: optionalGuid('Application (client) ID, a GUID'),
@@ -144,14 +146,9 @@ const Env = z.object({
       .optional(),
   ),
   /**
-   * With password sign-in on, 'true' requires Microsoft for SSO_DEFAULT_ORG (owners keep their
-   * password, as with an organisation's enforceSso). With it off, Microsoft is the only way anyway.
+   * E-mail domains, comma-separated, whose people may sign in through ENTRA_TENANT_ID (each
+   * organisation lists its own as well; both must hold). Empty: the organisations' domains alone.
    */
-  ENTRA_ENFORCE: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((v) => v === 'true'),
-  /** E-mail domains, comma-separated, whose people may sign in through ENTRA_TENANT_ID. */
   ENTRA_ALLOWED_DOMAINS: z
     .string()
     .default('')
@@ -269,7 +266,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   );
   if (former.length)
     throw new Error(
-      `Invalid configuration:\n  ${former.map((k) => `${k}: renamed, use ${RENAMED_VARIABLES[k]}`).join('\n  ')}`,
+      `Invalid configuration:\n  ${former.map((k) => `${k}: removed or renamed, see: ${RENAMED_VARIABLES[k]}`).join('\n  ')}`,
     );
   // App Service keeps a setting that was left empty: it counts as not set.
   const set = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== ''));
@@ -323,7 +320,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     }
     // The deployment's Microsoft sign-in comes whole, or not at all.
     const deployment = {
-      SSO_DEFAULT_ORG: d.SSO_DEFAULT_ORG,
       ENTRA_TENANT_ID: d.ENTRA_TENANT_ID,
       ENTRA_CLIENT_ID: d.ENTRA_CLIENT_ID,
       ENTRA_CLIENT_SECRET: d.ENTRA_CLIENT_SECRET,
@@ -341,7 +337,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     // Without passwords and without the deployment's directory nobody could sign in.
     if (!d.PASSWORD_LOGIN && missing.length)
       throw new Error(
-        'Invalid configuration:\n  PASSWORD_LOGIN=false: requires SSO_DEFAULT_ORG, ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET and ENTRA_REDIRECT_URI',
+        'Invalid configuration:\n  PASSWORD_LOGIN=false: requires ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET and ENTRA_REDIRECT_URI',
       );
   }
   if (!parsed.success) {

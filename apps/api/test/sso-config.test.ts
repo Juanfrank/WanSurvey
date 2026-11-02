@@ -5,7 +5,7 @@ import type { SsoPublicConfig } from '../src/db/common.js';
 import type { Engine } from '../src/db/engine.js';
 import { LocalBus } from '../src/jobs/bus.js';
 
-const config = { SSO_DEFAULT_ORG: undefined, ENTRA_ALLOWED_DOMAINS: [] } as unknown as AppConfig;
+const config = { ENTRA_ALLOWED_DOMAINS: [] } as unknown as AppConfig;
 const row = (clientId: string): SsoPublicConfig => ({
   tenantId: 't1',
   slug: 'org',

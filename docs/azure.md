@@ -29,11 +29,11 @@ az deployment group create -g <group> -f infra/azure/main.bicep \
   -p name=wansurvey acrName=<registry> imageTag=<tag> publicUrl=https://encuestas.example.org \
      databaseUrl='@Microsoft.KeyVault(SecretUri=…)' redisUrl='@Microsoft.KeyVault(SecretUri=…)' \
      encryptionKey='@Microsoft.KeyVault(SecretUri=…)' smtpUrl=… mailFrom='WanSurvey <encuestas@example.org>' \
-     passwordLogin=false ssoDefaultOrg=<slug> entraTenantId=<directory id> entraClientId=<client id> \
+     passwordLogin=false entraTenantId=<directory id> entraClientId=<client id> \
      entraClientSecret='@Microsoft.KeyVault(SecretUri=…)' entraAllowedDomains=agency.org
 ```
 
-`passwordLogin=false` makes sign-in the Microsoft button alone (`docs/sso-entra.md`, section 4). It defaults to `true`, so redeploying an environment that uses passwords keeps them. With `false`, the API refuses to start unless `ssoDefaultOrg` and the four `entra*` values are all set (an empty one counts as missing). With passwords kept, `entraEnforce=true` (default `false`) requires Microsoft in `ssoDefaultOrg` for everyone but its owners.
+`passwordLogin=false` makes sign-in the Microsoft button alone (`docs/sso-entra.md`, section 4). It defaults to `true`, so redeploying an environment that uses passwords keeps them. With `false`, the API refuses to start unless the four `entra*` values are all set (an empty one counts as missing). Each organisation turns Microsoft on and lists its e-mail domains on its Organisation page, and chooses there whether to require it (owners keep a password).
 
 The three separate apps of the earlier setup (web, API and worker each on its own Web App) still work: set `API_UPSTREAM` to the API app's address and `TRUST_PROXY_HOPS=3`. Docker Compose on App Service retires on 31 March 2027; sidecars are its replacement, so the single app is the layout to keep.
 
@@ -65,7 +65,7 @@ AZURE_STORAGE_ACCOUNT_NAME=<account>
 AZURE_STORAGE_CONTAINER=exports
 AZURE_CLIENT_ID=<the user-assigned identity's client id>
 PASSWORD_LOGIN=false               # the Microsoft button only
-SSO_DEFAULT_ORG=<slug>             # with ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET
+ENTRA_TENANT_ID=<directory id>     # with ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET (a Key Vault reference or the secret)
 ENTRA_ALLOWED_DOMAINS=agency.org   # (secret from Key Vault)
 API_UPSTREAM=http://localhost:3000
 TRUST_PROXY_HOPS=2                 # App Service front end → nginx → API
@@ -96,7 +96,7 @@ WEBSITE_HEALTHCHECK_MAXPINGFAILURES=5
 2. Replace every `<…>` value. Secrets are best as Key Vault references (`@Microsoft.KeyVault(SecretUri=…)`).
 3. Paste the whole array into Advanced edit and save (the app restarts).
 
-Microsoft sign-in takes all of `SSO_DEFAULT_ORG`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` and `ENTRA_REDIRECT_URI` or none (the API refuses to start otherwise); in development, delete those entries to go without. A test (`apps/api/test/appservice-settings.test.ts`) checks that each template, filled in, starts the app, and that it holds the zip's settings and none of the containers'.
+Microsoft sign-in takes all of `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` and `ENTRA_REDIRECT_URI` or none (the API refuses to start otherwise); in development, delete those entries to go without. A test (`apps/api/test/appservice-settings.test.ts`) checks that each template, filled in, starts the app, and that it holds the zip's settings and none of the containers'.
 
 ## First deployment
 

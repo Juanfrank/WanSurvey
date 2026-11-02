@@ -80,11 +80,6 @@
     "slotSetting": false
   },
   {
-    "name": "SSO_DEFAULT_ORG",
-    "value": "<organisation slug>",
-    "slotSetting": false
-  },
-  {
     "name": "ENTRA_TENANT_ID",
     "value": "<directory (tenant) id, a GUID>",
     "slotSetting": false
@@ -96,7 +91,7 @@
   },
   {
     "name": "ENTRA_CLIENT_SECRET",
-    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/entra-client-secret/)>",
+    "value": "<the client secret, or @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/entra-client-secret/)>",
     "slotSetting": false
   },
   {
@@ -107,11 +102,6 @@
   {
     "name": "ENTRA_ALLOWED_DOMAINS",
     "value": "<example.org>",
-    "slotSetting": false
-  },
-  {
-    "name": "ENTRA_ENFORCE",
-    "value": "false",
     "slotSetting": false
   },
   {

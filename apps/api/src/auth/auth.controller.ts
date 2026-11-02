@@ -64,7 +64,7 @@ export class AuthController {
   methods() {
     return {
       password: this.config.PASSWORD_LOGIN,
-      microsoftNeedsEmail: !this.config.SSO_DEFAULT_ORG,
+      microsoftNeedsEmail: true,
     };
   }
 

@@ -14,7 +14,7 @@ interface Tenant {
 
 interface Sso {
   configured: boolean;
-  /** Set in the deployment (ENTRA_*): shown, not edited. */
+  /** The directory and secret are the deployment's (ENTRA_*): shown, not edited. */
   managedByDeployment?: boolean;
   entraTenantId: string | null;
   clientId: string | null;
@@ -64,7 +64,7 @@ export function OrganisationPage() {
       <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.org.intro')}</p>
       <div className="grid items-start gap-6 xl:grid-cols-2">
         {tenant.data ? <General tenant={tenant.data} /> : <div aria-busy="true" />}
-        {sso.data ? <SsoForm sso={sso.data} /> : <div aria-busy="true" />}
+        {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
       </div>
     </div>
   );
@@ -172,39 +172,6 @@ function General({ tenant }: { tenant: Tenant }) {
   );
 }
 
-function SsoForm({ sso }: { sso: Sso }) {
-  if (sso.managedByDeployment) return <SsoFromDeployment sso={sso} />;
-  return <SsoEditor sso={sso} />;
-}
-
-function SsoFromDeployment({ sso }: { sso: Sso }) {
-  const { t } = useTranslation();
-  const rows: [string, string][] = [
-    [t('admin.org.redirectUri'), sso.redirectUri],
-    [t('admin.org.entraTenantId'), sso.entraTenantId ?? ''],
-    [t('admin.org.clientId'), sso.clientId ?? ''],
-    [t('admin.org.domains'), sso.allowedDomains.join(', ')],
-  ];
-  return (
-    <Card>
-      <h2 className="text-lg font-semibold">{t('admin.org.sso')}</h2>
-      <p className="mb-4 mt-2 text-sm text-slate-600">{t('admin.org.ssoManaged')}</p>
-      <dl className="flex flex-col gap-3">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex flex-col gap-1">
-            <dt className="text-sm font-medium text-slate-700">{label}</dt>
-            <dd>
-              <code className="break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-800">
-                {value}
-              </code>
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </Card>
-  );
-}
-
 function SsoEditor({ sso }: { sso: Sso }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -215,14 +182,20 @@ function SsoEditor({ sso }: { sso: Sso }) {
   const [enforce, setEnforce] = useState(sso.enforceSso);
   const [domains, setDomains] = useState(sso.allowedDomains.join(', '));
   const [saved, setSaved] = useState<string | null>(null);
+  // The directory, application and secret of the deployment are shown, not edited, and not sent.
+  const managed = !!sso.managedByDeployment;
   const save = useMutation({
     mutationFn: () =>
       api('/tenant/sso', {
         method: 'PUT',
         body: {
-          entraTenantId: directory.trim(),
-          clientId: clientId.trim(),
-          ...(secret ? { clientSecret: secret } : {}),
+          ...(managed
+            ? {}
+            : {
+                entraTenantId: directory.trim(),
+                clientId: clientId.trim(),
+                ...(secret ? { clientSecret: secret } : {}),
+              }),
           enabled,
           enforceSso: enabled && enforce,
           allowedDomains: domains
@@ -248,43 +221,67 @@ function SsoEditor({ sso }: { sso: Sso }) {
         }}
       >
         <h2 className="text-lg font-semibold">{t('admin.org.sso')}</h2>
-        <p className="-mt-2 text-sm text-slate-600">{t('admin.org.ssoIntro')}</p>
+        <p className="-mt-2 text-sm text-slate-600">
+          {t(managed ? 'admin.org.ssoManaged' : 'admin.org.ssoIntro')}
+        </p>
         <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-slate-700">{t('admin.org.redirectUri')}</span>
           <code className="break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-800">
             {sso.redirectUri}
           </code>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            id="sso-directory"
-            label={t('admin.org.entraTenantId')}
-            value={directory}
-            autoComplete="off"
-            onChange={(e) => setDirectory(e.target.value)}
-          />
-          <Field
-            id="sso-client"
-            label={t('admin.org.clientId')}
-            value={clientId}
-            autoComplete="off"
-            onChange={(e) => setClientId(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Field
-            id="sso-secret"
-            type="password"
-            label={t('admin.org.clientSecret')}
-            value={secret}
-            autoComplete="new-password"
-            aria-describedby={sso.hasClientSecret ? 'sso-secret-hint' : undefined}
-            onChange={(e) => setSecret(e.target.value)}
-          />
-          {sso.hasClientSecret ? (
-            <Hint id="sso-secret-hint">{t('admin.org.secretKept')}</Hint>
-          ) : null}
-        </div>
+        {managed ? (
+          <dl className="flex flex-col gap-3">
+            {(
+              [
+                [t('admin.org.entraTenantId'), sso.entraTenantId ?? ''],
+                [t('admin.org.clientId'), sso.clientId ?? ''],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="flex flex-col gap-1">
+                <dt className="text-sm font-medium text-slate-700">{label}</dt>
+                <dd>
+                  <code className="break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-800">
+                    {value}
+                  </code>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                id="sso-directory"
+                label={t('admin.org.entraTenantId')}
+                value={directory}
+                autoComplete="off"
+                onChange={(e) => setDirectory(e.target.value)}
+              />
+              <Field
+                id="sso-client"
+                label={t('admin.org.clientId')}
+                value={clientId}
+                autoComplete="off"
+                onChange={(e) => setClientId(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Field
+                id="sso-secret"
+                type="password"
+                label={t('admin.org.clientSecret')}
+                value={secret}
+                autoComplete="new-password"
+                aria-describedby={sso.hasClientSecret ? 'sso-secret-hint' : undefined}
+                onChange={(e) => setSecret(e.target.value)}
+              />
+              {sso.hasClientSecret ? (
+                <Hint id="sso-secret-hint">{t('admin.org.secretKept')}</Hint>
+              ) : null}
+            </div>
+          </>
+        )}
         <div className="flex flex-col gap-1">
           <Field
             id="sso-domains"
@@ -304,7 +301,10 @@ function SsoEditor({ sso }: { sso: Sso }) {
         />
         {save.isError ? <ErrorText>{save.error.message || t('admin.org.error')}</ErrorText> : null}
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={save.isPending || !directory.trim() || !clientId.trim()}>
+          <Button
+            type="submit"
+            disabled={save.isPending || (!managed && (!directory.trim() || !clientId.trim()))}
+          >
             {t('admin.org.saveSso')}
           </Button>
           <Saved text={saved} />

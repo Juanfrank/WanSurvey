@@ -1,5 +1,6 @@
-import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Optional, type OnModuleDestroy } from '@nestjs/common';
 import { decryptField } from '../common/crypto.js';
+import { SecretResolver } from '../common/key-vault.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import type { SsoPublicConfig } from '../db/common.js';
 import { Engine } from '../db/engine.js';
@@ -39,9 +40,10 @@ interface Cached<T> {
  * Where each organisation's Microsoft sign-in comes from, read once a minute per process
  * instead of on every sign-in (at the start of a field day hundreds come within minutes).
  * A change saved in the app reaches every process at once through the bus; the minute is the
- * fallback if the bus is down. The default organisation (SSO_DEFAULT_ORG) takes it from the
- * deployment when ENTRA_* are set: with password sign-in off, nobody could sign in to
- * configure it in the app.
+ * fallback if the bus is down. When the deployment sets a directory (ENTRA_*), every organisation
+ * with Microsoft sign-in turned on uses it in place of one of its own (its row keeps what is
+ * its own: on or off, the domains, whether Microsoft is required); the organisation is found from
+ * the e-mail's domain.
  */
 @Injectable()
 export class SsoConfigs implements OnModuleDestroy {
@@ -57,6 +59,7 @@ export class SsoConfigs implements OnModuleDestroy {
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(BUS) private readonly bus: Bus,
     private readonly engine: Engine,
+    @Optional() private readonly secrets: SecretResolver = new SecretResolver(),
   ) {
     this.unsubscribe = bus.subscribe(CHANNEL, (m) => {
       if (typeof m.tenantId === 'string') this.forget(m.tenantId);
@@ -67,20 +70,23 @@ export class SsoConfigs implements OnModuleDestroy {
     this.unsubscribe();
   }
 
-  /** The deployment's configuration, when complete (the configuration checks it is whole). */
+  /** The deployment's directory, when complete (the configuration checks it is whole). */
   private get deployment() {
     const c = this.config;
-    return c.SSO_DEFAULT_ORG && c.ENTRA_TENANT_ID && c.ENTRA_CLIENT_ID && c.ENTRA_CLIENT_SECRET
+    return c.ENTRA_TENANT_ID && c.ENTRA_CLIENT_ID && c.ENTRA_CLIENT_SECRET
       ? {
-          slug: c.SSO_DEFAULT_ORG.toLowerCase(),
           entraTenantId: c.ENTRA_TENANT_ID.toLowerCase(),
           clientId: c.ENTRA_CLIENT_ID.toLowerCase(),
-          clientSecret: c.ENTRA_CLIENT_SECRET,
+          secret: c.ENTRA_CLIENT_SECRET,
           allowedDomains: c.ENTRA_ALLOWED_DOMAINS,
-          // Required only when asked, or when there is no password to fall back on.
-          enforceSso: !c.PASSWORD_LOGIN || c.ENTRA_ENFORCE,
         }
       : null;
+  }
+
+  /** The domains an organisation lets in through the directory, within what the deployment allows. */
+  private domainsOf(own: string[]): string[] {
+    const d = this.deployment;
+    return d && d.allowedDomains.length ? own.filter((x) => d.allowedDomains.includes(x)) : own;
   }
 
   private get db() {
@@ -114,66 +120,64 @@ export class SsoConfigs implements OnModuleDestroy {
     return this.remember(this.idBySlug, key, () => this.db.tenantIdBySlug(key));
   }
 
-  /** The default organisation's id, when SSO_DEFAULT_ORG is set. */
-  async defaultTenantId(): Promise<string | null> {
-    return this.config.SSO_DEFAULT_ORG ? this.tenantIdBySlug(this.config.SSO_DEFAULT_ORG) : null;
+  /** Whether organisations use the deployment's directory (ENTRA_*) instead of their own. */
+  get usesDeployment(): boolean {
+    return this.deployment !== null;
   }
 
-  /** Whether this organisation's sign-in comes from the deployment's settings. */
-  async isDeploymentTenant(tenantId: string): Promise<boolean> {
+  /** The deployment's directory without the secret, when it has one. */
+  deploymentDirectory(): {
+    entraTenantId: string;
+    clientId: string;
+    allowedDomains: string[];
+  } | null {
     const d = this.deployment;
-    return !!d && tenantId === (await this.tenantIdBySlug(d.slug));
-  }
-
-  /** The deployment's sign-in settings without the secret, when it has them. */
-  async deploymentSettings() {
-    const d = this.deployment;
-    const tenantId = d ? await this.tenantIdBySlug(d.slug) : null;
-    return d && tenantId
-      ? {
-          tenantId,
-          entraTenantId: d.entraTenantId,
-          clientId: d.clientId,
-          enabled: true,
-          enforceSso: d.enforceSso,
-          allowedDomains: d.allowedDomains,
-        }
+    return d
+      ? { entraTenantId: d.entraTenantId, clientId: d.clientId, allowedDomains: d.allowedDomains }
       : null;
+  }
+
+  /** An organisation's start settings, with the deployment's directory in place of its own. */
+  private withDirectory(c: SsoStartConfig): SsoStartConfig {
+    const d = this.deployment;
+    return d ? { ...c, entraTenantId: d.entraTenantId, clientId: d.clientId } : c;
   }
 
   /** What starting a sign-in to the organisation `slug` needs (public settings, no secret). */
   async startBySlug(slug: string): Promise<SsoStartConfig | null> {
     const key = slug.toLowerCase();
-    if (this.deployment?.slug === key) return this.deploymentSettings();
-    return this.remember(this.startSlugs, key, () => this.db.ssoConfigBySlug(key));
+    const row = await this.remember(this.startSlugs, key, () => this.db.ssoConfigBySlug(key));
+    return row ? this.withDirectory(row) : null;
   }
 
   /** What starting a sign-in for an e-mail domain needs, or 'ambiguous'. */
   async startByDomain(domain: string): Promise<SsoStartConfig | 'ambiguous' | null> {
     const d = domain.toLowerCase();
-    if (this.deployment?.allowedDomains.includes(d)) return this.deploymentSettings();
+    const wanted = this.deployment?.allowedDomains;
+    if (wanted?.length && !wanted.includes(d)) return null;
     const matches = await this.db.ssoTenantsForDomain(d);
     if (matches.length > 1) return 'ambiguous';
-    return matches[0] ?? null;
+    return matches[0] ? this.withDirectory(matches[0]) : null;
   }
 
   /** The whole configuration, secret included, for finishing a sign-in. */
   async forTenant(tenantId: string): Promise<SsoConfig | null> {
-    const d = this.deployment;
-    if (d && (await this.isDeploymentTenant(tenantId))) {
-      return {
-        tenantId,
-        entraTenantId: d.entraTenantId,
-        clientId: d.clientId,
-        clientSecret: d.clientSecret,
-        enabled: true,
-        enforceSso: d.enforceSso,
-        allowedDomains: d.allowedDomains,
-        fromDeployment: true,
-      };
-    }
     const hit = this.byTenant.get(tenantId);
-    if (this.fresh(hit)) return hit.value;
+    const row = this.fresh(hit) ? hit.value : await this.readRow(tenantId);
+    const d = this.deployment;
+    if (!row || !d) return row;
+    return {
+      ...row,
+      entraTenantId: d.entraTenantId,
+      clientId: d.clientId,
+      clientSecret: await this.secrets.resolve(d.secret),
+      allowedDomains: this.domainsOf(row.allowedDomains),
+      fromDeployment: true,
+    };
+  }
+
+  /** An organisation's own row, secret decrypted (the deployment's directory is put on top). */
+  private async readRow(tenantId: string): Promise<SsoConfig | null> {
     const began = this.generation;
     const row = await this.db.withTenant(tenantId, (tx) => this.identity.sso(tx, tenantId));
     const value: SsoConfig | null = row
@@ -198,19 +202,7 @@ export class SsoConfigs implements OnModuleDestroy {
   async enforced(tenantIds: string[]): Promise<{ tenantId: string; entraTenantId: string }[]> {
     const rows = await this.db.ssoEnforcedTenants(tenantIds);
     const d = this.deployment;
-    const own = d ? await this.tenantIdBySlug(d.slug) : null;
-    if (!d || !own || !tenantIds.includes(own)) return rows;
-    // The deployment's settings replace the organisation's own, enforceSso included.
-    const others = rows.filter((r) => r.tenantId !== own);
-    return d.enforceSso ? [...others, { tenantId: own, entraTenantId: d.entraTenantId }] : others;
-  }
-
-  /** The organisation whose people sign in with this e-mail domain, if the deployment's. */
-  async deploymentTenantForDomain(domain: string): Promise<string | null> {
-    const d = this.deployment;
-    return d && d.allowedDomains.includes(domain.toLowerCase())
-      ? this.tenantIdBySlug(d.slug)
-      : null;
+    return d ? rows.map((r) => ({ ...r, entraTenantId: d.entraTenantId })) : rows;
   }
 
   /** After an organisation's settings are saved (committed): every process forgets them. */

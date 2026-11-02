@@ -20,7 +20,7 @@ export function useAuthMethods() {
 
 /**
  * Microsoft sign-in where it is the only way in: the button, and the e-mail field only when
- * the server needs it to find the organisation (no SSO_DEFAULT_ORG and no `org` given, as an
+ * the server needs it to find the organisation (from its domain; no `org` given, as an
  * invitation's link gives it).
  */
 export function MicrosoftSignIn({

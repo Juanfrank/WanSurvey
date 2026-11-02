@@ -43,9 +43,7 @@ param encryptionKey string
 param smtpUrl string = ''
 param mailFrom string = ''
 
-@description('Organisation (slug) whose people sign in with the Microsoft button; its directory is the ENTRA_* below.')
-param ssoDefaultOrg string = ''
-@description('Microsoft Entra directory (tenant) id of the app registration.')
+@description('Microsoft Entra directory (tenant) id of the app registration: the directory of every organisation that turns Microsoft sign-in on (found from the e-mail domain).')
 param entraTenantId string = ''
 @description('Application (client) id of the app registration.')
 param entraClientId string = ''
@@ -54,9 +52,7 @@ param entraClientId string = ''
 param entraClientSecret string = ''
 @description('E-mail domains of that directory, comma-separated, e.g. poderjudicial.gob.do.')
 param entraAllowedDomains string = ''
-@description('With passwordLogin true: require Microsoft in ssoDefaultOrg too (its owners keep a password).')
-param entraEnforce bool = false
-@description('false: Microsoft sign-in only (no passwords, no password reset); needs ssoDefaultOrg and the four entra* values, or the API refuses to start.')
+@description('false: Microsoft sign-in only (no passwords, no password reset); needs the four entra* values, or the API refuses to start.')
 param passwordLogin bool = true
 
 @description('Storage account for export files: 3-24 lowercase letters and digits, unique in Azure.')
@@ -176,16 +172,14 @@ resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
 }
 
 // The Microsoft button's directory, only when given (an empty setting is not a valid one).
-var entraSettings = empty(ssoDefaultOrg)
+var entraSettings = empty(entraTenantId)
   ? {}
   : {
-      SSO_DEFAULT_ORG: ssoDefaultOrg
       ENTRA_TENANT_ID: entraTenantId
       ENTRA_CLIENT_ID: entraClientId
       ENTRA_CLIENT_SECRET: entraClientSecret
       ENTRA_REDIRECT_URI: '${publicUrl}/api/auth/entra/callback'
       ENTRA_ALLOWED_DOMAINS: entraAllowedDomains
-      ENTRA_ENFORCE: entraEnforce ? 'true' : 'false'
     }
 
 // Every container sees every app setting; a container overrides one by pointing a variable

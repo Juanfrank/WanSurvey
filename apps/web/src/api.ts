@@ -95,7 +95,7 @@ export function nextRouteFor(me: Pick<Me, 'mfaState' | 'access'>): string | null
   return null;
 }
 
-/** Microsoft sign-in; without an e-mail the deployment's organisation (SSO_DEFAULT_ORG). */
+/** Microsoft sign-in: the e-mail's domain, or `org` (as an invitation's link gives it), finds the organisation. */
 export function ssoStartUrl(who?: string | { org: string }, returnTo = '/'): string {
   const target: Record<string, string> =
     typeof who === 'string' ? (who ? { email: who } : {}) : (who ?? {});

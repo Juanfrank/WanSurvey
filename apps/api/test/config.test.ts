@@ -9,13 +9,15 @@ const base = {
 } as NodeJS.ProcessEnv;
 
 describe('configuration names', () => {
-  it.each(Object.entries(RENAMED_VARIABLES))('%s stops the app and names %s', (old, now) => {
-    expect(() => loadConfig({ ...base, [old]: 'x' })).toThrow(`${old}: renamed, use ${now}`);
+  it.each(Object.entries(RENAMED_VARIABLES))('%s stops the app and says: %s', (old, now) => {
+    expect(() => loadConfig({ ...base, [old]: 'x' })).toThrow(
+      `${old}: removed or renamed, see: ${now}`,
+    );
   });
 
   it('says every former name found', () => {
     expect(() => loadConfig({ ...base, PUBLIC_WEB_URL: 'x', EXPORT_DIR: 'y' })).toThrow(
-      /PUBLIC_WEB_URL: renamed, use PUBLIC_URL\n\s+EXPORT_DIR: renamed, use DATA_DIR/,
+      /PUBLIC_WEB_URL: removed or renamed, see: PUBLIC_URL\n\s+EXPORT_DIR: removed or renamed, see: DATA_DIR/,
     );
   });
 
@@ -50,7 +52,6 @@ describe('startup checks', () => {
   it('the redirect URI ends in the same path as every app', () => {
     const entra = {
       ...base,
-      SSO_DEFAULT_ORG: 'pj',
       ENTRA_TENANT_ID: '00000000-0000-0000-0000-000000000002',
       ENTRA_CLIENT_ID: '00000000-0000-0000-0000-000000000003',
       ENTRA_CLIENT_SECRET: 'secret',
