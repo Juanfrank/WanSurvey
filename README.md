@@ -26,6 +26,7 @@ The MVP is built in 13 vertical slices; all thirteen are done.
 Background reading:
 
 - [`docs/architecture.md`](docs/architecture.md): how the pieces fit together
+- [`docs/dev-database.md`](docs/dev-database.md): a development database on a SQL Server you run yourself, without Docker (`db:dev`)
 - [`docs/logic-language.md`](docs/logic-language.md): the expression language
 - [`docs/decisions.md`](docs/decisions.md): assumptions taken where the spec was ambiguous
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
