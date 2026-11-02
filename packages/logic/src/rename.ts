@@ -45,7 +45,7 @@ export function renameInExpression(src: string, renames: Record<string, string>)
 /** Renames variable references inside a text's pipes: `{{A1}}`, `{{A1 | label}}`, `{{#if A1}}`. */
 export function renameInTemplate(src: string, renames: Record<string, string>): string {
   if (!src.includes('{{')) return src;
-  return src.replace(/\{\{([^}]*)\}\}/g, (m, inner: string) => {
+  return src.replace(/\{\{([^{}]*)\}\}/g, (m, inner: string) => {
     if (inner.trim() === 'else' || inner.trim() === '/if') return m;
     const cond = /^(\s*#if\b)([\s\S]*)$/.exec(inner);
     if (cond) return `{{${cond[1]}${renameInExpression(cond[2]!, renames)}}}`;

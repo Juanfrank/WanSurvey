@@ -40,6 +40,7 @@ import { EXPORT_STORAGE, type ExportStorage, type StorageWriter } from './storag
 import { EXPORTS_REPO, type ExportsRepo, type ExportsTx } from './exports-repo.js';
 import { sqlExport } from './sql-export.js';
 import { isTransient } from '../db/common.js';
+import { trimUnderscores } from '../common/text.js';
 
 export const EXPORT_FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 
@@ -73,12 +74,12 @@ const CONTENT_TYPES = {
 } as const;
 
 const safeName = (s: string) =>
-  s
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 60) || 'data';
+  trimUnderscores(
+    s
+      .normalize('NFKD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^A-Za-z0-9_-]+/g, '_'),
+  ).slice(0, 60) || 'data';
 
 const BOLD = { font: { bold: true } };
 type SheetCell = string | number | boolean | null;

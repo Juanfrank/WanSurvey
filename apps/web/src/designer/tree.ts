@@ -188,9 +188,11 @@ export function usedNames(draft: Draft): Set<string> {
 export function freshName(used: Set<string>, base: string): string {
   const stem = base.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[^A-Za-z]+/, '') || 'Q';
   if (!used.has(stem)) return stem;
-  const m = /^(.*?)(\d+)$/.exec(stem);
-  const prefix = m ? m[1]! : `${stem}_`;
-  for (let i = m ? Number(m[2]) + 1 : 2; ; i++) {
+  let cut = stem.length;
+  while (cut > 0 && stem.charCodeAt(cut - 1) >= 48 && stem.charCodeAt(cut - 1) <= 57) cut--;
+  const hasNumber = cut < stem.length;
+  const prefix = hasNumber ? stem.slice(0, cut) : `${stem}_`;
+  for (let i = hasNumber ? Number(stem.slice(cut)) + 1 : 2; ; i++) {
     if (!used.has(`${prefix}${i}`)) return `${prefix}${i}`;
   }
 }

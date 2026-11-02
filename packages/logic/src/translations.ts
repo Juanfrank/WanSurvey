@@ -1,4 +1,5 @@
 import type { ContainerItem, LocalizedText, Questionnaire, Section } from '@wansurvey/schema';
+import { byCode } from './compare.js';
 
 /**
  * Every translatable text of a questionnaire, with a stable key built from ids and codes so a
@@ -167,7 +168,7 @@ export function applyTexts(q: Questionnaire, rows: TextRow[]): ApplyResult {
     questionnaire: next,
     changes,
     unknownKeys,
-    ignoredLanguages: [...ignored].sort(),
+    ignoredLanguages: [...ignored].sort(byCode),
     missing,
   };
 }
@@ -253,7 +254,7 @@ const xmlUnescape = (s: string) =>
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(Number.parseInt(n, 16)))
     .replace(/&amp;/g, '&');
 
 /** One XLIFF 2.0 file per target language; existing translations are filled in as targets. */

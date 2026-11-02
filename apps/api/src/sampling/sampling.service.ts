@@ -29,6 +29,7 @@ import {
 import { compileRule, ruleError } from '../cases/case-logic.js';
 import { chunks, CasesService } from '../cases/cases.service.js';
 import { CrossChecker } from './cross-check.js';
+import { byCode } from '../common/sort.js';
 
 export const ReleaseBody = z.object({
   count: z.number().int().min(1).max(10_000),
@@ -202,9 +203,9 @@ export class SamplingService {
         cases: Object.fromEntries(roles.map((r) => [r.role ?? 'none', r.n])),
         reservesLeft,
         unitsLeft,
-        fields: [
-          ...new Set(units.flatMap((u) => Object.keys(this.casesService.pii.read(u)))),
-        ].sort(),
+        fields: [...new Set(units.flatMap((u) => Object.keys(this.casesService.pii.read(u))))].sort(
+          byCode,
+        ),
       };
     });
   }

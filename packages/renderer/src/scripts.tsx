@@ -7,7 +7,7 @@ export const scriptText = (html: string) =>
   html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
+    .replace(/<[^<>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')

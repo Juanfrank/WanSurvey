@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 /** Where the E2E API writes e-mails (MAILER=file). */
 export const MAIL_DIR = join(tmpdir(), 'wansurvey-e2e-mail');
 
@@ -21,6 +23,6 @@ export interface SentMail {
 export function sentMail(): SentMail[] {
   return readdirSync(MAIL_DIR)
     .filter((f) => f.endsWith('.json'))
-    .sort()
+    .sort(byCode)
     .map((f) => JSON.parse(readFileSync(join(MAIL_DIR, f), 'utf8')) as SentMail);
 }

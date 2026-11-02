@@ -32,6 +32,7 @@ import { AUTH_REPO, type AuthRepo, type AuthTx, type TokenPurpose } from './auth
 import { SsoConfigs } from './sso-config.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { isUuid, type UserTenant } from '../db/common.js';
+import { byCode } from '../common/sort.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 
@@ -382,7 +383,7 @@ export class AuthService {
       mfaState: ctx.mfaState,
       csrfToken: ctx.csrfToken,
       memberships: ctx.memberships,
-      permissions: [...permissions].sort(),
+      permissions: [...permissions].sort(byCode),
     };
   }
 

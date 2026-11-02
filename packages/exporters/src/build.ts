@@ -2,6 +2,9 @@ import { questionOptions, type CompiledQuestionnaire } from '@wansurvey/logic';
 import type { LocalizedText, Question } from '@wansurvey/schema';
 import type { Cell, Column, ColumnSource, Table } from './table.js';
 
+/** Orders texts by code unit, as `.sort()` does, but explicit. */
+const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 /** One interview as the export reads it. */
 export interface ExportInterview {
   id: string;
@@ -51,9 +54,9 @@ const isSpecial = (v: unknown): v is Special =>
 function plain(text: LocalizedText | undefined, lang: string, fallback: string): string {
   const t = text?.[lang] ?? (text ? Object.values(text)[0] : undefined) ?? fallback;
   return t
-    .replace(/<[^>]+>/g, ' ')
+    .replace(/<[^<>]+>/g, ' ')
     .replace(/\{\{#if [^}]*\}\}|\{\{else\}\}|\{\{\/if\}\}/g, '')
-    .replace(/\{\{[^}]*\}\}/g, '…')
+    .replace(/\{\{[^{}]*\}\}/g, '…')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -550,7 +553,7 @@ export class TableBuilder {
   /** The tables' columns, fixed from here on. */
   layout(): { main: TableLayout; rosters: TableLayout[] } {
     if (this.frozen) return { main: this.frozen.main, rosters: this.frozen.rosters };
-    const coded = [...this.coded].sort();
+    const coded = [...this.coded].sort(byCode);
     const columns: Column[] = [...META];
     for (const f of this.top) columns.push(...f.columns.map((c) => ({ ...c, variable: true })));
     for (const c of coded)
@@ -634,7 +637,7 @@ export class TableBuilder {
         i.paradata?.notes ?? 0,
         i.paradata?.pauses ?? 0,
         i.paradata?.warnings ?? 0,
-        i.flags && Object.keys(i.flags).length ? Object.keys(i.flags).sort().join(' ') : null,
+        i.flags && Object.keys(i.flags).length ? Object.keys(i.flags).sort(byCode).join(' ') : null,
       );
     return row;
   }

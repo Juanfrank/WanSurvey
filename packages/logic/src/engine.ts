@@ -1525,7 +1525,7 @@ export class InterviewSession {
           }
           if (re && !re.test(s)) add('pattern', DEFAULT_MESSAGES.pattern);
         }
-        if (q.format === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+        if (q.format === 'email' && !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(s))
           add('email', DEFAULT_MESSAGES.email);
         if (q.format === 'phone' && !/^\+?[\d\s\-().]{6,20}$/.test(s))
           add('phone', DEFAULT_MESSAGES.phone);
@@ -1717,7 +1717,8 @@ function fromParam(q: Question, raw: string): AnswerValue | undefined {
 /** Spaces and punctuation left by a value left out ("Hola , gracias" → "Hola, gracias"). */
 export function tidyBlanks(s: string): string {
   return s
-    .replace(/[ \t]+([,.;:?!)])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]([,.;:?!)])/g, '$1')
     .replace(/([¿¡(])[ \t]+/g, '$1')
     .replace(/,(\s*[,.?!])/g, '$1')
     .replace(/[ \t]{2,}/g, ' ')

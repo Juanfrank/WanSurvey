@@ -64,13 +64,22 @@ type Target =
 
 const targetOf = (c: Column): Target => (c.kind === 'contact' ? c.type : c.kind);
 
+const trimUnderscores = (s: string) => {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s[start] === '_') start++;
+  while (end > start && s[end - 1] === '_') end--;
+  return s.slice(start, end);
+};
+
 const fieldName = (h: string) => {
-  const n = h
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  const n = trimUnderscores(
+    h
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_'),
+  );
   return (/^[a-z]/.test(n) ? n : `f_${n}`).slice(0, 64);
 };
 

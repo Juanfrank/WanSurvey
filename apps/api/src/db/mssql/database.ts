@@ -54,12 +54,9 @@ const ssoPublic = (r: SsoRow) => ({
 export class MssqlDatabase {
   readonly db: Kysely<MssqlSchema>;
 
-  constructor(
-    url: string,
-    opts: MssqlOptions & Partial<MssqlLimits> = {},
-    limits: MssqlLimits = { lockTimeoutMs: opts.lockTimeoutMs ?? 5_000 },
-  ) {
-    this.db = createMssqlDb<MssqlSchema>(url, { ...opts, lockTimeoutMs: limits.lockTimeoutMs });
+  constructor(url: string, opts: MssqlOptions & Partial<MssqlLimits> = {}, limits?: MssqlLimits) {
+    const lockTimeoutMs = limits?.lockTimeoutMs ?? opts.lockTimeoutMs ?? 5_000;
+    this.db = createMssqlDb<MssqlSchema>(url, { ...opts, lockTimeoutMs });
   }
 
   /**

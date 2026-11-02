@@ -1,0 +1,6 @@
+projectKey=wansurvey
+serverUrl=http://localhost:9000
+serverVersion=26.10.0.133078
+dashboardUrl=http://localhost:9000/dashboard?id=wansurvey
+ceTaskId=f34d56cc-e712-46a9-90e1-f9a894e9662e
+ceTaskUrl=http://localhost:9000/api/ce/task?id=f34d56cc-e712-46a9-90e1-f9a894e9662e

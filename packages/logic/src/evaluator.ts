@@ -199,9 +199,9 @@ function evalBinary(node: Extract<Node, { type: 'binary' }>, scope: Scope): Valu
     case '*':
       return arith(l, r, (a, b) => a * b);
     case '/':
-      return arith(l, r, (a, b) => (b === 0 ? NaN : a / b));
+      return arith(l, r, (a, b) => (b === 0 ? Number.NaN : a / b));
     case '%':
-      return arith(l, r, (a, b) => (b === 0 ? NaN : a % b));
+      return arith(l, r, (a, b) => (b === 0 ? Number.NaN : a % b));
     case '^':
       return arith(l, r, (a, b) => a ** b);
   }

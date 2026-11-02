@@ -196,7 +196,8 @@ function operandNode(o: Operand): Node {
 
 export function operandComplete(o: Operand | undefined): boolean {
   if (!o) return false;
-  if (o.kind === 'value') return o.value !== '' && !(typeof o.value === 'number' && isNaN(o.value));
+  if (o.kind === 'value')
+    return o.value !== '' && !(typeof o.value === 'number' && Number.isNaN(o.value));
   if (o.kind === 'var') return o.name.trim() !== '';
   return o.args.every(operandComplete);
 }

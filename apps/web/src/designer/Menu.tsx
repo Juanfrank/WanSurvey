@@ -173,6 +173,7 @@ export function Menu({
     <div
       ref={ref}
       role="menu"
+      tabIndex={-1}
       aria-label={label}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => e.preventDefault()}

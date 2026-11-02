@@ -16,6 +16,8 @@ import {
 } from './tree.js';
 import { nodeLabel, nodeName } from './vars.js';
 
+const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 export interface LibraryItem {
   id: string;
   name: string;
@@ -157,7 +159,7 @@ export function InsertFromLibraryDialog({
     queryKey: ['library', '', ''],
     queryFn: () => api<LibraryItem[]>('/library'),
   });
-  const tags = [...new Set((allTags.data ?? []).flatMap((i) => i.tags))].sort();
+  const tags = [...new Set((allTags.data ?? []).flatMap((i) => i.tags))].sort(byCode);
   const list = items.data ?? [];
   const pick = list.find((i) => i.id === chosen) ?? list[0] ?? null;
   const lang = draft.defaultLanguage;

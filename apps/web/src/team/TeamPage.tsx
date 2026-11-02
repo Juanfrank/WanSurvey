@@ -478,7 +478,7 @@ function InviteForm({
       }),
     onSuccess: () => onInvited(email.trim()),
   });
-  const ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) && name.trim() && grants.length;
+  const ok = /^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$/.test(email.trim()) && name.trim() && grants.length;
   return (
     <Card>
       <form

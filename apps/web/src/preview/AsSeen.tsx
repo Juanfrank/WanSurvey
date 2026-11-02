@@ -154,7 +154,7 @@ export function AsSeenFrame({
                   <div key={a.key} className="contents">
                     <dt className="font-mono text-slate-600">{a.key}</dt>
                     <dd className="min-w-0 break-words">
-                      {shown(a.value, session, a.key.replace(/\[.*$/, '').split('.').pop()!)}
+                      {shown(a.value, session, a.key.split('[', 1)[0]!.split('.').pop()!)}
                     </dd>
                   </div>
                 ))}

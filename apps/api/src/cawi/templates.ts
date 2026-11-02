@@ -106,8 +106,8 @@ export function renderTemplate(
 /** Variables a template may use, for the editor's check. */
 export function templateProblems(t: Template): string[] {
   const out: string[] = [];
-  for (const m of `${t.subject}\n${t.body}`.matchAll(/\{\{\s*([^}]*?)\s*\}\}/g)) {
-    const name = m[1]!;
+  for (const m of `${t.subject}\n${t.body}`.matchAll(/\{\{([^{}]*)\}\}/g)) {
+    const name = m[1]!.trim();
     if (name !== 'link' && name !== 'unsubscribe' && !/^case\.[a-zA-Z_]\w*$/.test(name))
       out.push(name);
   }

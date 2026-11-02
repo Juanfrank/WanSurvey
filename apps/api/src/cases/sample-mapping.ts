@@ -1,5 +1,6 @@
 import { MODES } from '@wansurvey/schema';
 import { z } from 'zod';
+import { trimUnderscores } from '../common/text.js';
 
 export const FIELD_TYPES = ['text', 'number', 'date', 'code'] as const;
 export const CONTACT_TYPES = ['phone', 'email', 'address'] as const;
@@ -41,12 +42,13 @@ export const ImportMapping = z.object({
 export type ImportMapping = z.infer<typeof ImportMapping>;
 
 const norm = (h: string) =>
-  h
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  trimUnderscores(
+    h
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_'),
+  );
 
 /** A sample field name from a header: letters, digits and _, starting with a letter. */
 export function fieldNameFor(header: string): string {
@@ -93,11 +95,12 @@ export function suggestMapping(headers: string[], sample: string[][] = []): Impo
 // Value checks
 // ---------------------------------------------------------------------------
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// Linear: the labels of the domain cannot hold dots, so they cannot overlap.
+const EMAIL = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 export function normaliseEmail(v: string): string | null {
   const e = v.trim().toLowerCase();
-  return EMAIL.test(e) ? e : null;
+  return EMAIL.test(e) && e.length - e.lastIndexOf('.') > 2 ? e : null;
 }
 
 /**

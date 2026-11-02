@@ -1,5 +1,6 @@
 import type { SamplingPlanInput } from '@wansurvey/schema/sampling';
 import { seededRandom } from './hash.js';
+import { byCode } from './compare.js';
 
 // ---------------------------------------------------------------------------
 // Sample size: what the objective needs, then what has to be selected and fielded
@@ -207,7 +208,7 @@ export function allocate(
   how: 'proportional' | 'equal' | 'manual',
   manual: Record<string, number> = {},
 ): Record<string, number> {
-  const keys = Object.keys(sizes).sort();
+  const keys = Object.keys(sizes).sort(byCode);
   const N = keys.reduce((s, k) => s + sizes[k]!, 0);
   const out: Record<string, number> = {};
   if (how === 'manual') {
@@ -342,7 +343,7 @@ export function selectSample(
       groups.set(c, [...(groups.get(c) ?? []), u]);
     }
     if (groups.has('')) warnings.push(`units_without_cluster:${groups.get('')!.length}`);
-    const clusters = [...groups.keys()].sort().map((key) => ({
+    const clusters = [...groups.keys()].sort(byCode).map((key) => ({
       key,
       size: pps ? groups.get(key)!.reduce((s, u) => s + (u.size ?? 1), 0) : groups.get(key)!.length,
     }));

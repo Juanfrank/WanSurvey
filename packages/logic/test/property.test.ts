@@ -113,7 +113,7 @@ describe('property: evaluator', () => {
           rosters: { R: ['X'] },
           ns: { case: { region: 2 } },
         });
-        evaluate(parse(src), scope);
+        expect(() => evaluate(parse(src), scope)).not.toThrow();
       }),
       { numRuns: 3000 },
     );
@@ -128,7 +128,7 @@ describe('property: evaluator', () => {
         fc.boolean(),
         (op, other, missing, left) => {
           const src = left ? `X ${op} Y` : `Y ${op} X`;
-          return evaluate(parse(src), mapScope({ X: missing, Y: other })) === false;
+          expect(evaluate(parse(src), mapScope({ X: missing, Y: other }))).toBe(false);
         },
       ),
       { numRuns: 2000 },

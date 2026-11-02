@@ -29,6 +29,7 @@ const TakeoverBody = z.object({ deviceId: DeviceId });
 import { PAPI_REPO, type PapiRepo } from '../papi/papi-repo.js';
 import { PapiService } from '../papi/papi.service.js';
 import { EDITABLE, InterviewsService, personalVariables } from './interviews.service.js';
+import { beforeBracket } from '../common/text.js';
 
 export { personalVariables };
 
@@ -190,7 +191,7 @@ export class InterviewsController {
           events: events
             .filter((e) => e.interviewId === r.id)
             .map(({ interviewId: _i, seq: _s, ...e }) =>
-              personal.has(e.variable.replace(/\[.*$/, ''))
+              personal.has(beforeBracket(e.variable))
                 ? { ...e, oldValue: hide(e.oldValue), newValue: hide(e.newValue) }
                 : e,
             ),

@@ -27,6 +27,7 @@ import {
 } from './piping.js';
 import { typecheck, type MessageRef, type StaticType } from './typecheck.js';
 import { own, truthy } from './values.js';
+import { byCode } from './compare.js';
 
 export interface Diagnostic {
   severity: 'error' | 'warning';
@@ -786,7 +787,7 @@ function checkComputedCycles(model: Model, add: (d: Diagnostic) => void) {
       if (dep === name) continue; // self-reference reported as computed_cycle by forward-ref check
       if (state.get(dep) === 1) {
         const cycle = [...stack.slice(stack.indexOf(dep)), dep];
-        const key = [...cycle].sort().join(',');
+        const key = [...cycle].sort(byCode).join(',');
         if (!reported.has(key)) {
           reported.add(key);
           add({

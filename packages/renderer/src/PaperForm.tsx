@@ -36,8 +36,8 @@ export function paperText(src: string, ctx: PaperContext = {}): string {
   return src
     .replace(/\{\{#if [^}]*\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, '[$1 / $2]')
     .replace(/\{\{#if [^}]*\}\}([\s\S]*?)\{\{\/if\}\}/g, '[$1]')
-    .replace(/\{\{\s*([^}|]+?)\s*(\|[^}]*)?\}\}/g, (_m, expr: string, filters?: string) => {
-      const [scope, ...path] = expr.split('.');
+    .replace(/\{\{([^{}|]+)(\|[^{}]*)?\}\}/g, (_m, raw: string, filters?: string) => {
+      const [scope, ...path] = raw.trim().split('.');
       const from =
         scope === 'case' ? ctx.case : scope === 'respondent' ? ctx.respondent : undefined;
       const v = from && path.length === 1 ? from[path[0]!] : undefined;

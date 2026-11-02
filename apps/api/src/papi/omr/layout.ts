@@ -79,7 +79,7 @@ const tx = (t: LocalizedText | undefined, lang: string) =>
 /** Only what the standard PDF fonts can print; pipes become a blank to fill. */
 export function printable(s: string) {
   return s
-    .replace(/\{\{[^}]*\}\}/g, '…')
+    .replace(/\{\{[^{}]*\}\}/g, '…')
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[–—]/g, '-')

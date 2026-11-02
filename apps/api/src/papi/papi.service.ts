@@ -15,6 +15,7 @@ import { can, type AuthContext } from '../common/auth-context.js';
 import type { InterviewRow } from '../interviews/interviews-repo.js';
 import { InterviewsService } from '../interviews/interviews.service.js';
 import { PAPI_REPO, type PapiRepo, type PapiTx } from './papi-repo.js';
+import { byCode } from '../common/sort.js';
 
 /**
  * Entries that were keyed and sent, whatever review made of them since (a rejected one is
@@ -174,7 +175,7 @@ export class PapiService implements OnModuleInit {
     const b = (row.answers ?? {}) as Record<string, unknown>;
     const differ = [...new Set([...Object.keys(a), ...Object.keys(b)])]
       .filter((k) => stableStringify(a[k] ?? null) !== stableStringify(b[k] ?? null))
-      .sort();
+      .sort(byCode);
     if (differ.length) {
       await tx.insertMismatches(
         differ.map((variable) => ({

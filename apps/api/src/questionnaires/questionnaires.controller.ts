@@ -32,6 +32,7 @@ import {
 } from './questionnaires-repo.js';
 import { checkDraft } from './publish-checks.js';
 import { QUESTIONNAIRE_STATES } from './state.js';
+import { trimUnderscores } from '../common/text.js';
 
 const Definition = z.record(z.string(), z.unknown());
 
@@ -586,14 +587,15 @@ function diagnosticsOf(definition: unknown) {
 
 /** An id from the name, as exports show it: SATISFACCION_CON_SERVICIOS. */
 export function questionnaireIdFrom(name: string): string {
-  const id = name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 32)
-    .replace(/_+$/, '');
+  const id = trimUnderscores(
+    trimUnderscores(
+      name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_'),
+    ).slice(0, 32),
+  );
   return /^[A-Z]/.test(id) ? id : id ? `Q_${id}`.slice(0, 32) : 'QUESTIONNAIRE';
 }
 

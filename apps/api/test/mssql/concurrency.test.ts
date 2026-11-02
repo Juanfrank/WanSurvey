@@ -77,11 +77,14 @@ describe.skipIf(!configured)('SQL Server: the database under concurrent use', ()
 
   it('hands every connection back to the pool, so a small pool serves any number of transactions', async () => {
     const small = new MssqlDatabase(process.env.MSSQL_URL!, { max: 2, lockTimeoutMs: 1000 });
+    let served = 0;
     try {
       for (let i = 0; i < 20; i++)
         await small.withTenant(tenant.id, async (tx) => {
           await sql`SELECT 1 AS one`.execute(tx);
+          served++;
         });
+      expect(served).toBe(20);
     } finally {
       await small.destroy();
     }

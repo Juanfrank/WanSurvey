@@ -75,7 +75,10 @@ export function base32Encode(buf: Buffer): string {
 }
 
 export function base32Decode(s: string): Buffer {
-  const clean = s.toUpperCase().replace(/=+$/, '').replace(/\s/g, '');
+  const spaced = s.toUpperCase().replace(/\s/g, '');
+  let end = spaced.length;
+  while (end > 0 && spaced[end - 1] === '=') end--;
+  const clean = spaced.slice(0, end);
   let bits = 0;
   let value = 0;
   const out: number[] = [];

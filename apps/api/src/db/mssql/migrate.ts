@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sql } from 'kysely';
 import { createMssqlDb, parseMssqlUrl } from './connection.js';
+import { byCode } from '../../common/sort.js';
 
 export const APP_USER = 'wansurvey_app';
 const MIGRATIONS = fileURLToPath(new URL('../../../mssql', import.meta.url));
@@ -11,7 +12,7 @@ const MIGRATIONS = fileURLToPath(new URL('../../../mssql', import.meta.url));
 export function migrationFiles(dir = MIGRATIONS): { name: string; batches: string[] }[] {
   return readdirSync(dir)
     .filter((f) => /^\d{4}_.+\.sql$/.test(f))
-    .sort()
+    .sort(byCode)
     .map((name) => ({
       name,
       batches: readFileSync(join(dir, name), 'utf8')

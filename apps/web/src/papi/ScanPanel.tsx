@@ -39,7 +39,7 @@ export function ScanPanel({
   });
   if (!info.data || !currentKey) return null;
   // Questions in a roster are shown as the roster's area.
-  const name = currentKey.replace(/\[.*$/, '');
+  const name = currentKey.split('[', 1)[0]!;
   const q = info.data.questions[name];
   const projectId = info.data.projectId;
   return (

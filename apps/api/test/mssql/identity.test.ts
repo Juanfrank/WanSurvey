@@ -186,7 +186,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: identity', () => {
   });
 
   it('keeps tokens global: no organisation needed', async () => {
-    await app.withUser(ana, async (tx) => {
+    const tokens = await app.withUser(ana, async (tx) => {
       await tx
         .insertInto('user_tokens')
         .values({
@@ -198,7 +198,10 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: identity', () => {
           expires_at: new Date(Date.now() + 3_600_000),
         })
         .execute();
+      return tx.selectFrom('user_tokens').select('tenant_id').where('user_id', '=', ana).execute();
     });
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens.every((t) => t.tenant_id === null)).toBe(true);
   });
 
   it('keeps SSO settings per organisation, and lets sign-in find them without context', async () => {

@@ -79,7 +79,9 @@ export class SmtpMailer implements Mailer {
     this.transport = nodemailer.createTransport(url);
   }
   async send(message: MailMessage): Promise<void> {
-    const address = this.from.match(/<([^>]+)>/)?.[1] ?? this.from;
+    const open = this.from.indexOf('<');
+    const close = open < 0 ? -1 : this.from.indexOf('>', open + 1);
+    const address = close > open + 1 ? this.from.slice(open + 1, close) : this.from;
     await this.transport.sendMail({
       from: message.fromName ? { name: message.fromName, address } : this.from,
       to: message.to,

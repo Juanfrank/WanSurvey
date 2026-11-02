@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { type AnalysisTx } from './analysis-repo.js';
 import { median } from '../metrics/metrics.js';
 import { DataFilter, DatasetService, type Dataset } from './dataset.service.js';
+import { byCode } from '../common/sort.js';
 
 /** Filters plus a closed question to keep (`where=SEX:1,2`) and the label language. */
 export const AnalysisQuery = DataFilter.extend({
@@ -101,7 +102,7 @@ export class AnalysisService {
     const dates = data.interviews
       .map((i) => (i.submittedAt ? new Date(i.submittedAt).toISOString() : null))
       .filter((d): d is string => !!d)
-      .sort();
+      .sort(byCode);
     return {
       completes: data.interviews.length,
       approved: data.interviews.filter((i) => i.status === 'approved').length,

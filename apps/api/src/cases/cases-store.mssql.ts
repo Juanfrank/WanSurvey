@@ -21,6 +21,7 @@ const toCase = (r: Selectable<MssqlSchema['cases']>): CaseRow => ({ ...r, sample
 
 /** Ids per statement when they travel as parameters (the limit is 2100). */
 const ID_CHUNK = 1000;
+const FIRST_PAGE: { limit: number; after?: { priority: number; id: string } } = { limit: 50 };
 const chunks = <T>(xs: T[], n: number): T[][] =>
   Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, (i + 1) * n));
 
@@ -167,7 +168,7 @@ export class CasesStore {
   async list(
     tx: MssqlTx,
     f: CaseFilter,
-    page: { limit: number; after?: { priority: number; id: string } } = { limit: 50 },
+    page: { limit: number; after?: { priority: number; id: string } } = FIRST_PAGE,
   ): Promise<CaseRow[]> {
     let q = tx.selectFrom('cases').selectAll().where('project_id', '=', f.projectId);
     if (f.questionnaireId !== undefined)

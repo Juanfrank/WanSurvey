@@ -15,6 +15,7 @@ import type { TypeTag } from './functions.js';
 import { KEYWORDS } from './lexer.js';
 import { tryParse } from './parser.js';
 import { own } from './values.js';
+import { byCode } from './compare.js';
 
 export type NodeKind =
   'section' | 'block' | 'roster' | 'question' | 'static' | 'computed' | 'pagebreak';
@@ -343,7 +344,7 @@ export function buildModel(questionnaire: Questionnaire): Model {
       const v = own(vars, r);
       if (v) roots.add(v.rosterChain[0] ?? r);
     }
-    e.roots = [...roots].sort();
+    e.roots = [...roots].sort(byCode);
   }
 
   // Dependency graph: variable root → nodes reading it.

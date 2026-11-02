@@ -344,9 +344,7 @@ export function InterviewPage() {
                   {answered.map((a) => (
                     <div key={a.key} className="contents">
                       <dt className="font-mono text-slate-600">{a.key}</dt>
-                      <dd>
-                        {shown(a.value, session, a.key.replace(/\[.*$/, '').split('.').pop()!)}
-                      </dd>
+                      <dd>{shown(a.value, session, a.key.split('[', 1)[0]!.split('.').pop()!)}</dd>
                     </div>
                   ))}
                 </dl>

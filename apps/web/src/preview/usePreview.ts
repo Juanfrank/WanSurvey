@@ -104,8 +104,10 @@ function newSession(
  * answers given so far (the interview is rebuilt from its state), so one run can be
  * inspected in every mode.
  */
-export function usePreview(initial: Source = { kind: 'sample', id: SAMPLES[0]!.id }) {
-  const [source, setSourceState] = useState<Source>(initial);
+export function usePreview(initial?: Source) {
+  const [source, setSourceState] = useState<Source>(
+    initial ?? { kind: 'sample', id: SAMPLES[0]!.id },
+  );
   const loaded = useMemo(() => loadSource(source), [source]);
   const [options, setOptions] = useState<RunOptions>({
     mode: 'CATI',
