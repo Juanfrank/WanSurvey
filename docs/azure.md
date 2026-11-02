@@ -106,7 +106,7 @@ Microsoft sign-in takes all of `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIE
    `docker run --rm -e DATABASE_ADMIN_URL=… -e DATABASE_URL=… <api-image> node dist/db/mssql/migrate.js`
    It creates the contained user `wansurvey_app` (password from `DATABASE_URL`) and applies the T-SQL migrations.
 4. Optional demo data: `node dist/db/seed.js`, then `node dist/db/seed-demo.js` (needs `SEED_PASSWORD`, and `ENCRYPTION_KEY` so the personal fields are sealed straight away).
-5. Deploy `infra/azure/main.bicep`; check `https://<app>/health`.
+5. Deploy `infra/azure/main.bicep` with `entra*` values and `initialAdminUser=<UPN of the first administrator>`: on a new installation the API creates the first organisation and its owner when it starts (`docs/sso-entra.md`, "The first administrator"). Check `https://<app>/health`, sign in with Microsoft, and remove `initialAdminUser`.
 
 Before each later release, run step 3 with the new images, then deploy the new tag to a staging slot and swap (Premium v3 includes 20 slots).
 

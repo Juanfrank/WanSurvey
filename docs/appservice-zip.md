@@ -96,6 +96,7 @@ removed), so a client cannot pass as another by sending that header. A refused c
 - `ENCRYPTION_KEY`: seals personal data and secrets in the database; 32 random bytes in base64,
   one per environment, never changed once data exists.
 - `NODE_ENV`: `production` turns on the production checks (Blob Storage required, HSTS).
+- `INITIAL_ADMIN_USER`: the UPN of the first administrator, for a new installation (`docs/sso-entra.md`).
 - `PASSWORD_LOGIN`, `ENTRA_*` (tenant, client, secret and `ENTRA_REDIRECT_URI`): sign-in (`docs/sso-entra.md`).
 - `MAILER`, `SMTP_URL`, `MAIL_FROM`: e-mail; `console` writes it to the log instead.
 - `EXPORT_STORAGE`, `AZURE_STORAGE_ACCOUNT_NAME`, `AZURE_STORAGE_CONTAINER`, `AZURE_CLIENT_ID`: export

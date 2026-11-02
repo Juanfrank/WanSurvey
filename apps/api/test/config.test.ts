@@ -76,4 +76,31 @@ describe('startup checks', () => {
       loadConfig({ ...prod, DATABASE_URL: 'mssql://sa:admin1234@db.example.org:1433/x' }),
     ).toThrow(/DATABASE_URL: still has an example value/);
   });
+
+  it('takes the first administrator as a UPN, and only with the deployment’s directory', () => {
+    const entra = {
+      ...base,
+      ENTRA_TENANT_ID: '00000000-0000-0000-0000-000000000002',
+      ENTRA_CLIENT_ID: '00000000-0000-0000-0000-000000000003',
+      ENTRA_CLIENT_SECRET: 'secret',
+      ENTRA_REDIRECT_URI: 'https://x.example.org/api/auth/entra/callback',
+    };
+    expect(
+      loadConfig({ ...entra, INITIAL_ADMIN_USER: ' Ana@Example.ORG ' }).INITIAL_ADMIN_USER,
+    ).toBe('ana@example.org');
+    expect(() => loadConfig({ ...base, INITIAL_ADMIN_USER: 'ana@example.org' })).toThrow(
+      /INITIAL_ADMIN_USER: requires ENTRA_TENANT_ID/,
+    );
+    expect(() => loadConfig({ ...entra, INITIAL_ADMIN_USER: 'not a upn' })).toThrow(
+      /INITIAL_ADMIN_USER/,
+    );
+    expect(() =>
+      loadConfig({
+        ...entra,
+        INITIAL_ADMIN_USER: 'ana@example.org',
+        ENTRA_ALLOWED_DOMAINS: 'other.org',
+      }),
+    ).toThrow(/domain example.org is not in ENTRA_ALLOWED_DOMAINS/);
+    expect(loadConfig({ ...entra, INITIAL_ADMIN_USER: '' }).INITIAL_ADMIN_USER).toBeUndefined();
+  });
 });

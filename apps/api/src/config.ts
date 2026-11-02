@@ -158,6 +158,21 @@ const Env = z.object({
         .map((d) => d.trim().toLowerCase())
         .filter(Boolean),
     ),
+  /**
+   * The user principal name (UPN, as in Microsoft Entra ID) of the first administrator: on a new
+   * installation with no organisation, one is created from the UPN's domain with that person as
+   * its owner, and their first Microsoft sign-in activates the account (no password). It needs the
+   * deployment's directory (ENTRA_*). See db/initial-admin.ts.
+   */
+  INITIAL_ADMIN_USER: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/, 'A user principal name, such as ana@agency.org')
+      .optional(),
+  ),
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
@@ -334,6 +349,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           .filter((k) => !missing.includes(k))
           .join(', ')}`,
       );
+    // The first administrator signs in with Microsoft, through the deployment's directory.
+    if (d.INITIAL_ADMIN_USER) {
+      if (missing.length)
+        throw new Error(
+          'Invalid configuration:\n  INITIAL_ADMIN_USER: requires ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET and ENTRA_REDIRECT_URI (the administrator signs in with Microsoft)',
+        );
+      const domain = d.INITIAL_ADMIN_USER.slice(d.INITIAL_ADMIN_USER.lastIndexOf('@') + 1);
+      if (d.ENTRA_ALLOWED_DOMAINS.length && !d.ENTRA_ALLOWED_DOMAINS.includes(domain))
+        throw new Error(
+          `Invalid configuration:\n  INITIAL_ADMIN_USER: the domain ${domain} is not in ENTRA_ALLOWED_DOMAINS`,
+        );
+    }
     // Without passwords and without the deployment's directory nobody could sign in.
     if (!d.PASSWORD_LOGIN && missing.length)
       throw new Error(

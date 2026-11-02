@@ -101,6 +101,19 @@ PASSWORD_LOGIN=false                      # optional: Microsoft only, no passwor
 - **One directory per session.** A session opens another of the person's organisations only if that organisation has Microsoft sign-in from the same directory; otherwise `switch-tenant` answers `SSO_REQUIRED` and the app sends the browser to that organisation's own sign-in.
 - **Start of the day.** Starting a sign-in reads only public settings (no secret); the settings are kept for a minute per process, and a change saved in the app reaches every process at once through Redis. A known account signs in with one transaction (find it by `oid`, open the session).
 
+## The first administrator
+
+A new installation has no organisation and nobody who could create one. `INITIAL_ADMIN_USER`, the **UPN** (user principal name) of the first administrator in Entra ID, starts it:
+
+```
+INITIAL_ADMIN_USER=ana@agency.org
+```
+
+- **What it does.** When the API starts (after the migrations) and the database has **no organisation at all**, it creates one from the UPN's domain (named after it: `agency.org`, slug `agency-org`) with Microsoft sign-in on for that domain through the deployment's directory (`ENTRA_*`), and the person as its **owner**, invited, with no password. Their first Microsoft sign-in activates the account and links it to their Entra identity; Entra's `mfa` claim stands in for the second factor, otherwise an owner enrols a code as usual. The organisation's name can be changed on the Organisation page; more domains, projects and people are added from the app.
+- **Once.** It does nothing when the person already exists, and when the installation already has organisations it only warns (`INITIAL_ADMIN_USER is ignored`): it is not a way into an existing installation. Remove the setting once the first administrator is in.
+- **Production and development.** It works the same in both: it needs the four `ENTRA_*` settings (the API refuses to start without them, or with a domain outside `ENTRA_ALLOWED_DOMAINS`), and it needs `DATABASE_ADMIN_URL`, which is set where the migrations run at start (App Service from a zip). With separate migration steps (containers), run the API once with the setting, or create the organisation with the demo seed in development.
+- **Not with the demo data.** `db:seed` creates its own organisations; the setting is then ignored.
+
 ## Testing against a real tenant
 
 Set these in the API environment:

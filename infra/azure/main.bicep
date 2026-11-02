@@ -52,6 +52,8 @@ param entraClientId string = ''
 param entraClientSecret string = ''
 @description('E-mail domains of that directory, comma-separated, e.g. poderjudicial.gob.do.')
 param entraAllowedDomains string = ''
+@description('UPN (user principal name in Entra ID) of the first administrator: on a new installation the API creates the first organisation (from the UPN domain) with this person as owner. Needs the entra* values; remove it once they are in.')
+param initialAdminUser string = ''
 @description('false: Microsoft sign-in only (no passwords, no password reset); needs the four entra* values, or the API refuses to start.')
 param passwordLogin bool = true
 
@@ -182,6 +184,9 @@ var entraSettings = empty(entraTenantId)
       ENTRA_ALLOWED_DOMAINS: entraAllowedDomains
     }
 
+// The first administrator, only when given (an empty setting is not a valid one).
+var initialAdminSettings = empty(initialAdminUser) ? {} : { INITIAL_ADMIN_USER: initialAdminUser }
+
 // Every container sees every app setting; a container overrides one by pointing a variable
 // at another setting (the API's PORT and each Node process's heap below).
 var settings = union(
@@ -221,6 +226,7 @@ var settings = union(
     WEBSITE_HEALTHCHECK_MAXPINGFAILURES: '5'
   },
   entraSettings,
+  initialAdminSettings,
   extraSettings
 )
 

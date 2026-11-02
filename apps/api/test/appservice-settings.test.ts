@@ -25,6 +25,7 @@ const FILLED: Record<string, string> = {
   ENTRA_CLIENT_SECRET: 'secret',
   ENTRA_REDIRECT_URI: 'https://encuestas.example.org/api/auth/entra/callback',
   ENTRA_ALLOWED_DOMAINS: 'example.org',
+  INITIAL_ADMIN_USER: 'ana@example.org',
   HEALTH_ALLOWED_IPS: '169.254.0.0/16,127.0.0.1',
   MAIL_WEBHOOK_SECRET: '0123456789abcdef0123',
 };

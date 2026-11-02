@@ -105,6 +105,11 @@
     "slotSetting": false
   },
   {
+    "name": "INITIAL_ADMIN_USER",
+    "value": "<UPN of the first administrator in Entra ID, e.g. ana@example.org; needed once, on a new installation>",
+    "slotSetting": false
+  },
+  {
     "name": "SESSION_IDLE_MINUTES",
     "value": "60",
     "slotSetting": false
