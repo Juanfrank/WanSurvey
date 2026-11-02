@@ -65,6 +65,7 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 
 - Set **Settings → Personal data retention** per project (days after a case is finished). Each night the worker removes the personal data of older finished and withdrawn cases; answers that are not personal stay for statistics. Each case is recorded in the audit log (`case.anonymised`).
 - A person asking for their data: open the case → **Personal data → Download what is held (JSON)**. Asking for erasure: **Erase personal data…** with the request reference. Both are in the audit log (`case.subject_exported`, `case.anonymised`).
+- Auditors: `GET /api/v1/audit-log/export?from=…&to=…[&action=…&actorUserId=…][&format=csv|jsonl]` downloads the activity log of a range (up to 366 days) as a stream. It needs the `audit.export` permission (owners by default; roles are configurable under Administration). Each export is recorded twice in the log (`audit.exported`, at the start and at the end with the row count).
 - Exports already downloaded are outside the system; erasure applies to what WanSurvey holds.
 
 ## Monitoring

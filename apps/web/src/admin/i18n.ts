@@ -61,6 +61,7 @@ export const adminEn = {
     email_templates: 'E-mail templates',
     cawi_waves: 'Web survey campaigns',
     audit_read: 'See the activity log',
+    audit_export: 'Export the activity log',
     pii_view: 'See personal data',
   },
   permAreas: {
@@ -232,6 +233,7 @@ export const adminEs: typeof adminEn = {
     email_templates: 'Plantillas de correo',
     cawi_waves: 'Campañas de encuesta web',
     audit_read: 'Ver la bitácora',
+    audit_export: 'Exportar la bitácora',
     pii_view: 'Ver datos personales',
   },
   permAreas: {

@@ -327,6 +327,26 @@ describe.skipIf(!configured)('SQL Server: personal data over HTTP', () => {
     // The analysis model sees the change and is refreshed.
     await t.app.get(JobsService).drain();
     expect(await inModel()).toHaveLength(0);
+
+    // Whatever the tables above did not name: no text column of any table keeps the phone
+    // numbers any more. A table added later is covered without touching this test.
+    const cols = await rows(sql`
+      SELECT s.name AS sch, o.name AS tbl, c.name AS col
+      FROM sys.columns c
+      JOIN sys.objects o ON o.object_id = c.object_id AND o.type = 'U'
+      JOIN sys.schemas s ON s.schema_id = o.schema_id
+      JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+      WHERE ty.name IN ('varchar', 'nvarchar', 'char', 'nchar') AND s.name IN ('dbo', 'bi')
+        AND c.max_length <> 0`);
+    expect(cols.length).toBeGreaterThan(100);
+    const leaks: string[] = [];
+    for (const { sch, tbl, col } of cols) {
+      const found = await rows(
+        sql`SELECT TOP 1 1 AS x FROM ${sql.table(`${sch}.${tbl}`)} WHERE ${sql.ref(col as string)} LIKE ${'%98765432%'}`,
+      );
+      if (found.length) leaks.push(`${sch}.${tbl}.${col}`);
+    }
+    expect(leaks).toEqual([]);
   });
 
   it('removes personal data after the retention period, and only then', async () => {

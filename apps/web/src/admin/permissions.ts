@@ -12,6 +12,7 @@ export const PERMISSION_AREAS: { area: string; permissions: Permission[] }[] = [
       'users.read',
       'users.manage',
       'audit.read',
+      'audit.export',
     ],
   },
   {

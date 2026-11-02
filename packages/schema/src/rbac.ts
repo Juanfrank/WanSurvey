@@ -47,6 +47,7 @@ export const PERMISSIONS = [
   'email.templates',
   'cawi.waves',
   'audit.read',
+  'audit.export',
   'pii.view',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
@@ -60,7 +61,7 @@ const ALL: readonly Permission[] = PERMISSIONS;
  */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: ALL,
-  admin: ALL.filter((p) => p !== 'tenant.billing' && p !== 'tenant.delete'),
+  admin: ALL.filter((p) => p !== 'tenant.billing' && p !== 'tenant.delete' && p !== 'audit.export'),
   project_manager: [
     'tenant.read',
     'users.read',

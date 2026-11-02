@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '../common/auth-context.js';
 import { Engine } from '../db/engine.js';
-import { AuditStore } from './audit-store.mssql.js';
+import { AuditStore, type AuditFilter, type AuditRow } from './audit-store.mssql.js';
 
 export type AuditAction =
   | 'auth.login'
@@ -76,7 +76,8 @@ export type AuditAction =
   | 'sample_field.updated'
   | 'assignment.created'
   | 'assignment.updated'
-  | 'assignment.deleted';
+  | 'assignment.deleted'
+  | 'audit.exported';
 
 export interface AuditEntry {
   action: AuditAction;
@@ -113,5 +114,33 @@ export class AuditService {
     },
   ) {
     return this.engine.sql.withTenant(ctx.tenantId, (tx) => this.store.list(tx, filter));
+  }
+
+  async record(ctx: AuthContext, entry: Omit<AuditEntry, 'actorUserId' | 'ip' | 'userAgent'>) {
+    await this.engine.sql.withTenant(ctx.tenantId, (tx) =>
+      this.store.record(tx, ctx.tenantId, this.fromContext(ctx, entry)),
+    );
+  }
+
+  /**
+   * Every entry of the range, oldest first, in pages of `size`; each page is read in its own
+   * short transaction so an export of a long history never holds one open.
+   */
+  async *exportPages(
+    ctx: AuthContext,
+    filter: Omit<AuditFilter, 'limit'> & { from: Date; to: Date },
+    size = 1000,
+  ): AsyncGenerator<AuditRow[]> {
+    let after: { at: Date; id: string } | undefined;
+    for (;;) {
+      const rows = await this.engine.sql.withTenant(ctx.tenantId, (tx) =>
+        this.store.page(tx, filter, size, after),
+      );
+      if (rows.length === 0) return;
+      yield rows;
+      const last = rows[rows.length - 1]!;
+      after = { at: last.at, id: last.id };
+      if (rows.length < size) return;
+    }
   }
 }

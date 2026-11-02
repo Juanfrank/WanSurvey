@@ -48,6 +48,35 @@ export class AuditStore {
       .execute();
   }
 
+  /**
+   * Oldest first, a page after the row (`at`, `id`) the previous page ended at, for exports: the
+   * keyset keeps the cost of a page the same however far the export has gone.
+   */
+  async page(
+    tx: MssqlTx,
+    filter: Omit<AuditFilter, 'limit'> & { from: Date; to: Date },
+    size: number,
+    after?: { at: Date; id: string },
+  ): Promise<AuditRow[]> {
+    let q = tx
+      .selectFrom('audit_log')
+      .selectAll()
+      .where('at', '>=', instant(filter.from))
+      .where('at', '<=', instant(filter.to));
+    if (filter.action) q = q.where('action', '=', filter.action);
+    if (filter.actorUserId) q = q.where('actor_user_id', '=', filter.actorUserId);
+    if (filter.targetId) q = q.where('target_id', '=', filter.targetId);
+    if (after)
+      q = q.where((eb) =>
+        eb.or([
+          eb('at', '>', instant(after.at)),
+          eb.and([eb('at', '=', instant(after.at)), eb('id', '>', after.id)]),
+        ]),
+      );
+    const rows = await q.orderBy('at', 'asc').orderBy('id', 'asc').top(size).execute();
+    return rows.map(toRow);
+  }
+
   /** Newest first. */
   async list(tx: MssqlTx, filter: AuditFilter): Promise<AuditRow[]> {
     let q = tx.selectFrom('audit_log').selectAll();
@@ -57,17 +86,30 @@ export class AuditStore {
     if (filter.from) q = q.where('at', '>=', instant(filter.from));
     if (filter.to) q = q.where('at', '<=', instant(filter.to));
     const rows = await q.orderBy('at', 'desc').orderBy('id', 'desc').top(filter.limit).execute();
-    return rows.map((r) => ({
-      id: r.id.toLowerCase(),
-      tenantId: r.tenant_id.toLowerCase(),
-      actorUserId: r.actor_user_id?.toLowerCase() ?? null,
-      action: r.action,
-      targetType: r.target_type,
-      targetId: r.target_id,
-      ip: r.ip,
-      userAgent: r.user_agent,
-      details: JSON.parse(r.details) as Record<string, unknown>,
-      at: r.at,
-    }));
+    return rows.map(toRow);
   }
 }
+
+const toRow = (r: {
+  id: string;
+  tenant_id: string;
+  actor_user_id: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  details: string;
+  at: Date;
+}): AuditRow => ({
+  id: r.id.toLowerCase(),
+  tenantId: r.tenant_id.toLowerCase(),
+  actorUserId: r.actor_user_id?.toLowerCase() ?? null,
+  action: r.action,
+  targetType: r.target_type,
+  targetId: r.target_id,
+  ip: r.ip,
+  userAgent: r.user_agent,
+  details: JSON.parse(r.details) as Record<string, unknown>,
+  at: r.at,
+});

@@ -148,6 +148,15 @@ const ENDPOINTS: Endpoint[] = [
     call: (s) => s.agent.get('/api/v1/audit-log'),
   },
   {
+    name: 'GET /audit-log/export',
+    permission: 'audit.export',
+    call: (s) =>
+      s.agent.get('/api/v1/audit-log/export').query({
+        from: new Date(Date.now() - 86_400_000).toISOString(),
+        to: new Date(Date.now() + 86_400_000).toISOString(),
+      }),
+  },
+  {
     name: 'GET questionnaires',
     permission: 'questionnaires.read',
     call: (s, ids) => s.agent.get(`/api/v1/projects/${ids.project}/questionnaires`),
