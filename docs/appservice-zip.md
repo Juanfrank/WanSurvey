@@ -25,6 +25,9 @@ DATABASE_ADMIN_URL='mssql://sa:Wansurvey_Test1%21@localhost:1433/master?trustSer
   scripts/smoke-appservice.sh out/wansurvey-appservice.zip   # starts it as App Service would
 ```
 
+For trying it out on a laptop, with its own SQL Server in Docker, build the development zip with
+`scripts/package-appservice.sh out --dev` (`docs/dev-database.md`); it is not for deploying.
+
 It holds `dist/` (the API), `mssql/` (migrations), `public/` (the web app), `package.json`
 (`npm start`) and `node_modules/` with production dependencies only, as plain folders. Native
 modules (Argon2, the canvas) are built for Linux x64 glibc: build it on Linux, not on Windows or a

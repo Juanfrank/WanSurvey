@@ -6,6 +6,20 @@ SQL Server (an emulator that reproduced all that would be the engine itself), so
 and tests the closest thing is **the real engine, on your machine, with a database you can throw
 away**.
 
+## The development zip: it starts its own SQL Server
+
+To try the application with nothing to set up but **Docker and Node 24**, build the development zip:
+
+```
+scripts/package-appservice.sh out --dev        # → out/wansurvey-dev.zip (Linux x64, like the other zip)
+```
+
+Unzip it and run `./start-dev.sh` (Linux, macOS) or `start-dev.cmd` (Windows). The launcher starts a SQL Server in a Docker container (`wansurvey-dev-mssql`, port 14330), waits for it, creates the database with the migrations and the demo data, connects the application to it (the generated passwords and the encryption key are kept in `.dev/`) and serves the web app on <http://localhost:3000>. Ctrl+C stops the application and keeps the container, so the next start is quick; `node dev-start.mjs --reset` loads the demo data again and `--down` removes the container. The zip's own `README.md` has the details.
+
+The SQL Server itself is **not** inside the zip: Microsoft's licence does not allow redistributing it, and it needs 2 GB of RAM and a Linux kernel. The launcher pulls the official image (`mcr.microsoft.com/mssql/server`) the first time. This zip is for trying things out: its demo users have a public password. Never deploy it; the App Service zip (`wansurvey-appservice.zip`) is the other one.
+
+Without Docker, use a SQL Server you run yourself, as follows.
+
 ## 1. A SQL Server on your machine
 
 Any edition works for development; the free ones are enough.

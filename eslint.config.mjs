@@ -45,6 +45,13 @@ export default tseslint.config(
     },
   },
   {
+    // The scripts that run on Node by themselves (the development launcher).
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', setTimeout: 'readonly' },
+    },
+  },
+  {
     // The logic engine must run unchanged in browsers, offline tablets and Node.
     files: ['packages/logic/src/**/*.ts', 'packages/schema/src/**/*.ts'],
     rules: {
