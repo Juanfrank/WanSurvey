@@ -331,18 +331,25 @@ describe.skipIf(!configured)('SQL Server: personal data over HTTP', () => {
     // Whatever the tables above did not name: no text column of any table keeps the phone
     // numbers any more. A table added later is covered without touching this test.
     const cols = await rows(sql`
-      SELECT s.name AS sch, o.name AS tbl, c.name AS col
+      SELECT s.name AS sch, o.name AS tbl, c.name AS col,
+        CASE WHEN EXISTS (SELECT 1 FROM sys.columns t WHERE t.object_id = o.object_id AND t.name = 'tenant_id')
+             THEN 'tenant_id'
+             WHEN EXISTS (SELECT 1 FROM sys.columns t WHERE t.object_id = o.object_id AND t.name = 'organizacion_id')
+             THEN 'organizacion_id' END AS scope
       FROM sys.columns c
-      JOIN sys.objects o ON o.object_id = c.object_id AND o.type = 'U'
+      JOIN sys.objects o ON o.object_id = c.object_id AND o.type IN ('U', 'V')
       JOIN sys.schemas s ON s.schema_id = o.schema_id
       JOIN sys.types ty ON ty.user_type_id = c.user_type_id
       WHERE ty.name IN ('varchar', 'nvarchar', 'char', 'nchar') AND s.name IN ('dbo', 'bi')
         AND c.max_length <> 0`);
     expect(cols.length).toBeGreaterThan(100);
     const leaks: string[] = [];
-    for (const { sch, tbl, col } of cols) {
+    for (const { sch, tbl, col, scope } of cols) {
+      // Other tests leave the same numbers in the shared database: only this organisation.
+      if (!scope) continue;
       const found = await rows(
-        sql`SELECT TOP 1 1 AS x FROM ${sql.table(`${sch}.${tbl}`)} WHERE ${sql.ref(col as string)} LIKE ${'%98765432%'}`,
+        sql`SELECT TOP 1 1 AS x FROM ${sql.table(`${sch}.${tbl}`)}
+            WHERE ${sql.ref(scope as string)} = ${tenant.id} AND ${sql.ref(col as string)} LIKE ${'%98765432%'}`,
       );
       if (found.length) leaks.push(`${sch}.${tbl}.${col}`);
     }
