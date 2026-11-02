@@ -29,6 +29,7 @@ Background reading:
 - [`docs/dev-database.md`](docs/dev-database.md): a development database on a SQL Server you run yourself, without Docker (`db:dev`)
 - [`docs/logic-language.md`](docs/logic-language.md): the expression language
 - [`docs/decisions.md`](docs/decisions.md): assumptions taken where the spec was ambiguous
+- [`docs/adr/0001-quality-integration-and-channels.md`](docs/adr/0001-quality-integration-and-channels.md): what to build next and in which order (audit export, fraud risk score, integration API and webhooks, SMS, interview audio, web notifications, organisation theme)
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
 - [`docs/operations.md`](docs/operations.md): running it in production (processes, configuration, jobs, backups, retention)
 - [`docs/bi.md`](docs/bi.md): the analysis model (schema `bi`) for BI tools and SQL: snowflake and flat table, refreshed by the worker
