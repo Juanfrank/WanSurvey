@@ -440,9 +440,9 @@ export class WebhooksService implements OnModuleInit {
 }
 
 /** One POST to the address already checked: no redirect followed, a time limit, a capped read. */
-function post(
+export function post(
   target: { url: URL; address: string; family: 4 | 6 },
-  body: string,
+  body: string | Buffer,
   headers: Record<string, string>,
 ): Promise<number> {
   const { url, address, family } = target;

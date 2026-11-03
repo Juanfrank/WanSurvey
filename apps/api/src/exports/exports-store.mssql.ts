@@ -5,6 +5,7 @@ import type { MssqlSchema } from '../db/mssql/schema.js';
 import { claimJob } from '../jobs/claim.mssql.js';
 import { COUNTED } from '../review/review-store.mssql.js';
 import { dayStart, nextDay } from '../stats/zoned-day.js';
+import { enqueuePush } from '../push/outbox.js';
 import { enqueueEvent } from '../webhooks/outbox.js';
 
 /**
@@ -137,9 +138,12 @@ export class ExportsStore {
       .execute();
     const e = await tx
       .selectFrom('exports')
-      .select(['tenant_id', 'project_id'])
+      .select(['tenant_id', 'project_id', 'requested_by'])
       .where('id', '=', id)
       .executeTakeFirst();
+    if (e) {
+      await enqueuePush(tx, e.tenant_id.toLowerCase(), e.requested_by, 'exports', { url: '/' });
+    }
     if (e)
       await enqueueEvent(
         tx,

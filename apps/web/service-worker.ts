@@ -87,5 +87,41 @@ self.addEventListener('fetch', (event) => {
     ),
   );
 });
+
+// Web notifications (ADR 0001, decision 6): the text comes ready from the server and holds no
+// personal data; tapping it brings the app to the front, or opens it.
+self.addEventListener('push', (event) => {
+  let m = {};
+  try {
+    m = event.data ? event.data.json() : {};
+  } catch (e) {
+    m = {};
+  }
+  event.waitUntil(
+    self.registration.showNotification(m.title || 'WanSurvey', {
+      body: m.body || '',
+      tag: m.tag,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: m.url || '/' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) {
+          if ('navigate' in c) c.navigate(url).catch(() => undefined);
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});
 `;
 }

@@ -599,6 +599,34 @@ export interface MssqlSchema {
     sha256: string;
     uploaded_at: Instant;
   };
+  push_subscriptions: {
+    id: string;
+    tenant_id: string;
+    user_id: string;
+    endpoint: string;
+    endpoint_hash: string;
+    p256dh: string;
+    auth: string;
+    categories: string;
+    lang: Generated<string>;
+    user_agent: string | null;
+    created_at: Instant;
+    last_ok_at: InstantOrNull;
+  };
+  push_outbox: {
+    id: string;
+    tenant_id: string;
+    user_id: string;
+    category: string;
+    payload: string;
+    dedupe_key: string | null;
+    status: Generated<string>;
+    attempt: Generated<number>;
+    next_attempt_at: Instant;
+    claimed_until: InstantOrNull;
+    last_error: string | null;
+    created_at: Instant;
+  };
   api_keys: {
     id: string;
     tenant_id: string;

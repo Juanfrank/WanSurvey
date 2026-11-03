@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { MssqlTx } from '../db/mssql/database.js';
+import { enqueuePush } from '../push/outbox.js';
 
 /**
  * The events a webhook can subscribe to (ADR 0001). They are written to the outbox in the
@@ -72,8 +73,9 @@ export async function enqueueEvent(
 export async function enqueueFromAudit(
   tx: MssqlTx,
   tenantId: string,
-  entry: { action: string; targetId?: string | null },
+  entry: { action: string; targetId?: string | null; details?: Record<string, unknown> },
 ): Promise<void> {
+  await pushFromAudit(tx, tenantId, entry);
   const map = FROM_AUDIT[entry.action];
   if (!map || !entry.targetId) return;
   // Identifiers and statuses only; never names, answers or contact data.
@@ -101,4 +103,31 @@ export async function enqueueFromAudit(
     caseId: low(i.case_id),
     status: map.status ?? i.status,
   });
+}
+
+/** Notifications to people (web push) that follow from the same entries. */
+async function pushFromAudit(
+  tx: MssqlTx,
+  tenantId: string,
+  entry: { action: string; targetId?: string | null; details?: Record<string, unknown> },
+): Promise<void> {
+  if (entry.action === 'interview.returned' && entry.targetId) {
+    const i = await tx
+      .selectFrom('interviews')
+      .select(['interviewer_id'])
+      .where('id', '=', entry.targetId)
+      .executeTakeFirst();
+    if (i?.interviewer_id)
+      await enqueuePush(tx, tenantId, i.interviewer_id, 'returned', { url: '/' }, undefined);
+  }
+  if (entry.action === 'cases.assigned') {
+    const d = entry.details ?? {};
+    const people: [string, number][] = d.perPerson
+      ? Object.entries(d.perPerson as Record<string, number>)
+      : typeof d.to === 'string'
+        ? [[d.to, Number(d.count ?? 1)]]
+        : [];
+    for (const [userId, count] of people)
+      if (count > 0) await enqueuePush(tx, tenantId, userId, 'assignments', { count, url: '/' });
+  }
 }

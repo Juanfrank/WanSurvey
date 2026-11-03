@@ -1,6 +1,6 @@
 # ADR 0001: Audit, fraud signals, integrations and new channels
 
-- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)) 4 (SMS) and 5 (interview audio, off by default; see [operations](../operations.md)); the rest pending
+- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)) 4 (SMS), 5 (interview audio, off by default) and 6 (web notifications; see [operations](../operations.md)); the rest pending
 - **Date:** 2026-11-02
 - **Deciders:** product owner
 - **Scope:** what to build next, in which order and in which form. Decisions are built in the order given below.
@@ -134,7 +134,8 @@ Not decided here, and kept out on purpose: survey weighting and calibration, SCI
 - Opt-in per user from the account menu, by category: callbacks due (CATI), new assignments, an interview returned, an export ready, a wave finished. A table of subscriptions per user and device, under row-level security; a subscription that answers 404 or 410 is deleted.
 - The payload is generic and holds no personal data ("You have 2 callbacks due"); tapping it opens the right screen.
 - Sent through the delivery pattern of decision 3 (kept in the database, retried). Callbacks need a tick every minute that looks at the next five minutes, in the process that already runs the sweeper.
-- New settings `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (a secret) and `VAPID_SUBJECT` go to the `appconfig/` templates. The `web-push` package (MPL-2.0, 3.6.7) was last published in January 2024: it is used pinned, and if it stays unmaintained the protocol (RFC 8291 and RFC 8188) is small enough to implement over `node:crypto`.
+- New settings `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (a secret) and `VAPID_SUBJECT` go to the `appconfig/` templates. The `web-push` package was last published in January 2024, and the protocol is small: it is implemented over `node:crypto` and `jose` (`push/webpush.ts`), and checked against the example of RFC 8291, appendix A, which it reproduces byte for byte.
+- _As built:_ four categories (callbacks due, new assignments, an interview returned, an export ready); "a wave finished" is left out; the outbox keeps its rows only for people subscribed to the category.
 
 **Benefit.** An interviewer does not miss a callback, and a reviewer sees a return without refreshing.
 

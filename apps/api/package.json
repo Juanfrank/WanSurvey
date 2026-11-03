@@ -13,6 +13,7 @@
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
     "db:dev": "tsx src/db/dev-db.ts",
+    "vapid": "tsx src/push/vapid.ts",
     "db:migrate": "tsx src/db/mssql/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",

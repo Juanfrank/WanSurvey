@@ -21,6 +21,17 @@ const en = {
     name: 'WanSurvey',
     language: 'Language',
     signOut: 'Sign out',
+    notifications: {
+      title: 'Notifications on this device',
+      denied: 'The browser has blocked notifications for this site; allow them in its settings.',
+      test: 'Send a test',
+      categories: {
+        callbacks: 'Callbacks about to be due',
+        assignments: 'New cases assigned to me',
+        returned: 'An interview of mine was returned',
+        exports: 'My export is ready',
+      },
+    },
     organisation: 'Organisation',
     home: 'Home',
     admin: 'Administration',
@@ -211,6 +222,18 @@ const es: Catalogue = {
     name: 'WanSurvey',
     language: 'Idioma',
     signOut: 'Cerrar sesión',
+    notifications: {
+      title: 'Notificaciones en este dispositivo',
+      denied:
+        'El navegador bloqueó las notificaciones de este sitio; permítalas en su configuración.',
+      test: 'Enviar una prueba',
+      categories: {
+        callbacks: 'Llamadas por devolver pronto',
+        assignments: 'Casos nuevos que me asignan',
+        returned: 'Una entrevista mía fue devuelta',
+        exports: 'Mi exportación está lista',
+      },
+    },
     organisation: 'Organización',
     home: 'Inicio',
     admin: 'Administración',

@@ -39,6 +39,7 @@ const SECRET_SETTINGS = new Set([
   'MAIL_WEBHOOK_SECRET',
   'SMTP_URL',
   'SMS_CONNECTION_STRING',
+  'VAPID_PRIVATE_KEY',
   'SMS_WEBHOOK_SECRET',
   'DATABASE_URL',
   'DATABASE_ADMIN_URL',
@@ -210,6 +211,11 @@ const Env = z.object({
    * production: it would let an organisation make the server call its own network.
    */
   WEBHOOK_ALLOW_PRIVATE_URLS: z.enum(['true', 'false']).default('false'),
+  /** Web notifications (Web Push): the VAPID key pair (`npm run vapid` makes one) and a contact. */
+  VAPID_PUBLIC_KEY: z.string().min(80).max(100).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(40).max(60).optional(),
+  /** mailto: or https: address of whoever runs the service, shown to the push services. */
+  VAPID_SUBJECT: z.string().max(200).optional(),
   /** How SMS leaves: logged, written as files (development), or Azure Communication Services. */
   SMS_PROVIDER: z.enum(['console', 'file', 'acs']).default('console'),
   /** Folder for SMS_PROVIDER=file (one JSON file per message). */
@@ -328,6 +334,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (d.NODE_ENV === 'production' && d.WEBHOOK_ALLOW_PRIVATE_URLS === 'true')
       throw new Error(
         'Invalid configuration:\n  WEBHOOK_ALLOW_PRIVATE_URLS: must not be true in production',
+      );
+    if (!!d.VAPID_PUBLIC_KEY !== !!d.VAPID_PRIVATE_KEY || (d.VAPID_PUBLIC_KEY && !d.VAPID_SUBJECT))
+      throw new Error(
+        'Invalid configuration:\n  VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT: all three or none',
       );
     if (d.SMS_PROVIDER === 'acs' && (!d.SMS_CONNECTION_STRING || !d.SMS_FROM))
       throw new Error(

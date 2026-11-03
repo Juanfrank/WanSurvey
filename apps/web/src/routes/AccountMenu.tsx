@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { Me } from '../api.js';
 import { LANGUAGES, setLanguage } from '../i18n.js';
 import { THEMES, useTheme, type ThemePref } from '../theme.js';
+import { Notifications } from './Notifications.js';
 import { ChevronDownIcon, LogoutIcon } from './icons.js';
 
 /** Up to two initials from a person's name, or the first letter of their e-mail. */
@@ -147,6 +148,7 @@ export function AccountMenu({
             ))}
           </select>
         </label>
+        <Notifications />
       </div>
     </div>
   );

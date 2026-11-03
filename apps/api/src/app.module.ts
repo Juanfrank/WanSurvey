@@ -25,6 +25,8 @@ import {
 } from './sms/sms.js';
 import { AudioController } from './audio/audio.controller.js';
 import { AUDIO_STORAGE, AudioService, audioStorage } from './audio/audio.service.js';
+import { PushController } from './push/push.controller.js';
+import { PushService } from './push/push.service.js';
 import { WebhooksController } from './webhooks/webhooks.controller.js';
 import { WebhooksService } from './webhooks/webhooks.service.js';
 import { AuditController } from './audit/audit.controller.js';
@@ -180,6 +182,7 @@ export class AppModule {
         ExtController,
         WebhooksController,
         AudioController,
+        PushController,
         AuthController,
         SsoController,
         EntraCallbackController,
@@ -263,6 +266,7 @@ export class AppModule {
         ApiKeysService,
         WebhooksService,
         AudioService,
+        PushService,
         { provide: AUDIO_STORAGE, useValue: opts.audioStorage ?? audioStorage(config) },
         AuthService,
         SsoService,

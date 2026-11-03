@@ -103,4 +103,13 @@ Face-to-face (CAPI) interviews can be recorded for quality review (ADR 0001, dec
 
 Not done: recording only marked questions (short clips); sending flagged interviews to the audio queue first; recording web (CAWI) or telephone (CATI) interviews; reading what is said. The browser recorder was tested in its sending logic and against the server, not yet on a real tablet: try it on the devices of the fieldwork (microphone permission, battery, storage) before relying on it.
 
+### Web notifications
+
+People can ask to be told, in the browser, when something needs them (ADR 0001, decision 6): **account menu → Notifications on this device**. Nothing is asked of the browser until they tick a category.
+
+- **Categories.** Callbacks about to be due (a look every minute at the next five; one notice per person and five-minute window), new cases assigned, one of their interviews returned, their export ready. The message is generic and ready-made on the server ("You have 2 callbacks due"); it holds no names or answers, and tapping it opens the app. A wave that has finished is not announced yet.
+- **Setup.** `pnpm --filter @wansurvey/api vapid` prints a key pair; set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (a secret: a Key Vault reference in production) and `VAPID_SUBJECT` (`mailto:` or `https:` of whoever runs the service). All three or none; without them the menu entry does not appear and nothing is sent. Changing the keys invalidates the subscriptions made with the old public key: people subscribe again.
+- **Delivery.** Notifications wait in the database (`push_outbox`, created in the transaction of the change that caused them, and only for people who subscribed to that category) and the dispatcher sends them within seconds, encrypted for the browser (RFC 8291) and signed with VAPID (RFC 8292), over `node:crypto` and `jose`: no push library. A push service that answers 5xx or 429 is tried again after 1, 5 and 30 minutes; a browser the service says is gone (404, 410) is forgotten. A person who is no longer an active member of the organisation is not sent anything. The endpoints are checked as webhook addresses are (https, no private network).
+- **Limits.** There is no delivery guarantee: the browser or the device may be off, or the permission withdrawn. Where it works depends on the browser; on iOS only for the installed app (16.4 or later). Too many notifications make people turn them off, so the categories are few.
+
 The k6 scripts that measured a CAWI burst of 50 completes per second and 300 interviewers syncing were removed with the PostgreSQL code (they are in the git history, before commit `3484e04`'s successor that removed `load/`). Measure again on a staging copy before large waves.

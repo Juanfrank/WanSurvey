@@ -219,6 +219,12 @@ export class MssqlDatabase {
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
+  /** The organisations with web notifications due. */
+  async tenantsWithPushDue(): Promise<string[]> {
+    const res = await sql<{ tenant_id: string }>`EXEC dbo.tenants_with_push_due`.execute(this.db);
+    return res.rows.map((r) => r.tenant_id.toLowerCase());
+  }
+
   /** The organisations that invited this address (an SMS reply carries only the number). */
   async tenantsInvitedAt(address: string): Promise<string[]> {
     const res = await sql<{ tenant_id: string }>`

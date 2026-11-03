@@ -310,6 +310,21 @@
     "slotSetting": false
   },
   {
+    "name": "VAPID_PUBLIC_KEY",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "VAPID_PRIVATE_KEY",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "VAPID_SUBJECT",
+    "value": "",
+    "slotSetting": false
+  },
+  {
     "name": "HEALTH_ALLOWED_IPS",
     "value": "169.254.0.0/16",
     "slotSetting": false
