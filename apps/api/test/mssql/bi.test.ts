@@ -166,9 +166,9 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
     await owner(async (db) => {
       const ins = (id: string, submittedAt: string, answers: object) =>
         sql`INSERT INTO interviews (id, tenant_id, project_id, questionnaire_version_id, mode, interviewer_id,
-              status, disposition, language, device_id, submitted_at, active_ms, total_ms, answers, flags)
+              status, disposition, language, device_id, started_at, submitted_at, active_ms, total_ms, answers, flags)
             VALUES (${id}, ${a.id}, ${a.project}, ${versionId}, 'CATI', ${user}, 'submitted', 'COMPLETE', 'es', 'd',
-              ${submittedAt}, 4600, 9000, ${JSON.stringify(answers)}, '{"speeding":true,"alone":true}')`.execute(
+              ${submittedAt}, ${submittedAt}, 4600, 9000, ${JSON.stringify(answers)}, '{"speeding":true,"alone":true}')`.execute(
           db,
         );
       await ins(i1, '2026-11-02T03:00:00Z', {
