@@ -219,6 +219,14 @@ export class MssqlDatabase {
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
+  /** The organisations with webhook deliveries due. */
+  async tenantsWithWebhooksDue(): Promise<string[]> {
+    const res = await sql<{ tenant_id: string }>`EXEC dbo.tenants_with_webhooks_due`.execute(
+      this.db,
+    );
+    return res.rows.map((r) => r.tenant_id.toLowerCase());
+  }
+
   /** Every organisation, for nightly jobs. */
   async allTenantIds(): Promise<string[]> {
     const res = await sql<{ tenant_id: string }>`EXEC dbo.all_tenant_ids`.execute(this.db);

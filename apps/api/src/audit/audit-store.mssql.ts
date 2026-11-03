@@ -1,4 +1,5 @@
 import { uuidv7 } from 'uuidv7';
+import { enqueueFromAudit } from '../webhooks/outbox.js';
 import { instant } from '../db/mssql/instant.js';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { AuditEntry } from './audit.service.js';
@@ -46,6 +47,8 @@ export class AuditStore {
         user_agent: entry.userAgent ?? null,
       })
       .execute();
+    // Some entries are webhook events: written to the outbox in this same transaction.
+    await enqueueFromAudit(tx, tenantId, entry);
   }
 
   /**

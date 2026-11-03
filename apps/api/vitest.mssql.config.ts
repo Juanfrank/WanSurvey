@@ -16,6 +16,7 @@ export default defineConfig({
     // the configuration when they are imported need these before anything is.
     env: {
       NODE_ENV: 'test',
+      WEBHOOK_ALLOW_PRIVATE_URLS: 'true',
       LOG_LEVEL: 'error',
       DATABASE_URL: process.env.MSSQL_URL ?? '',
       DATABASE_ADMIN_URL: process.env.MSSQL_ADMIN_URL ?? '',

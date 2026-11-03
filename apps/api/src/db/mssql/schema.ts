@@ -554,6 +554,38 @@ export interface MssqlSchema {
     active: Generated<boolean>;
     created_at: Instant;
   };
+  webhook_endpoints: {
+    id: string;
+    tenant_id: string;
+    project_id: string | null;
+    url: string;
+    events: string;
+    secret_enc: string;
+    previous_secret_enc: string | null;
+    previous_secret_until: InstantOrNull;
+    enabled: Generated<boolean>;
+    failure_streak: Generated<number>;
+    disabled_reason: string | null;
+    created_by: string;
+    created_at: Instant;
+  };
+  webhook_deliveries: {
+    id: string;
+    tenant_id: string;
+    endpoint_id: string;
+    event_id: string;
+    event: string;
+    payload: string;
+    status: Generated<string>;
+    attempt: Generated<number>;
+    next_attempt_at: Instant;
+    claimed_until: InstantOrNull;
+    last_status_code: number | null;
+    last_error: string | null;
+    duration_ms: number | null;
+    created_at: Instant;
+    delivered_at: InstantOrNull;
+  };
   api_keys: {
     id: string;
     tenant_id: string;
@@ -565,7 +597,7 @@ export interface MssqlSchema {
     allowed_ips: string | null;
     expires_at: Instant;
     created_by: string;
-    created_at: Generated<Instant>;
+    created_at: Instant;
     last_used_at: InstantOrNull;
     revoked_at: InstantOrNull;
     revoked_by: string | null;

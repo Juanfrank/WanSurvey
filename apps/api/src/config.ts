@@ -203,6 +203,11 @@ const Env = z.object({
   MAIL_FROM: z.string().default('WanSurvey <encuestas@localhost>'),
   /** Shared secret the mail provider sends in `x-webhook-secret` with delivery events. */
   MAIL_WEBHOOK_SECRET: z.string().min(16).optional(),
+  /**
+   * Lets webhooks go to http addresses and private networks (tests, local development). Never in
+   * production: it would let an organisation make the server call its own network.
+   */
+  WEBHOOK_ALLOW_PRIVATE_URLS: z.enum(['true', 'false']).default('false'),
   /** Base of respondent links; the web app by default. */
   PUBLIC_SURVEY_URL: z.string().url().optional(),
   /**
@@ -302,6 +307,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     // The API and the worker run in separate containers: only Blob Storage is shared.
     if (d.NODE_ENV === 'production' && d.EXPORT_STORAGE !== 'blob')
       throw new Error('Invalid configuration:\n  EXPORT_STORAGE: must be blob in production');
+    if (d.NODE_ENV === 'production' && d.WEBHOOK_ALLOW_PRIVATE_URLS === 'true')
+      throw new Error(
+        'Invalid configuration:\n  WEBHOOK_ALLOW_PRIVATE_URLS: must not be true in production',
+      );
     if (d.AZURE_STORAGE_ACCOUNT_NAME && !d.AZURE_STORAGE_CONTAINER)
       throw new Error(
         'Invalid configuration:\n  AZURE_STORAGE_CONTAINER: required with AZURE_STORAGE_ACCOUNT_NAME (both or neither)',

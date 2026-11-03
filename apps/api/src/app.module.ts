@@ -15,6 +15,8 @@ import { LoggerModule } from 'nestjs-pino';
 import { ApiKeysController } from './apikeys/api-keys.controller.js';
 import { ApiKeysService } from './apikeys/api-keys.service.js';
 import { ExtController } from './apikeys/ext.controller.js';
+import { WebhooksController } from './webhooks/webhooks.controller.js';
+import { WebhooksService } from './webhooks/webhooks.service.js';
 import { AuditController } from './audit/audit.controller.js';
 import { AuditService } from './audit/audit.service.js';
 import { AuthController } from './auth/auth.controller.js';
@@ -162,6 +164,7 @@ export class AppModule {
         HealthController,
         ApiKeysController,
         ExtController,
+        WebhooksController,
         AuthController,
         SsoController,
         EntraCallbackController,
@@ -231,6 +234,7 @@ export class AppModule {
         { provide: EXPORTS_REPO, useClass: MssqlExportsRepo },
         AuditService,
         ApiKeysService,
+        WebhooksService,
         AuthService,
         SsoService,
         SsoConfigs,

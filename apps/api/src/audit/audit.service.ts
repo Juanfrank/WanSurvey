@@ -79,7 +79,12 @@ export type AuditAction =
   | 'assignment.deleted'
   | 'audit.exported'
   | 'apikey.created'
-  | 'apikey.revoked';
+  | 'apikey.revoked'
+  | 'webhook.created'
+  | 'webhook.updated'
+  | 'webhook.deleted'
+  | 'webhook.rotated'
+  | 'webhook.disabled';
 
 export interface AuditEntry {
   action: AuditAction;

@@ -5,6 +5,7 @@ import type { MssqlSchema } from '../db/mssql/schema.js';
 import { claimJob } from '../jobs/claim.mssql.js';
 import { COUNTED } from '../review/review-store.mssql.js';
 import { dayStart, nextDay } from '../stats/zoned-day.js';
+import { enqueueEvent } from '../webhooks/outbox.js';
 
 /**
  * Exports on SQL Server (Kysely): the jobs the worker builds, the pages of interviews an export
@@ -134,6 +135,21 @@ export class ExportsStore {
       })
       .where('id', '=', id)
       .execute();
+    const e = await tx
+      .selectFrom('exports')
+      .select(['tenant_id', 'project_id'])
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (e)
+      await enqueueEvent(
+        tx,
+        e.tenant_id.toLowerCase(),
+        'export.ready',
+        e.project_id.toLowerCase(),
+        {
+          exportId: id.toLowerCase(),
+        },
+      );
   }
 
   /** The attempt failed: queued again for another try, or failed for good. */

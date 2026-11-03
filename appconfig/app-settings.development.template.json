@@ -265,6 +265,11 @@
     "slotSetting": false
   },
   {
+    "name": "WEBHOOK_ALLOW_PRIVATE_URLS",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
     "name": "HEALTH_ALLOWED_IPS",
     "value": "169.254.0.0/16",
     "slotSetting": false

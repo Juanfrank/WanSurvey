@@ -1,6 +1,6 @@
 # ADR 0001: Audit, fraud signals, integrations and new channels
 
-- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) and 3 phase A (API keys, read only; see [the integration API](../integration-api.md)); the rest pending
+- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) and 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)); the rest pending
 - **Date:** 2026-11-02
 - **Deciders:** product owner
 - **Scope:** what to build next, in which order and in which form. Decisions are built in the order given below.
@@ -81,7 +81,7 @@ Not decided here, and kept out on purpose: survey weighting and calibration, SCI
 ### Phase B: outgoing webhooks
 
 - Endpoints per organisation (optionally per project) subscribed to a small set of events: `interview.submitted`, `interview.status_changed`, `export.ready`, `case.status_changed`.
-- Signed as the Standard Webhooks specification says (`webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC-SHA256, a `whsec_` secret shown once, two secrets valid at once for rotation) with the `standardwebhooks` package (MIT, 1.1.1, published 2026-08-28).
+- Signed as the Standard Webhooks specification says (`webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC-SHA256, a `whsec_` secret shown once, two secrets valid at once for rotation) by a small module of our own (`webhooks/signing.ts`, tested against the specification's example) instead of the `standardwebhooks` package: it is ten lines of HMAC and avoids a dependency. The e-mail to administrators when an endpoint is switched off is not built yet.
 - Payload with identifiers and timestamps only; details are fetched through phase A. No personal data in a webhook body.
 - Delivery kept in the database (`webhook_deliveries`: attempt, next attempt, status, response code, duration), claimed like the jobs, so it works without Redis and survives a restart. Retries at 1 min, 5 min, 30 min, 2 h, 12 h, 24 h; after that, or after a run of failures, the endpoint is disabled and the administrators are told by e-mail. A failed delivery can be redelivered by hand from the screen.
 - Safe by construction against server-side request forgery: `https` only, the address resolved and refused if it is loopback, private, link-local or the cloud metadata address, no redirects followed, a 10-second timeout and a cap on the response read.

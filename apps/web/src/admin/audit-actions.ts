@@ -76,4 +76,9 @@ export const AUDIT_ACTIONS = [
   'audit.exported',
   'apikey.created',
   'apikey.revoked',
+  'webhook.created',
+  'webhook.updated',
+  'webhook.deleted',
+  'webhook.rotated',
+  'webhook.disabled',
 ] as const;
