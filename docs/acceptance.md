@@ -16,9 +16,9 @@ The acceptance list of spec §13, with the automated tests that prove each item.
 
 Performance targets (spec §12) and how they are covered:
 
-| Target                                                    | Coverage                                                                                                                      |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Question-to-question under 100 ms                         | Engine re-evaluation under 20 ms on a 500-item questionnaire: `packages/logic/test/perf.test.ts`; navigation needs no network |
-| CAWI first load under 2.5 s LCP on 4G                     | The respondent page loads about 151 KB gzipped; CI fails above 160 KB (`apps/web/scripts/bundle-budget.mjs`)                  |
-| 300 concurrent interviewers; 50 CAWI completes per second | k6 load test on staging (the scripts were removed with the PostgreSQL code; see the git history)                              |
-| Dashboard within 5 s of a submit                          | As above                                                                                                                      |
+| Target                                                    | Coverage                                                                                                                                                          |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Question-to-question under 100 ms                         | Engine re-evaluation under 20 ms on a 500-item questionnaire: `packages/logic/test/perf.test.ts`; navigation needs no network                                     |
+| CAWI first load under 2.5 s LCP on 4G                     | The respondent page loads about 151 KB gzipped; CI fails above 160 KB (`apps/web/scripts/bundle-budget.mjs`)                                                      |
+| 300 concurrent interviewers; 50 CAWI completes per second | k6 load tests on staging: `load/cati.js` and `load/capi.js` (300 interviewers) and `load/cawi.js` (50 completes a second); how to run them is in `load/README.md` |
+| Dashboard within 5 s of a submit                          | As above                                                                                                                                                          |

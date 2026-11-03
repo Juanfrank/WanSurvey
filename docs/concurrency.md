@@ -46,7 +46,7 @@ This must stay below what the database tier allows (concurrent sessions and work
 | One App Service P0v3 (API + worker per instance), autoscale to 2 | `DB_POOL_MAX=10`, `DB_WORKER_POOL_MAX=5` (15 per instance, 30 at most) |
 | Fieldwork: 3 API + 1 worker                                      | `DB_POOL_MAX=15`, `DB_WORKER_POOL_MAX=5` (50)                          |
 
-Keep `JOB_CONCURRENCY + HEAVY_JOB_CONCURRENCY` at or below `DB_WORKER_POOL_MAX`, and `MAX_CONCURRENT_REQUESTS` well above what one instance serves in normal use (it is a safety valve, not a throttle). Check with a load test (k6) on a staging copy before a large wave; for it, raise `RATE_LIMIT_PER_IP` (all virtual users come from one address).
+Keep `JOB_CONCURRENCY + HEAVY_JOB_CONCURRENCY` at or below `DB_WORKER_POOL_MAX`, and `MAX_CONCURRENT_REQUESTS` well above what one instance serves in normal use (it is a safety valve, not a throttle). Check with the load tests (k6) of `load/` on a staging copy before a large wave (CAWI, CATI and CAPI; see `load/README.md`); for it, raise `RATE_LIMIT_PER_IP` (all virtual users come from one machine).
 
 ## Settings
 

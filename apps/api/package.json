@@ -20,7 +20,8 @@
     "test:mssql": "vitest run --config vitest.mssql.config.ts",
     "start:worker": "node dist/worker.js",
     "dev:worker": "tsx watch src/worker.ts",
-    "db:seed-demo": "tsx src/db/seed-demo.ts"
+    "db:seed-demo": "tsx src/db/seed-demo.ts",
+    "db:load-setup": "tsx src/db/load-setup.ts"
   },
   "dependencies": {
     "@azure/storage-blob": "12.34.0",

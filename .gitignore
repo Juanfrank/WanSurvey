@@ -9,8 +9,8 @@ test-results
 playwright-report
 dump.rdb
 
-# Written by apps/api/scripts/load-setup.ts
-load/sync-users.json
+# Written by apps/api/src/db/load-setup.ts
+load/users.json
 apps/api/.exports/
 out/
 .exports/
