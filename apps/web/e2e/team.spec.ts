@@ -231,7 +231,11 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await page
     .getByRole('combobox', { name: 'Time zone of new projects' })
     .selectOption('America/Lima');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page
+    .locator('form')
+    .filter({ has: page.getByRole('combobox', { name: 'Time zone of new projects' }) })
+    .getByRole('button', { name: 'Save', exact: true })
+    .click();
   await expect(page.getByText('Organisation saved.')).toBeVisible();
   await shot(page, 'admin-organisation');
   await expectAccessible(page);
