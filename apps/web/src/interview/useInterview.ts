@@ -21,6 +21,13 @@ import {
   type NewOp,
 } from './store.js';
 import { Syncer } from './sync.js';
+import {
+  IdbSegmentStore,
+  SegmentRecorder,
+  drawnLocally,
+  flushSegments,
+  recorderMime,
+} from './audio.js';
 
 export interface InterviewPayload {
   interview: {
@@ -53,6 +60,8 @@ export interface InterviewPayload {
   settings?: {
     capi?: { gps: 'off' | 'start_end'; gpsNotice: string };
     shortcuts?: ShortcutSettings;
+    /** Whether this interview is recorded, and what to ask before (ADR 0001, decision 5). */
+    audio?: { record: boolean; consentText?: string; consentVersion?: number };
   };
   lastSeq: number;
   serverTime: string;
@@ -151,7 +160,20 @@ async function localPayload(
     context: m.context as InterviewPayload['context'],
     compiled: v.compiled as CompiledQuestionnaire,
     ...(c
-      ? { settings: { capi: c.capi, ...(c.shortcuts ? { shortcuts: c.shortcuts } : {}) } }
+      ? {
+          settings: {
+            capi: c.capi,
+            ...(c.shortcuts ? { shortcuts: c.shortcuts } : {}),
+            audio:
+              c.audio && (await drawnLocally(local.id, c.audio.samplePercent))
+                ? {
+                    record: true,
+                    consentText: c.audio.consentText,
+                    consentVersion: c.audio.consentVersion,
+                  }
+                : { record: false },
+          },
+        }
       : {}),
     lastSeq: local.acked,
     serverTime: new Date().toISOString(),
@@ -192,6 +214,9 @@ export function useInterview(id: string) {
   /** The case is downloaded to this device (offline work). */
   const [onDevice, setOnDevice] = useState(false);
   const [, setTick] = useState(0);
+  /** Recording of the interview: not asked, waiting for the respondent's answer, on, or stopped. */
+  const [audio, setAudio] = useState<'off' | 'ask' | 'recording' | 'declined'>('off');
+  const audioRef = useRef<{ store: IdbSegmentStore; recorder: SegmentRecorder } | null>(null);
   const ref = useRef<{
     store: InterviewStore;
     syncer: Syncer;
@@ -270,6 +295,58 @@ export function useInterview(id: string) {
     [],
   );
 
+  /** Sends the segments waiting on this device; harmless to call at any time. */
+  const flushAudio = useCallback(async () => {
+    const a = audioRef.current;
+    if (a) await flushSegments(a.store, id);
+  }, [id]);
+
+  /** Starts the recorder (consent already given) and sends what an earlier session left. */
+  const startAudio = useCallback(async () => {
+    const store = audioRef.current?.store ?? new IdbSegmentStore();
+    const recorder = new SegmentRecorder(id, store, () => void flushSegments(store, id));
+    audioRef.current = { store, recorder };
+    if (await recorder.start()) {
+      setAudio('recording');
+      // A connection that comes back sends what waited for it.
+      window.addEventListener('online', () => void flushSegments(store, id));
+    } else {
+      setAudio('declined');
+    }
+    void flushSegments(store, id);
+  }, [id]);
+
+  const initAudio = useCallback(
+    async (p: InterviewPayload) => {
+      const a = p.settings?.audio;
+      if (!a?.record || p.interview.mode !== 'CAPI' || !recorderMime()) return;
+      const store = new IdbSegmentStore();
+      audioRef.current = { store, recorder: new SegmentRecorder(id, store) };
+      const meta = await store.meta(id);
+      if (!meta.decided) setAudio('ask');
+      else if (meta.granted) await startAudio();
+      else setAudio('declined');
+    },
+    [id, startAudio],
+  );
+
+  /** The respondent's answer: kept as paradata with the version of the text, then acted on. */
+  const answerConsent = useCallback(
+    async (granted: boolean) => {
+      const a = audioRef.current;
+      const version = payload?.settings?.audio?.consentVersion ?? 1;
+      if (!a) return;
+      await a.store.setMeta(id, { decided: true, granted });
+      record([paradata('audio_consent', { granted, version })]);
+      if (granted) await startAudio();
+      else {
+        await a.recorder.stop();
+        setAudio('declined');
+      }
+    },
+    [id, payload, record, paradata, startAudio],
+  );
+
   // Load: the server copy, or this device's when it has changes the server lacks.
   useEffect(() => {
     let cancelled = false;
@@ -328,6 +405,7 @@ export function useInterview(id: string) {
         record([paradata('enter_question', { key: s.currentKey(), resumed: !fresh })]);
         if (fresh && p.settings?.capi?.gps === 'start_end' && p.interview.mode === 'CAPI')
           void position().then((at) => record([paradata('gps', { when: 'start', ...at })]));
+        void initAudio(p);
         void keepStorage();
         setLowSpace(await lowOnSpace());
       } catch (e) {
@@ -338,7 +416,7 @@ export function useInterview(id: string) {
       cancelled = true;
       store?.close();
     };
-  }, [id, record, paradata]);
+  }, [id, record, paradata, initAudio]);
 
   /** After every change in the runner: answer history, navigation paradata, then save. */
   const onChange = useCallback(() => {
@@ -455,6 +533,11 @@ export function useInterview(id: string) {
     const r = ref.current!;
     if (payload?.settings?.capi?.gps === 'start_end' && payload.interview.mode === 'CAPI')
       record([paradata('gps', { when: 'end', ...(await position()) })]);
+    // The recording ends with the interview; what is on the device goes up when it can.
+    if (audioRef.current) {
+      await audioRef.current.recorder.stop();
+      setAudio('off');
+    }
     await r.writes;
     const offline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
     // Everything must be acknowledged first; a send already under way is waited for.
@@ -483,6 +566,7 @@ export function useInterview(id: string) {
         body: { deviceId: await r.store.deviceId(), ...body },
       });
       await r.store.remove(id);
+      void flushAudio();
       if (local?.meta)
         await r.store.patchCase(local.meta.caseId, {
           status: 'done',
@@ -493,7 +577,7 @@ export function useInterview(id: string) {
       if (canQueue && isOffline(e)) return queue();
       throw e;
     }
-  }, [id, sync, payload, record, paradata]);
+  }, [id, sync, payload, record, paradata, flushAudio]);
 
   return {
     payload,
@@ -512,5 +596,8 @@ export function useInterview(id: string) {
     setLanguage,
     submit,
     sync,
+    audio,
+    answerConsent,
+    stopRecording: () => answerConsent(false),
   };
 }

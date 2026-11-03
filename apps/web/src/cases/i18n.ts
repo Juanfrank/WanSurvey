@@ -429,6 +429,14 @@ export const casesEn = {
     expiryHelp:
       'Counted from the assignment; reassigning starts again. A case not finished in time closes as Expired, leaves the work lists and can be reopened by a supervisor.',
     capiTitle: 'Face-to-face interviewing',
+    audioTitle: 'Recording of interviews',
+    audioHelp:
+      'To check the quality of the interviews, a share of the face-to-face interviews can be recorded, always after the respondent agrees. Agree the legal basis, the wording, the retention period and who may listen with your legal area before turning it on. Nothing is recorded while this is off.',
+    audioEnabled: 'Record a share of the interviews (asks for consent first)',
+    audioPercent: '% of the interviews recorded',
+    audioRetention: 'Days the recordings are kept after the interview is decided',
+    audioConsent:
+      'What the respondent is told and asked (version {{version}}; it goes up when the text changes)',
     gps: 'Record the device’s location at the start and end of each interview',
     gpsNotice: 'Notice shown to interviewers about the location',
     save: 'Save settings',
@@ -874,6 +882,14 @@ export const casesEs: CasesCatalogue = {
     expiryHelp:
       'Se cuentan desde la asignación; al reasignar, el plazo empieza de nuevo. Un caso no terminado a tiempo se cierra como Vencido, sale de las listas de trabajo y un supervisor puede reabrirlo.',
     capiTitle: 'Entrevistas en persona',
+    audioTitle: 'Grabación de entrevistas',
+    audioHelp:
+      'Para controlar la calidad se puede grabar una parte de las entrevistas en persona, siempre después de que la persona acepte. Antes de activarlo, acuerde con su área jurídica la base legal, el texto, el plazo de conservación y quién puede escuchar. Mientras esté apagado no se graba nada.',
+    audioEnabled: 'Grabar una parte de las entrevistas (pide consentimiento antes)',
+    audioPercent: '% de las entrevistas grabadas',
+    audioRetention: 'Días que se conservan las grabaciones después de decidida la entrevista',
+    audioConsent:
+      'Lo que se le dice y pregunta a la persona (versión {{version}}; sube cuando cambia el texto)',
     gps: 'Registrar la ubicación del dispositivo al inicio y al final de cada entrevista',
     gpsNotice: 'Aviso a los entrevistadores sobre la ubicación',
     save: 'Guardar configuración',

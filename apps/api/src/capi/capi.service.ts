@@ -149,7 +149,21 @@ export class CapiService implements OnModuleInit {
     }
     return {
       project: { id: projectId, name: projectName },
-      settings: { capi: settings.capi, shortcuts: settings.shortcuts },
+      settings: {
+        capi: settings.capi,
+        shortcuts: settings.shortcuts,
+        // What a device needs to draw, as the server does, whether an interview it starts
+        // offline is recorded (the draw depends only on the interview's id).
+        ...(settings.audio.enabled && settings.audio.consentText.trim()
+          ? {
+              audio: {
+                samplePercent: settings.audio.samplePercent,
+                consentText: settings.audio.consentText,
+                consentVersion: settings.audio.consentVersion,
+              },
+            }
+          : {}),
+      },
       versions: [...versions.values()].map((v) => ({
         id: v.id,
         version: v.version,

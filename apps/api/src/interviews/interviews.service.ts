@@ -1,3 +1,4 @@
+import { drawFor } from '../audio/audio.service.js';
 import {
   BadRequestException,
   ConflictException,
@@ -581,7 +582,12 @@ export class InterviewsService {
       compiled,
       settings: await (
         settings ? Promise.resolve(settings) : this.cases.settings(t, row.projectId)
-      ).then((x) => ({ capi: x.capi, shortcuts: x.shortcuts })),
+      ).then((x) => ({
+        capi: x.capi,
+        shortcuts: x.shortcuts,
+        // Recording is asked for only when the project has it on and this interview was drawn.
+        audio: drawFor(row.id, x.audio, row.mode),
+      })),
       lastSeq: seq ?? 0,
       serverTime: new Date().toISOString(),
     };

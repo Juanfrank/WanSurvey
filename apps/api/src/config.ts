@@ -278,6 +278,8 @@ const Env = z.object({
   AZURE_STORAGE_ACCOUNT_NAME: optionalText(24),
   /** The container; with a connection string (Azurite) alone, 'exports' if not given. */
   AZURE_STORAGE_CONTAINER: optionalText(63),
+  /** Container of the interview recordings in the same account (private, never signed links). */
+  AZURE_STORAGE_AUDIO_CONTAINER: z.string().min(3).max(63).default('interview-audio'),
   /** The user-assigned managed identity's client id (App Service sets no default one). */
   AZURE_CLIENT_ID: optionalText(100),
   /** …or a connection string (Azurite in development and tests). */

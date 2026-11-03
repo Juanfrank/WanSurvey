@@ -31,6 +31,11 @@ export const reviewEn = {
     round: 'round {{n}}',
   },
   risk: 'Risk {{n}}',
+  audio: {
+    title: 'Interview recording',
+    length: '{{parts}} parts, about {{seconds}} s',
+    part: 'Part {{n}} of {{of}}',
+  },
   flags: {
     speeding: 'Speeding',
     straightlining: 'Straight-lining',
@@ -157,6 +162,11 @@ export const reviewEs: ReviewCatalogue = {
     round: 'ronda {{n}}',
   },
   risk: 'Riesgo {{n}}',
+  audio: {
+    title: 'Grabación de la entrevista',
+    length: '{{parts}} partes, unos {{seconds}} s',
+    part: 'Parte {{n}} de {{of}}',
+  },
   flags: {
     speeding: 'Demasiado rápida',
     straightlining: 'Respuestas en línea',

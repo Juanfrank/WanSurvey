@@ -50,6 +50,8 @@ export const PERMISSIONS = [
   'audit.export',
   /** Create and revoke the keys of the integration API. */
   'apikeys.manage',
+  /** Listen to the recordings of interviews (always written to the activity log). */
+  'audio.listen',
   'pii.view',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
@@ -92,6 +94,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'pii.view',
   ],
   supervisor: [
+    'audio.listen',
     'tenant.read',
     'users.read',
     'projects.read',
@@ -108,6 +111,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'pii.view',
   ],
   reviewer: [
+    'audio.listen',
     'tenant.read',
     'projects.read',
     'questionnaires.read',

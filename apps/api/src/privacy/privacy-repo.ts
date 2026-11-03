@@ -53,6 +53,8 @@ export interface PrivacyTx extends CasesTx {
   ): Promise<{ id: string; answers: unknown; state: unknown; compiled: unknown }[]>;
   scrubInterview(id: string, answers: unknown, state: unknown, now: Date): Promise<void>;
   eraseHistory(interviewId: string, names: string[]): Promise<void>;
+  /** Deletes the recordings of the interviews: each file through `remove`, then its row. */
+  eraseAudio(interviewIds: string[], remove: (key: string) => Promise<void>): Promise<number>;
   mismatches(caseId: string): Promise<MismatchRow[]>;
   setMismatch(
     id: string,
@@ -255,6 +257,27 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
       })
       .where('id', '=', id)
       .execute();
+  }
+
+  async eraseAudio(interviewIds: string[], remove: (key: string) => Promise<void>) {
+    if (!interviewIds.length) return 0;
+    const rows = await this.xtx
+      .selectFrom('interview_audio')
+      .select(['id', 'storage_key'])
+      .where('interview_id', 'in', interviewIds)
+      .execute();
+    // The files first: a failure leaves the rows, so the erasure can be repeated.
+    for (const r of rows) await remove(r.storage_key);
+    if (rows.length)
+      await this.xtx
+        .deleteFrom('interview_audio')
+        .where(
+          'id',
+          'in',
+          rows.map((r) => r.id),
+        )
+        .execute();
+    return rows.length;
   }
 
   async eraseHistory(interviewId: string, names: string[]) {

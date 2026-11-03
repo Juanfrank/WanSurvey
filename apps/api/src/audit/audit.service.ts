@@ -84,7 +84,9 @@ export type AuditAction =
   | 'webhook.updated'
   | 'webhook.deleted'
   | 'webhook.rotated'
-  | 'webhook.disabled';
+  | 'webhook.disabled'
+  | 'audio.listened'
+  | 'audio.deleted';
 
 export interface AuditEntry {
   action: AuditAction;

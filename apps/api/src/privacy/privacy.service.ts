@@ -12,6 +12,7 @@ import type { Question } from '@wansurvey/schema';
 import { AuditService } from '../audit/audit.service.js';
 import { can, type AuthContext } from '../common/auth-context.js';
 import { CasesService } from '../cases/cases.service.js';
+import { AudioService } from '../audio/audio.service.js';
 import { Engine } from '../db/engine.js';
 import { PRIVACY_REPO, type PrivacyRepo, type PrivacyTx } from './privacy-repo.js';
 import { ImportMapping, type ImportReport } from '../cases/sample-mapping.js';
@@ -59,6 +60,7 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
     private readonly cases: CasesService,
     private readonly audit: AuditService,
     private readonly jobs: JobsService,
+    private readonly audio: AudioService,
     @Inject(PROCESS_ROLE) private readonly role: ProcessRole,
   ) {}
 
@@ -192,6 +194,11 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
       await t.scrubInterview(iv.id, stripKeys(iv.answers, names), stripKeys(iv.state, names), now);
       await t.eraseHistory(iv.id, [...names]);
     }
+    // A voice is personal data too: the recordings of these interviews go with them.
+    const recordings = await t.eraseAudio(
+      ivs.map((iv) => iv.id),
+      (key) => this.audio.removeFile(key),
+    );
     // Double-entry differences keep both keyed values: personal ones go, rosters lose theirs.
     for (const m of await t.mismatches(caseId)) {
       const isGone = personal.has(m.variable);
@@ -214,6 +221,7 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
         reason,
         interviews: ivs.length,
         contacts: gone,
+        ...(recordings ? { recordings } : {}),
         ...(note ? { note } : {}),
       },
     };

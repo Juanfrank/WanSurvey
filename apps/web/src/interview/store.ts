@@ -79,6 +79,8 @@ export interface DeviceCase {
   capi: { gps: 'off' | 'start_end'; gpsNotice: string };
   /** The project's keyboard shortcuts, kept for interviews started offline. */
   shortcuts?: ShortcutSettings;
+  /** Present when the project records interviews: what the device needs to draw and ask. */
+  audio?: { samplePercent: number; consentText: string; consentVersion: number };
 }
 
 export interface LocalInterview {

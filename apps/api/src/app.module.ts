@@ -23,6 +23,8 @@ import {
   SMS_PROVIDER,
   type SmsProvider,
 } from './sms/sms.js';
+import { AudioController } from './audio/audio.controller.js';
+import { AUDIO_STORAGE, AudioService, audioStorage } from './audio/audio.service.js';
 import { WebhooksController } from './webhooks/webhooks.controller.js';
 import { WebhooksService } from './webhooks/webhooks.service.js';
 import { AuditController } from './audit/audit.controller.js';
@@ -126,6 +128,8 @@ export interface AppModuleOptions {
   mailer?: Mailer;
   /** Replaces the configured SMS provider (tests keep the messages in memory). */
   sms?: SmsProvider;
+  /** Replaces the storage of interview recordings (tests). */
+  audioStorage?: ExportStorage;
   /** Replaces the configured geocoder (tests use a mock Nominatim). */
   geocoder?: Geocoder | null;
   /** The background worker runs the same services without HTTP (M1). */
@@ -175,6 +179,7 @@ export class AppModule {
         ApiKeysController,
         ExtController,
         WebhooksController,
+        AudioController,
         AuthController,
         SsoController,
         EntraCallbackController,
@@ -257,6 +262,8 @@ export class AppModule {
         AuditService,
         ApiKeysService,
         WebhooksService,
+        AudioService,
+        { provide: AUDIO_STORAGE, useValue: opts.audioStorage ?? audioStorage(config) },
         AuthService,
         SsoService,
         SsoConfigs,

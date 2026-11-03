@@ -305,6 +305,11 @@
     "slotSetting": false
   },
   {
+    "name": "AZURE_STORAGE_AUDIO_CONTAINER",
+    "value": "interview-audio",
+    "slotSetting": false
+  },
+  {
     "name": "HEALTH_ALLOWED_IPS",
     "value": "169.254.0.0/16",
     "slotSetting": false

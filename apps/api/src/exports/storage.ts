@@ -70,8 +70,8 @@ export class BlobStorage implements ExportStorage {
 
   constructor(private readonly container: ContainerClient) {}
 
-  static fromConfig(c: AppConfig) {
-    const name = c.AZURE_STORAGE_CONTAINER ?? 'exports';
+  static fromConfig(c: AppConfig, container?: string) {
+    const name = container ?? c.AZURE_STORAGE_CONTAINER ?? 'exports';
     if (c.AZURE_STORAGE_CONNECTION_STRING)
       return new BlobStorage(
         BlobServiceClient.fromConnectionString(

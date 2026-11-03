@@ -265,6 +265,73 @@ export function SettingsTab({ project }: { project: Project }) {
                   />
                 </label>
               </fieldset>
+              <fieldset className="flex flex-col gap-2" data-testid="audio-settings">
+                <legend className="mb-1 font-medium">{t('cases.settings.audioTitle')}</legend>
+                <p className="max-w-3xl text-sm text-slate-600">{t('cases.settings.audioHelp')}</p>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={form.audio.enabled}
+                    onChange={(e) =>
+                      setForm({ ...form, audio: { ...form.audio, enabled: e.target.checked } })
+                    }
+                  />
+                  {t('cases.settings.audioEnabled')}
+                </label>
+                {form.audio.enabled ? (
+                  <>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        className={`${controlCls} w-24`}
+                        value={form.audio.samplePercent}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            audio: { ...form.audio, samplePercent: Number(e.target.value) },
+                          })
+                        }
+                      />
+                      {t('cases.settings.audioPercent')}
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={3650}
+                        className={`${controlCls} w-24`}
+                        value={form.audio.retentionDays}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            audio: { ...form.audio, retentionDays: Number(e.target.value) },
+                          })
+                        }
+                      />
+                      {t('cases.settings.audioRetention')}
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span>
+                        {t('cases.settings.audioConsent', { version: form.audio.consentVersion })}
+                      </span>
+                      <textarea
+                        className={`${controlCls} min-h-[6rem]`}
+                        value={form.audio.consentText}
+                        maxLength={2000}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            audio: { ...form.audio, consentText: e.target.value },
+                          })
+                        }
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </fieldset>
             </>,
           )}
         </Tabs.Content>

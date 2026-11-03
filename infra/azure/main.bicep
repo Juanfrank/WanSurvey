@@ -116,6 +116,15 @@ resource exportsContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
   }
 }
 
+// Interview recordings (ADR 0001, decision 5): private, written and read through the API only.
+resource audioContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobs
+  name: 'interview-audio'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 // The app deletes files after EXPORT_RETENTION_DAYS (7); this catches any it missed.
 resource exportsLifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
   parent: storage
@@ -123,6 +132,25 @@ resource exportsLifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@
   properties: {
     policy: {
       rules: [
+        {
+          // Backstop for the nightly job: a project keeps recordings for at most 3650 days.
+          name: 'expire-interview-audio'
+          enabled: true
+          type: 'Lifecycle'
+          definition: {
+            filters: {
+              blobTypes: ['blockBlob']
+              prefixMatch: ['interview-audio/']
+            }
+            actions: {
+              baseBlob: {
+                delete: {
+                  daysAfterModificationGreaterThan: 3660
+                }
+              }
+            }
+          }
+        }
         {
           name: 'expire-exports'
           enabled: true

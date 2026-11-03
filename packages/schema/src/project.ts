@@ -13,6 +13,29 @@ export const CapiSettings = z.object({
 });
 export type CapiSettings = z.infer<typeof CapiSettings>;
 
+/**
+ * Recording of interviews for quality review (ADR 0001, decision 5). Off by default: nothing is
+ * recorded until a project turns it on, and then only with the respondent's consent, asked at
+ * the start of each interview with this text.
+ */
+export const AudioSettings = z.object({
+  enabled: z.boolean().default(false),
+  /** Share of the interviews recorded, drawn on the server for each interview. */
+  samplePercent: z.number().int().min(1).max(100).default(10),
+  /** What the respondent is told and asked; required to turn recording on. */
+  consentText: z.string().max(2000).default(''),
+  /** Raised whenever the wording changes, and kept with each consent given. */
+  consentVersion: z.number().int().min(1).max(10_000).default(1),
+  /** Days the recordings are kept after the interview is approved or rejected. */
+  retentionDays: z.number().int().min(1).max(3650).default(90),
+});
+/** What is accepted when a project changes its recording settings. */
+export const AudioSettingsInput = AudioSettings.refine(
+  (a) => !a.enabled || a.consentText.trim().length >= 20,
+  { message: 'The consent wording is needed to turn recording on', path: ['consentText'] },
+);
+export type AudioSettings = z.infer<typeof AudioSettings>;
+
 /** Legal grounds for e-mailing a sample (W4); nothing is sent until one is declared. */
 export const LAWFUL_BASES = ['consent', 'legitimate_interest', 'contract', 'public_task'] as const;
 export type LawfulBasis = (typeof LAWFUL_BASES)[number];
@@ -150,6 +173,7 @@ export const ProjectSettings = z.object({
   cati: CatiSettings.default(CatiSettings.parse({})),
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
+  audio: AudioSettings.default(AudioSettings.parse({})),
   /** Web surveys by e-mail. */
   cawi: CawiSettings.default(CawiSettings.parse({})),
   /** Paper forms keyed by data-entry clerks. */

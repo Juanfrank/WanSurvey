@@ -11,7 +11,11 @@ import { Syncer } from './sync.js';
 
 interface CheckoutResponse {
   project: { id: string; name: string };
-  settings: { capi: DeviceCase['capi']; shortcuts?: DeviceCase['shortcuts'] };
+  settings: {
+    capi: DeviceCase['capi'];
+    shortcuts?: DeviceCase['shortcuts'];
+    audio?: DeviceCase['audio'];
+  };
   versions: { id: string; version: number; compiled: unknown }[];
   cases: {
     caseId: string;
@@ -94,6 +98,7 @@ export function downloadCases(projectId: string, caseIds: string[]) {
         downloadedAt: existing?.downloadedAt ?? now,
         capi: r.settings.capi,
         ...(r.settings.shortcuts ? { shortcuts: r.settings.shortcuts } : {}),
+        ...(r.settings.audio ? { audio: r.settings.audio } : {}),
       });
     }
     return { downloaded: r.cases.length, refused: r.refused };

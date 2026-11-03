@@ -586,6 +586,19 @@ export interface MssqlSchema {
     created_at: Instant;
     delivered_at: InstantOrNull;
   };
+  interview_audio: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    interview_id: string;
+    segment: number;
+    storage_key: string;
+    content_type: string;
+    bytes: number;
+    duration_ms: number;
+    sha256: string;
+    uploaded_at: Instant;
+  };
   api_keys: {
     id: string;
     tenant_id: string;

@@ -14,6 +14,7 @@ import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
+import { useMe } from '../routes/AppLayout.js';
 import { Button } from '../routes/ui.js';
 import { FlagChips, minutes } from './ReviewTab.js';
 
@@ -217,6 +218,7 @@ export function ReviewPage() {
           ))}
         </div>
       </header>
+      <AudioPlayer projectId={projectId} interviewId={interviewId} />
       <p role="status" aria-live="polite" className="empty:hidden" data-testid="review-message">
         {message}
       </p>
@@ -609,5 +611,52 @@ function CorrectDialog({
         </div>
       </form>
     </Dialog>
+  );
+}
+
+interface Segment {
+  segment: number;
+  durationMs: number;
+}
+
+/**
+ * The recording of an interview, for those who may listen (`audio.listen`): the segments play
+ * one after another from the server, which streams them and logs each listening.
+ */
+function AudioPlayer({ projectId, interviewId }: { projectId: string; interviewId: string }) {
+  const { t } = useTranslation();
+  const me = useMe();
+  const may = !!me.data?.permissions.includes('audio.listen');
+  const q = useQuery({
+    queryKey: ['interview-audio', interviewId],
+    queryFn: () => api<Segment[]>(`/projects/${projectId}/interviews/${interviewId}/audio`),
+    enabled: may,
+  });
+  const [i, setI] = useState(0);
+  const segments = q.data ?? [];
+  if (!may || !segments.length) return null;
+  const seconds = Math.round(segments.reduce((n, s) => n + s.durationMs, 0) / 1000);
+  return (
+    <section
+      aria-label={t('review.audio.title')}
+      className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3"
+      data-testid="audio-player"
+    >
+      <span className="font-medium">{t('review.audio.title')}</span>
+      <span className="text-sm text-slate-600">
+        {t('review.audio.length', { parts: segments.length, seconds })}
+      </span>
+      <audio
+        key={segments[i]!.segment}
+        controls
+        autoPlay={i > 0}
+        preload="none"
+        src={`/api/v1/projects/${projectId}/interviews/${interviewId}/audio/${segments[i]!.segment}`}
+        onEnded={() => setI((n) => (n + 1 < segments.length ? n + 1 : n))}
+      />
+      <span className="text-sm tabular-nums">
+        {t('review.audio.part', { n: i + 1, of: segments.length })}
+      </span>
+    </section>
   );
 }

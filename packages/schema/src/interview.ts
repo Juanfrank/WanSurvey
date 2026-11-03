@@ -99,6 +99,8 @@ export const PARADATA_TYPES = [
   'note_added',
   /** Device location at the start or end (projects with `capi.gps`). */
   'gps',
+  /** The respondent's answer to the request to record the interview (ADR 0001, decision 5). */
+  'audio_consent',
   /** Paper form date and duration as written on it (PAPI entry). */
   'paper_meta',
 ] as const;

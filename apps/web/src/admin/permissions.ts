@@ -56,6 +56,7 @@ export const PERMISSION_AREAS: { area: string; permissions: Permission[] }[] = [
       'interviews.review',
       'interviews.approve',
       'interviews.correct',
+      'audio.listen',
     ],
   },
   {

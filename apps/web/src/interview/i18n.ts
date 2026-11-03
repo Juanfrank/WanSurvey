@@ -1,5 +1,12 @@
 /** Strings for the interviewer screen (namespace `app`, key `interview`). */
 export const interviewEn = {
+  audio: {
+    title: 'Recording this interview',
+    yes: 'Yes, they agree',
+    no: 'No, do not record',
+    recording: 'Recording',
+    stop: 'Stop recording',
+  },
   title: 'Interview · case {{id}}',
   case: 'Case {{id}}',
   interviewer: 'Interviewer: {{name}}',
@@ -115,6 +122,13 @@ export const interviewEn = {
 export type InterviewCatalogue = typeof interviewEn;
 
 export const interviewEs: InterviewCatalogue = {
+  audio: {
+    title: 'Grabación de esta entrevista',
+    yes: 'Sí, está de acuerdo',
+    no: 'No, no grabar',
+    recording: 'Grabando',
+    stop: 'Dejar de grabar',
+  },
   title: 'Entrevista · caso {{id}}',
   case: 'Caso {{id}}',
   interviewer: 'Entrevistador: {{name}}',

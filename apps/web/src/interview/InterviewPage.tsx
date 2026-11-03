@@ -247,8 +247,36 @@ export function InterviewPage() {
             {t('device.gpsOn')}
           </span>
         ) : null}
+        {iv.audio === 'recording' ? (
+          <span className="flex items-center gap-2 text-xs" data-testid="recording">
+            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-rose-600" />
+            {t('interview.audio.recording')}
+            <button
+              type="button"
+              className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50"
+              onClick={() => void iv.stopRecording()}
+            >
+              {t('interview.audio.stop')}
+            </button>
+          </span>
+        ) : null}
         <SaveBadge state={iv.save} />
       </header>
+      {iv.audio === 'ask' ? (
+        <Dialog title={t('interview.audio.title')} onClose={() => void iv.answerConsent(false)}>
+          <div className="flex flex-col gap-4" data-testid="audio-consent">
+            <p className="whitespace-pre-line">{payload.settings?.audio?.consentText}</p>
+            <div className="flex gap-3">
+              <Button onClick={() => void iv.answerConsent(true)}>
+                {t('interview.audio.yes')}
+              </Button>
+              <Button variant="secondary" onClick={() => void iv.answerConsent(false)}>
+                {t('interview.audio.no')}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
       {payload.interview.status === 'returned' ? (
         <ReturnedComments interviewId={interviewId} />
       ) : null}

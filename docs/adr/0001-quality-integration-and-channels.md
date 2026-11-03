@@ -1,6 +1,6 @@
 # ADR 0001: Audit, fraud signals, integrations and new channels
 
-- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)) and 4 (SMS, see [operations](../operations.md)); the rest pending
+- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)) 4 (SMS) and 5 (interview audio, off by default; see [operations](../operations.md)); the rest pending
 - **Date:** 2026-11-02
 - **Deciders:** product owner
 - **Scope:** what to build next, in which order and in which form. Decisions are built in the order given below.
@@ -116,6 +116,7 @@ Not decided here, and kept out on purpose: survey weighting and calibration, SCI
 - **Listening.** Only in the review screen, for a new permission `audio.listen`, streamed by the API with range requests; every listening is written to the audit log (`audio.listened`).
 - **Life of the files.** Kept a project-set number of days after the interview is approved (90 by default), deleted by the nightly retention job, with a Blob lifecycle rule as a backstop in `main.bicep`. The erasure of a data subject deletes the audio of their interviews (the test of decision 1 covers it). At rest, Azure's storage encryption; a customer-managed key can follow.
 - The risk score of decision 2 can send flagged interviews to the audio queue first.
+- _As built:_ whole interviews only (not marked questions), CAPI only, the sample drawn by the interview's id (also on the device, for interviews started offline), segments restarted every 30 seconds so each plays on its own, and the legal sign-off still pending: the feature is off in every project until one turns it on.
 
 **Benefit.** The strongest check against fabricated interviews, and the evidence for a disputed one.
 

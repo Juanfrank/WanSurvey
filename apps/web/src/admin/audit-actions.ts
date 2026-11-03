@@ -81,4 +81,6 @@ export const AUDIT_ACTIONS = [
   'webhook.deleted',
   'webhook.rotated',
   'webhook.disabled',
+  'audio.listened',
+  'audio.deleted',
 ] as const;

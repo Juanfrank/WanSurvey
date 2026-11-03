@@ -23,6 +23,7 @@ import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import {
   ASSIGNMENT_MODES,
+  AudioSettingsInput,
   CapiSettings,
   CatiSettings,
   CawiSettings,
@@ -76,6 +77,7 @@ const ProjectPatch = ProjectFields.partial().extend({
       assignmentMode: z.enum(ASSIGNMENT_MODES),
       cati: CatiSettings,
       capi: CapiSettings,
+      audio: AudioSettingsInput,
       cawi: CawiSettings,
       papi: PapiSettings,
       review: ReviewSettings,
@@ -168,6 +170,15 @@ export class ProjectsController {
     @Body(new ZodPipe(ProjectPatch)) body: z.infer<typeof ProjectPatch>,
   ) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
+      // Each wording of the recording consent has its own version, kept with every answer.
+      if (body.settings?.audio) {
+        const current = await t.project(id);
+        if (!current) throw new NotFoundException('Project not found');
+        const before = projectSettings(current.settings).audio;
+        const next = body.settings.audio;
+        if (next.consentText !== before.consentText && next.consentVersion <= before.consentVersion)
+          body.settings.audio = { ...next, consentVersion: before.consentVersion + 1 };
+      }
       const project = await t.updateProject(id, body);
       if (!project) throw new NotFoundException('Project not found');
       await t.audit(

@@ -136,6 +136,7 @@ export const adminEn = {
     email_templates: 'E-mail templates',
     cawi_waves: 'Web survey campaigns',
     audit_read: 'See the activity log',
+    audio_listen: 'Listen to interview recordings',
     audit_export: 'Export the activity log',
     apikeys_manage: 'Manage the keys of the integration API',
     pii_view: 'See personal data',
@@ -249,6 +250,7 @@ export const adminEn = {
       audit: 'Activity log',
       apikey: 'API keys',
       webhook: 'Webhooks',
+      audio: 'Recordings',
     },
   },
 };
@@ -390,6 +392,7 @@ export const adminEs: typeof adminEn = {
     email_templates: 'Plantillas de correo',
     cawi_waves: 'Campañas de encuesta web',
     audit_read: 'Ver la bitácora',
+    audio_listen: 'Escuchar las grabaciones de entrevistas',
     audit_export: 'Exportar la bitácora',
     apikeys_manage: 'Administrar las claves de la API de integración',
     pii_view: 'Ver datos personales',
@@ -505,6 +508,7 @@ export const adminEs: typeof adminEn = {
       audit: 'Bitácora',
       apikey: 'Claves de API',
       webhook: 'Webhooks',
+      audio: 'Grabaciones',
     },
   },
 };
