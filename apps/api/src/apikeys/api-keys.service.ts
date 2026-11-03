@@ -4,6 +4,7 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -72,7 +73,7 @@ export class ApiKeysService {
   constructor(
     private readonly engine: Engine,
     private readonly audit: AuditService,
-    private readonly throttle: ThrottlerStorage,
+    @Inject(ThrottlerStorage) private readonly throttle: ThrottlerStorage,
   ) {}
 
   /** Creates a key; the secret is returned this once and never stored. */
