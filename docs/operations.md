@@ -76,4 +76,17 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 
 ## Load testing
 
+### SMS invitations
+
+A web survey wave can go **by SMS** instead of by e-mail (ADR 0001, decision 4): choose _By SMS_ when creating the wave. It uses the same machinery as the e-mail waves (lawful basis declared first, the dispatcher, reminders, the funnel, the personal link) and differs in four things.
+
+- **Who gets it.** Cases with a valid _phone_ contact in E.164 form (`+51987654321`; the import's default country code makes them so), whose consent does not say `sms: false`, and that is not on the do-not-contact list. The preview counts what is left out and why (no number, not E.164, opted out, on the list).
+- **When.** Only inside the project's calling hours (**Settings → Telephone interviewing**) in the respondent's time zone (`timezone` of the sample, else the project's); outside them the message waits for the next run of the dispatcher.
+- **What it costs.** _Send now_ first shows the recipients, the message segments (160 characters, 70 with an accent outside the GSM set; 153 and 67 when joined) and the estimated cost from `SMS_PRICE_PER_SEGMENT`. A wave to more than `SMS_CONFIRM_ABOVE` numbers (500 by default) is refused until it is confirmed a second time.
+- **Opting out.** Every message ends with _Responda BAJA_ (_Reply STOP_). The provider hands replies to `POST /api/v1/webhooks/sms` (`{"from":"+51…","text":"BAJA"}`, header `x-webhook-secret: $SMS_WEBHOOK_SECRET`); a stop word (BAJA, STOP, CANCELAR, PARAR, UNSUBSCRIBE…) puts the number on the do-not-contact list, in every organisation that wrote to it, and the invitations still waiting for it are not sent.
+
+Settings: `SMS_PROVIDER` (`console` logs, `file` writes JSON files to `SMS_OUTBOX_DIR`, `acs` sends through Azure Communication Services with `SMS_CONNECTION_STRING` and `SMS_FROM`, best as Key Vault references), `SMS_PRICE_PER_SEGMENT`, `SMS_CONFIRM_ABOVE`, `SMS_WEBHOOK_SECRET`.
+
+Before the first real wave: confirm that Azure Communication Services can send to the countries of the fieldwork and which sender (number, short code or alphanumeric ID) each country accepts; register the sender where the operators require it; and read the telecom rules of those countries on consent and opt-out. The ACS adapter signs its REST call as the service documents and is tested against that description, but it has **not been run against a live resource**: send a few messages to your own numbers first. Delivery receipts are not read (ACS reports them through Event Grid): the invitation stays _sent_, and a number that does not exist shows up only as no answer.
+
 The k6 scripts that measured a CAWI burst of 50 completes per second and 300 interviewers syncing were removed with the PostgreSQL code (they are in the git history, before commit `3484e04`'s successor that removed `load/`). Measure again on a staging copy before large waves.

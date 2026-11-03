@@ -1,6 +1,6 @@
 # ADR 0001: Audit, fraud signals, integrations and new channels
 
-- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) and 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)); the rest pending
+- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)) and 4 (SMS, see [operations](../operations.md)); the rest pending
 - **Date:** 2026-11-02
 - **Deciders:** product owner
 - **Scope:** what to build next, in which order and in which form. Decisions are built in the order given below.
@@ -99,6 +99,7 @@ Not decided here, and kept out on purpose: survey weighting and calibration, SCI
 - Send only inside the respondent's allowed hours (the CATI calling hours already know the time zone).
 - Cost guard: the wave preview shows recipients, message segments and the estimated cost from a price setting; sending above a threshold asks for a second confirmation.
 - New settings (`SMS_PROVIDER`, the sender, the credentials, best as Key Vault references) go to the `appconfig/` templates, which a test keeps in step with the code.
+- _As built:_ the provider is Azure Communication Services through its REST API (no SDK), plus console, file and in-memory adapters; the SMS text is fixed per language (short, with the link and the way out) and is not yet editable per project; delivery receipts are not read; the ACS adapter has not been run against a live resource.
 
 **Benefit.** Higher response in populations without a working e-mail address, with a link that opens on the phone they already have.
 

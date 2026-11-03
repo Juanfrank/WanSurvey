@@ -38,6 +38,11 @@ export class Engine implements OnModuleDestroy {
     return this.sql.invitationTenant(id);
   }
 
+  /** The organisations that invited an address (e-mail or number). */
+  tenantsInvitedAt(address: string): Promise<string[]> {
+    return this.sql.tenantsInvitedAt(address);
+  }
+
   /** The organisations with invitations or reminders due. */
   tenantsWithMailDue(): Promise<string[]> {
     return this.sql.tenantsWithMailDue();

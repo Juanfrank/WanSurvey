@@ -37,7 +37,7 @@ interface Wave {
   filter: string | null;
   createdAt: string;
   funnel: Funnel;
-  channel: 'email' | 'links';
+  channel: 'email' | 'sms' | 'links';
 }
 
 const STEPS = [
@@ -361,7 +361,7 @@ function WavesSection({
   const [filter, setFilter] = useState('');
   const [reminders, setReminders] = useState('3, 7');
   const [toCati, setToCati] = useState(false);
-  const [channel, setChannel] = useState<'email' | 'links'>('email');
+  const [channel, setChannel] = useState<'email' | 'sms' | 'links'>('email');
   const [linksOf, setLinksOf] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const create = useMutation({
@@ -389,24 +389,56 @@ function WavesSection({
     onError: (e) => setMessage(localiseError(t, e)),
   });
   const send = useMutation({
-    mutationFn: (id: string) =>
+    mutationFn: ({ id, confirm }: { id: string; confirm?: boolean }) =>
       api<{
         queued: number;
         links?: number;
-        skipped: { noEmail: number; optedOut: number; suppressed: number };
-      }>(`/projects/${projectId}/waves/${id}/send`, { method: 'POST' }),
-    onSuccess: async (r, id) => {
+        skipped: {
+          noEmail?: number;
+          noPhone?: number;
+          badNumber?: number;
+          optedOut: number;
+          suppressed: number;
+        };
+      }>(`/projects/${projectId}/waves/${id}/send`, {
+        method: 'POST',
+        body: { confirm: !!confirm },
+      }),
+    onSuccess: async (r, { id }) => {
       if (r.links !== undefined) {
         setMessage(t('cawi.links.made', { count: r.links }));
         setLinksOf(id);
       } else
         setMessage(
-          `${t('cawi.waves.queued', { count: r.queued })} ${t('cawi.waves.skipped', r.skipped)}`,
+          `${t('cawi.waves.queued', { count: r.queued })} ${t('cawi.waves.skipped', {
+            noEmail:
+              (r.skipped.noEmail ?? 0) + (r.skipped.noPhone ?? 0) + (r.skipped.badNumber ?? 0),
+            optedOut: r.skipped.optedOut,
+            suppressed: r.skipped.suppressed,
+          })}`,
         );
       await qc.invalidateQueries({ queryKey: ['waves', projectId] });
     },
     onError: (e) => setMessage(localiseError(t, e)),
   });
+
+  /** An SMS wave costs money: what it would do and cost is shown first, and a large one asks twice. */
+  const sendSms = async (w: Wave) => {
+    try {
+      const p = await api<{
+        recipients: number;
+        estimatedSegments: number;
+        estimatedCost: number;
+        needsConfirmation: boolean;
+        confirmAbove: number;
+      }>(`/projects/${projectId}/waves/${w.id}/preview`);
+      if (!window.confirm(t('cawi.sms.confirm', { name: w.name, ...p }))) return;
+      if (p.needsConfirmation && !window.confirm(t('cawi.sms.confirmBig', p))) return;
+      send.mutate({ id: w.id, confirm: p.needsConfirmation });
+    } catch (e) {
+      setMessage(localiseError(t, e));
+    }
+  };
 
   return (
     <section aria-labelledby="cawi-waves" className="flex flex-col gap-4">
@@ -440,7 +472,9 @@ function WavesSection({
                         ? t('cawi.links.make', { name: w.name })
                         : t('cawi.waves.send', { name: w.name })
                     }
-                    onClick={() => send.mutate(w.id)}
+                    onClick={() =>
+                      w.channel === 'sms' ? void sendSms(w) : send.mutate({ id: w.id })
+                    }
                   >
                     {w.channel === 'links'
                       ? t('cawi.links.makeShort')
@@ -516,7 +550,7 @@ function WavesSection({
         </div>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1 font-medium">{t('cawi.links.channel')}</legend>
-          {(['email', 'links'] as const).map((c) => (
+          {(['email', 'sms', 'links'] as const).map((c) => (
             <label key={c} className="flex items-start gap-2">
               <input
                 type="radio"
@@ -534,7 +568,7 @@ function WavesSection({
             </label>
           ))}
         </fieldset>
-        {channel === 'email' ? (
+        {channel === 'email' || channel === 'sms' ? (
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={toCati} onChange={(e) => setToCati(e.target.checked)} />
             {t('cawi.waves.bouncesToCati')}

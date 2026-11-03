@@ -219,6 +219,13 @@ export class MssqlDatabase {
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
+  /** The organisations that invited this address (an SMS reply carries only the number). */
+  async tenantsInvitedAt(address: string): Promise<string[]> {
+    const res = await sql<{ tenant_id: string }>`
+      EXEC dbo.tenants_invited_at @address = ${address}`.execute(this.db);
+    return res.rows.map((r) => r.tenant_id.toLowerCase());
+  }
+
   /** The organisations with webhook deliveries due. */
   async tenantsWithWebhooksDue(): Promise<string[]> {
     const res = await sql<{ tenant_id: string }>`EXEC dbo.tenants_with_webhooks_due`.execute(

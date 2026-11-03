@@ -192,6 +192,9 @@ export interface CawiTx extends InterviewsTx {
     caseIds: string[],
   ): Promise<{ id: string; caseId: string; value: string; consent: unknown }[]>;
   suppressedEmails(): Promise<string[]>;
+  phoneContacts(
+    caseIds: string[],
+  ): Promise<{ id: string; caseId: string; value: string; consent: unknown }[]>;
   /** A case already invited in the wave is skipped. */
   insertInvitations(rows: NewInvitationRow[]): Promise<void>;
   waveLinkRows(
@@ -542,6 +545,28 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
         .select(['id', 'case_id', 'value', 'consent'])
         .where('case_id', 'in', caseIds.slice(i, i + 1000))
         .where('type', '=', 'email')
+        .where('valid', '=', true)
+        .orderBy('created_at')
+        .execute();
+      for (const r of rows)
+        out.push({
+          id: low(r.id),
+          caseId: low(r.case_id),
+          value: r.value,
+          consent: parse(r.consent),
+        });
+    }
+    return out;
+  }
+
+  async phoneContacts(caseIds: string[]) {
+    const out: { id: string; caseId: string; value: string; consent: unknown }[] = [];
+    for (let i = 0; i < caseIds.length; i += 1000) {
+      const rows = await this.mctx
+        .selectFrom('contacts')
+        .select(['id', 'case_id', 'value', 'consent'])
+        .where('case_id', 'in', caseIds.slice(i, i + 1000))
+        .where('type', '=', 'phone')
         .where('valid', '=', true)
         .orderBy('created_at')
         .execute();

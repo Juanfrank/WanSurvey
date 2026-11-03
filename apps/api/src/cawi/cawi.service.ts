@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import { uuidv7 } from 'uuidv7';
-import { projectSettings, type CawiTheme } from '@wansurvey/schema';
+import { projectSettings, withinHours, type CawiTheme } from '@wansurvey/schema';
 import { z } from 'zod';
 import { DisplayName } from '../common/zod.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
@@ -32,6 +32,16 @@ import {
 import { closedCode } from '../questionnaires/state.js';
 import { DeviceId, SubmitBody, SyncItem } from '../interviews/schemas.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
+import { caseTimezone } from '../cati/queue.js';
+import {
+  isE164,
+  isOptOut,
+  maskPhone,
+  SMS_PROVIDER,
+  segments,
+  smsText,
+  type SmsProvider,
+} from '../sms/sms.js';
 import {
   TEMPLATE_KINDS,
   defaultTemplate,
@@ -54,8 +64,8 @@ export const WaveBody = z.strictObject({
   reminderDays: z.array(z.number().int().min(1).max(90)).max(5).default([]),
   sendAt: z.iso.datetime({ offset: true }).optional(),
   bouncesToCati: z.boolean().default(false),
-  /** email: invitations are sent; links: a personal link per case, nothing sent. */
-  channel: z.enum(['email', 'links']).default('email'),
+  /** email or sms: invitations are sent; links: a personal link per case, nothing sent. */
+  channel: z.enum(['email', 'sms', 'links']).default('email'),
 });
 
 export const OpenLinkBody = z.strictObject({
@@ -107,6 +117,7 @@ export class CawiService implements OnModuleInit {
     private readonly runtime: InterviewsService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
   ) {}
 
   onModuleInit() {
@@ -273,10 +284,11 @@ export class CawiService implements OnModuleInit {
    * finished, with a usable e-mail address that is not suppressed, and only once the project
    * has declared its lawful basis for e-mailing (W4). The dispatcher sends them.
    */
-  async sendWave(t: CawiTx, ctx: AuthContext, projectId: string, waveId: string) {
+  async sendWave(t: CawiTx, ctx: AuthContext, projectId: string, waveId: string, confirm = false) {
     const settings = await this.cases.settings(t, projectId);
-    if ((await t.waveChannel(projectId, waveId)) === 'links')
-      return this.makeLinks(t, ctx, projectId, waveId);
+    const channel = await t.waveChannel(projectId, waveId);
+    if (channel === 'links') return this.makeLinks(t, ctx, projectId, waveId);
+    if (channel === 'sms') return this.sendSmsWave(t, ctx, projectId, waveId, confirm);
     if (!settings.cawi.lawfulBasis)
       throw new BadRequestException({
         code: 'NO_LAWFUL_BASIS',
@@ -322,6 +334,142 @@ export class CawiService implements OnModuleInit {
       rows.map((r) => ({ caseId: r.caseId, type: 'invited', details: { waveId: w.id } })),
     );
     return { queued: rows.length, skipped };
+  }
+
+  // -------------------------------------------------------------------------
+  // SMS (ADR 0001, decision 4)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Who an SMS wave would write to: the cases its rule lets through, each with a valid
+   * E.164 number the person has not refused and that is not on the list of those who asked
+   * to stop. The list is shared with e-mail (numbers and addresses cannot be mistaken).
+   */
+  private async smsPlan(
+    t: CawiTx,
+    projectId: string,
+    w: { questionnaireId: string; filter: string | null },
+    compiled: CompiledQuestionnaire,
+  ) {
+    const candidates = await this.candidatesOf(t, projectId, w);
+    const phones = await t.phoneContacts(candidates.map((c) => c.id));
+    const suppressed = new Set(await t.suppressedEmails());
+    const skipped = { noPhone: 0, badNumber: 0, suppressed: 0, optedOut: 0 };
+    const rows: { c: (typeof candidates)[number]; phone: { id: string; value: string } }[] = [];
+    for (const c of candidates) {
+      const all = phones.filter((p) => p.caseId === c.id);
+      const usable = all.filter((p) => (p.consent as { sms?: boolean }).sms !== false);
+      const valid = usable.filter((p) => isE164(p.value));
+      const open = valid.find((p) => !suppressed.has(p.value));
+      if (!all.length) skipped.noPhone++;
+      else if (!usable.length) skipped.optedOut++;
+      else if (!valid.length) skipped.badNumber++;
+      else if (!open) skipped.suppressed++;
+      if (open) rows.push({ c, phone: open });
+    }
+    return { rows, skipped, compiled };
+  }
+
+  /** What sending an SMS wave would do and cost, before it is sent. */
+  async previewSmsWave(t: CawiTx, projectId: string, waveId: string) {
+    const w = await t.lockWave(projectId, waveId);
+    if (!w) throw new NotFoundException('Wave not found');
+    if ((await t.waveChannel(projectId, waveId)) !== 'sms')
+      throw new BadRequestException({ code: 'NOT_SMS', message: 'This wave is not an SMS wave' });
+    const v = await this.runtime.latestVersion(t, projectId, w.questionnaireId, 'CAWI');
+    const plan = await this.smsPlan(t, projectId, w, v.compiled as CompiledQuestionnaire);
+    // The longest text a recipient could get: the link is as long as a real one.
+    const sample = smsText('invitation', 'es', {
+      link: this.clickUrl('x'.repeat(32)),
+      firstName: 'Nombre',
+    });
+    const seg = segments(sample).count;
+    const reminders = w.reminderDays.length;
+    const messages = plan.rows.length * (1 + reminders);
+    return {
+      recipients: plan.rows.length,
+      skipped: plan.skipped,
+      reminders,
+      segmentsPerMessage: seg,
+      estimatedSegments: messages * seg,
+      estimatedCost: Math.round(messages * seg * this.config.SMS_PRICE_PER_SEGMENT * 100) / 100,
+      confirmAbove: this.config.SMS_CONFIRM_ABOVE,
+      needsConfirmation: plan.rows.length > this.config.SMS_CONFIRM_ABOVE,
+    };
+  }
+
+  private async sendSmsWave(
+    t: CawiTx,
+    ctx: AuthContext,
+    projectId: string,
+    waveId: string,
+    confirm: boolean,
+  ) {
+    const settings = await this.cases.settings(t, projectId);
+    if (!settings.cawi.lawfulBasis)
+      throw new BadRequestException({
+        code: 'NO_LAWFUL_BASIS',
+        message: 'Declare the lawful basis for contacting this sample first',
+      });
+    const w = await t.lockWave(projectId, waveId);
+    if (!w) throw new NotFoundException('Wave not found');
+    if (w.status !== 'draft')
+      throw new ConflictException({ code: 'WAVE_SENT', message: 'This wave has been sent' });
+    const v = await this.runtime.latestVersion(t, projectId, w.questionnaireId, 'CAWI');
+    const compiled = v.compiled as CompiledQuestionnaire;
+    const plan = await this.smsPlan(t, projectId, w, compiled);
+    // A large wave costs real money: it is sent only on a second, explicit confirmation.
+    if (plan.rows.length > this.config.SMS_CONFIRM_ABOVE && !confirm)
+      throw new ConflictException({
+        code: 'CONFIRM_REQUIRED',
+        message: `This wave writes to ${plan.rows.length} numbers; confirm to send it`,
+        recipients: plan.rows.length,
+        confirmAbove: this.config.SMS_CONFIRM_ABOVE,
+      });
+    const rows: NewInvitationRow[] = plan.rows.map(({ c, phone }) => {
+      const { tokenHash, tokenEnc } = this.newToken();
+      return {
+        projectId,
+        questionnaireId: w.questionnaireId,
+        waveId: w.id,
+        caseId: c.id,
+        contactId: phone.id,
+        // The invitation's address: here, the number.
+        email: phone.value,
+        tokenHash,
+        tokenEnc,
+        language: this.languageOf(c.sample as Record<string, unknown>, compiled),
+      };
+    });
+    await t.insertInvitations(rows);
+    await t.setWaveStatus(w.id, 'sending');
+    await this.cases.events(
+      t,
+      ctx.userId,
+      rows.map((r) => ({
+        caseId: r.caseId,
+        type: 'invited',
+        details: { waveId: w.id, channel: 'sms' },
+      })),
+    );
+    return { queued: rows.length, skipped: plan.skipped };
+  }
+
+  /**
+   * A reply from a respondent, handed over by the provider: a stop word puts the number on the
+   * list of those never written to again, in every organisation that wrote to it.
+   */
+  async smsInbound(body: { from: string; text: string }) {
+    const from = body.from.replace(/[\s()-]/g, '');
+    if (!isOptOut(body.text) || !isE164(from)) return { optedOut: 0 };
+    let n = 0;
+    for (const tenantId of await this.engine.tenantsInvitedAt(from)) {
+      await this.repo.inTenant(tenantId, async (t) => {
+        await t.suppress(from, 'unsubscribe');
+        n++;
+      });
+    }
+    return { optedOut: n };
   }
 
   /**
@@ -452,7 +600,26 @@ export class CawiService implements OnModuleInit {
         await t.patchInvitation(inv.id, { status: 'suppressed', leaseUntil: null });
         return null;
       }
+      const channel =
+        inv.waveId &&
+        (await once(`channel:${inv.waveId}`, () => t.waveChannel(inv.projectId, inv.waveId!)));
       const c = inv.caseId ? await t.caseSample(inv.caseId) : null;
+      if (channel === 'sms') {
+        // Only inside the calling hours of the respondent's time zone; otherwise it waits.
+        const settings = await once(`settings:${inv.projectId}`, () =>
+          this.cases.settings(t, inv.projectId),
+        );
+        const project = await once(`project:${inv.projectId}`, () =>
+          this.cases.project(t, inv.projectId),
+        );
+        const sample = c ? this.cases.pii.read(c) : {};
+        const tz = caseTimezone((sample as Record<string, unknown>).timezone, project.timezone);
+        if (!withinHours(now, tz, settings.cati.callingHours)) {
+          await t.patchInvitation(inv.id, { leaseUntil: null });
+          return null;
+        }
+        return { sms: true as const, case: sample };
+      }
       const settings = await once(`settings:${inv.projectId}`, () =>
         this.cases.settings(t, inv.projectId),
       );
@@ -463,6 +630,7 @@ export class CawiService implements OnModuleInit {
     });
     if (!prepared) return false;
     const token = decryptField(inv.tokenEnc, this.config.ENCRYPTION_KEY);
+    if ('sms' in prepared) return this.sendSms(tenantId, inv, kind, now, prepared.case, token);
     const t = renderTemplate(prepared.template, {
       case: prepared.case,
       link: this.clickUrl(token),
@@ -482,6 +650,46 @@ export class CawiService implements OnModuleInit {
           'List-Unsubscribe': `<${this.unsubscribeUrl(token)}>`,
           'X-WanSurvey-Invitation': inv.id,
         },
+        idempotencyKey: `inv:${inv.id}:${n}`,
+      });
+    } catch (e) {
+      const attempts = inv.sendAttempts + 1;
+      await this.repo.inTenant(tenantId, (t) =>
+        t.patchInvitation(inv.id, {
+          sendAttempts: attempts,
+          lastError: (e as Error).message.slice(0, 500),
+          leaseUntil: null,
+          ...(attempts >= MAX_SEND_ATTEMPTS && kind === 'invitation' ? { status: 'failed' } : {}),
+        }),
+      );
+      return false;
+    }
+    await this.repo.inTenant(tenantId, (t) =>
+      t.patchInvitation(
+        inv.id,
+        kind === 'invitation'
+          ? { status: 'sent', sentAt: now, lastError: null, leaseUntil: null }
+          : { remindersSent: inv.remindersSent + 1, lastReminderAt: now, leaseUntil: null },
+      ),
+    );
+    return true;
+  }
+
+  /** One SMS: sent, and recorded the way an e-mail is. */
+  private async sendSms(
+    tenantId: string,
+    inv: InvitationRow,
+    kind: TemplateKind,
+    now: Date,
+    sample: Record<string, unknown>,
+    token: string,
+  ) {
+    const n = kind === 'invitation' ? 0 : inv.remindersSent + 1;
+    const firstName = typeof sample.first_name === 'string' ? sample.first_name : undefined;
+    try {
+      await this.sms.send({
+        to: inv.email!,
+        text: smsText(kind, inv.language, { link: this.clickUrl(token), firstName }),
         idempotencyKey: `inv:${inv.id}:${n}`,
       });
     } catch (e) {
@@ -924,6 +1132,7 @@ function htmlBody(text: string, pixel: string) {
 
 function maskEmail(e: string | null) {
   if (!e) return null;
+  if (!e.includes('@')) return maskPhone(e);
   const [user, domain] = e.split('@');
   return `${user!.slice(0, 2)}•••@${domain}`;
 }

@@ -33,11 +33,18 @@ export const cawiEn = {
     save: 'Save wording',
     saved: 'Wording saved.',
   },
+  sms: {
+    confirm:
+      'Send “{{name}}” by SMS to {{recipients}} numbers? About {{estimatedSegments}} message segments (invitation and reminders), estimated cost {{estimatedCost}}.',
+    confirmBig:
+      'This wave writes to more than {{confirmAbove}} numbers ({{recipients}}). Are you sure you want to send it?',
+  },
   links: {
     channel: 'How it reaches people',
-    channels: { email: 'By e-mail', links: 'Personal links only' },
+    channels: { email: 'By e-mail', sms: 'By SMS', links: 'Personal links only' },
     channelHints: {
       email: 'Each case with an e-mail gets its invitation and reminders.',
+      sms: 'Each case with a mobile number (+country code) gets a short message with its link, inside the calling hours. Replying BAJA or STOP removes the number. Messages cost money: the cost is shown before sending.',
       links:
         'A link per case, e-mail or not; nothing is sent. Hand them out by SMS, WhatsApp, a letter…',
     },
@@ -139,11 +146,18 @@ export const cawiEs: CawiCatalogue = {
     save: 'Guardar el texto',
     saved: 'Texto guardado.',
   },
+  sms: {
+    confirm:
+      '¿Enviar “{{name}}” por SMS a {{recipients}} números? Unos {{estimatedSegments}} segmentos de mensaje (invitación y recordatorios), costo estimado {{estimatedCost}}.',
+    confirmBig:
+      'Esta ola escribe a más de {{confirmAbove}} números ({{recipients}}). ¿Seguro que desea enviarla?',
+  },
   links: {
     channel: 'Cómo llega a las personas',
-    channels: { email: 'Por correo electrónico', links: 'Solo enlaces personales' },
+    channels: { email: 'Por correo electrónico', sms: 'Por SMS', links: 'Solo enlaces personales' },
     channelHints: {
       email: 'Cada caso con correo recibe su invitación y recordatorios.',
+      sms: 'Cada caso con un celular (+código de país) recibe un mensaje corto con su enlace, dentro del horario de llamadas. Responder BAJA o STOP quita el número. Los mensajes cuestan: el costo se muestra antes de enviar.',
       links:
         'Un enlace por caso, tenga o no correo; no se envía nada. Repártalos por SMS, WhatsApp, carta…',
     },

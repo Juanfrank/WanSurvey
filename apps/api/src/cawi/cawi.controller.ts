@@ -19,6 +19,8 @@ import { CawiService, OpenLinkBody, TemplateBody, WaveBody } from './cawi.servic
 const PERM = { projectParam: 'projectId' } as const;
 const TEMPLATES = ['email.templates', 'cawi.waves'] as const;
 
+const SendBody = z.object({ confirm: z.boolean().default(false) }).default({ confirm: false });
+
 /** Web surveys for project staff: e-mail wording, waves and their funnel, the open link. */
 @ApiTags('cawi')
 @Controller('projects/:projectId')
@@ -70,8 +72,22 @@ export class CawiController {
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('waveId', ParseUUIDPipe) waveId: string,
+    @Body(new ZodPipe(SendBody)) body: z.infer<typeof SendBody>,
   ) {
-    return this.repo.inTenant(ctx.tenantId, (t) => this.cawi.sendWave(t, ctx, projectId, waveId));
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.cawi.sendWave(t, ctx, projectId, waveId, body.confirm),
+    );
+  }
+
+  /** For an SMS wave: who it would write to, how many messages and what that costs. */
+  @Get('waves/:waveId/preview')
+  @RequirePermission('cawi.waves', PERM)
+  preview(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('waveId', ParseUUIDPipe) waveId: string,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) => this.cawi.previewSmsWave(t, projectId, waveId));
   }
 
   /** The personal links of a "links only" wave (W7). */

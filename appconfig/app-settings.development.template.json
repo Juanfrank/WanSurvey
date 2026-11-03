@@ -270,6 +270,41 @@
     "slotSetting": false
   },
   {
+    "name": "SMS_PROVIDER",
+    "value": "console",
+    "slotSetting": false
+  },
+  {
+    "name": "SMS_PRICE_PER_SEGMENT",
+    "value": "0",
+    "slotSetting": false
+  },
+  {
+    "name": "SMS_CONFIRM_ABOVE",
+    "value": "500",
+    "slotSetting": false
+  },
+  {
+    "name": "SMS_OUTBOX_DIR",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "SMS_CONNECTION_STRING",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "SMS_FROM",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "SMS_WEBHOOK_SECRET",
+    "value": "",
+    "slotSetting": false
+  },
+  {
     "name": "HEALTH_ALLOWED_IPS",
     "value": "169.254.0.0/16",
     "slotSetting": false

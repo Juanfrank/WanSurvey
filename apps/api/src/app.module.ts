@@ -15,6 +15,14 @@ import { LoggerModule } from 'nestjs-pino';
 import { ApiKeysController } from './apikeys/api-keys.controller.js';
 import { ApiKeysService } from './apikeys/api-keys.service.js';
 import { ExtController } from './apikeys/ext.controller.js';
+import {
+  AcsSms,
+  ConsoleSms,
+  FileSms,
+  MemorySms,
+  SMS_PROVIDER,
+  type SmsProvider,
+} from './sms/sms.js';
 import { WebhooksController } from './webhooks/webhooks.controller.js';
 import { WebhooksService } from './webhooks/webhooks.service.js';
 import { AuditController } from './audit/audit.controller.js';
@@ -116,6 +124,8 @@ import { sessionOrIp, throttleStorage } from './common/throttle.js';
 
 export interface AppModuleOptions {
   mailer?: Mailer;
+  /** Replaces the configured SMS provider (tests keep the messages in memory). */
+  sms?: SmsProvider;
   /** Replaces the configured geocoder (tests use a mock Nominatim). */
   geocoder?: Geocoder | null;
   /** The background worker runs the same services without HTTP (M1). */
@@ -211,6 +221,18 @@ export class AppModule {
                 : config.MAILER === 'smtp'
                   ? new SmtpMailer(config.SMTP_URL!, config.MAIL_FROM)
                   : new ConsoleMailer(config.NODE_ENV !== 'production')),
+        },
+        {
+          provide: SMS_PROVIDER,
+          useValue:
+            opts.sms ??
+            (config.NODE_ENV === 'test'
+              ? new MemorySms()
+              : config.SMS_PROVIDER === 'file'
+                ? new FileSms(config.SMS_OUTBOX_DIR!)
+                : config.SMS_PROVIDER === 'acs'
+                  ? new AcsSms(config.SMS_CONNECTION_STRING!, config.SMS_FROM!)
+                  : new ConsoleSms(config.NODE_ENV !== 'production')),
         },
         Engine,
         { provide: AUTH_REPO, useClass: MssqlAuthRepo },

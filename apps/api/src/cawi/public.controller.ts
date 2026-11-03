@@ -30,6 +30,7 @@ const respondentLimit = { default: { limit: 120, ttl: 60_000 } };
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
 /** `params` is the link's own query string (`sede=2&…`), kept with the interview. */
+const SmsReply = z.object({ from: z.string().max(40), text: z.string().max(1600) });
 const DeviceQuery = z.object({ device: DeviceId, params: z.string().max(2000).optional() });
 
 /**
@@ -142,5 +143,20 @@ export class PublicSurveyController {
     if (!expected || !secret || !safeEqual(secret, expected))
       throw new UnauthorizedException({ code: 'BAD_SECRET', message: 'Invalid webhook secret' });
     return this.cawi.webhook(body);
+  }
+
+  /** Replies to SMS invitations, from the SMS provider, authenticated by a shared secret. */
+  @Public()
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  @Post('webhooks/sms')
+  @HttpCode(200)
+  smsReply(
+    @Headers('x-webhook-secret') secret: string | undefined,
+    @Body(new ZodPipe(SmsReply)) body: z.infer<typeof SmsReply>,
+  ) {
+    const expected = this.config.SMS_WEBHOOK_SECRET;
+    if (!expected || !secret || !safeEqual(secret, expected))
+      throw new UnauthorizedException({ code: 'BAD_SECRET', message: 'Invalid webhook secret' });
+    return this.cawi.smsInbound(body);
   }
 }

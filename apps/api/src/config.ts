@@ -38,6 +38,8 @@ const SECRET_SETTINGS = new Set([
   'ENTRA_CLIENT_SECRET',
   'MAIL_WEBHOOK_SECRET',
   'SMTP_URL',
+  'SMS_CONNECTION_STRING',
+  'SMS_WEBHOOK_SECRET',
   'DATABASE_URL',
   'DATABASE_ADMIN_URL',
 ]);
@@ -208,6 +210,20 @@ const Env = z.object({
    * production: it would let an organisation make the server call its own network.
    */
   WEBHOOK_ALLOW_PRIVATE_URLS: z.enum(['true', 'false']).default('false'),
+  /** How SMS leaves: logged, written as files (development), or Azure Communication Services. */
+  SMS_PROVIDER: z.enum(['console', 'file', 'acs']).default('console'),
+  /** Folder for SMS_PROVIDER=file (one JSON file per message). */
+  SMS_OUTBOX_DIR: z.string().optional(),
+  /** Azure Communication Services: endpoint=https://….communication.azure.com/;accesskey=… */
+  SMS_CONNECTION_STRING: z.string().optional(),
+  /** Sender number or short code the provider resource owns (SMS_PROVIDER=acs). */
+  SMS_FROM: z.string().optional(),
+  /** Price of one message segment, in the organisation's money, for the cost shown before sending. */
+  SMS_PRICE_PER_SEGMENT: z.coerce.number().min(0).default(0),
+  /** A wave to more recipients than this asks for a second confirmation before it is sent. */
+  SMS_CONFIRM_ABOVE: z.coerce.number().int().min(0).default(500),
+  /** Shared secret the SMS provider sends in `x-webhook-secret` with replies (STOP). */
+  SMS_WEBHOOK_SECRET: z.string().min(16).optional(),
   /** Base of respondent links; the web app by default. */
   PUBLIC_SURVEY_URL: z.string().url().optional(),
   /**
@@ -311,6 +327,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       throw new Error(
         'Invalid configuration:\n  WEBHOOK_ALLOW_PRIVATE_URLS: must not be true in production',
       );
+    if (d.SMS_PROVIDER === 'acs' && (!d.SMS_CONNECTION_STRING || !d.SMS_FROM))
+      throw new Error(
+        'Invalid configuration:\n  SMS_CONNECTION_STRING and SMS_FROM: required when SMS_PROVIDER=acs',
+      );
+    if (d.SMS_PROVIDER === 'file' && !d.SMS_OUTBOX_DIR)
+      throw new Error('Invalid configuration:\n  SMS_OUTBOX_DIR: required when SMS_PROVIDER=file');
     if (d.AZURE_STORAGE_ACCOUNT_NAME && !d.AZURE_STORAGE_CONTAINER)
       throw new Error(
         'Invalid configuration:\n  AZURE_STORAGE_CONTAINER: required with AZURE_STORAGE_ACCOUNT_NAME (both or neither)',
