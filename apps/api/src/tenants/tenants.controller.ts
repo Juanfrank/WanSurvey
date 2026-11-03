@@ -1,7 +1,10 @@
-import { Body, Controller, Get, Inject, Patch, Put } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Inject, Patch, Put } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import {
+  ACCENTS,
   CUSTOM_ROLES,
+  OrgTheme,
+  checkAccent,
   PERMISSIONS,
   RESERVED_PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -40,7 +43,8 @@ export const TenantSettings = z
 const TenantPatch = z.object({
   name: DisplayName.optional(),
   settings: TenantSettings.optional(),
-  branding: z.record(z.string(), z.unknown()).optional(),
+  /** Merged into the stored branding; `theme` is the organisation's default and accent. */
+  branding: z.object({ theme: OrgTheme }).partial().catchall(z.unknown()).optional(),
 });
 
 const RolesBody = z.object({ overrides: RoleOverrides });
@@ -69,8 +73,23 @@ export class TenantsController {
     @Auth() ctx: AuthContext,
     @Body(new ZodPipe(TenantPatch)) body: z.infer<typeof TenantPatch>,
   ) {
+    // An accent is kept only if it passes the contrast check, in both themes.
+    const accent = body.branding?.theme?.accent;
+    if (accent) {
+      const failures = checkAccent(accent);
+      if (failures.length || !(ACCENTS as readonly string[]).includes(accent))
+        throw new BadRequestException({
+          code: 'ACCENT_CONTRAST',
+          message: 'That colour does not keep the text readable',
+          failures,
+        });
+    }
     return this.repo.inTenant(ctx.tenantId, async (t) => {
-      const tenant = await t.updateTenant(body);
+      const current = body.branding ? ((await t.tenant())?.branding ?? {}) : {};
+      const tenant = await t.updateTenant({
+        ...body,
+        ...(body.branding ? { branding: { ...current, ...body.branding } } : {}),
+      });
       await t.audit(
         this.audit.fromContext(ctx, {
           action: 'tenant.updated',

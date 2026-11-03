@@ -12,3 +12,4 @@ export * from './project.js';
 export * from './cati.js';
 export * from './time.js';
 export * from './apikeys.js';
+export * from './theme.js';

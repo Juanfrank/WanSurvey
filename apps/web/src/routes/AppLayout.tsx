@@ -7,6 +7,7 @@ import { AccountMenu } from './AccountMenu.js';
 import { adminSectionsFor } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
 import { LogoMark, LogoName } from './Logo.js';
+import { setOrgTheme } from '../org-theme.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
 
 const ME_KEY = 'wansurvey.me';
@@ -69,6 +70,12 @@ export function AppLayout() {
       if (!target && location.pathname === '/waiting') void navigate({ to: '/' });
     }
   }, [me.data, me.error, location.pathname, navigate]);
+
+  // The organisation's default theme and accent, for people who have not chosen their own.
+  const theme = me.data?.theme;
+  useEffect(() => {
+    if (theme) setOrgTheme(theme);
+  }, [theme]);
 
   const switchTenant = async (tenantId: string) => {
     if (await openTenant(tenantId)) await queryClient.invalidateQueries();

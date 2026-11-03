@@ -1,3 +1,4 @@
+import type { OrgTheme } from '@wansurvey/schema';
 /** Thin client for the WanSurvey API: same-origin cookies, CSRF header on writes. */
 export class ApiError extends Error {
   constructor(
@@ -73,6 +74,8 @@ export interface Me {
   user: { id: string; email: string; name: string; firstName: string | null; totpEnabled: boolean };
   tenantId: string;
   tenants: TenantSummary[];
+  /** The organisation's default theme and accent. */
+  theme?: OrgTheme;
   mfaState: 'ok' | 'pending' | 'enroll';
   /** Each role with what it allows in this organisation (its permissions may be customised). */
   memberships: { role: string; projectId: string | null; permissions?: string[] }[];

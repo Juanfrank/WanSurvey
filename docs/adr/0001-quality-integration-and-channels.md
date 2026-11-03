@@ -1,6 +1,6 @@
 # ADR 0001: Audit, fraud signals, integrations and new channels
 
-- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)) 4 (SMS), 5 (interview audio, off by default) and 6 (web notifications; see [operations](../operations.md)); the rest pending
+- **Status:** accepted; implemented so far: decisions 1 (audit export, RLS coverage test, erasure scan), 2 (fraud risk score) 3 (API keys, read only, and outgoing webhooks; see [the integration API](../integration-api.md)) 4 (SMS), 5 (interview audio, off by default), 6 (web notifications; see [operations](../operations.md)) and 7 (organisation theme; see [accessibility](../accessibility.md))
 - **Date:** 2026-11-02
 - **Deciders:** product owner
 - **Scope:** what to build next, in which order and in which form. Decisions are built in the order given below.
@@ -148,6 +148,14 @@ Not decided here, and kept out on purpose: survey weighting and calibration, SCI
 - The organisation chooses a default (light, dark, or follow the system) for people who have not chosen their own, and an accent colour from a **limited palette**, not free CSS.
 - Each palette colour is checked for contrast (4.5:1 for text) in both themes when it is saved and in the accessibility tests, so the WCAG 2.2 AA result of `docs/accessibility.md` holds.
 - The logo and name already travel with the project; the respondent pages follow the respondent's own system preference.
+
+**As built.**
+
+- `branding.theme` holds `{ default, accent }`; `accent` is one of `brand` (the product's own indigo), `teal`, `violet`, `magenta` and `graphite`. Anything else, free CSS included, is refused with 400. Other `branding` keys are kept when the theme changes.
+- `packages/schema/src/theme.ts` generates the colour tokens of an accent for both themes from one hue. `checkAccent` computes the 4.5:1 text contrast on every surface, and `PATCH /tenant` refuses an accent that fails (`ACCENT_CONTRAST`); a unit test runs the check on the whole palette.
+- Everyone who works in the organisation gets the theme with `GET /auth/me` (no permission to read the organisation is needed). The web applies it, and keeps it on the device so the first paint is right.
+- Choosing: the person's own choice, "follow the system" included, wins; then the organisation default; then the system. The respondent pages (`/s`, `/o`, `/f`, `/u`) ignore the organisation look.
+- Set under Administration, Organisation, Appearance (needs `tenant.manage`); it is audited as `tenant.updated`.
 
 **Benefit.** The product looks like the institution's, at little cost, without breaking accessibility.
 

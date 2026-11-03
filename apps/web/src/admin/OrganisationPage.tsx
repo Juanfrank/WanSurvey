@@ -1,4 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ACCENTS,
+  THEME_DEFAULTS,
+  accentTokens,
+  orgTheme,
+  type Accent,
+  type ThemeDefault,
+} from '@wansurvey/schema';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -10,6 +18,7 @@ interface Tenant {
   id: string;
   name: string;
   settings: { defaultLanguage?: string; defaultTimezone?: string };
+  branding?: unknown;
 }
 
 interface Sso {
@@ -64,6 +73,7 @@ export function OrganisationPage() {
       <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.org.intro')}</p>
       <div className="grid items-start gap-6 xl:grid-cols-2">
         {tenant.data ? <General tenant={tenant.data} /> : <div aria-busy="true" />}
+        {tenant.data ? <Appearance tenant={tenant.data} /> : null}
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
       </div>
     </div>
@@ -306,6 +316,95 @@ function SsoEditor({ sso }: { sso: Sso }) {
             disabled={save.isPending || (!managed && (!directory.trim() || !clientId.trim()))}
           >
             {t('admin.org.saveSso')}
+          </Button>
+          <Saved text={saved} />
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * The organisation's default theme and accent colour. Both are only defaults: a person who
+ * picks their own theme in the account menu keeps it. Colours come from a short palette whose
+ * text contrast is checked in both themes, so the interface stays readable.
+ */
+function Appearance({ tenant }: { tenant: Tenant }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const current = orgTheme(tenant.branding);
+  const [def, setDef] = useState<ThemeDefault>(current.default);
+  const [accent, setAccent] = useState<Accent>(current.accent);
+  const [saved, setSaved] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () =>
+      api('/tenant', { method: 'PATCH', body: { branding: { theme: { default: def, accent } } } }),
+    onSuccess: async () => {
+      setSaved('admin.org.appearance.saved');
+      await qc.invalidateQueries({ queryKey: ['tenant'] });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+  useEffect(() => setSaved(null), [def, accent]);
+  const swatch = (a: Accent) => accentTokens(a, 'light')['indigo-600'] ?? '#0050dd';
+  return (
+    <Card>
+      <form
+        className="flex flex-col gap-4"
+        data-testid="org-appearance"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <h2 className="text-lg font-semibold">{t('admin.org.appearance.title')}</h2>
+        <label className="flex max-w-xs flex-col gap-1">
+          <span className="text-sm font-medium text-slate-700">
+            {t('admin.org.appearance.theme')}
+          </span>
+          <select
+            className={`${inputCls} py-2`}
+            value={def}
+            onChange={(e) => setDef(e.target.value as ThemeDefault)}
+          >
+            {THEME_DEFAULTS.map((v) => (
+              <option key={v} value={v}>
+                {t(`app.themes.${v}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm font-medium text-slate-700">
+            {t('admin.org.appearance.accent')}
+          </legend>
+          <div className="flex flex-wrap gap-3">
+            {ACCENTS.map((a) => (
+              <label
+                key={a}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
+              >
+                <input
+                  type="radio"
+                  name="org-accent"
+                  checked={accent === a}
+                  onChange={() => setAccent(a)}
+                />
+                <span
+                  aria-hidden="true"
+                  className="h-5 w-5 rounded-full border border-slate-300"
+                  style={{ background: swatch(a) }}
+                />
+                {t(`admin.org.appearance.accents.${a}`)}
+              </label>
+            ))}
+          </div>
+          <Hint>{t('admin.org.appearance.hint')}</Hint>
+        </fieldset>
+        {save.isError ? <ErrorText>{t('admin.org.appearance.error')}</ErrorText> : null}
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={save.isPending}>
+            {t('admin.org.save')}
           </Button>
           <Saved text={saved} />
         </div>

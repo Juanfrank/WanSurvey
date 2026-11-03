@@ -1,3 +1,4 @@
+import { orgTheme } from '@wansurvey/schema';
 import {
   BadRequestException,
   ConflictException,
@@ -368,10 +369,14 @@ export class AuthService {
         (m.permissions ?? ROLE_PERMISSIONS[m.role]).forEach((p) => permissions.add(p));
     const tenants = await this.listTenants(ctx);
     const orgName = tenants.find((t) => t.id === ctx.tenantId)?.name ?? 'this organisation';
+    // The organisation's look, for everyone who works in it (no permission to read the
+    // organisation is needed for that).
+    const theme = orgTheme(await this.repo.inTenant(ctx.tenantId, (t) => t.branding()));
     return {
       user,
       tenantId: ctx.tenantId,
       tenants,
+      theme,
       // People created by a first Microsoft sign-in have no role until an admin assigns one.
       access:
         ctx.memberships.length === 0

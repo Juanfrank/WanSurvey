@@ -54,6 +54,10 @@ Pages checked with axe in the browser: sign-in and the waiting page, the designe
 | Esc                      | Close a dialog                                                                                                                            |
 | ?                        | Show the shortcuts                                                                                                                        |
 
+## Organisation accent
+
+An organisation can pick an accent from a fixed palette (Administration, Organisation, Appearance). The tokens of each accent are generated for the light and the dark theme, and `checkAccent` (`packages/schema/src/theme.ts`) verifies the 4.5:1 text contrast on every surface; a unit test runs it on the whole palette, and the API refuses an accent that fails. A person's own theme choice always wins over the organisation default, and the respondent pages keep the neutral look.
+
 ## Known limits
 
 - Screen-reader testing was done with the axe rules and the accessibility tree in Playwright, not with every screen reader and browser pair; a manual pass with NVDA and VoiceOver is recommended before each major release.
