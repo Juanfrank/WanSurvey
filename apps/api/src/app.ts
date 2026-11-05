@@ -13,6 +13,7 @@ import { loadShedding } from './common/load-shed.js';
 import { compress, isApiPath, serveWeb } from './common/web.js';
 import { plainBodiesOnly } from './common/plain-body.js';
 import { loadConfig } from './config.js';
+import { VERSION } from './version.js';
 
 export async function createApp(opts: AppModuleOptions = {}): Promise<INestApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(opts), {
@@ -67,7 +68,10 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
 
   const doc = new DocumentBuilder()
     .setTitle('WanSurvey API')
-    .setVersion('v1')
+    .setVersion(VERSION)
+    .setDescription(
+      'HTTP API v1: the paths start with /api/v1. The version above is the product version.',
+    )
     .addCookieAuth('ws_sid')
     .addApiKey({ type: 'apiKey', in: 'header', name: 'X-CSRF-Token' }, 'csrf')
     .build();

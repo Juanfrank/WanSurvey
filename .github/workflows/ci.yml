@@ -18,6 +18,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24.22.2, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # One product version in every package.json, and a CHANGELOG that agrees (docs/releasing.md).
+      - run: node --test scripts/release.test.mjs
+      - run: pnpm release:check
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm build

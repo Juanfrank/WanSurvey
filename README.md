@@ -23,6 +23,8 @@ The MVP is built in 13 vertical slices; all thirteen are done.
 | 12    | **Metrics, dashboards and exports**: a background worker (BullMQ, Redis), a live dashboard (Server-Sent Events), interviewer metrics with AAPOR rates and outliers, topline and crosstabs, a printable summary and read-only links for clients, and exports to CSV, Excel, SPSS, Stata and a codebook                                                                                                                 | ✅    |
 | 13    | **Hardening**: accessibility audit (keyboard-only web survey, 44 px targets, 200% zoom, reduced motion, shortcut map per project), strict Content-Security-Policy and security headers, encrypted personal fields, retention with anonymisation, data subject export and erasure, a bundle budget, k6 load scripts, and the operations, security (ASVS L2) and accessibility guides                                   | ✅    |
 
+Releases follow [Semantic Versioning](https://semver.org/); the current version is in `package.json`, what changed in each release is in [`CHANGELOG.md`](CHANGELOG.md), and what comes next is in [`docs/roadmap.md`](docs/roadmap.md).
+
 Background reading:
 
 - [`docs/architecture.md`](docs/architecture.md): how the pieces fit together
@@ -37,6 +39,7 @@ Background reading:
 - [`docs/azure.md`](docs/azure.md): running on one Azure App Service (Premium v3 P0v3, web, API and worker as sidecars, `infra/azure/main.bicep`) with Azure SQL (or SQL Server) and Azure Cache for Redis
 - [`docs/security.md`](docs/security.md): the OWASP ASVS level 2 checklist and personal data handling
 - [`docs/accessibility.md`](docs/accessibility.md): WCAG 2.2 AA audit results and the keyboard map
+- [`docs/releasing.md`](docs/releasing.md): versions, the changelog, commit messages and how a release is made
 - [`docs/acceptance.md`](docs/acceptance.md): the MVP acceptance criteria and the tests that prove them
 
 Questionnaires are written and conducted in Spanish; other languages can be added and are edited one at a time. The interface is in Spanish by default, with English available.

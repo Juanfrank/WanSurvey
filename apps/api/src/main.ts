@@ -3,6 +3,7 @@ import { loadConfig } from './config.js';
 import { ensureInitialAdmin } from './db/initial-admin.js';
 import { runMssqlMigrations } from './db/mssql/migrate.js';
 import { initObservability } from './observability.js';
+import { VERSION } from './version.js';
 
 const config = loadConfig();
 initObservability(config);
@@ -27,3 +28,4 @@ if (config.INITIAL_ADMIN_USER && config.DATABASE_ADMIN_URL) {
 }
 const app = await createApp();
 await app.listen(config.PORT);
+console.log(`WanSurvey ${VERSION} listening on port ${config.PORT}`);
