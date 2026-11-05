@@ -71,6 +71,17 @@ test('next version: major, minor, patch, explicit, and never backwards', () => {
   assert.throws(() => next('1.2.3', 'big'), /not a Semantic Version/);
 });
 
+test('pre-release channels: the next alpha, a later channel, and the plain release', () => {
+  assert.equal(next('0.1.0-alpha.3', 'alpha'), '0.1.0-alpha.4');
+  assert.equal(next('0.1.0-alpha.12', 'beta'), '0.1.0-beta.1');
+  assert.equal(next('0.1.0-beta.2', 'rc'), '0.1.0-rc.1');
+  assert.equal(next('0.1.0-rc.2', 'release'), '0.1.0');
+  assert.equal(next('0.1.0-alpha.3', 'patch'), '0.1.0');
+  assert.throws(() => next('0.1.0-beta.1', 'alpha'), /cannot go to alpha/);
+  assert.throws(() => next('0.1.0', 'alpha'), /cannot go to alpha/);
+  assert.throws(() => next('0.1.0', 'release'), /already a release/);
+});
+
 test('reads releases and sections', () => {
   assert.deepEqual(releases(changelog()), [
     { version: '1.2.0', date: '2026-03-01' },

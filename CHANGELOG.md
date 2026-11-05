@@ -9,67 +9,374 @@ Planned work is in [`docs/roadmap.md`](docs/roadmap.md).
 Entries are written by hand, grouped by what changed for the reader, and say what to do when an
 upgrade needs action (**Upgrade** notes). They are not a list of commits.
 
+**Every version so far is an alpha** (`0.1.0-alpha.N`): features are still arriving and the
+interface may change between any two of them. Alphas up to `0.1.0-alpha.18` were **reconstructed
+on 2026-11-05 from the git history**: nothing was numbered or deployed as a release at the time,
+and each tag marks the commit that closes a stage of the work, with that commit's date. From
+`0.1.0-alpha.19` on, versions are made as described in `docs/releasing.md`.
+
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-05
-
-The first tagged release. Before 1.0.0 the interface may still change between minor versions
-(see the versioning policy); every such change is listed here.
+## [0.1.0-alpha.19] - 2026-11-05
 
 ### Added
 
-- **Platform and security.** Several organisations in one deployment, isolated by row-level
-  security on SQL Server; accounts that belong to several organisations; password sign-in
-  (Argon2id) and Microsoft Entra ID sign-in, cookie sessions with CSRF protection, TOTP two-factor
-  authentication, rate limiting, roles and customisable role permissions per organisation, an
-  append-only audit log with its own export, encrypted personal fields with audited reveal,
-  retention with anonymisation, and data subject export and erasure.
-- **Questionnaires.** A schema and an expression language with routing, validation and piping; a
-  keyboard-driven designer with a visual condition builder, scripts, quotas, mode variants,
-  translations (CSV and XLIFF), comments, a question library, light co-editing, version
-  comparison and immutable published versions with publish checks.
-- **Fieldwork in four modes.** Telephone (CATI) with a call queue, callbacks and AAPOR
-  dispositions; face to face (CAPI) as an installable app that works offline; web (CAWI) with
-  e-mail invitations, reminders, open links and per-case links; paper (PAPI) with printable forms,
-  keying with double entry, and automatic reading of scanned forms (OMR).
-- **Cases and assignments.** Sample import from CSV and Excel with a validation report,
-  assignment rules with quotas, sampling designs, expiry, duplicate detection and geocoding.
-- **Quality and review.** A review workflow with quality flags, a random sample and comments per
-  question; a fraud-risk score from short answers, position clusters and distance to the address;
-  optional audio recording of face-to-face interviews, off by default, in a private container.
-- **Results.** Live dashboards, interviewer metrics, topline and crosstabs, read-only client
-  links, a printable summary, exports to CSV, Excel, SPSS, Stata and SQL with a codebook, and an
-  analysis model (schema `bi`) for BI tools.
-- **Integration.** A read-only integration API with keys per organisation
-  (`/api/v1/ext/v1`), outgoing webhooks with signatures, an SMS channel for web surveys, and web
-  notifications for interviewers and supervisors.
-- **Interface.** Spanish by default with English available; light and dark themes, with a default
-  and an accent colour per organisation from a contrast-checked palette; WCAG 2.2 AA audit.
-- **Operations.** Deployment as a zip to one Azure App Service (API, web and worker), a Bicep
-  template, background jobs with or without Redis, a health endpoint, k6 load tests for CAWI,
-  CATI and CAPI (`load/`), and the guides in `docs/`.
+- One product version for the whole repository, checked in CI together with this file
+  (`pnpm release:check`), and `pnpm release` to cut a release: alpha, beta, release candidate or
+  final.
+- The versioning policy, the commit convention and the release steps (`docs/releasing.md`), a
+  pull request checklist, and the roadmap rewritten as Now, Next and Later with the conditions
+  for 1.0.0 (`docs/roadmap.md`).
+- The API reports its version in the OpenAPI document (`/docs`) and in the start-up log.
+
+## [0.1.0-alpha.18] - 2026-11-03
+
+### Added
+
+- **Outgoing webhooks** for the integration API: signed deliveries kept in the database with
+  retries, a screen to manage them, and a check that the address is not an internal one.
+- **SMS channel for web surveys**: invitation and reminder waves by SMS with a preview before
+  sending, and replies and opt-outs handled.
+- **Interview audio** for face-to-face interviews, off in every project: a share of the interviews
+  is recorded in 30-second files on the device after the respondent consents, sent to a private
+  container, listened to with a permission that is audited, and deleted with the retention job or
+  an erasure.
+- **Web notifications** (Web Push): people choose, per browser and category, what to be told:
+  callbacks about to be due, new assignments, an interview returned, an export ready.
+- **Organisation theme**: a default (light, dark, system) and an accent colour from a palette
+  whose contrast is checked in both themes; a person's own choice always wins.
+- **Load tests** for web, telephone and tablet interviewing with k6 (`load/`), with a script that
+  makes the accounts and cases on SQL Server.
+
+## [0.1.0-alpha.17] - 2026-11-02
+
+### Added
+
+- **Audit log export** with its own permission, a test that every table with an organisation
+  column is under row-level security, and a scan that finds personal data left after an erasure.
+- **Fraud-risk score** of submitted interviews from short answers, clusters of positions and the
+  distance to the address, shown in the review queue.
+- **Integration API**, read only, with keys per organisation under `/api/v1/ext/v1`
+  (`docs/integration-api.md`).
+- A disposable development database on a SQL Server you run (`db:dev`), and a development zip that
+  starts its own SQL Server in Docker.
+- The decisions for the next stage, recorded in ADR 0001.
+- `INITIAL_ADMIN_USER`: the first administrator, by UPN, signs in with Microsoft.
 
 ### Changed
 
-- SQL Server (or Azure SQL) is the only database. The data layer is Kysely with tedious and the
-  migrations are T-SQL. Instants are stored with millisecond precision.
-- Settings have one set of names; the former names stop the application at start instead of being
-  read as aliases. **Upgrade:** rename them as in `apps/api/.env.example`.
-- The Microsoft sign-in callback is `/api/auth/entra/callback`, the same in every app;
-  `/api/v1/auth/sso/callback` was removed. **Upgrade:** register the new redirect URI in Entra.
-- There is no default organisation: the organisation comes from the e-mail's directory.
-  **Upgrade:** set `INITIAL_ADMIN_USER` to create the first administrator.
+- There is no default organisation: the directory is the deployment's and the organisation comes
+  from the e-mail's domain. **Upgrade:** set `INITIAL_ADMIN_USER` on a new installation.
+- Code-quality findings from SonarQube: sort comparators, linear regular expressions, test
+  assertions and accessibility.
 
-### Removed
+### Fixed
 
-- PostgreSQL support, Drizzle and the PostgreSQL migrations. The copy tool that moved data from
-  PostgreSQL is in the git history (`docs/data-copy.md`).
+- The first local day was missing from the analysis model's date dimension.
+
+## [0.1.0-alpha.16] - 2026-11-01
+
+### Changed
+
+- Settings have one set of names, and the former names stop the application at start instead of
+  being read as aliases. **Upgrade:** rename them as in `apps/api/.env.example`.
+- The Microsoft sign-in callback is `/api/auth/entra/callback`, the same in every app of the
+  organisation; `/api/v1/auth/sso/callback` was removed. **Upgrade:** register the new redirect
+  URI in Entra.
+- Major dependency updates, one at a time: Vitest 4, Playwright 1.64, pino 10, tedious 20,
+  BullMQ 6 and ioredis 6, NestJS 12, ESLint 10, React 19, Vite 8. ExcelJS is replaced by hucre.
+- Node 24.22.2, the security release, in CI, the images and `.nvmrc`.
+- Comments describe SQL Server as it is, no react-hooks lint warnings are left, and unused code
+  and parameters are gone.
+
+### Fixed
+
+- A web survey sends again when a send under way left changes unacknowledged.
 
 ### Security
 
-- Strict Content-Security-Policy and security headers; the OWASP ASVS level 2 checklist is in
-  `docs/security.md`. Dependencies are taken when they are two weeks old, apart from security
-  fixes, and the build fails on a moderate or higher advisory.
+- Updates of `body-parser`, `multer`, `follow-redirects` and `uuid`; `jose` is pinned. The
+  dependency audit now covers development tools, at moderate severity.
 
-[Unreleased]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Juanfrank/WanSurvey/releases/tag/v0.1.0
+## [0.1.0-alpha.15] - 2026-10-31
+
+### Changed
+
+- **SQL Server (or Azure SQL) is the only database.** Every module reads and writes through a
+  repository with a SQL Server implementation, the migrations are T-SQL, isolation by organisation
+  is a security policy on `SESSION_CONTEXT`, and instants have millisecond precision.
+  **Upgrade:** an installation on PostgreSQL moves its data with the copy tool of this version
+  (`docs/data-copy.md`; no production data existed when it was written).
+- The API tests that need a database run on SQL Server over HTTP, for every module and every role,
+  and so do the browser tests, each with its own CI job.
+
+### Removed
+
+- PostgreSQL, Drizzle, the PostgreSQL migrations and test suite, and the k6 scripts written
+  against them.
+
+### Fixed
+
+- Accessible names that contain the visible text (label in name), found with axe-core 4.14.
+
+### Security
+
+- `nodemailer` 10.1.4 closes three moderate advisories in its address parser.
+
+## [0.1.0-alpha.14] - 2026-10-30
+
+### Added
+
+- A SQL Server data layer (Kysely with tedious) and an isolation kernel in T-SQL, built vertical
+  by vertical with tests: questionnaires, cases and sampling, interviews and CATI, review, web
+  surveys and e-mail, paper, statistics and exports, the analysis model (`bi`) filled by owner
+  procedures with its T-SQL export, teams, the audit log, identity, sessions and one-time tokens,
+  people, organisations and projects.
+- A test that every PostgreSQL column exists in the T-SQL migrations.
+- `ENTRA_REDIRECT_URI`, and `/health` restricted by `HEALTH_ALLOWED_IPS`.
+
+### Removed
+
+- `API_PUBLIC_URL`.
+
+## [0.1.0-alpha.13] - 2026-10-26
+
+### Added
+
+- **Deployment to Azure App Service from a zip**: one Node process, one instance, no containers
+  and no Redis; jobs run in the API with retries, scanned paper forms are read with a pure-Node
+  PDF renderer, and migrations run when the application starts.
+- Settings templates for development and production, and `appconfig/` for the confidential files
+  kept out of the repository.
+
+### Changed
+
+- Node 24 LTS.
+
+## [0.1.0-alpha.12] - 2026-10-24
+
+### Added
+
+- One App Service on Premium v3 (P0v3) with the web, the API and the worker as sidecars, and its
+  Bicep template.
+- Exports streamed page by page to Azure Blob Storage, so a large export does not need memory.
+- Load tests with k6 for web respondents and sign-in at the start of the day, with server-side
+  measures; capacity work moved the point where the web survey stops keeping up from 47 to 72
+  completes a second (fewer statements per request, shedding by priority, one transaction per
+  respondent request).
+
+### Changed
+
+- Sign-in with the Microsoft button only, when the deployment asks for it.
+- Personal data stays behind `pii.view` in exports, case filters and the map, and an erasure
+  removes every copy.
+- The logic engine and the designer were hardened after a review (checks, edge cases of the
+  expression language), and so were sign-in, sessions and SSO, sampling weights, share-outs,
+  double entry and goals.
+- Redis outages never hold requests, lost jobs are retried and e-mail is sent once; transactions
+  are short and the analysis model refreshes when data changes.
+- Accessibility: errors, focus, contrast, page titles and reflow.
+- Lockout after failed sign-ins, one-use codes, a blocking audit, and smaller files.
+
+### Security
+
+- No account takeover through Microsoft sign-in: an identity is linked to an existing account by
+  e-mail only when the account belongs to that organisation alone, or its owner is signed in with
+  password and second factor; a domain can belong to one organisation only.
+- SQL and CSV exports and the import report keep formula-like text as text; names in the SQL
+  export cannot break out of their comment; request URLs and the console mailer no longer put
+  tokens or message text in the logs; web respondents get only the case fields the questionnaire
+  reads; redirect addresses must be http(s).
+
+## [0.1.0-alpha.11] - 2026-10-17
+
+### Added
+
+- **Administration** in the side panel: users, teams, organisation and audit log; a People tab in
+  each project to see and change who works on it; projects as a submenu.
+- **Customisable role permissions** per organisation, with a guide to each role; interviewers can
+  key paper forms.
+- **Reading scanned paper forms**: PDFs of any number of forms, in any order, are split, aligned
+  and read; what a machine cannot read reliably is left for a second round by hand.
+- Share-out of cases by capacity, by performance, and fair with a ceiling, with a preview; goals
+  by frequency (day, business days, week, month, period), per person or for the team.
+- Questionnaire actions: disable, enable again, complete (with a continuation) and reopen.
+- The **analysis model** (schema `bi`), a snowflake and a flat table over every project,
+  questionnaire and feedback point, with paradata; and an SQL export that reproduces the Excel
+  one from it.
+
+## [0.1.0-alpha.10] - 2026-10-17
+
+### Added
+
+- A team page: invite people, roles per project, deactivate and reactivate.
+- Cases belong to questionnaires; a case list per questionnaire with figures, assignment dates
+  and the rules behind a gear; questionnaires in two-level tabs; project settings by topic.
+- Case deadlines, sample batches that add to the sample, goals per interviewer and eligibility
+  checks across cases.
+- Project logos and the style of the web survey.
+
+### Changed
+
+- Web survey waves are called campaigns (_Campañas_); callers land on their calls; the pages use
+  the width of the screen.
+
+## [0.1.0-alpha.9] - 2026-10-16
+
+### Added
+
+- **Quick feedback**: faces by link, a widget and printed slips, created with the questionnaires.
+- A sampling selector in place of the sample import, with a census that sizes itself from the
+  eligible frame and a note on every term.
+- Paper forms for form readers (circles, character boxes, a grid annex, approximate dates) and for
+  scanners (form bands, question anchors, special answers as circles).
+- Personal web survey links per case, without e-mail; case data and link parameters can answer
+  questions, and are kept on the server with the interview.
+- Designer: a grouped type menu with icons, split add buttons, a context menu, an assistant for
+  `{{`, scripts per item, flow previews, a logic check, and a preview as seen in the field.
+- Interviews: routes beside the answers, searchable choices, typed grids and rankings.
+- Likert points with follow-up questions; project tabs in working order.
+- An end-to-end journey test across the modes.
+
+### Changed
+
+- The web survey downloads 151 KB instead of 239 KB.
+
+### Fixed
+
+- The daily chart, scales with optional colours, clearing a radio button, and Ctrl+Enter in text
+  answers.
+
+## [0.1.0-alpha.8] - 2026-10-13
+
+### Added
+
+- Deployment to Azure App Service (S1) with a managed PostgreSQL.
+- Questionnaires take their modes (CATI, CAPI, CAWI, PAPI) when they are created.
+- A new visual style (Poppins, blue and navy), a collapsible side panel with an account badge,
+  and a dark mode that follows the person's choice or the device's.
+- The callbacks list says who, why and whether, and a callback can be called now.
+- Many users at once: connection pools, timeouts, retries, load shedding and limits shared between
+  processes.
+
+### Changed
+
+- Every visible text is in the interface language.
+
+### Fixed
+
+- Sync never sends changes without their snapshot.
+
+## [0.1.0-alpha.7] - 2026-10-13
+
+### Added
+
+- **Answer review**: statuses (in review, approved, returned with comments, rejected), a queue with
+  quality flags and a random sample, a review screen with timings and comment threads per
+  question, corrections that re-run the logic, and coding of "other" answers.
+- **Results**: a background worker (BullMQ, Redis), a live dashboard, interviewer metrics with
+  AAPOR rates and outliers, topline and crosstabs, a printable summary, read-only links for
+  clients, and exports to CSV, Excel, SPSS, Stata and a codebook.
+- **Hardening**: a keyboard-only web survey with 44 px targets and 200 % zoom, a strict
+  Content-Security-Policy, encrypted personal fields, retention with anonymisation, data subject
+  export and erasure, a bundle budget, k6 scripts, and the operations, security (ASVS level 2)
+  and accessibility guides.
+
+## [0.1.0-alpha.6] - 2026-10-12
+
+### Added
+
+- **CATI**: a call queue with callbacks first and locks so no case is served twice, calling hours
+  in the respondent's time zone, outcomes mapped to AAPOR dispositions with retries, scripts, and
+  a keyboard-first Phone calls workspace.
+- **CAPI offline**: an installable app with a service worker, cases downloaded to one device,
+  interviews started, continued and submitted without a connection, optional location, and a
+  supervisor release of a lost device.
+- **CAWI and e-mail**: invitation and reminder wording with preview, waves with reminders, tracking
+  of opens and clicks, bounces, do-not-e-mail list, unsubscribe, and the phone-friendly,
+  resumable respondent survey plus open links.
+- **PAPI**: printable forms per case with a QR code, keying by clerks, and double entry with a
+  list of differences for a supervisor.
+
+### Fixed
+
+- A submission waits until every change has been acknowledged.
+
+## [0.1.0-alpha.5] - 2026-10-12
+
+### Added
+
+- **Interview runtime**: an interviewer screen with case details, section navigator, notes and
+  pause; answers kept on the device and synced in numbered, idempotent batches; "Saved" only when
+  the server has them; paradata; a server-checked submission and the answer history of each case.
+- Questionnaires are written in Spanish and other languages are edited one at a time; the
+  interface is in Spanish by default, with English available.
+
+## [0.1.0-alpha.4] - 2026-10-12
+
+### Added
+
+- **Cases and assignments**: CSV and Excel sample import with column mapping and a validation
+  report, a case list with filters, bulk assignment, assignment rules with quotas, case history,
+  and personal data masked with audited reveal.
+- Per-project settings: automatic personal data for interviewers, and an open pool of cases.
+- Designer: drag and drop, translation export and import (CSV, XLIFF 2.0), version comparison,
+  comments on items, a question library, and light co-editing (presence and three-way merge).
+- Geocoding with OpenStreetMap, a case map, and duplicate detection across projects.
+
+### Changed
+
+- Stricter publish checks, restored prefill, and engine and server messages translated.
+
+## [0.1.0-alpha.3] - 2026-10-12
+
+### Added
+
+- **Questionnaire designer**: projects and questionnaires, a keyboard-driven outline, editors for
+  every item type, mode variants, scripts, quotas, a visual condition builder with nested
+  conditions, a routing map, and autosaved drafts with conflict detection.
+- Publishing with checks (errors, saved scenarios, breaking-change mapping) into immutable
+  versions.
+
+## [0.1.0-alpha.2] - 2026-10-12
+
+### Added
+
+- The questionnaire **renderer**: every question type in all four modes (paper as a print-style
+  form), operated by keyboard, in English and Spanish.
+- The web app: sign-in with password and Microsoft, the organisation switcher, the waiting-for-
+  access page, and a designer preview with a path tracer and saved test scenarios.
+- Browser tests (Playwright) and CI.
+
+## [0.1.0-alpha.1] - 2026-10-12
+
+### Added
+
+- The monorepo, with a Zod questionnaire schema and a logic engine: expression parser and
+  evaluator, routing, validation, piping and static analysis.
+- API foundations: several organisations in one database isolated by row-level security, password
+  sign-in (Argon2id) with cookie sessions, CSRF protection and rate limiting, TOTP two-factor
+  authentication, roles, and an append-only audit log.
+- Accounts that belong to several organisations, and Microsoft Entra ID sign-in.
+- A fixtures package with a scenario runner and translatable checks.
+
+[Unreleased]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.19...HEAD
+[0.1.0-alpha.19]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.18...v0.1.0-alpha.19
+[0.1.0-alpha.18]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.17...v0.1.0-alpha.18
+[0.1.0-alpha.17]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.16...v0.1.0-alpha.17
+[0.1.0-alpha.16]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.15...v0.1.0-alpha.16
+[0.1.0-alpha.15]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.14...v0.1.0-alpha.15
+[0.1.0-alpha.14]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.13...v0.1.0-alpha.14
+[0.1.0-alpha.13]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.12...v0.1.0-alpha.13
+[0.1.0-alpha.12]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.11...v0.1.0-alpha.12
+[0.1.0-alpha.11]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
+[0.1.0-alpha.10]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
+[0.1.0-alpha.9]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
+[0.1.0-alpha.8]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
+[0.1.0-alpha.7]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
+[0.1.0-alpha.6]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
+[0.1.0-alpha.5]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
+[0.1.0-alpha.4]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
+[0.1.0-alpha.3]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
+[0.1.0-alpha.2]: https://github.com/Juanfrank/WanSurvey/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
+[0.1.0-alpha.1]: https://github.com/Juanfrank/WanSurvey/releases/tag/v0.1.0-alpha.1

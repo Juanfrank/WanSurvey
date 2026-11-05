@@ -1,6 +1,6 @@
 {
   "name": "@wansurvey/exporters",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.19",
   "private": true,
   "description": "Data exports: the dataset from interviews, and CSV, SPSS (.sav), Stata (.dta) and ZIP writers.",
   "type": "module",

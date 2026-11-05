@@ -1,6 +1,6 @@
 {
   "name": "@wansurvey/renderer",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.19",
   "private": true,
   "description": "React components that render a questionnaire for each mode (CATI, CAPI, CAWI, PAPI).",
   "type": "module",

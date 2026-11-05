@@ -1,6 +1,6 @@
 {
   "name": "@wansurvey/fixtures",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.19",
   "private": true,
   "description": "Sample questionnaires shared by tests, the designer preview and seeds.",
   "type": "module",

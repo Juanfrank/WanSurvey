@@ -40,6 +40,22 @@ or setting is not.
 | New features, compatible changes, deprecations  | minor                                          |
 | A breaking change                               | major (**minor while below 1.0.0**, see below) |
 
+### Alpha, beta and release candidates
+
+A pre-release has a hyphen and a channel: `0.1.0-alpha.7`, `0.1.0-beta.2`, `0.1.0-rc.1`; it ranks
+below the plain `0.1.0` it leads to (SemVer item 11).
+
+| Channel | Means                                                                                            | Made with              |
+| ------- | ------------------------------------------------------------------------------------------------ | ---------------------- |
+| `alpha` | Features are still arriving and anything may change between two alphas. **All versions so far.** | `pnpm release alpha`   |
+| `beta`  | The features of the version are in; it is being tried in real conditions; fixes only             | `pnpm release beta`    |
+| `rc`    | A candidate for the plain version: nothing is added unless a defect needs it                     | `pnpm release rc`      |
+| (none)  | The release; `pnpm release release` drops the hyphen from the current pre-release                | `pnpm release release` |
+
+`pnpm release alpha` takes `0.1.0-alpha.7` to `0.1.0-alpha.8`; `beta` from an alpha starts at
+`beta.1`. The versions up to `0.1.0-alpha.18` were reconstructed from the git history (see the
+CHANGELOG): one per stage of the work, tagged on the commit that closes it.
+
 ### Before 1.0.0
 
 `0.y.z` is initial development (SemVer item 4): anything may change. We still keep it orderly:
@@ -105,8 +121,8 @@ Scopes are the modules: `cati`, `capi`, `cawi`, `papi`, `review`, `designer`, `a
 
 1. CI is green on the branch, and `[Unreleased]` says what changed. Check it against
    `git log <last tag>..HEAD`: nothing noticeable missing, nothing internal listed.
-2. Choose the bump with the table above: `pnpm release minor` (or `major`, `patch`, an exact
-   `1.0.0-rc.1`). `pnpm release minor --dry-run` shows the section without writing anything.
+2. Choose the bump with the table above: `pnpm release alpha` (or `beta`, `rc`, `release`,
+   `minor`, `major`, `patch`, an exact `1.0.0-rc.1`). `pnpm release minor --dry-run` shows the section without writing anything.
    The script moves `[Unreleased]` under the new version with today's date, fixes the link
    references and sets the version in every `package.json`.
 3. Read the diff and fix the words. Commit: `chore(release): vX.Y.Z`.

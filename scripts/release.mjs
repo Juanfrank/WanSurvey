@@ -3,7 +3,7 @@
 // Keep a Changelog 1.1.0 format. See docs/releasing.md.
 //
 //   node scripts/release.mjs check                  versions and CHANGELOG agree (run by CI)
-//   node scripts/release.mjs bump <major|minor|patch|X.Y.Z[-pre]> [--dry-run]
+//   node scripts/release.mjs bump <major|minor|patch|alpha|beta|rc|release|X.Y.Z[-pre]> [--dry-run]
 //                                                   cut a release: versions, CHANGELOG, links
 //   node scripts/release.mjs notes [X.Y.Z]          the CHANGELOG section of a release
 //                                                   (the latest one by default), for release notes
@@ -47,14 +47,32 @@ export function compare(a, b) {
   return 0;
 }
 
-/** The next version for `major`, `minor`, `patch`, or an explicit version that must be higher. */
+export const CHANNELS = ['alpha', 'beta', 'rc'];
+
+/**
+ * The next version for `major`, `minor`, `patch`; for a pre-release channel (`alpha`, `beta`,
+ * `rc`: the next number of the channel, or the first of a later channel); for `release` (the
+ * pre-release becomes its plain version); or an explicit version. Never goes backwards.
+ */
 export function next(current, how) {
   const c = parse(current);
+  const base = `${c.major}.${c.minor}.${c.patch}`;
   let v;
   if (how === 'major') v = `${c.major + 1}.0.0`;
   else if (how === 'minor') v = `${c.major}.${c.minor + 1}.0`;
   else if (how === 'patch') v = `${c.major}.${c.minor}.${c.patch + (c.pre ? 0 : 1)}`;
-  else {
+  else if (how === 'release') {
+    if (!c.pre) throw new Error(`${current} is already a release`);
+    v = base;
+  } else if (CHANNELS.includes(how)) {
+    const m = /^(alpha|beta|rc)\.(\d+)$/.exec(c.pre ?? '');
+    if (m && m[1] === how) v = `${base}-${how}.${+m[2] + 1}`;
+    else if (m && CHANNELS.indexOf(how) > CHANNELS.indexOf(m[1])) v = `${base}-${how}.1`;
+    else
+      throw new Error(
+        `${current} cannot go to ${how}: give an exact version (e.g. ${c.major}.${c.minor + 1}.0-${how}.1)`,
+      );
+  } else {
     parse(how);
     v = how;
   }
@@ -195,7 +213,10 @@ function main(argv) {
     }
     console.log(`Versions and CHANGELOG are in order (${versionOf(join(root, 'package.json'))}).`);
   } else if (command === 'bump') {
-    if (!arg) throw new Error('usage: release.mjs bump <major|minor|patch|X.Y.Z> [--dry-run]');
+    if (!arg)
+      throw new Error(
+        'usage: release.mjs bump <major|minor|patch|alpha|beta|rc|release|X.Y.Z> [--dry-run]',
+      );
     const dry = argv.includes('--dry-run');
     const problems = checkRepository(root);
     if (problems.length)
@@ -228,7 +249,7 @@ function main(argv) {
     console.log(body);
   } else {
     console.error(
-      'usage: release.mjs check | bump <major|minor|patch|X.Y.Z> [--dry-run] | notes [X.Y.Z]',
+      'usage: release.mjs check | bump <major|minor|patch|alpha|beta|rc|release|X.Y.Z> [--dry-run] | notes [X.Y.Z]',
     );
     process.exit(2);
   }

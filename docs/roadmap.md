@@ -5,14 +5,15 @@ by how soon we expect to take them (**Now, Next, Later**), and each says the out
 What has shipped is in [`CHANGELOG.md`](../CHANGELOG.md); how versions are numbered is in
 [`releasing.md`](releasing.md).
 
-**Where we are:** 0.1.0, the first tagged release. Everything described in the README is built
-and tested; what is left is proving it in the field, closing open decisions and keeping the
-dependencies current.
+**Where we are:** `0.1.0-alpha.19`; every version so far is an alpha. Everything described in the
+README is built and tested; what is left is proving it in the field, closing open decisions and
+keeping the dependencies current. Leaving alpha (beta, then `0.1.0`) is the first goal below.
 
-## Now: 0.2.0, ready for real fieldwork
+## Now: 0.1.0, leaving alpha: ready for real fieldwork
 
-Outcome: an organisation can run its first survey wave on the production deployment and we know,
-by measurement, that it holds.
+Outcome: the features are complete (`beta`) and, once the items below are closed, `0.1.0`: an
+organisation can run its first survey wave on the production deployment and we know, by
+measurement, that it holds.
 
 | Item                                  | Why, and what it takes                                                                                                                                                                                                                                                                                  | State |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
@@ -25,7 +26,7 @@ by measurement, that it holds.
 | Manual accessibility pass             | NVDA and VoiceOver on the interviewer and respondent screens ([`accessibility.md`](accessibility.md))                                                                                                                                                                                                   | open  |
 | Backup and restore rehearsal          | Restore an Azure SQL backup into a new database and start the application on it; write the steps in [`operations.md`](operations.md)                                                                                                                                                                    | open  |
 
-## Next: 0.3.0, upkeep
+## Next: 0.2.0, upkeep
 
 Outcome: the code base stays cheap to change.
 
