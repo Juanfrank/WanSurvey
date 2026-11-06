@@ -119,8 +119,17 @@ export const FieldworkSettings = z.object({
    * final result the case closes as EXPIRED. Null: cases do not expire.
    */
   caseExpiryDays: z.number().int().min(1).max(3650).nullable().default(null),
+  /**
+   * The same deadline in hours (the area's 48 hours). When set it is the one that counts; the
+   * days setting is kept for projects that already use it.
+   */
+  caseExpiryHours: z.number().int().min(1).max(87_600).nullable().default(null),
 });
 export type FieldworkSettings = z.infer<typeof FieldworkSettings>;
+
+/** The hours a case may stay with an interviewer after assignment, or null when it never expires. */
+export const caseExpiryHours = (f: Pick<FieldworkSettings, 'caseExpiryDays' | 'caseExpiryHours'>) =>
+  f.caseExpiryHours ?? (f.caseExpiryDays ? f.caseExpiryDays * 24 : null);
 
 export const RetentionSettings = z.object({
   /**

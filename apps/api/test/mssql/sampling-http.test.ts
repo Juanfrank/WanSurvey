@@ -197,6 +197,53 @@ describe.skipIf(!configured)('SQL Server: sampling selector over HTTP', () => {
       sql`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'sampling.batch_added'`,
     );
     expect(Number(audit!.n)).toBeGreaterThan(0);
+
+    // A batch can be sized with its own confidence and margin, kept with it.
+    const sized = await post(`${base}/sampling/batch`, {
+      confidence: 0.85,
+      margin: 0.15,
+      reason: 'Lote de diciembre',
+    });
+    expect(sized.status, JSON.stringify(sized.body)).toBe(200);
+    expect(sized.body.added).toBeGreaterThan(0);
+    const plan3 = await pm.agent.get(`${base}/sampling`).expect(200);
+    expect(plan3.body.result.batches[1]).toMatchObject({
+      kind: 'add',
+      confidence: 0.85,
+      margin: 0.15,
+      count: sized.body.added,
+    });
+
+    // Replacing the list: what nobody worked leaves, what was worked stays, a new batch comes.
+    const worked = refused.id;
+    const [fresh0] = await q<{ n: number }>(
+      sql`SELECT COUNT(*) AS n FROM cases WHERE project_id = ${project}
+          AND status IN ('fresh', 'assigned') AND attempts = 0 AND selection_role IS NOT NULL`,
+    );
+    const replaced = await post(`${base}/sampling/replace`, {
+      count: 3,
+      reason: 'Se vencieron los casos sin trabajar',
+    });
+    expect(replaced.status, JSON.stringify(replaced.body)).toBe(200);
+    expect(replaced.body).toMatchObject({ added: 3 });
+    expect(replaced.body.withdrawn).toBe(Number(fresh0!.n));
+    const [gone] = await q<{ n: number }>(
+      sql`SELECT COUNT(*) AS n FROM cases WHERE project_id = ${project} AND status = 'withdrawn'`,
+    );
+    expect(Number(gone!.n)).toBe(Number(fresh0!.n));
+    const [kept] = await q<{ status: string }>(sql`SELECT status FROM cases WHERE id = ${worked}`);
+    expect(kept!.status).toBe('finalised');
+    const evs = await q<{ type: string }>(
+      sql`SELECT e.type FROM case_events e JOIN cases c ON c.id = e.case_id
+          WHERE c.project_id = ${project} AND c.status = 'withdrawn'`,
+    );
+    expect(evs.map((e) => e.type)).toContain('replaced');
+    const plan4 = await pm.agent.get(`${base}/sampling`).expect(200);
+    expect(plan4.body.result.batches.at(-1)).toMatchObject({
+      kind: 'replace',
+      count: 3,
+      withdrawn: Number(fresh0!.n),
+    });
   });
 
   it('reweighs the units without a stratum value as a stratum of their own', async () => {

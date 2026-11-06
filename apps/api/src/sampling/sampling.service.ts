@@ -38,10 +38,18 @@ export const ReleaseBody = z.object({
 });
 export const SubstituteBody = z.object({ reason: z.string().trim().min(1).max(500) });
 /** Another batch from the units never selected, added to the cases already in the sample. */
-export const BatchBody = z.object({
-  count: z.number().int().min(1).max(100_000),
-  reason: z.string().trim().min(1).max(500),
-});
+export const BatchBody = z
+  .object({
+    /** Cases to add; left out, it is worked out from `confidence` and `margin`. */
+    count: z.number().int().min(1).max(100_000).optional(),
+    /** The confidence and margin this batch is sized with (kept with it); the plan's by default. */
+    confidence: z.number().min(0.5).max(0.999).optional(),
+    margin: z.number().positive().max(1000).optional(),
+    reason: z.string().trim().min(1).max(500),
+  })
+  .refine((b) => b.count !== undefined || (b.confidence !== undefined && b.margin !== undefined), {
+    message: 'Give the number of cases, or the confidence and the margin to work it out',
+  });
 /** Designs whose probabilities can be recomputed exactly when a batch is added. */
 const BATCH_METHODS = ['srs', 'systematic', 'stratified'];
 export const FieldCasesBody = z.object({
@@ -498,72 +506,127 @@ export class SamplingService {
     body: z.infer<typeof BatchBody>,
     questionnaireId?: string,
   ) {
-    return this.repo.inTenant(ctx.tenantId, async (t) => {
-      const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
-      const plan = await this.plan(t, projectId, q, true);
-      if (plan?.status !== 'selected')
-        throw new ConflictException({ code: 'NOT_SELECTED', message: 'Select the sample first' });
-      const input = this.input(plan);
-      if (input.design.family !== 'probability' || !BATCH_METHODS.includes(input.design.method))
-        throw new ConflictException({
-          code: 'BATCH_DESIGN',
-          message: 'Batches are for simple, systematic and stratified samples; use reserves',
-        });
-      const free = (await this.units(t, projectId, q)).filter((u) => !u.role && !u.caseId);
-      const previous = ((plan.result as { batches?: unknown[] } | null)?.batches ?? []) as {
-        n: number;
-      }[];
-      const n = previous.length + 2;
-      const run = await this.run(t, projectId, q, input, `${plan.seed}:batch${n}`, {
-        units: free,
-        count: body.count,
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.batchIn(t, ctx, projectId, body, questionnaireId, 'add'),
+    );
+  }
+
+  /**
+   * Replaces the list: the cases of the sample nobody has worked (no attempt, no interview, not
+   * on a device or in a call) are withdrawn, and a new batch is drawn from the units never
+   * selected, as in `batch`. What was worked stays. If no new case can be drawn nothing changes.
+   */
+  replace(
+    ctx: AuthContext,
+    projectId: string,
+    body: z.infer<typeof BatchBody>,
+    questionnaireId?: string,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.batchIn(t, ctx, projectId, body, questionnaireId, 'replace'),
+    );
+  }
+
+  private async batchIn(
+    t: SampleTx,
+    ctx: AuthContext,
+    projectId: string,
+    body: z.infer<typeof BatchBody>,
+    questionnaireId: string | undefined,
+    kind: 'add' | 'replace',
+  ) {
+    const q = await this.casesService.questionnaireFor(t, projectId, questionnaireId);
+    const plan = await this.plan(t, projectId, q, true);
+    if (plan?.status !== 'selected')
+      throw new ConflictException({ code: 'NOT_SELECTED', message: 'Select the sample first' });
+    const input = this.input(plan);
+    if (input.design.family !== 'probability' || !BATCH_METHODS.includes(input.design.method))
+      throw new ConflictException({
+        code: 'BATCH_DESIGN',
+        message: 'Batches are for simple, systematic and stratified samples; use reserves',
       });
-      if (!run.result.main.length)
-        throw new ConflictException({ code: 'NO_UNITS', message: 'No eligible units left' });
-      await t.markUnits(
-        run.screened
-          .filter((s) => s.out)
-          .map((s) => ({ id: s.unit.id, eligible: s.out !== 'ineligible', exclusion: s.out! })),
+    const free = (await this.units(t, projectId, q)).filter((u) => !u.role && !u.caseId);
+    // The size of the batch: given, or worked out with the confidence and margin chosen for it.
+    const confidence = body.confidence ?? input.size.confidence;
+    const margin = body.margin ?? input.size.margin;
+    const count =
+      body.count ??
+      Math.max(
+        1,
+        planSizes({ ...input, size: { ...input.size, confidence, margin } }, free.length).selected,
       );
-      const byId = new Map(run.screened.map((s) => [s.unit.id, s.unit]));
-      const created = await this.makeCases(
+    const previous = ((plan.result as { batches?: unknown[] } | null)?.batches ?? []) as {
+      n: number;
+    }[];
+    const n = previous.length + 2;
+    const run = await this.run(t, projectId, q, input, `${plan.seed}:batch${n}`, {
+      units: free,
+      count,
+    });
+    if (!run.result.main.length)
+      throw new ConflictException({ code: 'NO_UNITS', message: 'No eligible units left' });
+    // Replacing: what nobody has worked leaves the list (after the draw found units to bring).
+    const withdrawn = kind === 'replace' ? await t.withdrawUnworked(projectId, q) : [];
+    if (withdrawn.length)
+      await this.casesService.events(
         t,
-        ctx,
-        projectId,
-        q,
-        run.result.main.map((m) => ({
-          unit: byId.get(m.id)!,
-          role: 'main' as const,
-          prob: m.prob,
-          stratum: m.stratum,
+        ctx.userId,
+        withdrawn.map((caseId) => ({
+          caseId,
+          type: 'replaced',
+          details: { batch: n, reason: body.reason },
         })),
       );
-      await this.reweigh(t, projectId, q, input, [
-        ...new Set(run.result.main.map((m) => m.stratum)),
-      ]);
-      const entry = {
-        n,
-        count: created.length,
-        at: new Date().toISOString(),
-        by: ctx.userId,
-        reason: body.reason,
-      };
-      await t.updatePlan(plan.id, {
-        result: {
-          ...((plan.result as Record<string, unknown> | null) ?? {}),
-          batches: [...previous, entry],
-        },
-      });
-      await t.audit(
-        this.audit.fromContext(ctx, {
-          action: 'sampling.batch_added',
-          targetType: 'project',
-          targetId: projectId,
-          details: { questionnaireId: q, ...entry },
-        }),
-      );
-      return { added: created.length, batch: n, left: free.length - created.length };
+    await t.markUnits(
+      run.screened
+        .filter((s) => s.out)
+        .map((s) => ({ id: s.unit.id, eligible: s.out !== 'ineligible', exclusion: s.out! })),
+    );
+    const byId = new Map(run.screened.map((s) => [s.unit.id, s.unit]));
+    const created = await this.makeCases(
+      t,
+      ctx,
+      projectId,
+      q,
+      run.result.main.map((m) => ({
+        unit: byId.get(m.id)!,
+        role: 'main' as const,
+        prob: m.prob,
+        stratum: m.stratum,
+      })),
+    );
+    await this.reweigh(t, projectId, q, input, [...new Set(run.result.main.map((m) => m.stratum))]);
+    const entry = {
+      n,
+      kind,
+      count: created.length,
+      confidence,
+      margin,
+      at: new Date().toISOString(),
+      by: ctx.userId,
+      reason: body.reason,
+      ...(withdrawn.length ? { withdrawn: withdrawn.length } : {}),
+    };
+    await t.updatePlan(plan.id, {
+      result: {
+        ...((plan.result as Record<string, unknown> | null) ?? {}),
+        batches: [...previous, entry],
+      },
     });
+    await t.audit(
+      this.audit.fromContext(ctx, {
+        action: 'sampling.batch_added',
+        targetType: 'project',
+        targetId: projectId,
+        details: { questionnaireId: q, ...entry },
+      }),
+    );
+    return {
+      added: created.length,
+      withdrawn: withdrawn.length,
+      batch: n,
+      left: free.length - created.length,
+    };
   }
 
   /**

@@ -44,9 +44,16 @@ describe.skipIf(!configured)('SQL Server: cases expire after their deadline', ()
     await t?.close();
   });
 
-  async function newCase(opts: { daysAgo: number; status?: string; device?: string }) {
+  async function newCase(opts: {
+    daysAgo: number;
+    hoursAgo?: number;
+    status?: string;
+    device?: string;
+  }) {
     const id = randomUUID();
-    const at = new Date(Date.now() - opts.daysAgo * DAY).toISOString();
+    const at = new Date(
+      Date.now() - opts.daysAgo * DAY - (opts.hoursAgo ?? 0) * 3_600_000,
+    ).toISOString();
     await sql`INSERT INTO cases (id, tenant_id, project_id, external_id, sample, status, assigned_to, assigned_at, checked_out_device)
       VALUES (${id}, ${tenant.id}, ${project}, ${'E' + id.slice(-6)}, '{}',
               ${opts.status ?? 'assigned'}, ${interviewer.id}, CAST(${at} AS datetimeoffset(3)),
@@ -91,5 +98,34 @@ describe.skipIf(!configured)('SQL Server: cases expire after their deadline', ()
       .send({ status: 'fresh' });
     expect(reopen.status, JSON.stringify(reopen.body)).toBe(200);
     expect(await row(old)).toMatchObject({ status: 'fresh', disposition: null, assigned_to: null });
+  });
+
+  it('counts the deadline in hours when the project sets hours, and hours win over days', async () => {
+    const project2 = await createProject(t.owner, tenant.id);
+    const mk = async (hoursAgo: number) => {
+      const id = randomUUID();
+      const at = new Date(Date.now() - hoursAgo * 3_600_000).toISOString();
+      await sql`INSERT INTO cases (id, tenant_id, project_id, external_id, sample, status, assigned_to, assigned_at)
+        VALUES (${id}, ${tenant.id}, ${project2}, ${'H' + id.slice(-6)}, '{}', 'assigned',
+                ${interviewer.id}, CAST(${at} AS datetimeoffset(3)))`.execute(t.owner);
+      return id;
+    };
+    const late = await mk(49);
+    const inTime = await mk(47);
+    // 30 days is the older setting; 48 hours is the one that counts.
+    await setSettings(t.owner, project2, {
+      fieldwork: { caseExpiryDays: 30, caseExpiryHours: 48 },
+    });
+    await expiry.expireAll();
+    expect(await row(late)).toMatchObject({ status: 'finalised', disposition: 'EXPIRED' });
+    expect((await row(inTime)).status).toBe('assigned');
+    const list = await pm.agent.get(`/api/v1/projects/${project2}/cases`);
+    expect(list.body).toMatchObject({ caseExpiryDays: 30, caseExpiryHours: 48 });
+    const [ev] = (
+      (await sql`SELECT details FROM case_events WHERE case_id = ${late}`.execute(t.owner)) as {
+        rows: { details: string }[];
+      }
+    ).rows;
+    expect(JSON.parse(ev!.details)).toMatchObject({ hours: 48 });
   });
 });

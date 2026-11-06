@@ -106,6 +106,20 @@ export class SamplingController {
     return this.sampling.batch(ctx, projectId, body, q.questionnaireId);
   }
 
+  /** Replaces the list: withdraws what nobody has worked and brings a new batch. */
+  @Post('replace')
+  @HttpCode(200)
+  @RequirePermission('cases.import', PERM)
+  @ApiBody({ schema: z.toJSONSchema(BatchBody) as object })
+  replace(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body(new ZodPipe(BatchBody)) body: z.infer<typeof BatchBody>,
+    @Query(QPipe) q: QQ,
+  ) {
+    return this.sampling.replace(ctx, projectId, body, q.questionnaireId);
+  }
+
   @Post('cases/:caseId/substitute')
   @HttpCode(200)
   @RequirePermission('cases.import', PERM)

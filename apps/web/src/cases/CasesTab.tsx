@@ -28,8 +28,8 @@ const MAX_FIELD_COLUMNS = 4;
 const SHOW_LATER = false as boolean;
 
 /** When an assigned case expires, if the project sets a deadline. */
-export const dueAt = (at: string, days: number | null | undefined) =>
-  days ? new Date(Date.parse(at) + days * 86_400_000) : null;
+export const dueAt = (at: string, hours: number | null | undefined) =>
+  hours ? new Date(Date.parse(at) + hours * 3_600_000) : null;
 
 /** How long ago a case was assigned: under an hour, hours, then days. */
 export function assignedAge(t: TFunction, at: string, now = Date.now()) {
@@ -535,10 +535,10 @@ export function CasesTab({ projectId }: { projectId: string }) {
                       {r.assignedTo && r.assignedAt ? assignedAge(t, r.assignedAt) : '—'}
                       {r.assignedAt &&
                       (r.status === 'assigned' || r.status === 'in_progress') &&
-                      dueAt(r.assignedAt, data?.caseExpiryDays) ? (
+                      dueAt(r.assignedAt, data?.caseExpiryHours) ? (
                         <span className="block text-xs text-slate-600" data-col="due">
                           {t('cases.list.dueOn', {
-                            date: dateTime(dueAt(r.assignedAt, data?.caseExpiryDays)!),
+                            date: dateTime(dueAt(r.assignedAt, data?.caseExpiryHours)!),
                           })}
                         </span>
                       ) : null}

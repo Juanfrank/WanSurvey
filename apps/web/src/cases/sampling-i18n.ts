@@ -247,6 +247,22 @@ export const samplingEn = {
   },
   reservesLeft_one: '{{count}} reserve not released',
   reservesLeft_other: '{{count}} reserves not released',
+  changeList: 'Change the list',
+  mode: {
+    add: 'Add',
+    addHelp:
+      'Selects more units from those never chosen, with the same design, and adds them as new cases; the cases already in the sample stay.',
+    replace: 'Replace the list',
+    replaceHelp:
+      'Withdraws the cases nobody has worked (no call, no interview, not on a device) and brings a new batch in their place; what was worked stays.',
+    substituteHelp:
+      'To substitute one case that cannot be reached, use Substitute in that case, when the plan allows it.',
+  },
+  replaceGo: 'Replace the list',
+  replaceDone: '{{withdrawn}} cases withdrawn, {{added}} added.',
+  batchConfidence: 'Confidence of this batch (%)',
+  batchMargin: 'Margin of this batch (%)',
+  batchUseSuggested: 'Use the size they give: {{count}}',
   batch: 'Add a batch',
   batchHelp:
     'Selects more units from those never chosen, with the same design, and adds them as new cases; the cases already in the sample stay. Probabilities are recomputed per stratum.',
@@ -532,6 +548,22 @@ export const samplingEs: typeof samplingEn = {
   },
   reservesLeft_one: '{{count}} reserva sin liberar',
   reservesLeft_other: '{{count}} reservas sin liberar',
+  changeList: 'Cambiar la lista',
+  mode: {
+    add: 'Añadir',
+    addHelp:
+      'Selecciona más unidades entre las que nunca fueron elegidas, con el mismo diseño, y las agrega como casos nuevos; los casos que ya están en la muestra se conservan.',
+    replace: 'Reemplazar la lista',
+    replaceHelp:
+      'Retira los casos que nadie ha trabajado (sin llamada, sin entrevista, que no estén en un dispositivo) y trae un lote nuevo en su lugar; lo trabajado se conserva.',
+    substituteHelp:
+      'Para sustituir un caso al que no se puede llegar, use Sustituir en ese caso, cuando el plan lo permita.',
+  },
+  replaceGo: 'Reemplazar la lista',
+  replaceDone: 'Se retiraron {{withdrawn}} casos y se agregaron {{added}}.',
+  batchConfidence: 'Confianza de este lote (%)',
+  batchMargin: 'Margen de este lote (%)',
+  batchUseSuggested: 'Usar el tamaño que dan: {{count}}',
   batch: 'Agregar un lote',
   batchHelp:
     'Selecciona más unidades entre las que nunca fueron elegidas, con el mismo diseño, y las agrega como casos nuevos; los casos que ya están en la muestra se conservan. Las probabilidades se recalculan por estrato.',

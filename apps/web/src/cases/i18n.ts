@@ -442,7 +442,10 @@ export const casesEn = {
     assigned: 'Assigned by a supervisor or by assignment rules',
     pool: 'Open pool: interviewers take free cases themselves; the first to take a case holds it',
     poolHelp: 'Assignment rules do not run on new imports in this mode.',
-    expiry: 'Days an interviewer has to work a case (empty: no limit)',
+    expiry: 'Time an interviewer has to work a case (empty: no limit)',
+    expiryUnit: 'Unit of the time to work a case',
+    hours: 'hours',
+    days: 'days',
     expiryHelp:
       'Counted from the assignment; reassigning starts again. A case not finished in time closes as Expired, leaves the work lists and can be reopened by a supervisor.',
     capiTitle: 'Face-to-face interviewing',
@@ -912,7 +915,10 @@ export const casesEs: CasesCatalogue = {
     assigned: 'Asignados por un supervisor o por reglas de asignación',
     pool: 'Bolsa abierta: los entrevistadores toman casos libres; quien toma primero un caso lo conserva',
     poolHelp: 'En este modo las reglas de asignación no se aplican a las nuevas importaciones.',
-    expiry: 'Días que tiene el entrevistador para trabajar un caso (vacío: sin límite)',
+    expiry: 'Tiempo que tiene el entrevistador para trabajar un caso (vacío: sin límite)',
+    expiryUnit: 'Unidad del tiempo para trabajar un caso',
+    hours: 'horas',
+    days: 'días',
     expiryHelp:
       'Se cuentan desde la asignación; al reasignar, el plazo empieza de nuevo. Un caso no terminado a tiempo se cierra como Vencido, sale de las listas de trabajo y un supervisor puede reabrirlo.',
     capiTitle: 'Entrevistas en persona',

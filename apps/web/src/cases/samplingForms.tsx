@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
+import { planSizes } from '@wansurvey/logic';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useScoped } from './scope.js';
@@ -21,18 +22,34 @@ export function BatchForm({
 }) {
   const { t } = useTranslation();
   const scoped = useScoped();
+  // How the list changes: add a batch next to what is there, or replace what nobody has worked.
+  const [mode, setMode] = useState<'add' | 'replace'>('add');
   const [count, setCount] = useState(10);
+  // The confidence and margin this batch is sized with (the plan's to begin with).
+  const [confidence, setConfidence] = useState<number>(data.plan.size.confidence);
+  const [margin, setMargin] = useState<number>(data.plan.size.margin);
   const [reason, setReason] = useState('');
   const [status, setStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const suggested = Math.max(
+    1,
+    planSizes(
+      { ...data.plan, size: { ...data.plan.size, confidence, margin } },
+      data.unitsLeft || undefined,
+    ).selected,
+  );
   const add = useMutation({
     mutationFn: () =>
-      api<{ added: number }>(scoped(`/projects/${projectId}/sampling/batch`), {
-        method: 'POST',
-        body: { count, reason },
-      }),
+      api<{ added: number; withdrawn?: number }>(
+        scoped(`/projects/${projectId}/sampling/${mode === 'replace' ? 'replace' : 'batch'}`),
+        { method: 'POST', body: { count, confidence, margin, reason } },
+      ),
     onSuccess: async (r) => {
-      setStatus(t('cases.sampling.batchDone', { count: r.added }));
+      setStatus(
+        mode === 'replace'
+          ? t('cases.sampling.replaceDone', { added: r.added, withdrawn: r.withdrawn ?? 0 })
+          : t('cases.sampling.batchDone', { count: r.added }),
+      );
       setReason('');
       setError(null);
       await onDone();
@@ -49,13 +66,48 @@ export function BatchForm({
       }}
     >
       <h3 className="font-semibold">
-        {t('cases.sampling.batch')} ·{' '}
+        {t('cases.sampling.changeList')} ·{' '}
         <span className="font-normal text-slate-600">
           {t('cases.sampling.unitsLeft', { count: data.unitsLeft })}
         </span>
       </h3>
-      <p className="text-sm text-slate-600">{t('cases.sampling.batchHelp')}</p>
+      <fieldset className="flex flex-col gap-1 text-sm">
+        <legend className="sr-only">{t('cases.sampling.changeList')}</legend>
+        {(['add', 'replace'] as const).map((m) => (
+          <label key={m} className="flex items-start gap-2">
+            <input
+              type="radio"
+              name="change-list"
+              className="mt-0.5"
+              checked={mode === m}
+              onChange={() => setMode(m)}
+            />
+            <span>
+              <span className="font-medium">{t(`cases.sampling.mode.${m}`)}</span>
+              <span className="block text-slate-600">{t(`cases.sampling.mode.${m}Help`)}</span>
+            </span>
+          </label>
+        ))}
+        <p className="text-slate-600">{t('cases.sampling.mode.substituteHelp')}</p>
+      </fieldset>
       <div className="flex flex-wrap items-end gap-3">
+        <Num
+          label={t('cases.sampling.batchConfidence')}
+          value={confidence}
+          percent
+          step="0.1"
+          min={50}
+          max={99.9}
+          onChange={(n) => n !== null && setConfidence(Math.min(0.999, Math.max(0.5, n)))}
+        />
+        <Num
+          label={t('cases.sampling.batchMargin')}
+          value={margin}
+          percent
+          step="0.1"
+          min={0.1}
+          onChange={(n) => n !== null && n > 0 && setMargin(n)}
+        />
         <Num
           label={t('cases.sampling.batchCount')}
           value={count}
@@ -63,12 +115,21 @@ export function BatchForm({
           min={1}
           onChange={(n) => setCount(Math.max(1, Math.round(n ?? 1)))}
         />
+        <button
+          type="button"
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          onClick={() => setCount(suggested)}
+        >
+          {t('cases.sampling.batchUseSuggested', { count: suggested })}
+        </button>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 sm:min-w-[16rem] flex-1 flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">{t('cases.sampling.releaseReason')}</span>
           <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
         <Button type="submit" disabled={!reason.trim() || !data.unitsLeft || add.isPending}>
-          {t('cases.sampling.batchAdd')}
+          {mode === 'replace' ? t('cases.sampling.replaceGo') : t('cases.sampling.batchAdd')}
         </Button>
       </div>
       <p role="status" className="text-sm text-emerald-ink-800">

@@ -128,27 +128,50 @@ export function SettingsTab({ project }: { project: Project }) {
                 </p>
               </fieldset>
               <div className="flex flex-col gap-1">
-                <label className="flex items-center gap-2 font-medium">
+                <div className="flex flex-wrap items-center gap-2 font-medium">
+                  <label htmlFor="settings-expiry">{t('cases.settings.expiry')}</label>
                   <input
+                    id="settings-expiry"
                     type="number"
                     min={1}
-                    max={3650}
+                    max={form.fieldwork.caseExpiryHours ? 87600 : 3650}
                     className={`${controlCls} w-24`}
                     aria-describedby="settings-expiry-help"
-                    value={form.fieldwork.caseExpiryDays ?? ''}
-                    onChange={(e) =>
+                    value={form.fieldwork.caseExpiryHours ?? form.fieldwork.caseExpiryDays ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value === '' ? null : Math.max(1, Number(e.target.value));
+                      // The unit stays as it was: hours when the project counts hours, else days.
                       setForm({
                         ...form,
-                        fieldwork: {
-                          ...form.fieldwork,
-                          caseExpiryDays:
-                            e.target.value === '' ? null : Math.max(1, Number(e.target.value)),
-                        },
-                      })
-                    }
+                        fieldwork: form.fieldwork.caseExpiryHours
+                          ? { ...form.fieldwork, caseExpiryHours: v }
+                          : { ...form.fieldwork, caseExpiryDays: v },
+                      });
+                    }}
                   />
-                  {t('cases.settings.expiry')}
-                </label>
+                  <select
+                    className={controlCls}
+                    aria-label={t('cases.settings.expiryUnit')}
+                    value={form.fieldwork.caseExpiryHours ? 'hours' : 'days'}
+                    onChange={(e) => {
+                      const v = form.fieldwork.caseExpiryHours ?? form.fieldwork.caseExpiryDays;
+                      setForm({
+                        ...form,
+                        fieldwork:
+                          e.target.value === 'hours'
+                            ? { ...form.fieldwork, caseExpiryHours: v ?? 48, caseExpiryDays: null }
+                            : {
+                                ...form.fieldwork,
+                                caseExpiryDays: v ? Math.max(1, Math.ceil(v / 24)) : null,
+                                caseExpiryHours: null,
+                              },
+                      });
+                    }}
+                  >
+                    <option value="hours">{t('cases.settings.hours')}</option>
+                    <option value="days">{t('cases.settings.days')}</option>
+                  </select>
+                </div>
                 <p id="settings-expiry-help" className="max-w-prose text-slate-600">
                   {t('cases.settings.expiryHelp')}
                 </p>

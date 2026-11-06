@@ -277,7 +277,7 @@ export interface CasesTx {
   expireDue(
     projectId: string,
     now: Date,
-    days: number,
+    hours: number,
   ): Promise<{ id: string; assignedTo: string | null; assignedAt: Date | null }[]>;
   projectIds(): Promise<string[]>;
   /** Auto-views of personal data already recorded by the person for these cases. */
@@ -1037,7 +1037,7 @@ export class MssqlCasesTx implements CasesTx {
     }));
   }
 
-  async expireDue(projectId: string, now: Date, days: number) {
+  async expireDue(projectId: string, now: Date, hours: number) {
     const res = await ksql<{ id: string; assigned_to: string | null; assigned_at: Date | null }>`
       UPDATE c SET status = 'finalised', disposition = 'EXPIRED', next_contact_at = NULL,
                    updated_at = ${instant(now)}
@@ -1045,7 +1045,7 @@ export class MssqlCasesTx implements CasesTx {
       FROM dbo.cases c
       WHERE c.project_id = ${projectId} AND c.status IN ('assigned', 'in_progress')
         AND c.assigned_to IS NOT NULL
-        AND c.assigned_at < ${instant(new Date(now.getTime() - days * 86_400_000))}
+        AND c.assigned_at < ${instant(new Date(now.getTime() - hours * 3_600_000))}
         AND c.checked_out_device IS NULL
         AND (c.call_lock_until IS NULL OR c.call_lock_until < ${instant(now)})
         AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv

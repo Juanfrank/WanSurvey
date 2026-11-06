@@ -33,6 +33,7 @@ export interface CaseList {
   assignmentMode: 'assigned' | 'pool';
   /** Days a case may stay assigned before it expires; null: no deadline. */
   caseExpiryDays?: number | null;
+  caseExpiryHours?: number | null;
   piiMasked: boolean;
   autoReveal: boolean;
   canReveal: boolean;

@@ -15,7 +15,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { MODES } from '@wansurvey/schema';
+import { caseExpiryHours, MODES } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
@@ -196,6 +196,7 @@ export class CasesController {
         fields,
         assignmentMode: settings.assignmentMode,
         caseExpiryDays: settings.fieldwork.caseExpiryDays,
+        caseExpiryHours: caseExpiryHours(settings.fieldwork),
         piiMasked: pii.size > 0,
         /** The caller's own cases are listed with personal data shown. */
         autoReveal: auto && pii.size > 0,
@@ -273,6 +274,7 @@ export class CasesController {
         pii: { masked: hasPii && !show, canReveal: canSee && hasPii && !show, auto },
         assignmentMode: settings.assignmentMode,
         caseExpiryDays: settings.fieldwork.caseExpiryDays,
+        caseExpiryHours: caseExpiryHours(settings.fieldwork),
         elsewhere,
         canClaim: pool && free && can(ctx.memberships, 'cases.read_assigned', projectId),
         canRelease:

@@ -132,6 +132,8 @@ export interface SampleTx extends CasesTx {
   unitsByIds(ids: string[]): Promise<UnitView[]>;
   unit(id: string): Promise<UnitView | null>;
   markUnits(items: { id: string; eligible: boolean; exclusion: string }[]): Promise<void>;
+  /** Withdraws the sample's cases nobody has worked; returns their ids. */
+  withdrawUnworked(projectId: string, questionnaireId: string | null): Promise<string[]>;
   setReserve(
     id: string,
     v: { releaseOrder: number; prob: number | null; weight: number | null; stratum: string | null },
@@ -455,6 +457,26 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
       .where('id', '=', id)
       .executeTakeFirst();
     return r ? this.unitView(r) : null;
+  }
+
+  async withdrawUnworked(projectId: string, questionnaireId: string | null) {
+    const res = await ksql<{ id: string }>`
+      UPDATE c SET status = 'withdrawn', updated_at = SYSDATETIMEOFFSET()
+      OUTPUT inserted.id
+      FROM dbo.cases c
+      WHERE c.project_id = ${projectId}
+        AND ${
+          questionnaireId
+            ? ksql`c.questionnaire_id = ${questionnaireId}`
+            : ksql`c.questionnaire_id IS NULL`
+        }
+        AND c.selection_role IS NOT NULL
+        AND c.status IN ('fresh', 'assigned')
+        AND c.attempts = 0
+        AND c.checked_out_device IS NULL
+        AND (c.call_lock_until IS NULL OR c.call_lock_until < SYSDATETIMEOFFSET())
+        AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id)`.execute(this.mtx);
+    return res.rows.map((r) => r.id.toLowerCase());
   }
 
   async markUnits(items: { id: string; eligible: boolean; exclusion: string }[]) {

@@ -70,18 +70,6 @@ Outcome: populations arrive without anyone loading a file. Pending the area's de
 - **The SGC for face-to-face work**: its data are in SQL Server; how the application reads them is
   to be defined.
 
-### The sample (HU-04)
-
-- **Confidence and margin chosen, and kept, with each sample that is added**, not as one setting
-  for the project (the area's 95 % and 5 % from January to November and 85 % and 15 % in
-  December are met by choosing them for each added sample, so no monthly rule is needed). Today
-  a batch takes a number of cases; the confidence and margin behind that number are not kept
-  with the batch.
-- **Expiry in hours** (the area's 48 hours) instead of days. An expired case leaves the cases
-  eligible for contact and nothing more; a new sample is brought in with **Add**.
-- **Three ways to change a list**: replace it, add to it, or substitute cases; today there are the
-  last two.
-
 ### Questionnaires (HU-06)
 
 - **Approval before publishing**: who approves and in how many steps is defined later.

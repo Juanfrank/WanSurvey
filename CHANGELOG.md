@@ -34,6 +34,13 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   note, so no report counts them; the days involved are recomputed and the history keeps the state
   before.
 
+- **Time to work a case in hours**: the deadline after assignment (for example 48 hours) is set in
+  hours or in days, and hours win when a project has both.
+- **Changing the list of a sample**: a batch is sized with the confidence and margin chosen for it,
+  which are kept with it (the area changes them when it adds each sample, not for the whole
+  project), and **Replace the list** withdraws the cases nobody has worked and brings a new batch.
+  Adding and substituting a case were already there.
+
 ### Changed
 
 - The web sendings are called **Difusión** (outreach) in the interface instead of _Campañas_; the

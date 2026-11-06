@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { caseExpiryHours } from '@wansurvey/schema';
 import { Engine } from '../db/engine.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { CASES_REPO, type CasesRepo, type CasesTx } from './cases-repo.js';
 import { CasesService } from './cases.service.js';
 
 /**
- * Cases have a deadline after assignment (project setting `fieldwork.caseExpiryDays`): when it
+ * Cases have a deadline after assignment (project setting `fieldwork.caseExpiryHours`, or the
+ * older `caseExpiryDays`): when it
  * passes without a final result, the case closes as EXPIRED and leaves the work lists. Cases on
  * a device, being called or interviewed are left until that ends. Runs every hour.
  */
@@ -43,14 +45,14 @@ export class ExpiryService implements OnModuleInit {
 
   /** Closes the project's overdue cases; returns how many. */
   async expireProject(t: CasesTx, projectId: string, now = new Date()) {
-    const days = (await this.cases.settings(t, projectId)).fieldwork.caseExpiryDays;
-    if (!days) return 0;
-    const due = await t.expireDue(projectId, now, days);
+    const hours = caseExpiryHours((await this.cases.settings(t, projectId)).fieldwork);
+    if (!hours) return 0;
+    const due = await t.expireDue(projectId, now, hours);
     await t.events(
       due.map((c) => ({
         caseId: c.id,
         type: 'expired',
-        details: { days, assignedTo: c.assignedTo, assignedAt: c.assignedAt },
+        details: { hours, assignedTo: c.assignedTo, assignedAt: c.assignedAt },
       })),
     );
     return due.length;
