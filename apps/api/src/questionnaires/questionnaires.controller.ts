@@ -4,6 +4,7 @@ import {
   ConflictException,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Inject,
@@ -22,7 +23,7 @@ import { analyze } from '@wansurvey/logic';
 import { Mode, Questionnaire, Scenario, VersionMapping } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
+import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
 import {
   QUESTIONNAIRES_REPO,
@@ -31,6 +32,7 @@ import {
   type QuestionnairesTx,
 } from './questionnaires-repo.js';
 import { checkDraft } from './publish-checks.js';
+import { questionsOf, rankSimilar, type QuestionSource } from './similar.js';
 import { QUESTIONNAIRE_STATES } from './state.js';
 import { trimUnderscores } from '../common/text.js';
 
@@ -68,6 +70,21 @@ const PublishBody = z.object({
   mapping: VersionMapping.optional(),
 });
 const CheckBody = PublishBody.partial();
+const SimilarBody = z.strictObject({
+  text: z.string().trim().min(3).max(1000),
+  language: z.string().max(16).optional(),
+  /** The questionnaire being edited, whose own questions are not shown back. */
+  questionnaireId: z.uuid().optional(),
+});
+const ApprovalRequestBody = z.strictObject({
+  baseRevision: z.number().int().positive(),
+  note: z.string().trim().max(1000).optional(),
+});
+const ApprovalDecisionBody = z.strictObject({
+  approve: z.boolean(),
+  /** Needed to reject: what to fix. */
+  note: z.string().trim().max(1000).optional(),
+});
 
 const ScenarioBody = z.object({ scenario: Scenario });
 const RenameBody = z.object({ name: DisplayName });
@@ -342,6 +359,14 @@ export class QuestionnairesController {
       // The row lock serialises publishes (and saves) of this questionnaire.
       const q = await this.lockDraft(t, projectId, qid);
       if (q.draftRevision !== body.baseRevision) throw await this.conflict(t, q);
+      // A project that asks for it publishes only a draft someone else has approved as it stands.
+      const needsApproval = await t.approvalRequired(projectId);
+      const approved = needsApproval ? await t.approvedFor(qid, q.draftRevision) : null;
+      if (needsApproval && !approved)
+        throw new ConflictException({
+          code: 'APPROVAL_REQUIRED',
+          message: 'This project needs the draft approved before it is published',
+        });
       const previous = await t.previous(qid);
       const { check, questionnaire, compiled } = checkDraft(
         q.draft,
@@ -381,10 +406,166 @@ export class QuestionnairesController {
             hash: compiled.hash,
             breakingChanges: check.breaking.map((b) => b.id),
             scenarios: check.scenarios.length,
+            ...(approved ? { approvedBy: approved.decidedBy } : {}),
           },
         }),
       );
+      if (approved) await t.consumeApproval(approved.id);
       return row;
+    });
+  }
+
+  /**
+   * Questions like this one in the organisation's other questionnaires and its library (only
+   * where the caller may read the questionnaires), to avoid asking the same thing twice and to
+   * reuse the wording already in use.
+   */
+  @Post('similar')
+  @HttpCode(200)
+  @RequirePermission('questionnaires.read', PERM)
+  @ApiBody({ schema: z.toJSONSchema(SimilarBody) as object })
+  similar(
+    @Auth() ctx: AuthContext,
+    @Body(new ZodPipe(SimilarBody)) body: z.infer<typeof SimilarBody>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const found = await t.questionSources();
+      const sources: QuestionSource[] = [
+        ...found.questionnaires
+          .filter(
+            (q) =>
+              q.id !== body.questionnaireId &&
+              can(ctx.memberships, 'questionnaires.read', q.projectId),
+          )
+          .flatMap((q) =>
+            questionsOf(q.draft, body.language).map((x) => ({
+              origin: {
+                kind: 'questionnaire' as const,
+                id: q.id,
+                name: q.name,
+                projectId: q.projectId,
+              },
+              variable: x.variable,
+              text: x.text,
+            })),
+          ),
+        ...found.library.flatMap((l) =>
+          questionsOf([l.content], body.language).map((x) => ({
+            origin: { kind: 'library' as const, id: l.id, name: l.name, projectId: null },
+            variable: x.variable,
+            text: x.text,
+          })),
+        ),
+      ];
+      return rankSimilar(body.text, sources).map((s) => ({
+        score: s.score,
+        text: s.text,
+        variable: s.variable,
+        origin: s.origin,
+      }));
+    });
+  }
+
+  /** Whether the project asks for approval, and the requests of this questionnaire. */
+  @Get(':qid/approval')
+  @RequirePermission('questionnaires.read', PERM)
+  approval(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('qid', ParseUUIDPipe) qid: string,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.questionnaire(t, projectId, qid);
+      const requests = await t.approvals(qid);
+      return {
+        required: await t.approvalRequired(projectId),
+        draftRevision: q.draftRevision,
+        /** The latest request still standing, and whether it is for the draft as it is now. */
+        current: requests.find((r) => r.status === 'pending' || r.status === 'approved') ?? null,
+        requests,
+      };
+    });
+  }
+
+  /** Asks for the draft, as it stands, to be approved for publishing. */
+  @Post(':qid/approval/request')
+  @HttpCode(200)
+  @RequirePermission('questionnaires.edit', PERM)
+  @ApiBody({ schema: z.toJSONSchema(ApprovalRequestBody) as object })
+  requestApproval(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('qid', ParseUUIDPipe) qid: string,
+    @Body(new ZodPipe(ApprovalRequestBody)) body: z.infer<typeof ApprovalRequestBody>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.lockDraft(t, projectId, qid);
+      if (q.draftRevision !== body.baseRevision) throw await this.conflict(t, q);
+      const row = await t.requestApproval({
+        questionnaireId: qid,
+        draftRevision: q.draftRevision,
+        note: body.note ?? null,
+        userId: ctx.userId,
+      });
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'questionnaire.approval_requested',
+          targetType: 'questionnaire',
+          targetId: qid,
+          details: { draftRevision: q.draftRevision },
+        }),
+      );
+      return row;
+    });
+  }
+
+  /** Approves or rejects a request: someone other than who asked, and for the draft as it is. */
+  @Post(':qid/approval/:id/decide')
+  @HttpCode(200)
+  @RequirePermission('questionnaires.approve', PERM)
+  @ApiBody({ schema: z.toJSONSchema(ApprovalDecisionBody) as object })
+  decideApproval(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('qid', ParseUUIDPipe) qid: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(ApprovalDecisionBody)) body: z.infer<typeof ApprovalDecisionBody>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const q = await this.lockDraft(t, projectId, qid);
+      const r = await t.approval(id);
+      if (!r || r.questionnaireId !== qid) throw new NotFoundException('Request not found');
+      if (r.status !== 'pending')
+        throw new ConflictException({ code: 'NOT_PENDING', message: `The request is ${r.status}` });
+      if (r.requestedBy === ctx.userId)
+        throw new ForbiddenException({
+          code: 'SELF_APPROVAL',
+          message: 'Someone else has to approve what you ask to publish',
+        });
+      if (r.draftRevision !== q.draftRevision)
+        throw new ConflictException({
+          code: 'APPROVAL_STALE',
+          message: 'The draft changed after the request: ask again',
+        });
+      if (!body.approve && !body.note?.trim())
+        throw new BadRequestException({
+          code: 'NOTE_REQUIRED',
+          message: 'Say what has to change',
+        });
+      await t.decideApproval(id, {
+        approved: body.approve,
+        userId: ctx.userId,
+        note: body.note?.trim() || null,
+      });
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'questionnaire.approval_decided',
+          targetType: 'questionnaire',
+          targetId: qid,
+          details: { draftRevision: r.draftRevision, approved: body.approve },
+        }),
+      );
+      return (await t.approval(id))!;
     });
   }
 

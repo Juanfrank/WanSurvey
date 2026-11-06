@@ -41,6 +41,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   project), and **Replace the list** withdraws the cases nobody has worked and brings a new batch.
   Adding and substituting a case were already there.
 
+- **Approval before publishing**: a project can ask for a draft to be approved before it is
+  published. The author asks for the draft as it stands, someone else with the new permission
+  _Approve questionnaires for publishing_ (project managers have it by default) approves it or
+  says what to change, any later change to the draft needs a new request, and a publish uses up the
+  approval. The steps and who approves are still one level; more can be added later.
+  **Upgrade:** a custom role matrix does not have the new permission until it is given.
+- **Similar questions**: in the question editor, a button lists questions worded alike in the
+  organisation's other questionnaires and its library, to avoid asking the same thing twice and to
+  reuse wording. Linking similar questions to one another is still to do.
+
 ### Changed
 
 - The web sendings are called **Difusión** (outreach) in the interface instead of _Campañas_; the

@@ -327,6 +327,141 @@ describe.skipIf(!configured)('SQL Server: questionnaires over HTTP', () => {
     ).toEqual([1, 2]);
   });
 
+  it('asks for an approval before publishing when the project says so: someone else, for the draft as it is', async () => {
+    const proj = await createProject(t.owner, tenant.id);
+    const at = `/api/v1/projects/${proj}/questionnaires`;
+    const created = await post(pm, at, {
+      modes: ALL_MODES,
+      name: 'Con aprobación',
+      source: { kind: 'json', definition: small() },
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const url = `${at}/${created.body.id}`;
+    let rev = created.body.draftRevision as number;
+
+    // Without the setting, publishing needs no approval (checked in the other tests).
+    await sql`UPDATE projects SET settings = JSON_MODIFY(settings, '$.publishApproval', JSON_QUERY(${JSON.stringify({ required: true })})) WHERE id = ${proj}`.execute(
+      t.owner,
+    );
+    const state = await pm.agent.get(`${url}/approval`);
+    expect(state.body).toMatchObject({ required: true, current: null, requests: [] });
+    const refused = await post(pm, `${url}/publish`, { baseRevision: rev });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('APPROVAL_REQUIRED');
+
+    // The author asks; the author cannot approve; another approver can.
+    const asked = await post(pm, `${url}/approval/request`, {
+      baseRevision: rev,
+      note: 'Listo para campo',
+    });
+    expect(asked.status, JSON.stringify(asked.body)).toBe(200);
+    expect(asked.body).toMatchObject({ status: 'pending', draftRevision: rev });
+    const self = await post(pm, `${url}/approval/${asked.body.id}/decide`, { approve: true });
+    expect(self.status).toBe(403);
+    expect(self.body.code).toBe('SELF_APPROVAL');
+    // A rejection says what to change.
+    expect(
+      (await post(pm2, `${url}/approval/${asked.body.id}/decide`, { approve: false })).body.code,
+    ).toBe('NOTE_REQUIRED');
+    const rejected = await post(pm2, `${url}/approval/${asked.body.id}/decide`, {
+      approve: false,
+      note: 'Falta la pregunta B',
+    });
+    expect(rejected.body).toMatchObject({
+      status: 'rejected',
+      decisionNote: 'Falta la pregunta B',
+    });
+    expect((await post(pm, `${url}/publish`, { baseRevision: rev })).body.code).toBe(
+      'APPROVAL_REQUIRED',
+    );
+
+    // Ask again, approve, and a change to the draft takes the approval away.
+    const again = await post(pm, `${url}/approval/request`, { baseRevision: rev });
+    const ok = await post(pm2, `${url}/approval/${again.body.id}/decide`, { approve: true });
+    expect(ok.body).toMatchObject({ status: 'approved' });
+    const edited = await put(pm, `${url}/draft`, { definition: small(), baseRevision: rev });
+    expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+    rev = edited.body.draftRevision;
+    expect((await post(pm, `${url}/publish`, { baseRevision: rev })).body.code).toBe(
+      'APPROVAL_REQUIRED',
+    );
+    const stale = await post(pm2, `${url}/approval/${again.body.id}/decide`, { approve: true });
+    expect(stale.status).toBe(409);
+
+    // The new draft, asked and approved, publishes; the approval is used up.
+    const third = await post(pm, `${url}/approval/request`, { baseRevision: rev });
+    await post(pm2, `${url}/approval/${third.body.id}/decide`, { approve: true }).expect(200);
+    const published = await post(pm, `${url}/publish`, { baseRevision: rev });
+    expect(published.status, JSON.stringify(published.body)).toBe(201);
+    const [used] = await rows(sql`SELECT status FROM publish_requests WHERE id = ${third.body.id}`);
+    expect(used).toMatchObject({ status: 'consumed' });
+    // Someone without the permission cannot decide.
+    const viewer = await login(
+      t,
+      await createUser(t.owner, tenant.id, [{ role: 'reviewer', projectId: proj }]),
+      tenant.slug,
+    );
+    const fourth = await post(pm, `${url}/approval/request`, { baseRevision: rev });
+    expect(fourth.status).toBe(200);
+    expect(
+      (await post(viewer, `${url}/approval/${fourth.body.id}/decide`, { approve: true })).status,
+    ).toBe(403);
+  });
+
+  it('finds questions like a wording in the other questionnaires of the organisation', async () => {
+    // A word of its own: the organisation's other tests have asked about age many times.
+    const tag = `xq${Date.now().toString(36)}`;
+    const def = (id: string, text: string): QuestionnaireInput => ({
+      id,
+      title: { es: id },
+      defaultLanguage: 'es',
+      languages: ['es'],
+      sections: [
+        {
+          id: 'S',
+          title: { es: 'S' },
+          items: [
+            { kind: 'question', id: 'EDAD', name: 'EDAD', type: 'numeric', text: { es: text } },
+          ],
+        },
+      ],
+    });
+    const a = await post(pm, base, {
+      modes: ALL_MODES,
+      name: 'Hogares',
+      source: { kind: 'json', definition: def('HOG', `Edad cumplida del jefe del hogar ${tag}`) },
+    });
+    const b = await post(pm, base, {
+      modes: ALL_MODES,
+      name: 'Empleo',
+      source: { kind: 'json', definition: def('EMP', 'Color favorito') },
+    });
+    expect(a.status, JSON.stringify(a.body)).toBe(201);
+    const found = await post(pm, `${base}/similar`, {
+      text: `¿Cuál es la edad cumplida del jefe del hogar ${tag}?`,
+      language: 'es',
+      questionnaireId: b.body.id,
+    });
+    expect(found.status, JSON.stringify(found.body)).toBe(200);
+    // Other questionnaires of the organisation may have a better match; ours must be there.
+    expect(
+      found.body.find((m: { origin: { id: string } }) => m.origin.id === a.body.id),
+    ).toMatchObject({
+      text: `Edad cumplida del jefe del hogar ${tag}`,
+      variable: 'EDAD',
+      origin: { kind: 'questionnaire', id: a.body.id, name: 'Hogares' },
+    });
+    expect(found.body.some((m: { text: string }) => m.text === 'Color favorito')).toBe(false);
+    // The questionnaire being edited is not shown back to itself.
+    const own = await post(pm, `${base}/similar`, {
+      text: `Edad cumplida del jefe del hogar ${tag}`,
+      language: 'es',
+      questionnaireId: a.body.id,
+    });
+    expect(own.body.some((m: { origin: { id: string } }) => m.origin.id === a.body.id)).toBe(false);
+    expect((await post(pm, `${base}/similar`, { text: 'ab' })).status).toBe(400);
+  });
+
   it('retires versions; published versions cannot be changed or deleted', async () => {
     const qid = await createQuestionnaire(t.owner, tenant.id, project, { publish: true });
     const url = `${base}/${qid}/versions/1`;

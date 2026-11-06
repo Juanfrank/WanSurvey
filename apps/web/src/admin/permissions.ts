@@ -26,6 +26,7 @@ export const PERMISSION_AREAS: { area: string; permissions: Permission[] }[] = [
       'questionnaires.read',
       'questionnaires.edit',
       'questionnaires.publish',
+      'questionnaires.approve',
       'questionnaires.comment',
     ],
   },

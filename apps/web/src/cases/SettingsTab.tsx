@@ -458,6 +458,21 @@ export function SettingsTab({ project }: { project: Project }) {
                   {t('review.settings.rejectReopens')}
                 </label>
               </fieldset>
+              <fieldset className="flex flex-col gap-2" data-testid="approval-settings">
+                <legend className="mb-1 font-medium">{t('cases.settings.approvalTitle')}</legend>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={form.publishApproval.required}
+                    onChange={(e) =>
+                      setForm({ ...form, publishApproval: { required: e.target.checked } })
+                    }
+                  />
+                  {t('cases.settings.approvalRequired')}
+                </label>
+                <p className="max-w-prose text-slate-600">{t('cases.settings.approvalHelp')}</p>
+              </fieldset>
             </>,
           )}
         </Tabs.Content>

@@ -69,6 +69,22 @@ export interface LibraryItemView {
   updatedAt: Date;
 }
 
+/** A request to publish a draft (a questionnaire's approval before publishing). */
+export interface ApprovalView {
+  id: string;
+  questionnaireId: string;
+  draftRevision: number;
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'consumed';
+  note: string | null;
+  requestedBy: string;
+  requestedByName: string | null;
+  requestedAt: Date;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedAt: Date | null;
+  decisionNote: string | null;
+}
+
 export interface QuestionnairesTx {
   // ─── Questionnaires ─────────────────────────────────────────────────────────────────
   project(id: string): Promise<{ id: string; languages: string[]; modesEnabled: string[] } | null>;
@@ -234,6 +250,34 @@ export interface QuestionnairesTx {
     v: { name?: string; description?: string | null; tags?: string[] },
   ): Promise<LibraryItemView | null>;
   libraryDelete(id: string): Promise<{ id: string; name: string } | null>;
+
+  /** Drafts of the organisation's questionnaires and its library items, for finding questions. */
+  questionSources(): Promise<{
+    questionnaires: { id: string; name: string; projectId: string; draft: unknown }[];
+    library: { id: string; name: string; content: unknown }[];
+  }>;
+
+  // ─── Approval before publishing ─────────────────────────────────────────────────────
+  /** Whether the project asks for an approval before a questionnaire is published. */
+  approvalRequired(projectId: string): Promise<boolean>;
+  /** The questionnaire's requests, newest first. */
+  approvals(questionnaireId: string): Promise<ApprovalView[]>;
+  approval(id: string): Promise<ApprovalView | null>;
+  /** A new request for the draft revision; pending ones are withdrawn. */
+  requestApproval(v: {
+    questionnaireId: string;
+    draftRevision: number;
+    note: string | null;
+    userId: string;
+  }): Promise<ApprovalView>;
+  decideApproval(
+    id: string,
+    v: { approved: boolean; userId: string; note: string | null },
+  ): Promise<void>;
+  /** The approved request for this draft revision, if there is one. */
+  approvedFor(questionnaireId: string, draftRevision: number): Promise<ApprovalView | null>;
+  /** The approval used by a publish. */
+  consumeApproval(id: string): Promise<void>;
 
   audit(entry: AuditEntry): Promise<void>;
 }
@@ -864,6 +908,120 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
     if (!r) return null;
     await this.store.deleteLibraryItem(this.tx, id);
     return { id: r.id, name: r.name };
+  }
+
+  async questionSources() {
+    const qs = await this.tx
+      .selectFrom('questionnaires')
+      .select(['id', 'name', 'project_id', 'draft'])
+      .top(500)
+      .orderBy('updated_at', 'desc')
+      .execute();
+    const lib = await this.tx
+      .selectFrom('library_items')
+      .select(['id', 'name', 'content'])
+      .top(500)
+      .execute();
+    return {
+      questionnaires: qs.map((r) => ({
+        id: low(r.id),
+        name: r.name,
+        projectId: low(r.project_id),
+        draft: json(r.draft as unknown as string),
+      })),
+      library: lib.map((r) => ({ id: low(r.id), name: r.name, content: json(r.content) })),
+    };
+  }
+
+  async approvalRequired(projectId: string) {
+    const r = await this.tx
+      .selectFrom('projects')
+      .select('settings')
+      .where('id', '=', projectId)
+      .executeTakeFirst();
+    const settings = r ? json<{ publishApproval?: { required?: boolean } }>(r.settings) : null;
+    return settings?.publishApproval?.required === true;
+  }
+
+  private approvalView(r: Record<string, unknown>): ApprovalView {
+    const id = (k: string) => (r[k] ? String(r[k]).toLowerCase() : null);
+    return {
+      id: id('id')!,
+      questionnaireId: id('questionnaire_id')!,
+      draftRevision: Number(r.draft_revision),
+      status: r.status as ApprovalView['status'],
+      note: (r.note as string | null) ?? null,
+      requestedBy: id('requested_by')!,
+      requestedByName: (r.requested_by_name as string | null) ?? null,
+      requestedAt: r.requested_at as Date,
+      decidedBy: id('decided_by'),
+      decidedByName: (r.decided_by_name as string | null) ?? null,
+      decidedAt: (r.decided_at as Date | null) ?? null,
+      decisionNote: (r.decision_note as string | null) ?? null,
+    };
+  }
+
+  private readonly approvalColumns = ksql`
+    r.*, (SELECT u.name FROM dbo.users u WHERE u.id = r.requested_by) AS requested_by_name,
+         (SELECT u.name FROM dbo.users u WHERE u.id = r.decided_by) AS decided_by_name`;
+
+  async approvals(questionnaireId: string) {
+    const res = await ksql<Record<string, unknown>>`
+      SELECT TOP (20) ${this.approvalColumns} FROM dbo.publish_requests r
+      WHERE r.questionnaire_id = ${questionnaireId} ORDER BY r.requested_at DESC, r.id`.execute(
+      this.tx,
+    );
+    return res.rows.map((r) => this.approvalView(r));
+  }
+
+  async approval(id: string) {
+    const res = await ksql<Record<string, unknown>>`
+      SELECT ${this.approvalColumns} FROM dbo.publish_requests r WHERE r.id = ${id}`.execute(
+      this.tx,
+    );
+    return res.rows[0] ? this.approvalView(res.rows[0]) : null;
+  }
+
+  async requestApproval(v: {
+    questionnaireId: string;
+    draftRevision: number;
+    note: string | null;
+    userId: string;
+  }) {
+    await ksql`
+      UPDATE dbo.publish_requests SET status = 'withdrawn'
+      WHERE questionnaire_id = ${v.questionnaireId} AND status IN ('pending', 'approved')`.execute(
+      this.tx,
+    );
+    const id = randomUUID();
+    await ksql`
+      INSERT INTO dbo.publish_requests (id, tenant_id, questionnaire_id, draft_revision, note, requested_by)
+      VALUES (${id}, ${this.tenantId}, ${v.questionnaireId}, ${v.draftRevision}, ${v.note}, ${v.userId})`.execute(
+      this.tx,
+    );
+    return (await this.approval(id))!;
+  }
+
+  async decideApproval(id: string, v: { approved: boolean; userId: string; note: string | null }) {
+    await ksql`
+      UPDATE dbo.publish_requests
+      SET status = ${v.approved ? 'approved' : 'rejected'}, decided_by = ${v.userId},
+          decided_at = SYSDATETIMEOFFSET(), decision_note = ${v.note}
+      WHERE id = ${id} AND status = 'pending'`.execute(this.tx);
+  }
+
+  async approvedFor(questionnaireId: string, draftRevision: number) {
+    const res = await ksql<Record<string, unknown>>`
+      SELECT TOP (1) ${this.approvalColumns} FROM dbo.publish_requests r
+      WHERE r.questionnaire_id = ${questionnaireId} AND r.draft_revision = ${draftRevision}
+        AND r.status = 'approved' ORDER BY r.decided_at DESC`.execute(this.tx);
+    return res.rows[0] ? this.approvalView(res.rows[0]) : null;
+  }
+
+  async consumeApproval(id: string) {
+    await ksql`UPDATE dbo.publish_requests SET status = 'consumed' WHERE id = ${id}`.execute(
+      this.tx,
+    );
   }
 
   audit(entry: AuditEntry) {

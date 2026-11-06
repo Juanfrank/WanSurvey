@@ -26,6 +26,8 @@ export const PERMISSIONS = [
   'questionnaires.read',
   'questionnaires.edit',
   'questionnaires.publish',
+  /** Approve a draft for publishing, in projects that ask for it. */
+  'questionnaires.approve',
   /** Comment on questionnaire items (review rounds); editors can comment too. */
   'questionnaires.comment',
   'cases.read_all',
@@ -81,6 +83,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'questionnaires.read',
     'questionnaires.edit',
     'questionnaires.publish',
+    'questionnaires.approve',
     'questionnaires.comment',
     'cases.read_all',
     'cases.import',

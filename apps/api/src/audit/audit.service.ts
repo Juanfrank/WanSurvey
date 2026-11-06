@@ -51,6 +51,8 @@ export type AuditAction =
   | 'cases.assigned'
   | 'case.updated'
   | 'case.misidentified'
+  | 'questionnaire.approval_requested'
+  | 'questionnaire.approval_decided'
   | 'case.pii_viewed'
   | 'case.subject_exported'
   | 'case.anonymised'

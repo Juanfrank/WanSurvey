@@ -7,6 +7,7 @@ import { api, ApiError } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { toLiteral } from './ConditionBuilder.js';
+import { ApprovalSection, approvedToPublish, useApproval } from './ApprovalSection.js';
 import { Dialog } from './Dialog.js';
 import { controlCls } from './fields.js';
 import type { PublishCheckResult } from './hooks.js';
@@ -41,6 +42,7 @@ export function PublishDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const seq = useRef(0);
+  const approval = useApproval(projectId, qid, revision !== null);
   const url = `/projects/${projectId}/questionnaires/${qid}`;
   const vars = variablesOf(draft, draft.defaultLanguage);
 
@@ -178,6 +180,15 @@ export function PublishDialog({
               </div>
             ))}
 
+            {revision !== null ? (
+              <ApprovalSection
+                projectId={projectId}
+                qid={qid}
+                revision={revision}
+                state={approval.data}
+              />
+            ) : null}
+
             {check.breaking.length ? (
               <section aria-labelledby="mapping-h" className="flex flex-col gap-3">
                 <h3 id="mapping-h" className="font-semibold">
@@ -211,7 +222,11 @@ export function PublishDialog({
           <Button variant="secondary" type="button" onClick={onClose}>
             {t('designer.cancel')}
           </Button>
-          <Button type="button" disabled={!check?.ok || busy} onClick={() => void publish()}>
+          <Button
+            type="button"
+            disabled={!check?.ok || busy || !approvedToPublish(approval.data)}
+            onClick={() => void publish()}
+          >
             {t('designer.publish.publishVersion', { version: nextVersion })}
           </Button>
         </div>

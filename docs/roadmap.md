@@ -72,9 +72,10 @@ Outcome: populations arrive without anyone loading a file. Pending the area's de
 
 ### Questionnaires (HU-06)
 
-- **Approval before publishing**: who approves and in how many steps is defined later.
-- **Similar questions**: find them to avoid repeating questions, unify the wording across surveys
-  and link similar questions to one another.
+- **Approval in more steps**: today one person approves; who approves and in how many steps is the
+  area's to define later.
+- **Linking similar questions** to one another (finding them is done), so that a change in the
+  wording of one can be offered to the others.
 
 ### Calls and follow-up (HU-08, HU-09, HU-11)
 

@@ -39,6 +39,7 @@ import {
   type Draft,
   type TreeNode,
 } from './tree.js';
+import { SimilarQuestions } from './SimilarQuestions.js';
 import { VariantsEditor } from './VariantsEditor.js';
 import type { VarOption } from './vars.js';
 
@@ -569,6 +570,10 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
         multiline
         hint={t('designer.pipingHelp', PIPE_EXAMPLES)}
         onChange={(text) => p({ text: text ?? {} }, 'text')}
+      />
+      <SimilarQuestions
+        text={q.text?.[props.lang] ?? q.text?.[Object.keys(q.text ?? {})[0] ?? ''] ?? ''}
+        lang={props.lang}
       />
       <div className="flex flex-wrap gap-x-6 gap-y-2">
         <CheckField

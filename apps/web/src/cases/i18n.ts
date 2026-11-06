@@ -443,6 +443,10 @@ export const casesEn = {
     pool: 'Open pool: interviewers take free cases themselves; the first to take a case holds it',
     poolHelp: 'Assignment rules do not run on new imports in this mode.',
     expiry: 'Time an interviewer has to work a case (empty: no limit)',
+    approvalTitle: 'Approval of questionnaires',
+    approvalRequired: 'A draft must be approved by someone else before it is published',
+    approvalHelp:
+      'The person who asks cannot approve; approving needs the permission to approve questionnaires. A change to the draft asks for a new approval.',
     expiryUnit: 'Unit of the time to work a case',
     hours: 'hours',
     days: 'days',
@@ -916,6 +920,10 @@ export const casesEs: CasesCatalogue = {
     pool: 'Bolsa abierta: los entrevistadores toman casos libres; quien toma primero un caso lo conserva',
     poolHelp: 'En este modo las reglas de asignación no se aplican a las nuevas importaciones.',
     expiry: 'Tiempo que tiene el entrevistador para trabajar un caso (vacío: sin límite)',
+    approvalTitle: 'Aprobación de cuestionarios',
+    approvalRequired: 'Un borrador debe ser aprobado por otra persona antes de publicarse',
+    approvalHelp:
+      'Quien lo pide no puede aprobarlo; aprobar necesita el permiso de aprobar cuestionarios. Un cambio del borrador pide una nueva aprobación.',
     expiryUnit: 'Unidad del tiempo para trabajar un caso',
     hours: 'horas',
     days: 'días',

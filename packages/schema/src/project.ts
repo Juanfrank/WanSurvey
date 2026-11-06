@@ -131,6 +131,13 @@ export type FieldworkSettings = z.infer<typeof FieldworkSettings>;
 export const caseExpiryHours = (f: Pick<FieldworkSettings, 'caseExpiryDays' | 'caseExpiryHours'>) =>
   f.caseExpiryHours ?? (f.caseExpiryDays ? f.caseExpiryDays * 24 : null);
 
+/** Approval before a questionnaire is published (who approves and in how many steps comes later). */
+export const PublishApprovalSettings = z.object({
+  /** A draft needs to be approved, by someone other than who asks, before it can be published. */
+  required: z.boolean().default(false),
+});
+export type PublishApprovalSettings = z.infer<typeof PublishApprovalSettings>;
+
 export const RetentionSettings = z.object({
   /**
    * Days after a case is finished (or withdrawn) when its personal data is removed: personal
@@ -182,6 +189,7 @@ export const ProjectSettings = z.object({
   /** Telephone interviewing: calling hours, attempts and retry delays. */
   cati: CatiSettings.default(CatiSettings.parse({})),
   earlyExit: EarlyExitSettings.default(EarlyExitSettings.parse({})),
+  publishApproval: PublishApprovalSettings.default(PublishApprovalSettings.parse({})),
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
   audio: AudioSettings.default(AudioSettings.parse({})),
