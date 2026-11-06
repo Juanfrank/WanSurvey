@@ -10,6 +10,8 @@ export interface QueueCase {
   disposition: string | null;
   assignedTo: string | null;
   callbackUserId: string | null;
+  /** The caller who made this case the next one to call (their callbacks list). */
+  pinnedBy?: string | null;
   callLockUserId: string | null;
   callLockUntil: Date | null;
   /** The respondent's time zone as stored in the sample (may be missing or invalid). */
@@ -36,7 +38,8 @@ export function ineligible(c: QueueCase, o: QueueOptions): string | null {
   if (c.assignedTo ? c.assignedTo !== o.me : !o.pool) return 'not_yours';
   if (c.callLockUserId && c.callLockUserId !== o.me && c.callLockUntil && c.callLockUntil > o.now)
     return 'locked';
-  if (c.nextContactAt && c.nextContactAt > o.now) return 'not_due';
+  // A callback the caller made the next one is called before it is due.
+  if (c.nextContactAt && c.nextContactAt > o.now && c.pinnedBy !== o.me) return 'not_due';
   if (isCallback(c)) {
     // A callback promised to someone else waits for them.
     if (c.callbackUserId && c.callbackUserId !== o.me) return 'not_yours';
@@ -51,10 +54,20 @@ export function ineligible(c: QueueCase, o: QueueOptions): string | null {
  * due retries; by priority within each group, then the longest-waiting.
  */
 export function rank(c: QueueCase, me: string): number[] {
-  const group = isCallback(c) ? (c.callbackUserId === me ? 0 : 1) : c.attempts === 0 ? 2 : 3;
+  // Group -1: what the caller made the next one to call.
+  const group =
+    c.pinnedBy === me
+      ? -1
+      : isCallback(c)
+        ? c.callbackUserId === me
+          ? 0
+          : 1
+        : c.attempts === 0
+          ? 2
+          : 3;
   return [
     group,
-    group < 2 ? c.nextContactAt!.getTime() : 0,
+    group < 2 ? (c.nextContactAt?.getTime() ?? 0) : 0,
     -c.priority,
     c.lastAttemptAt?.getTime() ?? 0,
   ];

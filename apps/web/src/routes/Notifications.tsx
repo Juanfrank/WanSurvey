@@ -26,13 +26,9 @@ const b64u = (buf: ArrayBuffer | null) =>
         .replace(/=+$/, '')
     : '';
 
-/**
- * Web notifications for this browser (ADR 0001, decision 6), chosen by category in the account
- * menu: nothing is asked of the browser until the person ticks one. Hidden where the browser
- * cannot do it or the server has no keys.
- */
-export function Notifications() {
-  const { t, i18n } = useTranslation();
+/** What this browser has chosen, and how to change it (shared by the account menu and the bubbles). */
+export function usePushCategories() {
+  const { i18n } = useTranslation();
   const config = useQuery({
     queryKey: ['push-config'],
     queryFn: () => api<{ enabled: boolean; publicKey: string | null }>('/push/config'),
@@ -57,8 +53,6 @@ export function Notifications() {
   useEffect(() => {
     if (config.data?.enabled) void load().catch(() => undefined);
   }, [config.data?.enabled, load]);
-
-  if (!supported() || !config.data?.enabled) return null;
 
   const save = async (next: Category[]) => {
     setBusy(true);
@@ -94,6 +88,19 @@ export function Notifications() {
     }
   };
 
+  return { available: supported() && !!config.data?.enabled, chosen, denied, busy, save };
+}
+
+/**
+ * Web notifications for this browser (ADR 0001, decision 6), chosen by category in the account
+ * menu: nothing is asked of the browser until the person ticks one. Hidden where the browser
+ * cannot do it or the server has no keys.
+ */
+export function Notifications() {
+  const { t } = useTranslation();
+  const { available, chosen, denied, busy, save } = usePushCategories();
+  if (!available) return null;
+
   return (
     <fieldset className="flex flex-col gap-1.5" data-testid="notifications" disabled={busy}>
       <legend className="eyebrow mb-1">{t('app.notifications.title')}</legend>
@@ -120,5 +127,35 @@ export function Notifications() {
         </button>
       ) : null}
     </fieldset>
+  );
+}
+
+/**
+ * A small bubble where callbacks are listed: switches on the browser notice for callbacks about
+ * to be due (and off again) without opening the account menu. Hidden where notices cannot work.
+ */
+export function CallbackReminders() {
+  const { t } = useTranslation();
+  const { available, chosen, denied, busy, save } = usePushCategories();
+  if (!available) return null;
+  const on = chosen.includes('callbacks');
+  return (
+    <div
+      className="flex flex-col gap-1 rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-sm"
+      data-testid="callback-reminders"
+    >
+      <p>{on ? t('cati.reminders.on') : t('cati.reminders.off')}</p>
+      {denied ? <p className="text-xs text-slate-700">{t('app.notifications.denied')}</p> : null}
+      <button
+        type="button"
+        disabled={busy || denied}
+        className="self-start rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-on-fill hover:bg-indigo-500 disabled:bg-slate-200 disabled:text-slate-600"
+        onClick={() =>
+          void save(on ? chosen.filter((c) => c !== 'callbacks') : [...chosen, 'callbacks'])
+        }
+      >
+        {on ? t('cati.reminders.turnOff') : t('cati.reminders.turnOn')}
+      </button>
+    </div>
   );
 }

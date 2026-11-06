@@ -52,13 +52,14 @@ export class CatiStore {
         AND (c.mode_preference IS NULL OR c.mode_preference = 'CATI')
         AND ${q.pool ? sql`(c.assigned_to = ${q.userId} OR c.assigned_to IS NULL)` : sql`c.assigned_to = ${q.userId}`}
         AND (c.call_lock_until IS NULL OR c.call_lock_until < SYSDATETIMEOFFSET() OR c.call_lock_user_id = ${q.userId})
-        AND (c.next_contact_at IS NULL OR c.next_contact_at <= SYSDATETIMEOFFSET())
+        AND (c.next_contact_at IS NULL OR c.next_contact_at <= SYSDATETIMEOFFSET() OR c.queue_pin_user_id = ${q.userId})
         AND (c.attempts < ${q.maxAttempts} OR c.disposition = 'CALLBACK')
         AND EXISTS (SELECT 1 FROM dbo.contacts ct WHERE ct.case_id = c.id AND ct.type = 'phone' AND ct.valid = 1)
         AND NOT EXISTS (SELECT 1 FROM dbo.questionnaires qq WHERE qq.id = c.questionnaire_id AND qq.state <> 'active')
         AND c.checked_out_device IS NULL
         AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id AND iv.status = 'in_progress' AND iv.mode <> 'CATI')
       ORDER BY
+        CASE WHEN c.queue_pin_user_id = ${q.userId} THEN 1 ELSE 0 END DESC,
         CASE WHEN c.disposition = 'CALLBACK' AND c.next_contact_at IS NOT NULL THEN 1 ELSE 0 END DESC,
         CASE WHEN c.callback_user_id = ${q.userId} THEN 1 ELSE 0 END DESC,
         CASE WHEN c.attempts = 0 THEN 1 ELSE 0 END DESC,

@@ -90,11 +90,9 @@ Outcome: populations arrive without anyone loading a file. Pending the area's de
 
 ### Calls and follow-up (HU-08, HU-09, HU-11)
 
-- **A list of early-exit reasons** for interrupted interviews (also on the web and face to face);
-  the area gives the list later and generic ones are used meanwhile.
-- **Callbacks**: from the calls side panel, a bubble to switch the reminders on, and a button to
-  make a callback the next one in the queue. The browser notice is enough for now; e-mail or other
-  media come in a later iteration.
+- **Early-exit reasons beyond the telephone**: the list exists for telephone interviews; the same
+  for web respondents and face-to-face interviews, and the reason in the analysis model and the
+  exports. The area gives its own list later; generic reasons are used meanwhile.
 - **Reports by difusión, channel and analyst** reuse what exists ("Campañas" became "Difusión").
 - **A person identified wrongly in the original record** is handled case by case: mark it, correct
   the result with its history and recalculate the reports.

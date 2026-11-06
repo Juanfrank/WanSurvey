@@ -239,6 +239,7 @@ export interface MssqlSchema {
     last_attempt_at: InstantOrNull;
     next_contact_at: InstantOrNull;
     callback_user_id: string | null;
+    queue_pin_user_id: string | null;
     call_lock_user_id: string | null;
     call_lock_until: InstantOrNull;
     checked_out_device: string | null;
@@ -391,6 +392,8 @@ export interface MssqlSchema {
     device_id: string;
     started_at: Instant;
     ended_at: InstantOrNull;
+    exit_reason: string | null;
+    exit_note: string | null;
     entry_pass: Generated<number>;
     active_ms: Generated<number>;
     total_ms: Generated<number>;

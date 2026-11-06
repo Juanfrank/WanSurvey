@@ -403,6 +403,14 @@ export const casesEn = {
     sampleNo: 'No',
     sampleNext: 'Next',
   },
+  exitReasons: {
+    title: 'Early-exit reasons',
+    help: 'Why a telephone interview can be closed before its end. The same list is offered on every call of the project.',
+    required: 'A reason is required to close an interrupted call',
+    label: 'Reason {{n}} ({{lang}})',
+    add: 'Add a reason',
+    remove: 'Remove',
+  },
   settings: {
     title: 'Project settings',
     sections: 'Settings topics',
@@ -855,6 +863,14 @@ export const casesEs: CasesCatalogue = {
     sampleYes: 'Sí',
     sampleNo: 'No',
     sampleNext: 'Siguiente',
+  },
+  exitReasons: {
+    title: 'Motivos de salida temprana',
+    help: 'Por qué se puede cerrar una entrevista telefónica antes de terminar. La misma lista se ofrece en cada llamada del proyecto.',
+    required: 'Pedir un motivo para cerrar una llamada interrumpida',
+    label: 'Motivo {{n}} ({{lang}})',
+    add: 'Agregar un motivo',
+    remove: 'Quitar',
   },
   settings: {
     title: 'Configuración del proyecto',

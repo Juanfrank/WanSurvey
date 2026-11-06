@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -95,6 +96,29 @@ export class CatiController {
   @RequirePermission(CONDUCT, PERM)
   callbacks(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
     return this.repo.inTenant(ctx.tenantId, (t) => this.cati.callbacks(t, ctx, projectId));
+  }
+
+  /** Makes a callback the next case this caller is served, even before it is due. */
+  @Post('projects/:projectId/cati/callbacks/:caseId/pin')
+  @HttpCode(200)
+  @RequirePermission(CONDUCT, PERM)
+  pin(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) => this.cati.pin(t, ctx, projectId, caseId, true));
+  }
+
+  /** Takes it off again. */
+  @Delete('projects/:projectId/cati/callbacks/:caseId/pin')
+  @RequirePermission(CONDUCT, PERM)
+  unpin(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) => this.cati.pin(t, ctx, projectId, caseId, false));
   }
 
   /** A case's calls, newest first (numbers by their last digits). */

@@ -277,4 +277,98 @@ describe.skipIf(!configured)('SQL Server: telephone interviewing over HTTP', () 
     expect(now.body.case.id).toBe(first);
     void randomUUID;
   });
+
+  it('makes a callback the next case to call, and takes it off again', async () => {
+    const { project, users, sessions, newCase: mk } = await setup();
+    const [u] = users;
+    const [me, other] = sessions;
+    const first = await mk(u!.id, { priority: 5 });
+    const second = await mk(u!.id, { priority: 1 });
+    const a = await post(me!, `/projects/${project}/cati/next`);
+    expect(a.body.case.id).toBe(first);
+    const tomorrow = new Date(Date.now() + 24 * 3_600_000).toISOString();
+    await post(me!, `/cati/attempts/${a.body.attempt.id}/outcome`, {
+      outcome: 'callback',
+      callbackAt: tomorrow,
+      callbackFor: 'me',
+    }).expect(200);
+
+    // Not due: the queue serves the other case. Pinned: the callback comes first.
+    expect((await get(me!, `/projects/${project}/cati/callbacks`)).body[0].pinned).toBe(false);
+    const pin = await post(me!, `/projects/${project}/cati/callbacks/${first}/pin`);
+    expect(pin.status, JSON.stringify(pin.body)).toBe(200);
+    expect(pin.body).toEqual({ pinned: true });
+    expect((await get(me!, `/projects/${project}/cati/callbacks`)).body[0].pinned).toBe(true);
+    // Another caller cannot pin a case that is not theirs.
+    const theirs = await post(other!, `/projects/${project}/cati/callbacks/${first}/pin`);
+    expect(theirs.status).toBe(409);
+
+    const b = await post(me!, `/projects/${project}/cati/next`);
+    expect(b.body.case.id).toBe(first);
+    // Calling it clears the pin.
+    await post(me!, `/cati/attempts/${b.body.attempt.id}/release`).expect(200);
+    expect((await get(me!, `/projects/${project}/cati/callbacks`)).body[0].pinned).toBe(false);
+
+    await post(me!, `/projects/${project}/cati/callbacks/${first}/pin`).expect(200);
+    const off = await me!.agent
+      .delete(`/api/v1/projects/${project}/cati/callbacks/${first}/pin`)
+      .set('x-csrf-token', me!.csrf);
+    expect(off.status).toBe(200);
+    const c = await post(me!, `/projects/${project}/cati/next`);
+    expect(c.body.case.id).toBe(second);
+  });
+
+  it('asks for the reason an interview stopped early, from the project’s list', async () => {
+    const { project, qid, users, sessions, newCase: mk } = await setup();
+    const [u] = users;
+    const [me] = sessions;
+    await mk(u!.id);
+    const answered = async () => {
+      const a = await post(me!, `/projects/${project}/cati/next`);
+      const att = a.body.attempt.id as string;
+      if (a.body.attempt.outcome !== 'answered')
+        await post(me!, `/cati/attempts/${att}/outcome`, {
+          outcome: 'answered',
+          interview: { id: randomUUID(), deviceId: 'device-phone-0001', questionnaireId: qid },
+        }).expect(200);
+      return att;
+    };
+    const att = await answered();
+    const again = await post(me!, `/projects/${project}/cati/next`);
+    // The served payload carries the project's list (the generic one by default).
+    expect(again.body.earlyExit.reasons.map((r: { code: string }) => r.code)).toContain('no_time');
+    expect(again.body.earlyExit.required).toBe(false);
+
+    // Optional by default; unknown codes are refused.
+    const bad = await post(me!, `/cati/attempts/${att}/outcome`, {
+      outcome: 'refusal',
+      exitReason: 'made_up',
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.code).toBe('EXIT_REASON_UNKNOWN');
+
+    // Made required, it is asked for.
+    await sql`UPDATE projects SET settings = JSON_MODIFY(settings, '$.earlyExit', JSON_QUERY(${JSON.stringify({ required: true })})) WHERE id = ${project}`.execute(
+      t.owner,
+    );
+    const missing = await post(me!, `/cati/attempts/${att}/outcome`, { outcome: 'refusal' });
+    expect(missing.status).toBe(400);
+    expect(missing.body.code).toBe('EXIT_REASON_REQUIRED');
+
+    const ok = await post(me!, `/cati/attempts/${att}/outcome`, {
+      outcome: 'refusal',
+      exitReason: 'no_time',
+      note: 'Dijo que tenía que salir',
+    });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.disposition).toBe('BREAK_OFF');
+    const [iv] = await rows(
+      sql`SELECT status, exit_reason, exit_note FROM interviews WHERE id = (SELECT interview_id FROM call_attempts WHERE id = ${att})`,
+    );
+    expect(iv).toMatchObject({
+      status: 'broken_off',
+      exit_reason: 'no_time',
+      exit_note: 'Dijo que tenía que salir',
+    });
+  });
 });

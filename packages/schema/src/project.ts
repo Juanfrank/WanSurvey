@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CatiSettings } from './cati.js';
+import { EarlyExitSettings } from './exit-reasons.js';
 
 /** How cases reach interviewers: handed out by a supervisor or rules, or claimed from a pool. */
 export const ASSIGNMENT_MODES = ['assigned', 'pool'] as const;
@@ -171,6 +172,7 @@ export const ProjectSettings = z.object({
   assignmentMode: z.enum(ASSIGNMENT_MODES).default('assigned'),
   /** Telephone interviewing: calling hours, attempts and retry delays. */
   cati: CatiSettings.default(CatiSettings.parse({})),
+  earlyExit: EarlyExitSettings.default(EarlyExitSettings.parse({})),
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
   audio: AudioSettings.default(AudioSettings.parse({})),

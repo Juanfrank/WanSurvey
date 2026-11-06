@@ -52,6 +52,8 @@ export const OutcomeBody = z.strictObject({
   /** `me`: only the caller gets it; `anyone`: the case holder or, in pool mode, anyone. */
   callbackFor: z.enum(['me', 'anyone']).default('me'),
   note: z.string().max(2000).optional(),
+  /** An answered call closed early: why (a code of the project's `earlyExit.reasons`). */
+  exitReason: z.string().max(64).optional(),
   connectedMs: z.number().int().min(0).max(86_400_000).optional(),
   wrapUpMs: z.number().int().min(0).max(86_400_000).optional(),
   /** Answered: the interview to start (client id, as in `POST …/interviews`). */
@@ -195,6 +197,8 @@ export class CatiService implements OnModuleInit {
     questionnaireId?: string,
   ) {
     await t.setCallLock(c.id, ctx.userId, new Date(now.getTime() + CALL_LOCK_MS));
+    // The call this caller asked to be next has come: the case is no longer pinned.
+    if (c.queuePinUserId) await t.patchCase(c.id, { queuePinUserId: null });
     const attempt = await t.startAttempt({ projectId, caseId: c.id, interviewerId: ctx.userId });
     return this.serve(t, ctx, projectId, c, attempt, questionnaireId);
   }
@@ -214,6 +218,7 @@ export class CatiService implements OnModuleInit {
       disposition: r.disposition,
       assignedTo: r.assignedTo,
       callbackUserId: r.callbackUserId,
+      pinnedBy: r.queuePinUserId,
       callLockUserId: r.callLockUserId,
       callLockUntil: r.callLockUntil,
       timezone: (r.sample as Record<string, unknown>).timezone,
@@ -286,6 +291,7 @@ export class CatiService implements OnModuleInit {
       phones,
       history,
       callingHours: settings.cati.callingHours,
+      earlyExit: settings.earlyExit,
       questionnaires: qs,
       questionnaireId: qid,
       scripts: qid ? await this.scripts(t, ctx, projectId, qid, context.case) : null,
@@ -370,6 +376,19 @@ export class CatiService implements OnModuleInit {
       });
     const settings = await this.cases.settings(t, a.projectId);
     const interrupted = a.outcome === 'answered';
+    if (interrupted) {
+      const known = settings.earlyExit.reasons.some((r) => r.code === body.exitReason);
+      if (body.exitReason && !known)
+        throw new BadRequestException({
+          code: 'EXIT_REASON_UNKNOWN',
+          message: 'That is not one of the project’s early-exit reasons',
+        });
+      if (!body.exitReason && settings.earlyExit.required)
+        throw new BadRequestException({
+          code: 'EXIT_REASON_REQUIRED',
+          message: 'Say why the interview stopped',
+        });
+    }
     if (interrupted && !['callback', 'appointment', 'refusal'].includes(body.outcome))
       throw new BadRequestException({
         code: 'CALL_ANSWERED',
@@ -489,7 +508,18 @@ export class CatiService implements OnModuleInit {
     });
     if (interrupted && a.interviewId && finalCase)
       await t.breakOff(a.interviewId, disposition, now);
-    await this.event(t, ctx, c.id, a.id, body.outcome, caseDisposition, callbackAt);
+    if (interrupted && a.interviewId && body.exitReason)
+      await t.setExit(a.interviewId, body.exitReason, body.note ?? null);
+    await this.event(
+      t,
+      ctx,
+      c.id,
+      a.id,
+      body.outcome,
+      caseDisposition,
+      callbackAt,
+      interrupted && body.exitReason ? { exitReason: body.exitReason } : {},
+    );
     return {
       outcome: body.outcome,
       disposition: caseDisposition,
@@ -506,12 +536,19 @@ export class CatiService implements OnModuleInit {
     outcome: CallOutcome,
     disposition: string | null,
     callbackAt: Date | null = null,
+    extra: Record<string, unknown> = {},
   ) {
     await this.cases.events(t, ctx.userId, [
       {
         caseId,
         type: 'call_attempt',
-        details: { attemptId, outcome, disposition, ...(callbackAt ? { callbackAt } : {}) },
+        details: {
+          attemptId,
+          outcome,
+          disposition,
+          ...(callbackAt ? { callbackAt } : {}),
+          ...extra,
+        },
       },
     ]);
   }
@@ -535,6 +572,26 @@ export class CatiService implements OnModuleInit {
    * it, with their note. No phone numbers: those come with the call, where showing them is
    * recorded.
    */
+  async pin(t: CatiTx, ctx: AuthContext, projectId: string, caseId: string, on: boolean) {
+    const c = await t.callable(projectId, caseId, false);
+    if (!c) throw new NotFoundException('Case not found or not callable by phone');
+    if (on) {
+      const settings = await this.cases.settings(t, projectId);
+      const reason = ineligible(this.earlyAllowed(this.queueCase(c), new Date()), {
+        me: ctx.userId,
+        now: new Date(),
+        settings: settings.cati,
+        pool: settings.assignmentMode === 'pool',
+        projectTimezone: await this.projectTimezone(t, projectId),
+      });
+      // Only the caller's own cases: what is elsewhere (hours, a lock) clears by the time it is called.
+      if (reason === 'not_yours')
+        throw new ConflictException({ code: 'CANNOT_CALL', message: 'Not your case', reason });
+    } else if (c.queuePinUserId !== ctx.userId) return { pinned: false };
+    await t.patchCase(c.id, { queuePinUserId: on ? ctx.userId : null, updatedAt: c.updatedAt });
+    return { pinned: on };
+  }
+
   async callbacks(t: CatiTx, ctx: AuthContext, projectId: string) {
     const settings = await this.cases.settings(t, projectId);
     const tz = await this.projectTimezone(t, projectId);
@@ -554,6 +611,7 @@ export class CatiService implements OnModuleInit {
         at: c.nextContactAt,
         due: !!c.nextContactAt && c.nextContactAt <= now,
         mine: c.callbackUserId === ctx.userId,
+        pinned: c.queuePinUserId === ctx.userId,
         forUserName,
         timezone: caseTimezone((c.sample as Record<string, unknown>).timezone, tz),
         kind: b?.outcome === 'appointment' ? 'appointment' : 'callback',

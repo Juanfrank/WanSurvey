@@ -7,7 +7,9 @@ import {
   utcToZoned,
   withinHours,
   zonedToUtc,
+  exitReasonLabel,
   type CallOutcome,
+  type ExitReason,
 } from '@wansurvey/schema';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +18,7 @@ import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
 import { PhoneIcon } from '../routes/icons.js';
+import { CallbackReminders } from '../routes/Notifications.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button } from '../routes/ui.js';
 
@@ -49,6 +52,7 @@ interface Served {
   phones: { id: string; value: string; label: string | null }[];
   history: CallRow[];
   callingHours: { from: string; to: string };
+  earlyExit: { reasons: ExitReason[]; required: boolean };
   questionnaires: { id: string; name: string }[];
   questionnaireId: string | null;
   scripts: { intro: Script[]; outcomes: Record<string, Script[]> } | null;
@@ -60,6 +64,8 @@ interface Callback {
   at: string;
   due: boolean;
   mine: boolean;
+  /** The caller made this one the next to call. */
+  pinned: boolean;
   forUserName: string | null;
   timezone: string;
   kind: 'callback' | 'appointment';
@@ -128,6 +134,7 @@ export function CallsTab({
   const [callback, setCallback] = useState('');
   const [callbackFor, setCallbackFor] = useState<'me' | 'anyone'>('me');
   const [note, setNote] = useState('');
+  const [exitReason, setExitReason] = useState('');
   const [qid, setQid] = useState('');
   const [servedAt, setServedAt] = useState(0);
   const [outcomeAt, setOutcomeAt] = useState(0);
@@ -165,6 +172,7 @@ export function CallsTab({
     setCallback('');
     setCallbackFor('me');
     setNote('');
+    setExitReason('');
     setOutcomeAt(0);
   };
 
@@ -246,11 +254,13 @@ export function CallsTab({
             ? 'hours'
             : null
       : null;
+  const exitMissing = interrupted && !!served?.earlyExit.required && !exitReason;
   const canSave =
     !!served &&
     !!outcome &&
     !busy &&
     !callbackProblem &&
+    !exitMissing &&
     (outcome !== 'answered' || !!qid || !!served.questionnaireId);
 
   const choose = (o: CallOutcome) => {
@@ -271,6 +281,7 @@ export function CallsTab({
         connectedMs: Math.round(stop - servedAt),
         wrapUpMs: Math.round(Date.now() - stop),
         ...(served.phones[phone] ? { contactId: served.phones[phone]!.id } : {}),
+        ...(interrupted && exitReason ? { exitReason } : {}),
         ...(callbackDate && needsCallbackTime(outcome)
           ? { callbackAt: callbackDate.toISOString(), callbackFor }
           : {}),
@@ -330,6 +341,8 @@ export function CallsTab({
     phone,
     callbackDate,
     callbackFor,
+    exitReason,
+    interrupted,
     qid,
     navigate,
     projectId,
@@ -530,6 +543,28 @@ export function CallsTab({
                   </Button>
                 ) : null}
                 <p>{t('cati.interruptedOutcome')}</p>
+                {served.earlyExit.reasons.length ? (
+                  <label className="flex flex-col gap-1">
+                    <span className="font-medium">
+                      {t('cati.exitReason')}
+                      {served.earlyExit.required ? ' *' : ''}
+                    </span>
+                    <select
+                      className={controlCls}
+                      value={exitReason}
+                      required={served.earlyExit.required}
+                      onChange={(e) => setExitReason(e.target.value)}
+                      data-testid="exit-reason"
+                    >
+                      <option value="">{t('cati.exitReasonPick')}</option>
+                      {served.earlyExit.reasons.map((r) => (
+                        <option key={r.code} value={r.code}>
+                          {exitReasonLabel(r, i18n.resolvedLanguage ?? 'es')}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             ) : served.scripts?.intro.length ? (
               <ScriptBox scripts={served.scripts.intro} />
@@ -696,6 +731,7 @@ export function CallsTab({
         badge={callbacks.data?.filter((c) => new Date(c.at).getTime() <= now).length}
         className="text-sm"
       >
+        <CallbackReminders />
         <Callbacks
           rows={callbacks.data ?? []}
           now={now}
@@ -703,6 +739,16 @@ export function CallsTab({
           onCall={(c) => {
             drawer.setOpen(false);
             void next(false, c.caseId);
+          }}
+          onPin={async (c) => {
+            try {
+              await api(`/projects/${projectId}/cati/callbacks/${c.caseId}/pin`, {
+                method: c.pinned ? 'DELETE' : 'POST',
+              });
+              await qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
+            } catch (e) {
+              setMessage(localiseError(t, e));
+            }
           }}
         />
       </SideDrawer>
@@ -720,11 +766,13 @@ function Callbacks({
   now,
   canCall,
   onCall,
+  onPin,
 }: {
   rows: Callback[];
   now: number;
   canCall: boolean;
   onCall(c: Callback): void;
+  onPin(c: Callback): void | Promise<void>;
 }) {
   const { t, i18n } = useTranslation();
   const endOfDay = new Date(now);
@@ -779,6 +827,11 @@ function Callbacks({
                             ? t('cati.forOther', { name: c.forUserName })
                             : t('cati.forAnyoneTag')}
                       </span>
+                      {c.pinned ? (
+                        <span className="rounded-full bg-indigo-600 px-2 text-xs font-semibold text-on-fill">
+                          {t('cati.pinnedTag')}
+                        </span>
+                      ) : null}
                       {g === 'overdue' ? (
                         <span className="text-xs font-semibold text-amber-ink-900">
                           ({t('cati.due')})
@@ -815,6 +868,17 @@ function Callbacks({
                       >
                         <PhoneIcon className="h-3.5 w-3.5" />
                         {t('cati.callNow')}
+                      </button>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        aria-pressed={c.pinned}
+                        aria-label={t(c.pinned ? 'cati.unpinCase' : 'cati.pinCase', {
+                          id: c.externalId,
+                        })}
+                        onClick={() => void onPin(c)}
+                      >
+                        {t(c.pinned ? 'cati.unpin' : 'cati.pin')}
                       </button>
                       {!c.callableNow && c.reason ? (
                         <span className="text-xs text-slate-600">

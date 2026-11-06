@@ -55,6 +55,7 @@ export interface CasePatch {
   callLockUntil?: Date | null;
   nextContactAt?: Date | null;
   callbackUserId?: string | null;
+  queuePinUserId?: string | null;
   disposition?: string | null;
   status?: string;
   updatedAt?: Date;
@@ -93,6 +94,8 @@ export interface CatiTx extends InterviewsTx {
   }): Promise<AttemptRow>;
   patchCase(id: string, patch: CasePatch): Promise<void>;
   patchAttempt(id: string, patch: AttemptPatch): Promise<void>;
+  /** Why an interview stopped early (from the project's list), with an optional note. */
+  setExit(interviewId: string, reason: string, note: string | null): Promise<void>;
   /** The caller's next callback time in the project. */
   upcoming(projectId: string, userId: string): Promise<Date | null>;
   usableQuestionnaires(projectId: string): Promise<{ id: string; name: string }[]>;
@@ -284,11 +287,20 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
           ? { next_contact_at: p.nextContactAt ? instant(p.nextContactAt) : null }
           : {}),
         ...(p.callbackUserId !== undefined ? { callback_user_id: p.callbackUserId } : {}),
+        ...(p.queuePinUserId !== undefined ? { queue_pin_user_id: p.queuePinUserId } : {}),
         ...(p.disposition !== undefined ? { disposition: p.disposition } : {}),
         ...(p.status ? { status: p.status } : {}),
         updated_at: p.updatedAt ? instant(p.updatedAt) : ksql<Date>`SYSDATETIMEOFFSET()`,
       })
       .where('id', '=', id)
+      .execute();
+  }
+
+  async setExit(interviewId: string, reason: string, note: string | null) {
+    await this.mtx
+      .updateTable('interviews')
+      .set({ exit_reason: reason, exit_note: note ? note.slice(0, 1000) : null })
+      .where('id', '=', interviewId)
       .execute();
   }
 

@@ -64,6 +64,8 @@ export interface CaseFull {
   lastAttemptAt: Date | null;
   nextContactAt: Date | null;
   callbackUserId: string | null;
+  /** The caller who made this case the next one to call. */
+  queuePinUserId: string | null;
   callLockUserId: string | null;
   callLockUntil: Date | null;
   checkedOutDevice: string | null;
@@ -285,6 +287,7 @@ export function toCase(r: Record<string, unknown> & { sample: string }): CaseFul
     lastAttemptAt: g('last_attempt_at'),
     nextContactAt: g('next_contact_at'),
     callbackUserId: id('callback_user_id'),
+    queuePinUserId: id('queue_pin_user_id'),
     callLockUserId: id('call_lock_user_id'),
     callLockUntil: g('call_lock_until'),
     checkedOutDevice: g('checked_out_device'),

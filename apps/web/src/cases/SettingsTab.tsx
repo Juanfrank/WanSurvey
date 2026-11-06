@@ -9,6 +9,7 @@ import { controlCls } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { SubTabBar } from '../routes/tabs.js';
+import { ExitReasonsEditor } from './ExitReasonsEditor.js';
 import { CawiProjectSettings } from '../cawi/CawiTab.js';
 import { BrandingSettings } from './BrandingSettings.js';
 import { useCan } from '../designer/hooks.js';
@@ -231,6 +232,10 @@ export function SettingsTab({ project }: { project: Project }) {
                   ))}
                 </fieldset>
               </fieldset>
+              <ExitReasonsEditor
+                value={form.earlyExit}
+                onChange={(earlyExit) => setForm({ ...form, earlyExit })}
+              />
             </>,
           )}
         </Tabs.Content>

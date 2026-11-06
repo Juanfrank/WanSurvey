@@ -17,6 +17,17 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ## [Unreleased]
 
+### Added
+
+- **Early-exit reasons** for telephone interviews: each project has a list of reasons (generic ones
+  by default, in Spanish and English, editable in Settings → Phone), the call workspace asks for one
+  when an answered call is closed as interrupted, and the project can make it required. The reason
+  is kept on the interview and in the case history. Web and face-to-face interviews do not have it
+  yet.
+- **Callbacks**: a button to make a callback the next case the caller is served (even before it is
+  due; calling hours still apply), and a bubble in the callbacks panel that turns the browser
+  notice for callbacks on and off.
+
 ### Changed
 
 - The web sendings are called **Difusión** (outreach) in the interface instead of _Campañas_; the
