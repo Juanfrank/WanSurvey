@@ -94,6 +94,7 @@ type Row = {
   mode: string;
   status: string;
   disposition: string | null;
+  exitReason: string | null;
   interviewer: string | null;
   startedAt: Date;
   submittedAt: Date | null;
@@ -203,7 +204,7 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
       : ksql``;
     const res = await ksql<Record<string, unknown>>`
       SELECT ${page ? ksql`TOP (${page.size})` : ksql``}
-             i.id, i.case_id, c.external_id AS case_code, i.mode, i.status, i.disposition,
+             i.id, i.case_id, c.external_id AS case_code, i.mode, i.status, i.disposition, i.exit_reason,
              u.name AS interviewer, c.selection_role AS role, fu.stratum,
              c.inclusion_prob AS prob, c.base_weight AS weight, i.started_at, i.submitted_at,
              i.active_ms, v.version, i.language, i.answers, i.flags,
@@ -238,6 +239,7 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
       mode: r.mode as string,
       status: r.status as string,
       disposition: r.disposition as string | null,
+      exitReason: (r.exit_reason as string | null) ?? null,
       interviewer: r.interviewer as string | null,
       startedAt: r.started_at as Date,
       submittedAt: r.submitted_at as Date | null,

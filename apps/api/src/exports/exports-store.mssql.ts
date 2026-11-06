@@ -219,6 +219,7 @@ export class ExportsStore {
       mode: string;
       status: string;
       disposition: string | null;
+      exit_reason: string | null;
       interviewer: string | null;
       started_at: Date;
       submitted_at: Date;
@@ -238,7 +239,7 @@ export class ExportsStore {
       page_at: string;
     }>`
       SELECT TOP (${size}) i.id, i.case_id, c.external_id AS case_code, i.mode, i.status,
-        i.disposition, u.name AS interviewer, i.started_at, i.submitted_at, i.active_ms,
+        i.disposition, i.exit_reason, u.name AS interviewer, i.started_at, i.submitted_at, i.active_ms,
         v.version, i.language, i.answers, i.flags,
         c.selection_role AS role, fu.stratum, c.inclusion_prob AS prob, c.base_weight AS weight,
         ${f.paradata ? sql`pd.back, pd.notes, pd.pauses, pd.warnings` : sql`NULL AS back, NULL AS notes, NULL AS pauses, NULL AS warnings`},

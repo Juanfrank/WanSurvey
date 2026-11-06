@@ -76,9 +76,9 @@ Outcome: populations arrive without anyone loading a file. Pending the area's de
 
 ### Calls and follow-up (HU-08, HU-09, HU-11)
 
-- **Early-exit reasons beyond the telephone**: the list exists for telephone interviews; the same
-  for web respondents and face-to-face interviews, and the reason in the analysis model and the
-  exports. The area gives its own list later; generic reasons are used meanwhile.
+- **Early-exit reasons beyond the telephone**: the list exists for telephone interviews (and the
+  reason is in the analysis model and the exports); the same for web respondents and face-to-face
+  interviews. The area gives its own list later; generic reasons are used meanwhile.
 - **Reports by difusión, channel and analyst** reuse what exists ("Campañas" became "Difusión").
 
 ### The analysis model (HU-12)

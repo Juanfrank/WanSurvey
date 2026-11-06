@@ -124,13 +124,13 @@ describe('export dataset', () => {
     expect(rosters).toEqual([]);
     const names = main.columns.map((c) => c.name);
     expect(names.slice(0, 4)).toEqual(['interview_id', 'case_id', 'case_code', 'mode']);
-    expect(names.slice(12, 16)).toEqual([
+    expect(names.slice(13, 17)).toEqual([
       'selection_role',
       'stratum',
       'inclusion_prob',
       'base_weight',
     ]);
-    expect(names.slice(16)).toEqual([
+    expect(names.slice(17)).toEqual([
       'SEX',
       'SEX_OTHER',
       'MEDIA_1',

@@ -190,6 +190,8 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       await sql`EXEC bi.guardar_zonas ${JSON.stringify([{ tz: TZ, desde: '2000-01-01T00:00:00', minutos: -360 }])}`.execute(
         db,
       );
+      // The second one was closed early (migration 0023); the first was not.
+      await sql`UPDATE interviews SET exit_reason = 'respondent_busy' WHERE id = ${i2}`.execute(db);
       await sql`EXEC bi.refrescar`.execute(db);
     });
   });
@@ -335,6 +337,16 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       ['2026-11-02', 0, 0, 1, 'alone speeding'],
     ]);
     expect(Number(r[0]!.segundos_activos)).toBe(5);
+    // The early-exit reason of the interview, if it was closed early, is a column of the facts
+    // and of the flat table.
+    const m = await rows<{ envio_id: string; motivo_salida: string | null }>(
+      sql`SELECT envio_id, motivo_salida FROM bi.fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`,
+    );
+    expect(m.map((x) => x.motivo_salida)).toEqual([null, 'respondent_busy']);
+    const flat = await rows<{ motivo_salida: string | null }>(
+      sql`SELECT DISTINCT motivo_salida FROM bi.plano_respuestas WHERE envio_id = ${i2}`,
+    );
+    expect(flat).toEqual([{ motivo_salida: 'respondent_busy' }]);
   });
 
   it('ties paradata to the question and roster member it is about', async () => {

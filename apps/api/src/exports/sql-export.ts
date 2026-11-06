@@ -36,6 +36,7 @@ const META: Record<string, string> = {
   mode: 'e.canal',
   status: 'e.estado',
   disposition: 'e.resultado',
+  exit_reason: 'e.motivo_salida',
   interviewer: 'pe.persona',
   started_at: iso('e.iniciado_en'),
   submitted_at: iso('e.enviado_en'),

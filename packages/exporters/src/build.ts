@@ -14,6 +14,8 @@ export interface ExportInterview {
   mode: string;
   status: string;
   disposition: string | null;
+  /** Why a telephone interview was closed early (a code of the project's list), if it was. */
+  exitReason?: string | null;
   interviewer: string | null;
   startedAt: Date | string;
   submittedAt: Date | string | null;
@@ -350,6 +352,12 @@ const META: Column[] = [
     type: 'string',
   },
   {
+    name: 'exit_reason',
+    source: { kind: 'meta', field: 'exit_reason' },
+    label: 'Early-exit reason',
+    type: 'string',
+  },
+  {
     name: 'interviewer',
     source: { kind: 'meta', field: 'interviewer' },
     label: 'Interviewer',
@@ -454,6 +462,7 @@ function meta(i: ExportInterview): Cell[] {
     i.mode,
     i.status,
     i.disposition,
+    i.exitReason ?? null,
     i.interviewer,
     iso(i.startedAt),
     iso(i.submittedAt),
