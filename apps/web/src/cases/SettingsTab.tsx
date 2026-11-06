@@ -9,6 +9,8 @@ import { controlCls } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { SubTabBar } from '../routes/tabs.js';
+import { CleaningEditor } from './CleaningEditor.js';
+import { useSampleFields } from './hooks.js';
 import { ExitReasonsEditor } from './ExitReasonsEditor.js';
 import { CawiProjectSettings } from '../cawi/CawiTab.js';
 import { BrandingSettings } from './BrandingSettings.js';
@@ -21,6 +23,7 @@ export function SettingsTab({ project }: { project: Project }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<ProjectSettings>(project.settings);
   const [message, setMessage] = useState('');
+  const sampleFields = useSampleFields(project.id);
   useEffect(() => setForm(project.settings), [project.settings]);
   const save = useMutation({
     mutationFn: () =>
@@ -46,6 +49,7 @@ export function SettingsTab({ project }: { project: Project }) {
         ...(canWeb ? ['web'] : []),
         'paper',
         'review',
+        'cleaning',
         'fieldwork',
         'shortcuts',
         'privacy',
@@ -562,6 +566,15 @@ export function SettingsTab({ project }: { project: Project }) {
                 </div>
               </fieldset>
             </>,
+          )}
+        </Tabs.Content>
+        <Tabs.Content value="cleaning">
+          {section(
+            <CleaningEditor
+              value={form.cleaning}
+              fields={Array.isArray(sampleFields.data) ? sampleFields.data.map((f) => f.name) : []}
+              onChange={(cleaning) => setForm({ ...form, cleaning })}
+            />,
           )}
         </Tabs.Content>
         <Tabs.Content value="privacy">

@@ -49,6 +49,7 @@ export type AuditAction =
   | 'cases.import_uploaded'
   | 'cases.imported'
   | 'cases.assigned'
+  | 'cases.withdrawn'
   | 'case.updated'
   | 'case.misidentified'
   | 'questionnaire.approval_requested'

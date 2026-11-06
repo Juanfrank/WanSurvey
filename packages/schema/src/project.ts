@@ -138,6 +138,34 @@ export const PublishApprovalSettings = z.object({
 });
 export type PublishApprovalSettings = z.infer<typeof PublishApprovalSettings>;
 
+/** A saved rule that leaves out rows when a list is loaded: an expression over the row's data. */
+export const CleaningRule = z.object({
+  id: z.string().regex(/^[a-z0-9_-]{1,40}$/),
+  name: z.string().trim().min(1).max(100),
+  /** Over `case.*` (the columns of the file), like the assignment rules; true leaves the row out. */
+  expression: z.string().trim().min(1).max(500),
+  enabled: z.boolean().default(true),
+});
+export type CleaningRule = z.infer<typeof CleaningRule>;
+
+/** What is done to a list as it is loaded, before its rows become cases (or frame units). */
+export const CleaningSettings = z.object({
+  rules: z.array(CleaningRule).max(50).default([]),
+  /** Fields (sample fields, or `phone` / `email`) that identify the same person twice in a file. */
+  duplicateFields: z.array(z.string().trim().min(1).max(64)).max(5).default([]),
+  /** `warn` reports the repeats; `exclude` also leaves them out (the first one is kept). */
+  duplicateAction: z.enum(['warn', 'exclude']).default('warn'),
+  normalize: z
+    .object({
+      /** Text columns: no double spaces, no spaces at the ends, no invisible characters. */
+      spaces: z.boolean().default(true),
+      /** And no symbols other than letters, digits, spaces and . , ' - (names, mostly). */
+      symbols: z.boolean().default(false),
+    })
+    .default({ spaces: true, symbols: false }),
+});
+export type CleaningSettings = z.infer<typeof CleaningSettings>;
+
 export const RetentionSettings = z.object({
   /**
    * Days after a case is finished (or withdrawn) when its personal data is removed: personal
@@ -190,6 +218,7 @@ export const ProjectSettings = z.object({
   cati: CatiSettings.default(CatiSettings.parse({})),
   earlyExit: EarlyExitSettings.default(EarlyExitSettings.parse({})),
   publishApproval: PublishApprovalSettings.default(PublishApprovalSettings.parse({})),
+  cleaning: CleaningSettings.default(CleaningSettings.parse({})),
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
   audio: AudioSettings.default(AudioSettings.parse({})),

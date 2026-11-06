@@ -1,3 +1,4 @@
+import { regexProblem } from './safeRegex.js';
 import { NAMESPACES, type Node, type Span } from './ast.js';
 import { FUNCTIONS, type TypeTag } from './functions.js';
 import type { VariableInfo } from './model.js';
@@ -239,6 +240,19 @@ class Checker {
         this.err('type_mismatch', 'contains() needs a multi-choice or text answer', arg.span, {
           id: 'contains_type',
         });
+      }
+      if (node.name === 'matches') {
+        if (i === 0 && !['string', 'any'].includes(t.t))
+          this.err('type_mismatch', 'matches() needs a text', arg.span, { id: 'matches_type' });
+        // A pattern written in the expression is checked as the expression is.
+        if (i === 1 && arg.type === 'str') {
+          const problem = regexProblem(arg.value);
+          if (problem)
+            this.err('type_mismatch', `matches(): ${problem}`, arg.span, {
+              id: 'invalid_regex',
+              params: { problem },
+            });
+        }
       }
       if (
         ['age', 'datediff'].includes(node.name) &&

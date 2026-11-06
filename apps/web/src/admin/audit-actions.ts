@@ -47,6 +47,7 @@ export const AUDIT_ACTIONS = [
   'cases.import_uploaded',
   'cases.imported',
   'cases.assigned',
+  'cases.withdrawn',
   'case.updated',
   'case.misidentified',
   'case.pii_viewed',

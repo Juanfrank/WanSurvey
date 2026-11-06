@@ -40,6 +40,7 @@ import { CrossCheck } from '@wansurvey/schema/sampling';
 
 const CrossCheckList = z.array(CrossCheck);
 import { parseSampleFile, SampleFileError } from './sample-file.js';
+import { applyCleaning } from './cleaning.js';
 import { ImportMapping, suggestMapping, validateRows, type PreparedRow } from './sample-mapping.js';
 
 const PERM = { projectParam: 'projectId' } as const;
@@ -240,7 +241,7 @@ export class ImportsController {
       if (imp.target === 'frame')
         return this.commitFrame(t, ctx, projectId, imp, mapping, report, prepared);
       const rows = prepared.filter((r) => r.valid);
-      const fresh = rows.filter((r) => !r.exists && !r.crossChecked);
+      const fresh = rows.filter((r) => !r.exists && !r.crossChecked && !r.excluded);
       const updates = mapping.existing === 'update' ? rows.filter((r) => r.exists) : [];
       const created: string[] = [];
       // Personal fields are sealed (H1); the field list is the one just saved.
@@ -306,6 +307,8 @@ export class ImportsController {
         skipped: report.invalid,
         /** Not made: the same person answered recently (cross-case checks). */
         crossChecked: rows.filter((r) => r.crossChecked && !r.exists).length,
+        /** Not made: left out by the project's cleaning rules or as repeats. */
+        excluded: rows.filter((r) => r.excluded && !r.crossChecked && !r.exists).length,
         assigned,
       };
       await t.updateImport(importId, {
@@ -391,9 +394,11 @@ export class ImportsController {
     const existing = new Set<string>();
     for (const part of chunks(ids))
       (await t.casesByExternal(projectId, q, part)).forEach((f) => existing.add(f.externalId));
-    const result = validateRows(headers, rows, mapping, existing, maxExamples);
+    const cleaning = (await this.casesService.settings(t, projectId)).cleaning;
+    const result = validateRows(headers, rows, mapping, existing, maxExamples, cleaning.normalize);
     await this.flagElsewhere(t, projectId, result, maxExamples);
     await this.flagCrossChecks(t, projectId, q, result, maxExamples);
+    applyCleaning(result.prepared, result.report, cleaning, maxExamples);
     return result;
   }
 
@@ -494,7 +499,7 @@ export class ImportsController {
     const selected = plan?.status === 'selected';
     const probability = (plan?.design as { family?: string } | undefined)?.family === 'probability';
     const adding = selected && !probability;
-    const rows = prepared.filter((r) => r.valid);
+    const rows = prepared.filter((r) => r.valid && !r.excluded);
     const pii = await this.casesService.piiFields(t, projectId);
     const existing = await t.frameExternalIds(projectId, q);
     let created = 0;

@@ -1,4 +1,5 @@
 import './sampling-i18n.js';
+import { BulkWithdraw } from './BulkWithdraw.js';
 import { Misidentified } from './Misidentified.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -391,6 +392,14 @@ export function CasesTab({ projectId }: { projectId: string }) {
           >
             {t('cases.list.unassign')}
           </button>
+          <BulkWithdraw
+            projectId={projectId}
+            ids={[...selected]}
+            onDone={(m) => {
+              setSelected(new Set());
+              setMessage(m);
+            }}
+          />
         </div>
       ) : null}
 

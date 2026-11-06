@@ -44,6 +44,10 @@ interface Report {
   toCreate: number;
   toUpdate: number;
   elsewhere?: { projectId: string; name: string; rows: number }[];
+  cleaning?: {
+    rules: { id: string; name: string; count: number }[];
+    duplicates: { count: number; excluded: number; action: 'warn' | 'exclude' };
+  };
   issues: {
     code: string;
     count: number;
@@ -454,6 +458,25 @@ export function ImportTab({
           ) : (
             <p className="text-sm">{t('cases.import.report.noIssues')}</p>
           )}
+          {report.cleaning ? (
+            <div className="text-sm text-slate-700" data-testid="import-cleaning">
+              <p className="font-medium">{t('cases.import.cleaning.title')}</p>
+              <ul className="list-disc pl-5">
+                {report.cleaning.rules.map((r) => (
+                  <li key={r.id}>
+                    {t('cases.import.cleaning.rule', { name: r.name, count: r.count })}
+                  </li>
+                ))}
+                {report.cleaning.duplicates.count ? (
+                  <li>
+                    {t(`cases.import.cleaning.duplicates_${report.cleaning.duplicates.action}`, {
+                      count: report.cleaning.duplicates.count,
+                    })}
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
           {report.elsewhere?.length ? (
             <p className="text-sm text-slate-700" data-testid="import-elsewhere">
               {t('cases.import.elsewhere', {

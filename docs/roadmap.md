@@ -52,15 +52,10 @@ studies and channels.
 
 ### Cleaning at load (HU-02)
 
-- **Saved exclusion rules** per project, applied when the list is loaded, with a count of what each
-  rule excluded. The criteria come from the area in a spreadsheet; they must be able to carry a
-  calendar (to be made precise with the area).
-- **Pattern matching in filters and rules**, "as if it were a regular expression", with an engine
-  that cannot be made slow by a hostile pattern.
-- **Duplicates by the fields the area chooses**, inside a load and against the registry above.
-- **Bulk withdrawal**: tick cases, remove them with one reason for all.
-- **Normalisation at load**: telephone numbers in international (ISO/E.164) form, names without
-  double spaces or stray characters, and the other clean-ups the area lists.
+- **Repeats against what is already loaded**: the check for the same person works inside one file;
+  against earlier loads it comes with the people registry above.
+- **Calendar for the exclusion criteria**: the area wants them to carry dates of validity (to be
+  made precise).
 
 ### Where the lists come from (HU-01)
 

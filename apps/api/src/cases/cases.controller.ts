@@ -30,6 +30,11 @@ import { words } from './pii.js';
 const round = (x: number) => Math.round(x * 1000) / 1000;
 const PERM = { projectParam: 'projectId' } as const;
 const READ = ['cases.read_all', 'cases.read_assigned'] as const;
+const WithdrawBody = z.strictObject({
+  caseIds: z.array(z.uuid()).min(1).max(500),
+  /** One reason for all: what is recorded in each case's history. */
+  reason: z.string().trim().min(3).max(500),
+});
 const STATUSES = ['fresh', 'assigned', 'in_progress', 'finalised', 'withdrawn'] as const;
 
 const ListQuery = z.object({
@@ -282,6 +287,40 @@ export class CasesController {
           (c.assignedTo === ctx.userId || can(ctx.memberships, 'cases.assign', projectId)),
         canForceRelease: !!c.checkedOutAt && can(ctx.memberships, 'cases.assign', projectId),
       };
+    });
+  }
+
+  /** Withdraws several cases at once, with one reason for all (those being worked are skipped). */
+  @Post('cases/withdraw')
+  @HttpCode(200)
+  @RequirePermission('cases.edit', PERM)
+  @ApiBody({ schema: z.toJSONSchema(WithdrawBody) as object })
+  withdraw(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body(new ZodPipe(WithdrawBody)) body: z.infer<typeof WithdrawBody>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const ids = [...new Set(body.caseIds)];
+      const done = await t.withdrawMany(projectId, ids);
+      await this.svc.events(
+        t,
+        ctx.userId,
+        done.map((caseId) => ({
+          caseId,
+          type: 'withdrawn',
+          details: { reason: body.reason, bulk: ids.length },
+        })),
+      );
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'cases.withdrawn',
+          targetType: 'project',
+          targetId: projectId,
+          details: { count: done.length, requested: ids.length, reason: body.reason },
+        }),
+      );
+      return { withdrawn: done.length, skipped: ids.length - done.length };
     });
   }
 

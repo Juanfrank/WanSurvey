@@ -1,5 +1,6 @@
 import type { Node } from './ast.js';
 import type { Scope } from './evaluator.js';
+import { regexTest } from './safeRegex.js';
 import {
   isAnswered,
   isMissing,
@@ -130,6 +131,22 @@ export const FUNCTIONS: Record<string, FunctionDef> = {
       if (Array.isArray(v)) return v.some((e) => looseEquals(e, x));
       if (typeof v === 'string' && typeof x === 'string') return v.includes(x);
       return looseEquals(v, x);
+    },
+  },
+  matches: {
+    minArgs: 2,
+    maxArgs: 2,
+    returns: 'boolean',
+    doc: 'True when a text matches a regular expression: anywhere in it, ^ and $ anchor it, case does not matter. Back-references and look-around are not supported.',
+    impl: ([a, b], s, ev) => {
+      const v = ev(a!, s);
+      const p = ev(b!, s);
+      if (isMissing(v) || typeof p !== 'string') return false;
+      try {
+        return regexTest(p, String(v));
+      } catch {
+        return false;
+      }
     },
   },
   age: {

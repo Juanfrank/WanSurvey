@@ -62,6 +62,7 @@ An expression is at most 4,000 characters long, and brackets, function calls, `n
 | `sum(…)`, `min(…)`, `max(…)`   | Calculated over numeric arguments; arrays are flattened and unanswered values ignored. Null if there is nothing to calculate |
 | `length(x)`                    | Length of a text, or the number of selected codes or rows                                                                    |
 | `contains(Q, code)`            | The multi-choice answer includes `code`, or the text includes the substring                                                  |
+| `matches(Q, pattern)`          | The text matches a regular expression (`^abc`, `\\d{3}-\\d{4}`, `(ceo                                                        | gerente)$`): anywhere in it unless anchored with `^`and`$`, case ignored. Runs in time proportional to the text whatever the pattern; back-references and look-around are not supported |
 | `age(dob, ref?)`               | Completed years; `ref` defaults to today                                                                                     |
 | `datediff(a, b, unit?)`        | `b − a` in `"days"` (default), `"weeks"`, `"months"`, `"years"`, `"hours"` or `"minutes"`                                    |
 | `today()`                      | Today's date (ISO)                                                                                                           |

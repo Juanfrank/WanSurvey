@@ -127,3 +127,4 @@ export {
   type Selected,
   type SelectionResult,
 } from './sampling.js';
+export { regexProblem, regexTest, RegexError } from './safeRegex.js';

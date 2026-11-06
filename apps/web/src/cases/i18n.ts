@@ -318,6 +318,14 @@ export const casesEn = {
       empty_row: 'Empty row',
       duplicate_elsewhere: 'Phone or e-mail already in another project',
       cross_check: 'Answered recently (cross-case check): not created',
+      excluded_rule: 'Left out by a cleaning rule of the project',
+      duplicate_key: 'The same person as an earlier row (duplicate fields)',
+    },
+    cleaning: {
+      title: 'Cleaning of the project',
+      rule: '{{name}}: {{count}} left out',
+      duplicates_warn: '{{count}} repeated rows (loaded; the project only reports them)',
+      duplicates_exclude: '{{count}} repeated rows left out',
     },
     elsewhere:
       'Some people may already be in other projects: {{list}}. These rows are imported; check with the other project before contacting them twice.',
@@ -404,6 +412,39 @@ export const casesEn = {
     sampleNo: 'No',
     sampleNext: 'Next',
   },
+  cleaning: {
+    normalizeTitle: 'Tidy the text columns',
+    spaces: 'No double spaces, no spaces at the ends, no invisible characters',
+    symbols: "Also no symbols other than letters, digits, spaces and . , ' -",
+    phoneNote:
+      'Telephone numbers are written in international form (+51…) when the column is read as a phone; give the default country code in the import if the file has national numbers.',
+    rulesTitle: 'Rules that leave rows out',
+    rulesHelp:
+      'Each rule is a condition over the columns of the file, such as case.age < 18 or matches(case.job, "^(ceo|gerente)"). A row that meets a rule is not loaded; the report says how many each rule left out.',
+    enabled: 'Rule on',
+    name: 'Name of rule {{n}}',
+    expression: 'Condition of rule {{n}}',
+    expressionExample: 'case.age < 18',
+    remove: 'Remove',
+    add: 'Add a rule',
+    newRule: 'New rule',
+    duplicatesTitle: 'The same person twice in a file',
+    duplicatesHelp:
+      'Rows with the same value in all the chosen fields (accents, case and spaces do not count) are the same person. The first stays.',
+    action: 'When there are repeats',
+    warn: 'Report them and load them all',
+    exclude: 'Leave the repeats out',
+  },
+  withdraw: {
+    open: 'Withdraw selected',
+    title: 'Withdraw {{count}} cases',
+    help: 'They leave the work lists and are not assigned again; one reason for all goes in the history of each. Cases someone is working on, or that are finished, are skipped.',
+    reason: 'Reason',
+    confirm: 'Withdraw',
+    done_one: '{{count}} case withdrawn.',
+    done_other: '{{count}} cases withdrawn.',
+    skippedNote: '{{skipped}} skipped',
+  },
   misidentified: {
     open: 'Wrong person',
     explain:
@@ -425,6 +466,7 @@ export const casesEn = {
     sections: 'Settings topics',
     tabs: {
       assignment: 'Assignment',
+      cleaning: 'Cleaning',
       phone: 'Phone',
       field: 'Face to face',
       web: 'Web',
@@ -793,6 +835,14 @@ export const casesEs: CasesCatalogue = {
       empty_row: 'Fila vacía',
       duplicate_elsewhere: 'Teléfono o correo ya presente en otro proyecto',
       cross_check: 'Encuestado recientemente (verificación cruzada): no se crea',
+      excluded_rule: 'Dejada fuera por una regla de depuración del proyecto',
+      duplicate_key: 'La misma persona que una fila anterior (campos de duplicados)',
+    },
+    cleaning: {
+      title: 'Depuración del proyecto',
+      rule: '{{name}}: {{count}} dejadas fuera',
+      duplicates_warn: '{{count}} filas repetidas (se cargan; el proyecto solo las avisa)',
+      duplicates_exclude: '{{count}} filas repetidas dejadas fuera',
     },
     elsewhere:
       'Algunas personas podrían estar ya en otros proyectos: {{list}}. Estas filas se importan; consulte con el otro proyecto antes de contactarlas dos veces.',
@@ -881,6 +931,39 @@ export const casesEs: CasesCatalogue = {
     sampleNo: 'No',
     sampleNext: 'Siguiente',
   },
+  cleaning: {
+    normalizeTitle: 'Ordenar las columnas de texto',
+    spaces: 'Sin espacios dobles, sin espacios en los extremos, sin caracteres invisibles',
+    symbols: "Y sin símbolos que no sean letras, números, espacios y . , ' -",
+    phoneNote:
+      'Los teléfonos se escriben en forma internacional (+51…) cuando la columna se lee como teléfono; indique el código de país por defecto en la importación si el archivo trae números nacionales.',
+    rulesTitle: 'Reglas que dejan filas fuera',
+    rulesHelp:
+      'Cada regla es una condición sobre las columnas del archivo, como case.age < 18 o matches(case.job, "^(ceo|gerente)"). Una fila que cumple una regla no se carga; el informe dice cuántas dejó fuera cada regla.',
+    enabled: 'Regla activa',
+    name: 'Nombre de la regla {{n}}',
+    expression: 'Condición de la regla {{n}}',
+    expressionExample: 'case.age < 18',
+    remove: 'Quitar',
+    add: 'Agregar una regla',
+    newRule: 'Regla nueva',
+    duplicatesTitle: 'La misma persona dos veces en un archivo',
+    duplicatesHelp:
+      'Las filas con el mismo valor en todos los campos elegidos (no cuentan acentos, mayúsculas ni espacios) son la misma persona. La primera se queda.',
+    action: 'Cuando hay repetidas',
+    warn: 'Avisar y cargarlas todas',
+    exclude: 'Dejar fuera las repetidas',
+  },
+  withdraw: {
+    open: 'Retirar seleccionados',
+    title: 'Retirar {{count}} casos',
+    help: 'Salen de las listas de trabajo y no se vuelven a asignar; un mismo motivo para todos queda en el historial de cada uno. Los casos que alguien está trabajando, o que ya terminaron, se omiten.',
+    reason: 'Motivo',
+    confirm: 'Retirar',
+    done_one: 'Se retiró {{count}} caso.',
+    done_other: 'Se retiraron {{count}} casos.',
+    skippedNote: '{{skipped}} omitidos',
+  },
   misidentified: {
     open: 'Persona mal identificada',
     explain:
@@ -902,6 +985,7 @@ export const casesEs: CasesCatalogue = {
     sections: 'Temas de configuración',
     tabs: {
       assignment: 'Asignación',
+      cleaning: 'Depuración',
       phone: 'Teléfono',
       field: 'Presencial',
       web: 'Web',

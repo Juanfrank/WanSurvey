@@ -160,6 +160,16 @@ describe('functions', () => {
     expect(s('length(MULTI)')).toBe(2);
     expect(s('length(NOPE)')).toBe(0);
   });
+  it('matches: a regular expression on a text, anywhere unless anchored, ignoring case', () => {
+    expect(s('matches(NAME, "^ma")')).toBe(true);
+    expect(s('matches(NAME, "^MA")')).toBe(true);
+    expect(s('matches(NAME, "^a")')).toBe(false);
+    expect(s('matches(NAME, "r.a")')).toBe(true);
+    expect(s('matches(NAME, "(maria|jose)$")')).toBe(true);
+    // A pattern that is wrong, or a missing text, is simply not a match.
+    expect(s('matches(NAME, "(")')).toBe(false);
+    expect(s('matches(NOPE, "a")')).toBe(false);
+  });
   it('sum / min / max ignore unanswered values', () => {
     expect(ev('sum(A, B, C)', { A: 1, B: null, C: 4 })).toBe(5);
     expect(ev('sum(A, B)', { A: null, B: null })).toBe(null);

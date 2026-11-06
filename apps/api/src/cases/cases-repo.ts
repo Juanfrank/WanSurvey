@@ -135,6 +135,8 @@ export interface CasesTx {
     completed: number;
     held: number;
   }>;
+  /** Withdraws these cases of the project that nobody is working on; returns their ids. */
+  withdrawMany(projectId: string, ids: string[]): Promise<string[]>;
   updateCase(
     id: string,
     patch: {
@@ -547,6 +549,23 @@ export class MssqlCasesTx implements CasesTx {
       completed: done.n,
       held: held.n,
     };
+  }
+
+  async withdrawMany(projectId: string, ids: string[]) {
+    const out: string[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const res = await ksql<{ id: string }>`
+        UPDATE c SET status = 'withdrawn', updated_at = SYSDATETIMEOFFSET()
+        OUTPUT inserted.id
+        FROM dbo.cases c
+        WHERE c.project_id = ${projectId} AND c.id IN (${ksql.join(ids.slice(i, i + CHUNK))})
+          AND c.status IN ('fresh', 'assigned') AND c.checked_out_device IS NULL
+          AND (c.call_lock_until IS NULL OR c.call_lock_until < SYSDATETIMEOFFSET())`.execute(
+        this.tx,
+      );
+      out.push(...res.rows.map((r) => low(r.id)));
+    }
+    return out;
   }
 
   async updateCase(id: string, patch: Parameters<CasesTx['updateCase']>[1]) {

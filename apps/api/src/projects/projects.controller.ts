@@ -28,6 +28,7 @@ import {
   CatiSettings,
   EarlyExitSettings,
   PublishApprovalSettings,
+  CleaningSettings,
   CawiSettings,
   FieldworkSettings,
   Mode,
@@ -41,6 +42,7 @@ import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
+import { ruleProblem } from '../cases/cleaning.js';
 import { ORG_REPO, type OrgRepo } from './org-repo.js';
 
 const LOGO_MAX = 512 * 1024;
@@ -80,6 +82,7 @@ const ProjectPatch = ProjectFields.partial().extend({
       cati: CatiSettings,
       earlyExit: EarlyExitSettings,
       publishApproval: PublishApprovalSettings,
+      cleaning: CleaningSettings,
       capi: CapiSettings,
       audio: AudioSettingsInput,
       cawi: CawiSettings,
@@ -182,6 +185,16 @@ export class ProjectsController {
         const next = body.settings.audio;
         if (next.consentText !== before.consentText && next.consentVersion <= before.consentVersion)
           body.settings.audio = { ...next, consentVersion: before.consentVersion + 1 };
+      }
+      // A cleaning rule is checked as it is saved: it must read, and its patterns be valid.
+      for (const r of body.settings?.cleaning?.rules ?? []) {
+        const problem = ruleProblem(r.expression);
+        if (problem)
+          throw new BadRequestException({
+            code: 'CLEANING_RULE_INVALID',
+            message: `${r.name}: ${problem}`,
+            ruleId: r.id,
+          });
       }
       const project = await t.updateProject(id, body);
       if (!project) throw new NotFoundException('Project not found');

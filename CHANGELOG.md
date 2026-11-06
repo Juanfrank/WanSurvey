@@ -51,6 +51,15 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation's other questionnaires and its library, to avoid asking the same thing twice and to
   reuse wording. Linking similar questions to one another is still to do.
 
+- **Cleaning a list as it is loaded** (Settings → Cleaning): text columns tidied (no double
+  spaces or invisible characters, optionally no symbols); saved **rules** that leave rows out,
+  written over the columns of the file and counted by rule in the import report; the **same
+  person twice in a file** found by the fields the project chooses, reported or left out; and a
+  new `matches(text, pattern)` function in the expression language, with a regular-expression
+  engine that cannot be slowed down by a hostile pattern. Everywhere expressions are written
+  (rules, assignment, sampling, questionnaires) can use it.
+- **Withdraw several cases at once** from the case list, with one reason for all.
+
 ### Changed
 
 - The web sendings are called **Difusión** (outreach) in the interface instead of _Campañas_; the

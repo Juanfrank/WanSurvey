@@ -1,3 +1,4 @@
+import { cleanText } from './cleaning.js';
 import { MODES } from '@wansurvey/schema';
 import { z } from 'zod';
 import { trimUnderscores } from '../common/text.js';
@@ -170,7 +171,11 @@ export type IssueCode =
   /** A phone or e-mail already belongs to a case in another project (informational). */
   | 'duplicate_elsewhere'
   /** The same person answered recently (the plan's cross-case checks): not created. */
-  | 'cross_check';
+  | 'cross_check'
+  /** Left out by a saved cleaning rule of the project (`cleaning.rules`). */
+  | 'excluded_rule'
+  /** The same person as an earlier row of the file, by the project's duplicate fields. */
+  | 'duplicate_key';
 
 /** Issues that make a row unusable; `existing_id` and `empty_row` are informational. */
 const BLOCKING = new Set<IssueCode>([
@@ -196,6 +201,11 @@ export interface ImportReport {
   toUpdate: number;
   /** Other projects sharing phones or e-mails with rows of this file: names and row counts. */
   elsewhere?: { projectId: string; name: string; rows: number }[];
+  /** What the project's cleaning did: rows left out per rule, and the repeats found. */
+  cleaning?: {
+    rules: { id: string; name: string; count: number }[];
+    duplicates: { count: number; excluded: number; action: 'warn' | 'exclude' };
+  };
   issues: {
     code: IssueCode;
     count: number;
@@ -216,6 +226,8 @@ export interface PreparedRow {
   exists: boolean;
   /** Not eligible by a cross-case check: left out on commit. */
   crossChecked?: boolean;
+  /** Left out by a cleaning rule, or as a repeat when the project excludes them. */
+  excluded?: { rule: string; name: string };
 }
 
 /**
@@ -228,6 +240,7 @@ export function validateRows(
   mapping: ImportMapping,
   existingIds: ReadonlySet<string>,
   maxExamples = 5,
+  normalize?: { spaces: boolean; symbols: boolean },
 ): { report: ImportReport; prepared: PreparedRow[] } {
   const issues = new Map<IssueCode, ImportReport['issues'][number]>();
   const issue = (code: IssueCode, row: number, column: string, value: string) => {
@@ -257,7 +270,12 @@ export function validateRows(
 
     const row: PreparedRow = { rowNo, externalId, sample: {}, contacts: [], valid: true, exists };
     mapping.columns.forEach((col, c) => {
-      const raw = cells[c] ?? '';
+      const cell = cells[c] ?? '';
+      // Text columns are tidied as they are read (the id column and contacts keep their own rules).
+      const raw =
+        normalize && col.kind === 'sample' && col.type === 'text'
+          ? cleanText(cell, normalize)
+          : cell;
       const header = headers[c] ?? `Column ${c + 1}`;
       switch (col.kind) {
         case 'sample': {
