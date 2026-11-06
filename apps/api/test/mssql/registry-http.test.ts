@@ -357,4 +357,21 @@ describe.skipIf(!configured)('SQL Server: people registry and no contact', () =>
       ).status,
     ).toBe(403);
   });
+
+  it('does not download to a device a case whose person asked not to be contacted there', async () => {
+    const free = await newCase(t.owner, tenant.id, project, { holder: interviewerUser.id });
+    await newContact(t.owner, tenant.id, free, { value: '+51987000901' });
+    const blocked = await newCase(t.owner, tenant.id, project, { holder: interviewerUser.id });
+    await newContact(t.owner, tenant.id, blocked, { value: '+51987000902' });
+    // Only the phone channel for the first number: face to face is still allowed.
+    await add({ value: '+51987000901', channels: ['CATI'] });
+    await add({ value: '+51987000902', channels: ['CAPI'] });
+    const co = await post(interviewer, `/projects/${project}/capi/checkout`, {
+      deviceId: 'device-registry-capi',
+      caseIds: [free, blocked],
+    });
+    expect(co.status, JSON.stringify(co.body)).toBe(200);
+    expect(co.body.cases.map((c: { caseId: string }) => c.caseId)).toEqual([free]);
+    expect(co.body.refused).toEqual([{ caseId: blocked, code: 'NO_CONTACT' }]);
+  });
 });

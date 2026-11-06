@@ -47,8 +47,9 @@ list and of the history. What is left:
   two numbers is two keys; the case-level outcomes write every contact of the case).
 - **Exclusion by result** (a refusal excluding for longer than a completed interview): needs the
   area's table of results and periods.
-- **Face-to-face (CAPI)**: a case already downloaded to a device is not stopped offline; the list
-  is applied at load and at assignment only.
+- **Face-to-face (CAPI)**: a case is refused at download to a tablet when it is on the no-contact
+  list for that channel; one already on a device is not stopped offline, and the list is read
+  again at the next sync only for new downloads.
 
 ### Cleaning at load (HU-02)
 

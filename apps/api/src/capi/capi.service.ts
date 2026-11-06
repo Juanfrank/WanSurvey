@@ -8,6 +8,7 @@ import type { InterviewRow, InterviewsTx } from '../interviews/interviews-repo.j
 import { fieldedIn, InterviewsService } from '../interviews/interviews.service.js';
 import { DeviceId, type SyncItem } from '../interviews/schemas.js';
 import { closedCode } from '../questionnaires/state.js';
+import { RegistryService } from '../registry/registry.service.js';
 
 export const CheckoutBody = z.strictObject({
   deviceId: DeviceId,
@@ -36,6 +37,7 @@ export class CapiService implements OnModuleInit {
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
     private readonly audit: AuditService,
+    private readonly registry: RegistryService,
   ) {}
 
   onModuleInit() {
@@ -98,6 +100,16 @@ export class CapiService implements OnModuleInit {
         continue;
       }
       const open = await t.openInterview(c.id);
+      // The no-contact list (ADR 0002): not for a case about to leave on a device, unless an
+      // interview of it is already under way there.
+      if (!open) {
+        const { tx, tenantId } = t.handle();
+        const known = await this.registry.store.contactsOfCase(tx, c.id);
+        if (known.length && (await this.registry.blocked(tx, tenantId, known, ['CAPI'])).size) {
+          refused.push({ caseId: id, code: 'NO_CONTACT' });
+          continue;
+        }
+      }
       if (open && open.mode !== 'CAPI') {
         refused.push({ caseId: id, code: 'IN_PROGRESS_OTHER_MODE' });
         continue;

@@ -31,7 +31,7 @@ There is no `people` table with its own id. A person is whatever shares a **norm
 - **At load** (cleaning stage): a row whose phone or e-mail is on the active no-contact list for any of the project's channels, or has a participation inside the exclusion window, is reported (`no_contact`, `recent_participation`) and no case is made for it, as with the cross-case checks. The file keeps its place in the history.
 - **In the call queue**: a case with a phone on the active no-contact list for `CATI` is not served (`no_contact` in the queue's reasons). This covers entries added after the case was loaded.
 - **In web invitations** (e-mail, SMS): an address or number on the list for `CAWI` is not sent to; the invitation is marked as skipped.
-- **Not in this round**: face-to-face (CAPI) cases already downloaded to a device cannot be stopped offline; the case is withdrawn when the device syncs, by the same rule at assignment. Left to the roadmap.
+- **At download to a device (CAPI)**: a case with a contact on the list for `CAPI` is refused (`NO_CONTACT`). A case already on a device cannot be stopped offline; that stays open.
 
 ### 5. The "do not contact" outcome
 
