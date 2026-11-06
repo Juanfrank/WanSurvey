@@ -232,7 +232,7 @@ order by e.enviado_en, e.envio_id, ${levels.join(', ')};`;
     `-- Opciones: ${labels ? 'etiquetas' : 'códigos'}, listas ${opts.rosters === 'wide' ? 'en columnas' : 'en tablas aparte'}, ${opts.paradata ? 'con' : 'sin'} paradatos, idioma ${input.language}.`,
     `-- Filtros: ${filters.length ? filters.join(', ') : 'ninguno'}.`,
     `-- Generado el ${new Date().toISOString()}. Las tablas muestran los datos de su último`,
-    `-- refresco (cada hora en el worker, o: EXEC bi.refrescar;). Ejecutar con un rol que`,
+    `-- refresco (cada 6 horas en el worker por defecto, o: EXEC bi.refrescar;). Ejecutar con un rol que`,
     `-- pueda leer el esquema bi. T-SQL (SQL Server, Azure SQL).`,
   ].join('\n');
   const parts = [`${header}\n\n-- Hoja «data»\n${sheet(input.main, null)}`];

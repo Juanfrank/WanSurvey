@@ -404,6 +404,65 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
     expect(after.ultima).toBe(before.actual);
   });
 
+  it('shows an analysis user, who has no organisation context, every row of every table and dimension', async () => {
+    // A read-only user with SELECT on the schema, as docs/bi.md says to make: row-level security
+    // would hide the rows of any view over the organisation's own tables from it.
+    const user = `bi_reader_${Date.now().toString(36)}`;
+    await owner(async (db) => {
+      await sql.raw(`CREATE USER [${user}] WITHOUT LOGIN`).execute(db);
+      await sql.raw(`GRANT SELECT ON SCHEMA::bi TO [${user}]`).execute(db);
+    });
+    try {
+      const objects = await rows(
+        sql<{ name: string }>`SELECT o.name FROM sys.objects o
+          WHERE o.schema_id = SCHEMA_ID('bi') AND o.type IN ('U', 'V') AND o.name NOT LIKE 'fuente[_]%'
+          ORDER BY o.name`,
+      );
+      expect(objects.map((o) => o.name)).toEqual(
+        expect.arrayContaining([
+          'dim_organizacion',
+          'dim_proyecto',
+          'dim_instrumento',
+          'dim_version',
+          'dim_caso',
+          'dim_persona',
+          'dim_fecha',
+          'fact_envio',
+          'plano_respuestas',
+        ]),
+      );
+      for (const { name } of objects) {
+        const [own] = await rows(
+          sql<{ n: number }>`SELECT COUNT(*) AS n FROM ${sql.table(`bi.${name}`)}`,
+        );
+        const [seen] = await owner(
+          async (db) =>
+            (
+              await sql<{ n: number }>`
+                EXECUTE AS USER = ${user}; SELECT COUNT(*) AS n FROM ${sql.table(`bi.${name}`)}; REVERT;`.execute(
+                db,
+              )
+            ).rows,
+        );
+        expect(seen?.n, `${name} as the analysis user`).toBe(own!.n);
+      }
+      const [orgs] = await owner(
+        async (db) =>
+          (
+            await sql<{ n: number }>`
+              EXECUTE AS USER = ${user}; SELECT COUNT(*) AS n FROM bi.dim_organizacion; REVERT;`.execute(
+              db,
+            )
+          ).rows,
+      );
+      expect(orgs!.n).toBeGreaterThan(0);
+    } finally {
+      await owner(async (db) => {
+        await sql.raw(`DROP USER IF EXISTS [${user}]`).execute(db);
+      });
+    }
+  });
+
   it('lets the application refresh one table at a time but read nothing in bi', async () => {
     await app.db.transaction().execute(async (tx) => {
       await sql`EXEC bi.refrescar_vista ${'dim_fila'}`.execute(tx);

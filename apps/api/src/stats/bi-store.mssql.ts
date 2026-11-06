@@ -56,6 +56,9 @@ export class BiStore {
     ).rows[0]!;
     if (!force && state.actual === state.ultima) return false;
     await this.saveZones(db);
+    // The dimensions of the hierarchy first (organisations, projects, instruments, versions,
+    // cases, people, calendar): the flat table is built from them.
+    await sql`EXEC bi.refrescar_dimensiones`.execute(db.db);
     for (const table of BI_TABLES)
       await db.db.transaction().execute(async (tx) => {
         await sql`EXEC bi.refrescar_vista ${table}`.execute(tx);

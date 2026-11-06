@@ -5,9 +5,10 @@ import { BiStore } from './bi-store.mssql.js';
 import { JobsService } from '../jobs/jobs.service.js';
 
 /**
- * Keeps the analysis model (schema `bi`, migration 0034) up to date: the worker refreshes its
- * materialised views on `BI_REFRESH_CRON`. The app may only run `bi.refrescar()`, a security
- * definer function; it can read nothing in `bi`, which spans every organisation.
+ * Keeps the analysis model (schema `bi`, migrations 0009 and 0022) up to date: the worker refills
+ * its tables on `BI_REFRESH_CRON`. The app may only run the owner procedures of the model
+ * (`bi.refrescar_dimensiones`, `bi.refrescar_vista`, `bi.refrescar`); it can read nothing in `bi`,
+ * which spans every organisation.
  */
 @Injectable()
 export class BiService implements OnModuleInit {
@@ -27,8 +28,8 @@ export class BiService implements OnModuleInit {
 
   /**
    * Refreshes the model when anything it reads changed since the last time (`force` regardless),
-   * one view per transaction with its own time limit, so readers wait for one view at most and
-   * a slow refresh never holds the others. Returns whether it ran.
+   * the dimensions of the hierarchy in one transaction and then one table per transaction, so
+   * readers wait for one table at most and a slow refresh never holds the others. Returns whether it ran.
    */
   async refresh(force = false): Promise<boolean> {
     const started = Date.now();

@@ -1,6 +1,6 @@
 # Analysis model (schema `bi`)
 
-Migrations `0034_bi_model` and `0035_bi_model_v2` add a schema `bi` that turns the coded answers and the paradata into tables a BI tool (Power BI, Tableau, Looker Studio…) or plain SQL can read. It covers every organisation, project, questionnaire (CATI, CAPI, CAWI, PAPI) and feedback point. Table and column names are in Spanish, for the analysts who read them.
+Migration `0009_bi` (with `0016` and `0022`) adds a schema `bi` in the SQL Server database that turns the coded answers and the paradata into tables that plain SQL, or any tool that reads SQL Server (Power BI, Excel, Tableau, Looker Studio…), can read. No tool-specific output is made: the model is read with a SQL query. It covers every organisation, project, questionnaire (CATI, CAPI, CAWI, PAPI) and feedback point. Table and column names are in Spanish, for the analysts who read them.
 
 ## Two shapes
 
@@ -44,36 +44,47 @@ select r.variable, r.ruta, o.etiqueta, sum(d.segundos) as segundos
 from bi.fact_paradato d
 join bi.fact_respuesta r
   on r.envio_id = d.envio_id and r.variable = d.variable
- and r.ruta is not distinct from d.ruta
+ and (r.ruta = d.ruta or (r.ruta is null and d.ruta is null))
 left join bi.dim_opcion o on o.opcion_id = r.opcion_id
 where d.tipo = 'leave_question'
-group by 1, 2, 3;
+group by r.variable, r.ruta, o.etiqueta;
 ```
 
 ## The SQL export
 
-Exports offer a **SQL query** format: a `.sql` file with one query per sheet of the Excel export (the data, and a sheet per roster with "a table per roster"). Run on this schema, it gives the same columns, in the same order, with the same cells, for the options and filters chosen: codes or labels, rosters wide or long, paradata, mode, interviewer, dates, approved only. Its columns are the export's own (`Column.source` in `@wansurvey/exporters`, read by `apps/api/src/exports/sql-export.ts`), and a test compares both, cell by cell, over every question type. The codebook sheets are not part of it. Since the views hold the data of their last refresh, interviews submitted after it appear in the Excel but not yet in the query.
+Exports offer a **SQL query** format: a `.sql` file with one query per sheet of the Excel export (the data, and a sheet per roster with "a table per roster"). Run on this schema, it gives the same columns, in the same order, with the same cells, for the options and filters chosen: codes or labels, rosters wide or long, paradata, mode, interviewer, dates, approved only. Its columns are the export's own (`Column.source` in `@wansurvey/exporters`, read by `apps/api/src/exports/sql-export.ts`), and a test compares both, cell by cell, over every question type. The codebook sheets are not part of it. Since the tables hold the data of their last refresh, interviews submitted after it appear in the Excel but not yet in the query.
 
 ## Refresh
 
-The question, option and row dimensions, the facts and the flat table are materialised views with indexes, so reading them is fast; they show the data as of the last refresh. The worker refreshes them on `BI_REFRESH_CRON` (UTC, default `40 */6 * * *`, every 6 hours; `off` never), on the heavy queue, and only when something they read changed (`bi.huella()`, a fingerprint of the source tables). Each view is refreshed in its own transaction with a 15-minute limit (`bi.refrescar_vista`), so readers wait for one view at most. Once filled, a refresh does not block readers (except the flat table, for the moment it is swapped). They are created empty: the first scheduled run fills them, or run it by hand:
+SQL Server has no materialised views, so every table of the model is a **table**: the dimensions of the hierarchy (`dim_organizacion`, `dim_proyecto`, `dim_instrumento`, `dim_version`, `dim_caso`, `dim_persona`, `dim_fecha`) and the question, option and row dimensions, the facts and the flat table. Procedures that belong to the database owner empty and fill them; the application runs those and nothing else. A table shows the data as of the last refresh. (`dim_canal` and `dim_evento` are fixed lists and stay views. The `fuente_*` views are the sources of the dimensions: they are read by the refresh and by nobody else.)
+
+The worker refreshes the model on `BI_REFRESH_CRON` (UTC cron, default `40 */6 * * *`, every 6 hours; `off` never), on the heavy queue, and only when something the model reads changed (`bi.estado_actual` gives a fingerprint of the source tables, `bi.marcar_huella` keeps the one of the last refresh). The dimensions of the hierarchy are refilled first, in one transaction, then each other table in its own, one refresh at a time (an application lock). The tables are emptied and refilled, except the flat table, which is rebuilt: on Azure SQL Database, which reads with row versioning, a reader keeps seeing the previous data of a refilled table until its refresh commits, and waits only for the moment the flat table is swapped; on a SQL Server without row versioning, a reader of a table being refreshed waits for it.
+
+To refresh by hand, with a login that can run the procedures (the database owner):
 
 ```sql
-select bi.refrescar();
+exec bi.refrescar;
 ```
+
+The tables are created empty, except the dimensions of the hierarchy, which migration `0022` fills: the first scheduled run (or the command above) fills the rest.
 
 ## Access
 
-The views read with their owner's rights, so they **span every organisation**. The application role `wansurvey_app` may only run `bi.refrescar()` (a security definer function); it cannot read anything in `bi`. Give the schema to an internal analysis role only (again after migration 0035, which rebuilds the schema):
+The model **spans every organisation** and has no row-level security: the tables are filled by the owner, whose reads the policy lets through. The application user (`wansurvey_app`) may only run the refresh procedures and cannot read anything in `bi`. An analysis user is made apart, in the application's database, with read access to the schema only:
 
 ```sql
-create role wansurvey_bi login password '…';
-grant usage on schema bi to wansurvey_bi;
-grant select on all tables in schema bi to wansurvey_bi;
-grant execute on all functions in schema bi to wansurvey_bi;
+-- SQL Server: a login at the server, and a user in the database.
+create login wansurvey_bi with password = '…';
+create user wansurvey_bi for login wansurvey_bi;
+grant select on schema::bi to wansurvey_bi;
+
+-- Azure SQL Database: a user of the database, with a password or a Microsoft Entra account.
+create user wansurvey_bi with password = '…';
+-- create user [analyst@institution.org] from external provider;
+grant select on schema::bi to wansurvey_bi;
 ```
 
-For one organisation's own analysts, put views filtered on `organizacion_id` in front of these and grant only those. Personal questions (`dim_pregunta.personal`) are in the model; filter them out for roles that may not see personal data, as the exports do.
+Do not grant anything on `dbo`: the model needs none, and the application's tables are under row-level security. For one organisation's own analysts, put views filtered on `organizacion_id` in front of these tables and grant only those. Personal questions (`dim_pregunta.personal`) are in the model; filter them out for users who may not see personal data, as the exports do.
 
 ## Examples
 
@@ -85,11 +96,11 @@ where variable = 'A3_SEX' and completa = 1
 group by proyecto, respuesta;
 
 -- Mean age, without the special codes; and how many did not know.
-select avg(valor_numero), count(*) filter (where respuesta_especial)
+select avg(valor_numero), sum(case when respuesta_especial = 1 then 1 else 0 end)
 from bi.plano_respuestas where variable = 'A2_AGE';
 
 -- Faces by month and channel.
 select anio_mes, canal_nombre, respuesta, count(*)
 from bi.plano_respuestas where variable = '_CARA'
-group by 1, 2, 3 order by 1;
+group by anio_mes, canal_nombre, respuesta order by anio_mes;
 ```

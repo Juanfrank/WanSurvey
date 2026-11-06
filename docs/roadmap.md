@@ -26,7 +26,97 @@ measurement, that it holds.
 | Manual accessibility pass             | NVDA and VoiceOver on the interviewer and respondent screens ([`accessibility.md`](accessibility.md))                                                                                                                                                                                                   | open  |
 | Backup and restore rehearsal          | Restore an Azure SQL backup into a new database and start the application on it; write the steps in [`operations.md`](operations.md)                                                                                                                                                                    | open  |
 
-## Next: 0.2.0, upkeep
+## Next: 0.2.0 and after, from the user stories
+
+Source: the first round of user stories with the area (twelve stories, November 2026), contrasted
+with `0.1.0-alpha.19`; what each story already had is in the CHANGELOG and the docs, and what is
+listed here is what was missing, with the area's own decisions. The order is set with the area; an
+item that needs a real design gets an ADR first. Story references (HU-nn) are the area's.
+
+### People registry, history and no contact (HU-02, HU-03, HU-08)
+
+Outcome: nobody is contacted who should not be, by channel, and a person is recognised across
+studies and channels.
+
+- **A registry of people for the organisation**, built up over time (like a CRM): who took part in
+  what, so that lists arrive already cleaned and duplicates are found by person and not only by
+  identifier, phone or e-mail. It extends the cross-case checks that exist today; its design
+  (ADR) comes first.
+- **An exclusion period per channel**, set as a parameter (and by result), for people who can be
+  surveyed through several channels.
+- **A no-contact list** per person, per contact (phone, e-mail) or both, for every channel or only
+  some, with its permanence as a parameter. People who are "not interested" belong to it.
+- **A "do not call / contact" outcome** in the call, which feeds that list.
+- **Loading the existing data**: the history since 2020 (an Excel file, the column mapping still to
+  define) and the people already marked not interested or not to be contacted.
+
+### Cleaning at load (HU-02)
+
+- **Saved exclusion rules** per project, applied when the list is loaded, with a count of what each
+  rule excluded. The criteria come from the area in a spreadsheet; they must be able to carry a
+  calendar (to be made precise with the area).
+- **Pattern matching in filters and rules**, "as if it were a regular expression", with an engine
+  that cannot be made slow by a hostile pattern.
+- **Duplicates by the fields the area chooses**, inside a load and against the registry above.
+- **Bulk withdrawal**: tick cases, remove them with one reason for all.
+- **Normalisation at load**: telephone numbers in international (ISO/E.164) form, names without
+  double spaces or stray characters, and the other clean-ups the area lists.
+
+### Where the lists come from (HU-01)
+
+Outcome: populations arrive without anyone loading a file. Pending the area's definition:
+
+- **Zoho**: whether it offers an interface or only files is still to be investigated.
+- **The SGC for face-to-face work**: its data are in SQL Server; how the application reads them is
+  to be defined.
+
+### The sample (HU-04)
+
+- **Confidence and margin chosen, and kept, with each sample that is added**, not as one setting
+  for the project (the area's 95 % and 5 % from January to November and 85 % and 15 % in
+  December are met by choosing them for each added sample, so no monthly rule is needed). Today
+  a batch takes a number of cases; the confidence and margin behind that number are not kept
+  with the batch.
+- **Expiry in hours** (the area's 48 hours) instead of days. An expired case leaves the cases
+  eligible for contact and nothing more; a new sample is brought in with **Add**.
+- **Three ways to change a list**: replace it, add to it, or substitute cases; today there are the
+  last two.
+
+### Questionnaires (HU-06)
+
+- **Approval before publishing**: who approves and in how many steps is defined later.
+- **Similar questions**: find them to avoid repeating questions, unify the wording across surveys
+  and link similar questions to one another.
+
+### Calls and follow-up (HU-08, HU-09, HU-11)
+
+- **A list of early-exit reasons** for interrupted interviews (also on the web and face to face);
+  the area gives the list later and generic ones are used meanwhile.
+- **Callbacks**: from the calls side panel, a bubble to switch the reminders on, and a button to
+  make a callback the next one in the queue. The browser notice is enough for now; e-mail or other
+  media come in a later iteration.
+- **"Campañas" become "Difusión"** in the interface and the documents (the area's name for the web
+  sendings). Reports by difusión, channel and analyst reuse what exists.
+- **A person identified wrongly in the original record** is handled case by case: mark it, correct
+  the result with its history and recalculate the reports.
+
+### The analysis model (HU-12)
+
+The area wants the model readable from SQL by any tool, without anything specific to Power BI.
+
+- **Done in this round**: `docs/bi.md` describes SQL Server and how to create a read-only user;
+  the dimensions of the hierarchy were views that a read-only user saw empty, and are tables now
+  (migration `0022`).
+- **The refresh frequency set in the application's general configuration**, not only by the
+  `BI_REFRESH_CRON` setting.
+
+### Waiting for the area
+
+Things the items above need from the area: the exclusion criteria (spreadsheet), the mapping of the
+2020 history, the mechanism for Zoho and the SGC, the approval steps, and the list of early-exit
+reasons. The other questions of the survey were answered and are recorded above.
+
+## Alongside: upkeep
 
 Outcome: the code base stays cheap to change.
 
@@ -63,6 +153,8 @@ No decision has been taken; each needs an ADR before work starts
 ([`adr/`](adr/0001-quality-integration-and-channels.md) shows the form). They were left out of
 ADR 0001 on purpose.
 
+- **A second round of user stories**, for what the first did not cover (quality review, face to
+  face, paper, audit, privacy), after this iteration (the area's decision).
 - **Weighting and calibration** of results (design weights, post-stratification, raking).
 - **SCIM** provisioning of users from the organisation's directory.
 - **XLSForm import and DDI export** of questionnaires and metadata.

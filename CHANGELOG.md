@@ -17,6 +17,20 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/bi.md` describes SQL Server (it still described PostgreSQL): the tables of the model,
+  the refresh, and how to make a read-only analysis user.
+- The analysis model's refresh also refills the dimensions of the hierarchy, and its fingerprint of
+  changes covers their sources. **Upgrade:** the migration (`0022`) fills them; nothing to do.
+
+### Fixed
+
+- An analysis user with read access to the `bi` schema saw no rows in the dimensions of
+  organisations, projects, instruments, versions, cases and people, or only part of the calendar,
+  because they were views under the row-level security of the organisation's tables; a joined
+  query, such as the SQL export, came back empty. They are tables now, filled like the rest.
+
 ## [0.1.0-alpha.19] - 2026-11-05
 
 ### Added
