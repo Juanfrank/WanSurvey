@@ -347,7 +347,7 @@ function WavesSection({
     queryFn: () => api<Wave[]>(`/projects/${projectId}/waves`),
     refetchInterval: 10_000,
   });
-  // The campaigns of this questionnaire.
+  // The outreach (waves) of this questionnaire.
   const waves = { data: all.data?.filter((w) => w.questionnaireId === questionnaireId) };
   const qs = useQuery({
     queryKey: ['questionnaires', projectId],

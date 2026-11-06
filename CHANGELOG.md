@@ -19,6 +19,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- The web sendings are called **Difusión** (outreach) in the interface instead of _Campañas_; the
+  area's own name for them. Nothing changes in the API (`waves`).
 - `docs/bi.md` describes SQL Server (it still described PostgreSQL): the tables of the model,
   the refresh, and how to make a read-only analysis user.
 - The analysis model's refresh also refills the dimensions of the hierarchy, and its fingerprint of

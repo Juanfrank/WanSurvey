@@ -95,8 +95,7 @@ Outcome: populations arrive without anyone loading a file. Pending the area's de
 - **Callbacks**: from the calls side panel, a bubble to switch the reminders on, and a button to
   make a callback the next one in the queue. The browser notice is enough for now; e-mail or other
   media come in a later iteration.
-- **"Campañas" become "Difusión"** in the interface and the documents (the area's name for the web
-  sendings). Reports by difusión, channel and analyst reuse what exists.
+- **Reports by difusión, channel and analyst** reuse what exists ("Campañas" became "Difusión").
 - **A person identified wrongly in the original record** is handled case by case: mark it, correct
   the result with its history and recalculate the reports.
 
