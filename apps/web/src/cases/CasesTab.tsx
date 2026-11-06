@@ -1,4 +1,5 @@
 import './sampling-i18n.js';
+import { Misidentified } from './Misidentified.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -1011,6 +1012,9 @@ function CaseDrawer({
                 >
                   {t('cases.detail.withdraw')}
                 </button>
+              ) : null}
+              {c.status !== 'withdrawn' && c.disposition !== 'MISIDENTIFIED' ? (
+                <Misidentified projectId={projectId} caseId={caseId} />
               ) : null}
             </div>
           ) : null}

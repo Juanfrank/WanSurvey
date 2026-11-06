@@ -22,6 +22,8 @@ export const DISPOSITIONS = {
   DISCONNECTED: { aapor: '4.31', group: 'not_eligible', final: true },
   SCREENED_OUT: { aapor: '4.70', group: 'not_eligible', final: true },
   QUOTA_FULL: { aapor: '4.80', group: 'not_eligible', final: true },
+  /** The person reached is not the one of the original record (marked by a supervisor). */
+  MISIDENTIFIED: { aapor: '4.90', group: 'not_eligible', final: true },
   /** Not worked within the project's deadline after assignment (unknown eligibility). */
   EXPIRED: { aapor: '3.90', group: 'unknown_eligibility', final: true },
   /** Still pending when its questionnaire was marked completed. */

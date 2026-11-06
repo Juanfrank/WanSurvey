@@ -51,6 +51,11 @@ export const QueueQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
+export const MisidentifiedBody = z.strictObject({
+  /** What happened: who the person turned out to be, or how the record was wrong. */
+  note: z.string().trim().min(3).max(1000),
+});
+
 export const TransitionBody = z.strictObject({
   to: z.enum(['in_review', 'approved', 'returned', 'rejected']),
   comment: z.string().max(4000).optional(),
@@ -513,6 +518,62 @@ export class ReviewService implements OnModuleInit {
     );
     if (row.submittedAt) await this.stats.touched(t, row.tenantId, row.projectId, row.submittedAt);
     return { status: body.to };
+  }
+
+  /**
+   * A person reached was not the one of the original record. The case is finished as not
+   * eligible (`MISIDENTIFIED`) and every interview made with the wrong person is rejected, so no
+   * report counts them (the statistics of the days involved are recomputed). The case's history
+   * keeps who did it, why, and what the case and its interviews were before.
+   */
+  async misidentified(
+    t: ReviewTx,
+    ctx: AuthContext,
+    projectId: string,
+    caseId: string,
+    note: string,
+  ) {
+    const c = await t.caseState(projectId, caseId);
+    if (!c) throw new NotFoundException('Case not found');
+    if (c.disposition === 'MISIDENTIFIED') return { disposition: c.disposition, rejected: [] };
+    const interviews = await t.openInterviewsOfCase(caseId);
+    if (interviews.length && !can(ctx.memberships, 'interviews.approve', projectId))
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Interviews of this case must be rejected: that needs the review permission',
+      });
+    const now = new Date();
+    for (const i of interviews) {
+      await t.setReviewStatus(i.id, 'rejected', ctx.userId, now);
+      await t.addComment({
+        interviewId: i.id,
+        variable: null,
+        body: note,
+        authorId: ctx.userId,
+      });
+      if (i.submittedAt) await this.stats.touched(t, ctx.tenantId, projectId, i.submittedAt);
+    }
+    await t.closeCase(caseId, 'MISIDENTIFIED', now);
+    await this.cases.events(t, ctx.userId, [
+      {
+        caseId,
+        type: 'misidentified',
+        details: {
+          note,
+          from: { status: c.status, disposition: c.disposition },
+          interviews: interviews.map((i) => ({ id: i.id, status: i.status })),
+        },
+      },
+    ]);
+    await t.audit(
+      this.audit.fromContext(ctx, {
+        action: 'case.misidentified',
+        targetType: 'case',
+        targetId: caseId,
+        details: { projectId, interviews: interviews.length },
+      }),
+    );
+    return { disposition: 'MISIDENTIFIED', rejected: interviews.map((i) => i.id) };
   }
 
   /**

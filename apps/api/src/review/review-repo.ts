@@ -110,6 +110,17 @@ export interface ReviewTx extends InterviewsTx {
   /** After a rejection that reopens the case: fresh or assigned, without a result. */
   reopenCase(caseId: string, now: Date): Promise<void>;
   setCaseDisposition(caseId: string, disposition: string | null, now: Date): Promise<void>;
+  /** A case of the project, as the misidentification needs it. */
+  caseState(
+    projectId: string,
+    caseId: string,
+  ): Promise<{ id: string; externalId: string; status: string; disposition: string | null } | null>;
+  /** The interviews of a case that are not yet rejected. */
+  openInterviewsOfCase(
+    caseId: string,
+  ): Promise<{ id: string; status: string; submittedAt: Date | null }[]>;
+  /** Finishes a case with a result and takes it out of every queue. */
+  closeCase(caseId: string, disposition: string, now: Date): Promise<void>;
   submitCounts(interviewId: string): Promise<{ warnings: number; differences: number }>;
   /** The next change number under the review device. */
   nextReviewSeq(interviewId: string): Promise<number>;
@@ -306,6 +317,50 @@ export class MssqlReviewTx extends MssqlInterviewsTx implements ReviewTx {
       .updateTable('review_comments')
       .set({ resolved_at: at ? instant(at) : null })
       .where('id', '=', id)
+      .execute();
+  }
+
+  async caseState(projectId: string, caseId: string) {
+    const r = await this.mtx
+      .selectFrom('cases')
+      .select(['id', 'external_id', 'status', 'disposition'])
+      .where('id', '=', caseId)
+      .where('project_id', '=', projectId)
+      .executeTakeFirst();
+    return r
+      ? {
+          id: low(r.id),
+          externalId: r.external_id,
+          status: r.status,
+          disposition: r.disposition,
+        }
+      : null;
+  }
+
+  async openInterviewsOfCase(caseId: string) {
+    const rows = await this.mtx
+      .selectFrom('interviews')
+      .select(['id', 'status', 'submitted_at'])
+      .where('case_id', '=', caseId)
+      .where('status', '<>', 'rejected')
+      .execute();
+    return rows.map((r) => ({ id: low(r.id), status: r.status, submittedAt: r.submitted_at }));
+  }
+
+  async closeCase(caseId: string, disposition: string, now: Date) {
+    await this.mtx
+      .updateTable('cases')
+      .set({
+        status: 'finalised',
+        disposition,
+        next_contact_at: null,
+        callback_user_id: null,
+        queue_pin_user_id: null,
+        call_lock_user_id: null,
+        call_lock_until: null,
+        updated_at: instant(now),
+      })
+      .where('id', '=', caseId)
       .execute();
   }
 

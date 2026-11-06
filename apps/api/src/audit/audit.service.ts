@@ -50,6 +50,7 @@ export type AuditAction =
   | 'cases.imported'
   | 'cases.assigned'
   | 'case.updated'
+  | 'case.misidentified'
   | 'case.pii_viewed'
   | 'case.subject_exported'
   | 'case.anonymised'

@@ -103,6 +103,10 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
   const rows = async (q: ReturnType<typeof sql>) =>
     ((await q.execute(t.owner)) as { rows: Record<string, unknown>[] }).rows;
   const j = (v: unknown) => JSON.parse(v as string);
+  const auditActionsOf = async (caseId: string) =>
+    (await rows(sql`SELECT action FROM audit_log WHERE target_id = ${caseId}`)).map(
+      (r) => r.action as string,
+    );
 
   const post = (s: Session, path: string, body: object = {}) =>
     s.agent.post(`/api/v1${path}`).set('x-csrf-token', s.csrf).send(body);
@@ -336,6 +340,51 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
       tenant.slug,
     );
     expect((await other.agent.get(`/api/v1/review/interviews/${id}`)).status).toBe(404);
+  });
+
+  it('a person who is not the one of the record: the case closes as ineligible and its interviews are rejected', async () => {
+    const { id, caseId } = await interview([
+      ['AGE', 41],
+      ['WORK', 2],
+    ]);
+    // An interviewer may not do it (it needs case editing and the review permission).
+    expect(
+      (await post(me, `/projects/${project}/cases/${caseId}/misidentified`, { note: 'No era' }))
+        .status,
+    ).toBe(403);
+    // A reason is needed.
+    expect(
+      (await post(sup, `/projects/${project}/cases/${caseId}/misidentified`, { note: ' ' })).status,
+    ).toBe(400);
+
+    const ok = await post(sup, `/projects/${project}/cases/${caseId}/misidentified`, {
+      note: 'Contestó el hermano, no la persona del registro',
+    });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body).toEqual({ disposition: 'MISIDENTIFIED', rejected: [id] });
+    const [c] = await rows(
+      sql`SELECT status, disposition, assigned_to FROM cases WHERE id = ${caseId}`,
+    );
+    expect(c).toMatchObject({ status: 'finalised', disposition: 'MISIDENTIFIED' });
+    const [iv] = await rows(sql`SELECT status FROM interviews WHERE id = ${id}`);
+    expect(iv).toMatchObject({ status: 'rejected' });
+    // The history keeps what it was before, who and why; the reviewers see the note on the interview.
+    const [ev] = await rows(
+      sql`SELECT details FROM case_events WHERE case_id = ${caseId} AND type = 'misidentified'`,
+    );
+    expect(j(ev!.details)).toMatchObject({
+      note: 'Contestó el hermano, no la persona del registro',
+      from: { status: 'finalised', disposition: 'COMPLETE' },
+      interviews: [{ id, status: 'submitted' }],
+    });
+    const notes = await rows(sql`SELECT body FROM review_comments WHERE interview_id = ${id}`);
+    expect(notes.map((r) => r.body)).toContain('Contestó el hermano, no la persona del registro');
+    // Doing it again changes nothing.
+    const again = await post(sup, `/projects/${project}/cases/${caseId}/misidentified`, {
+      note: 'otra vez',
+    });
+    expect(again.body).toEqual({ disposition: 'MISIDENTIFIED', rejected: [] });
+    expect(await auditActionsOf(caseId)).toContain('case.misidentified');
   });
 
   it('codes "other" texts in bulk and writes the code to every interview', async () => {

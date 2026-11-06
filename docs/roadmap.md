@@ -94,8 +94,6 @@ Outcome: populations arrive without anyone loading a file. Pending the area's de
   for web respondents and face-to-face interviews, and the reason in the analysis model and the
   exports. The area gives its own list later; generic reasons are used meanwhile.
 - **Reports by difusión, channel and analyst** reuse what exists ("Campañas" became "Difusión").
-- **A person identified wrongly in the original record** is handled case by case: mark it, correct
-  the result with its history and recalculate the reports.
 
 ### The analysis model (HU-12)
 

@@ -28,6 +28,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   due; calling hours still apply), and a bubble in the callbacks panel that turns the browser
   notice for callbacks on and off.
 
+- **Person identified wrongly in the original record**: from a case, a supervisor marks that the
+  person reached is not the one of the record, with what happened. The case closes as not eligible
+  (a new result, _MISIDENTIFIED_) and the interviews made with that person are rejected with the
+  note, so no report counts them; the days involved are recomputed and the history keeps the state
+  before.
+
 ### Changed
 
 - The web sendings are called **Difusión** (outreach) in the interface instead of _Campañas_; the

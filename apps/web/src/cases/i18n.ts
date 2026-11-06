@@ -206,6 +206,7 @@ export const casesEn = {
     attempts_other: '{{count}} attempts',
     event: {
       link_made: 'Personal web link made',
+      misidentified: 'Marked as wrong person',
       anonymised: 'Personal data removed',
       imported: 'Imported',
       updated_by_import: 'Updated by an import',
@@ -402,6 +403,14 @@ export const casesEn = {
     sampleYes: 'Yes',
     sampleNo: 'No',
     sampleNext: 'Next',
+  },
+  misidentified: {
+    open: 'Wrong person',
+    explain:
+      'The person reached is not the one of the record. The case is closed as not eligible and the interviews made with that person are rejected, so no report counts them. This stays in the case history.',
+    note: 'What happened',
+    confirm: 'Mark as wrong person',
+    cancel: 'Cancel',
   },
   exitReasons: {
     title: 'Early-exit reasons',
@@ -665,6 +674,7 @@ export const casesEs: CasesCatalogue = {
     attempts_other: '{{count}} intentos',
     event: {
       link_made: 'Enlace web personal generado',
+      misidentified: 'Marcado como persona mal identificada',
       anonymised: 'Datos personales eliminados',
       imported: 'Importado',
       updated_by_import: 'Actualizado por una importación',
@@ -863,6 +873,14 @@ export const casesEs: CasesCatalogue = {
     sampleYes: 'Sí',
     sampleNo: 'No',
     sampleNext: 'Siguiente',
+  },
+  misidentified: {
+    open: 'Persona mal identificada',
+    explain:
+      'La persona contactada no es la del registro. El caso se cierra como no elegible y las entrevistas hechas con esa persona se rechazan, así que ningún reporte las cuenta. Queda en el historial del caso.',
+    note: 'Qué ocurrió',
+    confirm: 'Marcar como persona mal identificada',
+    cancel: 'Cancelar',
   },
   exitReasons: {
     title: 'Motivos de salida temprana',

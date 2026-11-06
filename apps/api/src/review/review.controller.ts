@@ -20,6 +20,7 @@ import {
   CodesBody,
   CommentBody,
   CorrectBody,
+  MisidentifiedBody,
   QueueQuery,
   ReviewService,
   TransitionBody,
@@ -81,6 +82,22 @@ export class ReviewController {
     @Body(new ZodPipe(TransitionBody)) body: z.infer<typeof TransitionBody>,
   ) {
     return this.repo.inTenant(ctx.tenantId, (t) => this.review.transition(t, ctx, id, body));
+  }
+
+  /** Marks the person of a case as not the one of the original record (see the service). */
+  @Post('projects/:projectId/cases/:caseId/misidentified')
+  @HttpCode(200)
+  @RequirePermission(['cases.edit', 'interviews.approve'], PERM)
+  @ApiBody({ schema: z.toJSONSchema(MisidentifiedBody) as object })
+  misidentified(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Body(new ZodPipe(MisidentifiedBody)) body: z.infer<typeof MisidentifiedBody>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.review.misidentified(t, ctx, projectId, caseId, body.note),
+    );
   }
 
   @Post('review/interviews/:id/correct')
