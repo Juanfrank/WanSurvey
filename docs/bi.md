@@ -60,6 +60,8 @@ SQL Server has no materialised views, so every table of the model is a **table**
 
 The worker refreshes the model on `BI_REFRESH_CRON` (UTC cron, default `40 */6 * * *`, every 6 hours; `off` never), on the heavy queue, and only when something the model reads changed (`bi.estado_actual` gives a fingerprint of the source tables, `bi.marcar_huella` keeps the one of the last refresh). The dimensions of the hierarchy are refilled first, in one transaction, then each other table in its own, one refresh at a time (an application lock). The tables are emptied and refilled, except the flat table, which is rebuilt: on Azure SQL Database, which reads with row versioning, a reader keeps seeing the previous data of a refilled table until its refresh commits, and waits only for the moment the flat table is swapped; on a SQL Server without row versioning, a reader of a table being refreshed waits for it.
 
+The frequency can also be set in the application (Administration → Organization → Analysis model refresh): every 15 minutes up to once a week, or never. It is one setting for the installation, kept in `dbo.app_settings` (migration `0025`). Once it is set, a job that wakes every ten minutes (`bi.tick`) refreshes the model when the interval has passed since the last check, and the `BI_REFRESH_CRON` schedule stands aside; removing the setting (\"as the deployment sets it\") brings the cron back. A refresh can also be asked for at once there.
+
 To refresh by hand, with a login that can run the procedures (the database owner):
 
 ```sql

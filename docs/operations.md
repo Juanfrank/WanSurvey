@@ -40,16 +40,17 @@ API and worker read the same environment (validated at start; see `apps/api/.env
 
 ## Background jobs
 
-| Job                 | When                                                     | What                                                                                                     |
-| ------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `mail.dispatch`     | every 15 s                                               | Sends queued invitations and due reminders, up to 200 per organisation per run                           |
-| `stats.refresh`     | after each submission or review decision (debounced 1 s) | Recomputes one project day of `stats_daily`, then announces it to dashboards                             |
-| `stats.nightly`     | 02:00 UTC                                                | Recomputes all daily figures                                                                             |
-| `exports.build`     | on request                                               | Builds an export file page by page into export storage (up to `EXPORT_MAX_BYTES`, 2 GB)                  |
-| `pii.encrypt`       | at worker start, then hourly                             | Seals personal sample fields still in plain text (for example after a field is marked personal)          |
-| `privacy.retention` | 02:30 UTC                                                | Removes personal data from cases past their project's retention period                                   |
-| `bi.refresh`        | `BI_REFRESH_CRON` (every 6 h at :40 UTC)                 | Refreshes the analysis model, schema `bi` ([bi.md](bi.md)), when its data changed                        |
-| `jobs.sweep`        | every 5 minutes                                          | Requeues exports and scanned batches left queued or abandoned by a lost worker; fails them after 3 tries |
+| Job                 | When                                                     | What                                                                                                                                       |
+| ------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mail.dispatch`     | every 15 s                                               | Sends queued invitations and due reminders, up to 200 per organisation per run                                                             |
+| `stats.refresh`     | after each submission or review decision (debounced 1 s) | Recomputes one project day of `stats_daily`, then announces it to dashboards                                                               |
+| `stats.nightly`     | 02:00 UTC                                                | Recomputes all daily figures                                                                                                               |
+| `exports.build`     | on request                                               | Builds an export file page by page into export storage (up to `EXPORT_MAX_BYTES`, 2 GB)                                                    |
+| `pii.encrypt`       | at worker start, then hourly                             | Seals personal sample fields still in plain text (for example after a field is marked personal)                                            |
+| `privacy.retention` | 02:30 UTC                                                | Removes personal data from cases past their project's retention period                                                                     |
+| `bi.refresh`        | `BI_REFRESH_CRON` (every 6 h at :40 UTC)                 | Refreshes the analysis model, schema `bi` ([bi.md](bi.md)), when its data changed; stands aside once a frequency is set in the application |
+| `bi.tick`           | every 10 minutes                                         | Refreshes the analysis model when the frequency set in the application has passed                                                          |
+| `jobs.sweep`        | every 5 minutes                                          | Requeues exports and scanned batches left queued or abandoned by a lost worker; fails them after 3 tries                                   |
 
 Without Redis (App Service from a zip, `docs/appservice-zip.md`) jobs run in the API's process with the same limits: `JOB_CONCURRENCY` light jobs and `HEAVY_JOB_CONCURRENCY` heavy ones at a time, three tries each (`JOB_RETRY_MS`, doubled). Failed jobs retry three times with backoff; the 500 most recent failed jobs (a week at most) are kept in Redis for inspection. Without the worker, e-mail stops, dashboards stop updating and exports stay queued; the API keeps working. Without Redis, the API still answers: jobs are not queued (submissions, exports and uploads go through; the sweeper and the nightly recompute catch up), live notices are skipped and rate limits are counted by each instance on its own (a little looser with several instances, never off).
 

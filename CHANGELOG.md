@@ -19,6 +19,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Refresh frequency of the analysis model** in Administration → Organization: every 15 minutes up
+  to once a week, never (on request only), or as the deployment's `BI_REFRESH_CRON` sets it, with a
+  "Refresh now" button and the time of the last check. The model spans every organisation, so the
+  setting is the installation's; who manages an organisation sets it and the audit log records it
+  (`app.bi_frequency_changed`). New table `app_settings` (migration `0025`) read and written only
+  through owner procedures. A job wakes every ten minutes to honour it.
 - **Early-exit reasons** for telephone interviews: each project has a list of reasons (generic ones
   by default, in Spanish and English, editable in Settings → Phone), the call workspace asks for one
   when an answered call is closed as interrupted, and the project can make it required. The reason

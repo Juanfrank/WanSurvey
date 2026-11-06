@@ -25,6 +25,7 @@ export type AuditAction =
   | 'user.invitation_resent'
   | 'user.forced_logout'
   | 'tenant.updated'
+  | 'app.bi_frequency_changed'
   | 'tenant.roles_updated'
   | 'team.created'
   | 'team.updated'

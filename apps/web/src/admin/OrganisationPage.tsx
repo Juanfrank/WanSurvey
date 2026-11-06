@@ -75,6 +75,7 @@ export function OrganisationPage() {
         {tenant.data ? <General tenant={tenant.data} /> : <div aria-busy="true" />}
         {tenant.data ? <Appearance tenant={tenant.data} /> : null}
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
+        <BiFrequency />
       </div>
     </div>
   );
@@ -408,6 +409,117 @@ function Appearance({ tenant }: { tenant: Tenant }) {
           </Button>
           <Saved text={saved} />
         </div>
+      </form>
+    </Card>
+  );
+}
+
+interface BiSetting {
+  refreshMinutes: number | null;
+  source: 'deployment' | 'setting';
+  deploymentCron: string;
+  lastRunAt: string | null;
+}
+
+/** Choices offered; `''` is the deployment's own schedule and `0` is never. */
+const BI_CHOICES = ['', '15', '30', '60', '180', '360', '720', '1440', '10080', '0'] as const;
+
+/** How often the analysis model (Power BI, SQL export) is refreshed; one setting for the installation. */
+function BiFrequency() {
+  const { t, i18n } = useTranslation();
+  const qc = useQueryClient();
+  const me = useMe();
+  const canManage = !!me.data?.permissions.includes('tenant.manage');
+  const setting = useQuery({
+    queryKey: ['app-settings-bi'],
+    queryFn: () => api<BiSetting>('/app-settings/bi'),
+    enabled: !!me.data,
+  });
+  const current =
+    setting.data?.source === 'setting' ? String(setting.data.refreshMinutes ?? 0) : '';
+  const [value, setValue] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const shown = value ?? current;
+  const save = useMutation({
+    mutationFn: () =>
+      api('/app-settings/bi', {
+        method: 'POST',
+        body: { refreshMinutes: shown === '' ? null : Number(shown) },
+      }),
+    onSuccess: async () => {
+      setSaved('admin.org.bi.saved');
+      setValue(null);
+      await qc.invalidateQueries({ queryKey: ['app-settings-bi'] });
+    },
+  });
+  const refresh = useMutation({
+    mutationFn: () => api<{ ran: boolean }>('/app-settings/bi/refresh', { method: 'POST' }),
+    onSuccess: (r) => setSaved(r.ran ? 'admin.org.bi.refreshed' : 'admin.org.bi.upToDate'),
+  });
+  const last = setting.data?.lastRunAt
+    ? new Date(setting.data.lastRunAt).toLocaleString(i18n.language)
+    : null;
+  return (
+    <Card>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(null);
+          save.mutate();
+        }}
+      >
+        <h2 className="text-lg font-semibold">{t('admin.org.bi.title')}</h2>
+        <p className="text-sm text-slate-600">{t('admin.org.bi.intro')}</p>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="bi-frequency" className="text-sm font-medium text-slate-700">
+            {t('admin.org.bi.frequency')}
+          </label>
+          <select
+            id="bi-frequency"
+            className={`${inputCls} py-2`}
+            value={shown}
+            disabled={!canManage}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setSaved(null);
+            }}
+          >
+            {BI_CHOICES.map((c) => (
+              <option key={c} value={c}>
+                {t(`admin.org.bi.choice.${c === '' ? 'deployment' : c}`)}
+              </option>
+            ))}
+          </select>
+          <Hint>
+            {shown === ''
+              ? t('admin.org.bi.deploymentHint', { cron: setting.data?.deploymentCron ?? '' })
+              : t('admin.org.bi.settingHint')}
+          </Hint>
+        </div>
+        <p className="text-sm text-slate-600">
+          {last ? t('admin.org.bi.last', { when: last }) : t('admin.org.bi.never')}
+        </p>
+        {save.isError || refresh.isError ? <ErrorText>{t('admin.org.error')}</ErrorText> : null}
+        {canManage ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" disabled={value === null || save.isPending}>
+              {t('admin.org.save')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={refresh.isPending}
+              onClick={() => {
+                setSaved(null);
+                refresh.mutate();
+              }}
+            >
+              {t('admin.org.bi.refreshNow')}
+            </Button>
+            <Saved text={saved} />
+          </div>
+        ) : null}
       </form>
     </Card>
   );

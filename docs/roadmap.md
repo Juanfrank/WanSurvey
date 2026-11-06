@@ -83,11 +83,9 @@ Outcome: populations arrive without anyone loading a file. Pending the area's de
 
 The area wants the model readable from SQL by any tool, without anything specific to Power BI.
 
-- **Done in this round**: `docs/bi.md` describes SQL Server and how to create a read-only user;
-  the dimensions of the hierarchy were views that a read-only user saw empty, and are tables now
-  (migration `0022`).
-- **The refresh frequency set in the application's general configuration**, not only by the
-  `BI_REFRESH_CRON` setting.
+- **Done**: `docs/bi.md` describes SQL Server and how to create a read-only user; the dimensions of
+  the hierarchy are tables a read-only user can read (migration `0022`); the refresh frequency is
+  set in Administration → Organization (migration `0025`).
 
 ### Waiting for the area
 

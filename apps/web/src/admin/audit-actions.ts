@@ -22,6 +22,7 @@ export const AUDIT_ACTIONS = [
   'user.forced_logout',
   'tenant.updated',
   'tenant.roles_updated',
+  'app.bi_frequency_changed',
   'team.created',
   'team.updated',
   'team.deleted',

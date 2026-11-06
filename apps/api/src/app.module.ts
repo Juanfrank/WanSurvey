@@ -77,6 +77,8 @@ import { BUS, LocalBus, RedisBus, type Bus } from './jobs/bus.js';
 import { JobsService, PROCESS_ROLE, type ProcessRole } from './jobs/jobs.service.js';
 import { MetricsService } from './metrics/metrics.service.js';
 import { BiService } from './stats/bi.service.js';
+import { AppSettingsController } from './settings/app-settings.controller.js';
+import { AppSettingsService } from './settings/app-settings.service.js';
 import { SweeperService } from './jobs/sweeper.service.js';
 import { StatsService } from './stats/stats.service.js';
 import { PrivacyController } from './privacy/privacy.controller.js';
@@ -189,6 +191,7 @@ export class AppModule {
         SsoSettingsController,
         UsersController,
         TenantsController,
+        AppSettingsController,
         ProjectsController,
         QuestionnairesController,
         CollabController,
@@ -294,6 +297,7 @@ export class AppModule {
         JobsService,
         StatsService,
         BiService,
+        AppSettingsService,
         SweeperService,
         MetricsService,
         LiveService,
