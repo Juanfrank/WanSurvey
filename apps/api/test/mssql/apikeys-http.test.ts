@@ -71,7 +71,10 @@ describe.skipIf(!configured)('SQL Server: integration API keys', () => {
     expect(res.body.key).toMatch(/^wsk_[0-9a-f]{12}_[A-Za-z0-9_-]{43}$/);
     const list = await owner.agent.get('/api/v1/api-keys');
     expect(list.status).toBe(200);
-    expect(JSON.stringify(list.body)).not.toContain(res.body.key.split('_')[2]);
+    expect(JSON.stringify(list.body)).not.toContain(
+      // The secret is base64url and may itself hold underscores: everything after the key id.
+      (res.body.key as string).split('_').slice(2).join('_'),
+    );
     const row = list.body.find((k: { id: string }) => k.id === res.body.id);
     expect(row).toMatchObject({ name: 'Power BI', revokedAt: null, lastUsedAt: null });
     const [stored] = (
