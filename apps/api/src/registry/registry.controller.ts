@@ -10,14 +10,19 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  UnprocessableEntityException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { CONTACT_CHANNELS } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { parseDate } from '../cases/sample-mapping.js';
+import { parseSampleFile, SampleFileError } from '../cases/sample-file.js';
 import { Engine } from '../db/engine.js';
 import { REASONS, RegistryService, parseContact } from './registry.service.js';
 import type { NoContactInput, ParticipationInput } from './registry-store.mssql.js';
@@ -255,6 +260,30 @@ export class RegistryController {
       });
     });
     return { loaded: rows.length, rejected: rejected.length, examples: rejected.slice(0, 20) };
+  }
+
+  /**
+   * Reads a spreadsheet (.xlsx, first sheet) or a delimited file into rows keyed by the header
+   * names in lower case, for the two loads below; nothing is stored.
+   */
+  @Post('read-file')
+  @HttpCode(200)
+  @RequirePermission('registry.manage')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  async readFile(@UploadedFile() file: { buffer: Buffer; originalname: string } | undefined) {
+    if (!file) throw new BadRequestException({ code: 'NO_FILE', message: 'Send a file' });
+    try {
+      const parsed = await parseSampleFile(file.buffer, file.originalname, { maxRows: 20_000 });
+      const names = parsed.headers.map((h) => h.trim().toLowerCase());
+      return {
+        rows: parsed.rows.map((r) => Object.fromEntries(names.map((n, i) => [n, r[i] ?? '']))),
+      };
+    } catch (e) {
+      if (e instanceof SampleFileError)
+        throw new UnprocessableEntityException({ code: 'UNREADABLE_FILE', message: e.message });
+      throw e;
+    }
   }
 
   /** What the registry knows of one phone or e-mail. */

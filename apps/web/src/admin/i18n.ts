@@ -72,7 +72,7 @@ export const adminEn = {
     add: 'Add',
     loadsTitle: 'Load files',
     loadsHelp:
-      'CSV files (in a spreadsheet, “Save as CSV”), with a header line. Numbers without a country code use the one typed above. Rows that cannot be read are reported and not loaded; the rest are.',
+      'Excel (.xlsx, first sheet) or CSV files, with a header line. Numbers without a country code use the one typed above. Rows that cannot be read are reported and not loaded; the rest are.',
     loadList: 'No-contact list',
     loadListCols:
       'Columns: value (phone or e-mail), reason, channels (CATI; CAWI…), until (date), note.',
@@ -437,7 +437,7 @@ export const adminEs: typeof adminEn = {
     add: 'Agregar',
     loadsTitle: 'Cargar archivos',
     loadsHelp:
-      'Archivos CSV (en una hoja de cálculo, «Guardar como CSV»), con una línea de encabezado. Los números sin código de país usan el escrito arriba. Las filas que no se pueden leer se informan y no se cargan; las demás sí.',
+      'Archivos de Excel (.xlsx, primera hoja) o CSV, con una línea de encabezado. Los números sin código de país usan el escrito arriba. Las filas que no se pueden leer se informan y no se cargan; las demás sí.',
     loadList: 'Lista de no contacto',
     loadListCols:
       'Columnas: valor (teléfono o correo), motivo, canales (CATI; CAWI…), hasta (fecha), nota.',

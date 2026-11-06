@@ -35,6 +35,7 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   people on the list for the phone channel, web invitations (e-mail and SMS) are not sent to them,
   and a list being loaded reports and leaves out whoever is on the no-contact list
   (`no_contact`) or took part inside the exclusion period (`recent_participation`).
+- The registry's two loads read **Excel (.xlsx, first sheet)** as well as CSV, by column name.
 - An interview of a case that is submitted records the participation of every phone and e-mail of
   the case, by channel, in the registry. Erasing a person removes their participations and keeps
   their no-contact entry.

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api } from '../api.js';
+import { api, upload } from '../api.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, QueryState } from '../routes/ui.js';
@@ -106,7 +106,14 @@ export function RegistryPage() {
   const [loadError, setLoadError] = useState(false);
   const load = useMutation({
     mutationFn: async ({ kind, file }: { kind: 'list' | 'history'; file: File }) => {
-      const table = parseTable(await file.text());
+      let table: Record<string, string>[];
+      if (/\.xlsx$/i.test(file.name)) {
+        // A spreadsheet is read by the server, which also knows its dates.
+        const form = new FormData();
+        form.append('file', file);
+        table = (await upload<{ rows: Record<string, string>[] }>('/registry/read-file', form))
+          .rows;
+      } else table = parseTable(await file.text());
       const total: LoadResult = { added: 0, updated: 0, loaded: 0, rejected: 0, examples: [] };
       const rows = table.map((r) =>
         kind === 'list'
@@ -336,7 +343,7 @@ export function RegistryPage() {
                 <input
                   id="registry-file-list"
                   type="file"
-                  accept=".csv,.txt,.tsv"
+                  accept=".csv,.txt,.tsv,.xlsx"
                   aria-describedby="registry-file-list-cols"
                   onChange={onFile('list')}
                 />
@@ -351,7 +358,7 @@ export function RegistryPage() {
                 <input
                   id="registry-file-history"
                   type="file"
-                  accept=".csv,.txt,.tsv"
+                  accept=".csv,.txt,.tsv,.xlsx"
                   aria-describedby="registry-file-history-cols"
                   onChange={onFile('history')}
                 />

@@ -1,6 +1,7 @@
 import { createInterview } from '@wansurvey/logic';
 import { toCsv } from '@wansurvey/fixtures';
 import { randomUUID } from 'node:crypto';
+import { writeXlsx } from 'hucre/xlsx';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createQuestionnaire, newCase, newContact, post, setSettings } from './fixtures.js';
@@ -320,5 +321,40 @@ describe.skipIf(!configured)('SQL Server: people registry and no contact', () =>
     expect(
       (await admin.agent.get(reg('/lookup?value=quien%40example.org'))).body.participations,
     ).toHaveLength(1);
+  });
+
+  it('reads a spreadsheet into rows for the loads, and refuses what it cannot read', async () => {
+    const xlsx = Buffer.from(
+      await writeXlsx({
+        sheets: [
+          {
+            name: 'Lista',
+            rows: [
+              ['Valor', 'Motivo'],
+              ['+51987000801', 'no llamar'],
+            ],
+          },
+        ],
+      }),
+    );
+    const ok = await admin.agent
+      .post(reg('/read-file'))
+      .set('x-csrf-token', admin.csrf)
+      .attach('file', xlsx, 'lista.xlsx');
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.rows).toEqual([{ valor: '+51987000801', motivo: 'no llamar' }]);
+    const bad = await admin.agent
+      .post(reg('/read-file'))
+      .set('x-csrf-token', admin.csrf)
+      .attach('file', Buffer.from('no es un zip'), 'roto.xlsx');
+    expect(bad.status).toBe(422);
+    expect(
+      (
+        await interviewer.agent
+          .post(reg('/read-file'))
+          .set('x-csrf-token', interviewer.csrf)
+          .attach('file', xlsx, 'lista.xlsx')
+      ).status,
+    ).toBe(403);
   });
 });

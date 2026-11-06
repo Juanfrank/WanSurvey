@@ -41,8 +41,8 @@ the registry by contact value, the no-contact list with channels and permanence,
 contact" outcome, the exclusion period per channel as a project setting, and the CSV loads of the
 list and of the history. What is left:
 
-- **Excel files** for the two loads (today CSV: "Save as CSV"), and the real column layout of the
-  history since 2020, still the area's to give.
+- **The real column layout** of the history since 2020, still the area's to give (the loads read
+  Excel and CSV by column name).
 - **Linking contacts into one person** when the area has an identifier to link on (a person with
   two numbers is two keys; the case-level outcomes write every contact of the case).
 - **Exclusion by result** (a refusal excluding for longer than a completed interview): needs the
