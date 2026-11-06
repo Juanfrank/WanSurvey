@@ -156,6 +156,11 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
   }
 
   async deleteContacts(caseId: string) {
+    // Who took part in what goes with the person's contacts; the no-contact list stays, so an
+    // erased person is still not contacted (ADR 0002).
+    await ksql`DELETE p FROM dbo.participations p
+      WHERE EXISTS (SELECT 1 FROM dbo.contacts ct WHERE ct.case_id = ${caseId}
+        AND ct.tenant_id = p.tenant_id AND ct.value = p.value)`.execute(this.xtx);
     const r = await this.xtx
       .deleteFrom('contacts')
       .where('case_id', '=', caseId)

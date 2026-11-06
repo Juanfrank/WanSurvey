@@ -65,6 +65,7 @@ export const PERMISSION_AREAS: { area: string; permissions: Permission[] }[] = [
     permissions: ['metrics.own', 'metrics.team', 'dashboards.read', 'exports.run'],
   },
   { area: 'privacy', permissions: ['pii.view'] },
+  { area: 'registry', permissions: ['registry.read', 'registry.manage'] },
 ];
 
 /** The i18n key of a permission's label (keys cannot hold dots). */

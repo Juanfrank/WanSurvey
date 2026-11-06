@@ -139,6 +139,11 @@ const adminApiKeysRoute = createRoute({
   path: 'api-keys',
   component: lazyRouteComponent(() => import('./admin/ApiKeysPage.js'), 'ApiKeysPage'),
 });
+const adminRegistryRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'registry',
+  component: lazyRouteComponent(() => import('./admin/RegistryPage.js'), 'RegistryPage'),
+});
 const adminWebhooksRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'webhooks',
@@ -282,6 +287,7 @@ const routeTree = rootRoute.addChildren([
       adminOrganisationRoute,
       adminAuditRoute,
       adminApiKeysRoute,
+      adminRegistryRoute,
       adminWebhooksRoute,
     ]),
     projectsRoute,

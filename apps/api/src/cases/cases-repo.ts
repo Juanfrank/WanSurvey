@@ -105,6 +105,8 @@ export interface FieldView {
 }
 
 export interface CasesTx {
+  /** The open tenant transaction itself, for modules that keep their own tables (the registry). */
+  connection(): { tx: MssqlTx; tenantId: string };
   // ─── Project, people, dictionary ────────────────────────────────────────────────────
   project(projectId: string): Promise<ProjectView | null>;
   piiFields(projectId: string): Promise<Set<string>>;
@@ -305,6 +307,10 @@ export class MssqlCasesTx implements CasesTx {
     private readonly tenantId: string,
     private readonly store: CasesStore,
   ) {}
+
+  connection() {
+    return { tx: this.tx, tenantId: this.tenantId };
+  }
 
   async project(projectId: string) {
     const r = await this.tx

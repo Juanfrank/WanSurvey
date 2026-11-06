@@ -14,6 +14,7 @@ import { projectSettings, withinHours, type CawiTheme } from '@wansurvey/schema'
 import { z } from 'zod';
 import { DisplayName } from '../common/zod.js';
 import { compileRule, ruleError } from '../cases/case-logic.js';
+import { RegistryService, parseContact } from '../registry/registry.service.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { decryptField, encryptField, randomToken, sha256Hex } from '../common/crypto.js';
@@ -118,6 +119,7 @@ export class CawiService implements OnModuleInit {
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
+    private readonly registry: RegistryService,
   ) {}
 
   onModuleInit() {
@@ -597,6 +599,15 @@ export class CawiService implements OnModuleInit {
     };
     const prepared = await this.repo.inTenant(tenantId, async (t) => {
       if (await t.isSuppressed(inv.email!)) {
+        await t.patchInvitation(inv.id, { status: 'suppressed', leaseUntil: null });
+        return null;
+      }
+      // The no-contact list (ADR 0002): the address, or any contact of the case, for the web channel.
+      const { tx, tenantId: tid } = t.handle();
+      const known = inv.caseId ? await this.registry.store.contactsOfCase(tx, inv.caseId) : [];
+      const mail = parseContact(inv.email ?? '');
+      const asked = [...known, ...(mail ? [mail] : [])];
+      if (asked.length && (await this.registry.blocked(tx, tid, asked, ['CAWI'])).size) {
         await t.patchInvitation(inv.id, { status: 'suppressed', leaseUntil: null });
         return null;
       }

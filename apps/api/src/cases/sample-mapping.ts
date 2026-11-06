@@ -172,6 +172,8 @@ export type IssueCode =
   | 'duplicate_elsewhere'
   /** The same person answered recently (the plan's cross-case checks): not created. */
   | 'cross_check'
+  | 'no_contact'
+  | 'recent_participation'
   /** Left out by a saved cleaning rule of the project (`cleaning.rules`). */
   | 'excluded_rule'
   /** The same person as an earlier row of the file, by the project's duplicate fields. */

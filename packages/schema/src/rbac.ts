@@ -55,6 +55,10 @@ export const PERMISSIONS = [
   /** Listen to the recordings of interviews (always written to the activity log). */
   'audio.listen',
   'pii.view',
+  /** See the people registry: the no-contact list and who took part in what. */
+  'registry.read',
+  /** Add and lift no-contact entries and load the registry's files. */
+  'registry.manage',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;
@@ -95,6 +99,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'exports.run',
     'cawi.waves',
     'pii.view',
+    'registry.read',
+    'registry.manage',
   ],
   supervisor: [
     'audio.listen',
@@ -112,6 +118,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'metrics.team',
     'dashboards.read',
     'pii.view',
+    'registry.read',
   ],
   reviewer: [
     'audio.listen',

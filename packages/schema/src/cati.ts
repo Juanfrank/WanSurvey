@@ -12,6 +12,8 @@ export const CALL_OUTCOMES = [
   'refusal',
   'callback',
   'appointment',
+  /** The person asks not to be contacted again: their contacts go on the no-contact list. Last, so the digit shortcuts of the others stay. */
+  'do_not_contact',
 ] as const;
 export type CallOutcome = (typeof CALL_OUTCOMES)[number];
 
@@ -24,6 +26,7 @@ export const OUTCOME_DISPOSITION: Record<CallOutcome, Disposition | null> = {
   wrong_number: 'WRONG_NUMBER',
   disconnected: 'DISCONNECTED',
   refusal: 'REFUSAL',
+  do_not_contact: 'REFUSAL',
   callback: 'CALLBACK',
   appointment: 'CALLBACK',
 };
@@ -45,6 +48,7 @@ export const OUTCOME_SCRIPT: Partial<Record<CallOutcome, string>> = {
   voicemail: 'voicemail',
   wrong_number: 'wrong_number',
   refusal: 'refusal',
+  do_not_contact: 'refusal',
   callback: 'callback',
   appointment: 'callback',
 };

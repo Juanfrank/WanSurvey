@@ -32,6 +32,7 @@ Background reading:
 - [`docs/logic-language.md`](docs/logic-language.md): the expression language
 - [`docs/decisions.md`](docs/decisions.md): assumptions taken where the spec was ambiguous
 - [`docs/adr/0001-quality-integration-and-channels.md`](docs/adr/0001-quality-integration-and-channels.md): what to build next and in which order (audit export, fraud risk score, integration API and webhooks, SMS, interview audio, web notifications, organisation theme)
+- [`docs/adr/0002-people-registry-and-no-contact.md`](docs/adr/0002-people-registry-and-no-contact.md): the people registry by contact value, the no-contact list, exclusion by channel and the "do not contact" outcome
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
 - [`docs/integration-api.md`](docs/integration-api.md): the read-only API for other systems, with keys per organisation
 - [`docs/operations.md`](docs/operations.md): running it in production (processes, configuration, jobs, backups, retention)

@@ -36,24 +36,25 @@ item that needs a real design gets an ADR first. Story references (HU-nn) are th
 ### People registry, history and no contact (HU-02, HU-03, HU-08)
 
 Outcome: nobody is contacted who should not be, by channel, and a person is recognised across
-studies and channels.
+studies and channels. **Built in the first round** (design in [ADR 0002](adr/0002-people-registry-and-no-contact.md)):
+the registry by contact value, the no-contact list with channels and permanence, the "do not
+contact" outcome, the exclusion period per channel as a project setting, and the CSV loads of the
+list and of the history. What is left:
 
-- **A registry of people for the organisation**, built up over time (like a CRM): who took part in
-  what, so that lists arrive already cleaned and duplicates are found by person and not only by
-  identifier, phone or e-mail. It extends the cross-case checks that exist today; its design
-  (ADR) comes first.
-- **An exclusion period per channel**, set as a parameter (and by result), for people who can be
-  surveyed through several channels.
-- **A no-contact list** per person, per contact (phone, e-mail) or both, for every channel or only
-  some, with its permanence as a parameter. People who are "not interested" belong to it.
-- **A "do not call / contact" outcome** in the call, which feeds that list.
-- **Loading the existing data**: the history since 2020 (an Excel file, the column mapping still to
-  define) and the people already marked not interested or not to be contacted.
+- **Excel files** for the two loads (today CSV: "Save as CSV"), and the real column layout of the
+  history since 2020, still the area's to give.
+- **Linking contacts into one person** when the area has an identifier to link on (a person with
+  two numbers is two keys; the case-level outcomes write every contact of the case).
+- **Exclusion by result** (a refusal excluding for longer than a completed interview): needs the
+  area's table of results and periods.
+- **Face-to-face (CAPI)**: a case already downloaded to a device is not stopped offline; the list
+  is applied at load and at assignment only.
 
 ### Cleaning at load (HU-02)
 
-- **Repeats against what is already loaded**: the check for the same person works inside one file;
-  against earlier loads it comes with the people registry above.
+- **Repeats against what is already loaded**: inside one file, and against the registry (the
+  no-contact list and the participations) since the people registry. Repeats against the cases of
+  earlier loads of the same project are found by the cross-case checks.
 - **Calendar for the exclusion criteria**: the area wants them to carry dates of validity (to be
   made precise).
 

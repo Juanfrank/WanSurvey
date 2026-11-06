@@ -18,6 +18,7 @@ import {
 } from '@wansurvey/schema';
 import { z } from 'zod';
 import { CasesService } from '../cases/cases.service.js';
+import { RegistryService } from '../registry/registry.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { CaseFull, InterviewRow } from '../interviews/interviews-repo.js';
 import { InterviewsService } from '../interviews/interviews.service.js';
@@ -79,6 +80,7 @@ export class CatiService implements OnModuleInit {
   constructor(
     private readonly cases: CasesService,
     private readonly runtime: InterviewsService,
+    private readonly registry: RegistryService,
     @Inject(CATI_REPO) private readonly repo: CatiRepo,
   ) {}
 
@@ -389,10 +391,14 @@ export class CatiService implements OnModuleInit {
           message: 'Say why the interview stopped',
         });
     }
-    if (interrupted && !['callback', 'appointment', 'refusal'].includes(body.outcome))
+    if (
+      interrupted &&
+      !['callback', 'appointment', 'refusal', 'do_not_contact'].includes(body.outcome)
+    )
       throw new BadRequestException({
         code: 'CALL_ANSWERED',
-        message: 'An answered call can only end as a callback or a refusal',
+        message:
+          'An answered call can only end as a callback, a refusal or a request not to be contacted',
       });
 
     let contact: { id: string; value: string } | null = null;
@@ -439,7 +445,12 @@ export class CatiService implements OnModuleInit {
       await this.projectTimezone(t, a.projectId),
     );
     let disposition: string = OUTCOME_DISPOSITION[body.outcome]!;
-    if (interrupted && body.outcome === 'refusal') disposition = 'BREAK_OFF';
+    if (interrupted && (body.outcome === 'refusal' || body.outcome === 'do_not_contact'))
+      disposition = 'BREAK_OFF';
+    // The person asks not to be contacted again: every phone and e-mail of the case goes on the
+    // no-contact list, for every channel (ADR 0002).
+    if (body.outcome === 'do_not_contact')
+      await this.registry.fromCall(t.handle().tx, ctx, c.id, settings.contactRules, body.note);
     // The case was finished meanwhile (on the web, say): the call is recorded, and the case
     // keeps its result and books no further call.
     if (c.status === 'finalised' || c.status === 'withdrawn') {

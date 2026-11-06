@@ -131,6 +131,32 @@ export type FieldworkSettings = z.infer<typeof FieldworkSettings>;
 export const caseExpiryHours = (f: Pick<FieldworkSettings, 'caseExpiryDays' | 'caseExpiryHours'>) =>
   f.caseExpiryHours ?? (f.caseExpiryDays ? f.caseExpiryDays * 24 : null);
 
+/** Channels a person can be contacted through (the modes of a questionnaire). */
+export const CONTACT_CHANNELS = ['CATI', 'CAPI', 'CAWI', 'PAPI'] as const;
+export type ContactChannel = (typeof CONTACT_CHANNELS)[number];
+
+/** Rules about contacting people again (ADR 0002). */
+export const ContactRules = z.object({
+  exclusion: z
+    .object({
+      /** A person with a participation in the last N days is not loaded or called; null: off. */
+      days: z.number().int().min(1).max(3650).nullable().default(null),
+      /** Which channels' participations count; a person surveyed in another one is not excluded. */
+      channels: z
+        .array(z.enum(CONTACT_CHANNELS))
+        .max(4)
+        .default([...CONTACT_CHANNELS]),
+    })
+    .default({ days: null, channels: [...CONTACT_CHANNELS] }),
+  noContact: z
+    .object({
+      /** How long a "do not contact" entry made in a call lasts; null: permanent. */
+      defaultDays: z.number().int().min(1).max(36_500).nullable().default(null),
+    })
+    .default({ defaultDays: null }),
+});
+export type ContactRules = z.infer<typeof ContactRules>;
+
 /** Approval before a questionnaire is published (who approves and in how many steps comes later). */
 export const PublishApprovalSettings = z.object({
   /** A draft needs to be approved, by someone other than who asks, before it can be published. */
@@ -219,6 +245,7 @@ export const ProjectSettings = z.object({
   earlyExit: EarlyExitSettings.default(EarlyExitSettings.parse({})),
   publishApproval: PublishApprovalSettings.default(PublishApprovalSettings.parse({})),
   cleaning: CleaningSettings.default(CleaningSettings.parse({})),
+  contactRules: ContactRules.default(ContactRules.parse({})),
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
   audio: AudioSettings.default(AudioSettings.parse({})),

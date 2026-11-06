@@ -10,6 +10,7 @@ import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { SubTabBar } from '../routes/tabs.js';
 import { CleaningEditor } from './CleaningEditor.js';
+import { ContactRulesEditor } from './ContactRulesEditor.js';
 import { useSampleFields } from './hooks.js';
 import { ExitReasonsEditor } from './ExitReasonsEditor.js';
 import { CawiProjectSettings } from '../cawi/CawiTab.js';
@@ -570,11 +571,19 @@ export function SettingsTab({ project }: { project: Project }) {
         </Tabs.Content>
         <Tabs.Content value="cleaning">
           {section(
-            <CleaningEditor
-              value={form.cleaning}
-              fields={Array.isArray(sampleFields.data) ? sampleFields.data.map((f) => f.name) : []}
-              onChange={(cleaning) => setForm({ ...form, cleaning })}
-            />,
+            <>
+              <CleaningEditor
+                value={form.cleaning}
+                fields={
+                  Array.isArray(sampleFields.data) ? sampleFields.data.map((f) => f.name) : []
+                }
+                onChange={(cleaning) => setForm({ ...form, cleaning })}
+              />
+              <ContactRulesEditor
+                value={form.contactRules}
+                onChange={(contactRules) => setForm({ ...form, contactRules })}
+              />
+            </>,
           )}
         </Tabs.Content>
         <Tabs.Content value="privacy">

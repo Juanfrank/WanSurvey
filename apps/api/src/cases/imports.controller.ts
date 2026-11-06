@@ -36,6 +36,7 @@ import {
 import { chunks, CasesService } from './cases.service.js';
 import { SamplingService } from '../sampling/sampling.service.js';
 import { CrossChecker } from '../sampling/cross-check.js';
+import { RegistryService, key as registryKey } from '../registry/registry.service.js';
 import { CrossCheck } from '@wansurvey/schema/sampling';
 
 const CrossCheckList = z.array(CrossCheck);
@@ -65,6 +66,7 @@ export class ImportsController {
     private readonly audit: AuditService,
     private readonly casesService: CasesService,
     private readonly sampling: SamplingService,
+    private readonly registry: RegistryService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -398,6 +400,7 @@ export class ImportsController {
     const result = validateRows(headers, rows, mapping, existing, maxExamples, cleaning.normalize);
     await this.flagElsewhere(t, projectId, result, maxExamples);
     await this.flagCrossChecks(t, projectId, q, result, maxExamples);
+    await this.flagRegistry(t, projectId, result, maxExamples);
     applyCleaning(result.prepared, result.report, cleaning, maxExamples);
     return result;
   }
@@ -432,6 +435,66 @@ export class ImportsController {
         value: r.externalId,
       })),
     });
+  }
+
+  /**
+   * The people registry (ADR 0002): rows whose phone or e-mail is on the no-contact list for a
+   * channel of the project (`no_contact`), or took part inside the project's exclusion window
+   * (`recent_participation`), are reported and get no case.
+   */
+  private async flagRegistry(
+    t: SampleTx,
+    projectId: string,
+    { report, prepared }: ReturnType<typeof validateRows>,
+    maxExamples: number,
+  ) {
+    const project = await this.casesService.project(t, projectId);
+    const rules = (await this.casesService.settings(t, projectId)).contactRules;
+    const { tx, tenantId } = t.connection();
+    const live = prepared.filter((r) => r.valid);
+    const items = live.flatMap((r) =>
+      r.contacts
+        .filter((c) => c.type === 'phone' || c.type === 'email')
+        .map((c) => ({ kind: c.type as 'phone' | 'email', value: c.value })),
+    );
+    if (!items.length) return;
+    const unique = [...new Map(items.map((i) => [registryKey(i.kind, i.value), i])).values()];
+    const modes = project.modesEnabled.length ? project.modesEnabled : undefined;
+    const blocked = new Set<string>();
+    const recent = new Set<string>();
+    for (const part of chunks(unique, 1000)) {
+      (await this.registry.blocked(tx, tenantId, part, modes)).forEach((_, k) => blocked.add(k));
+      (await this.registry.recentlySurveyed(tx, tenantId, rules, part)).forEach((k) =>
+        recent.add(k),
+      );
+    }
+    if (!blocked.size && !recent.size) return;
+    const hitBy = (set: Set<string>) =>
+      live.filter((r) =>
+        r.contacts.some(
+          (c) =>
+            (c.type === 'phone' || c.type === 'email') && set.has(registryKey(c.type, c.value)),
+        ),
+      );
+    for (const [code, set] of [
+      ['no_contact', blocked],
+      ['recent_participation', recent],
+    ] as const) {
+      const rows = hitBy(set);
+      if (!rows.length) continue;
+      for (const r of rows) {
+        if (!r.crossChecked && !r.exists) report.toCreate--;
+        r.crossChecked = true;
+      }
+      report.issues.push({
+        code,
+        count: rows.length,
+        blocking: false,
+        examples: rows
+          .slice(0, maxExamples)
+          .map((r) => ({ row: r.rowNo, column: '', value: r.externalId })),
+      });
+    }
   }
 
   /**

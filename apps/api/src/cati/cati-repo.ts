@@ -13,6 +13,7 @@ import {
   type InterviewsTx,
 } from '../interviews/interviews-repo.js';
 import { InterviewsStore } from '../interviews/interviews-store.mssql.js';
+import { hasNoContact } from '../registry/registry-store.mssql.js';
 import { CatiStore } from './cati-store.mssql.js';
 import { idOrder } from '../db/mssql/order.js';
 
@@ -218,6 +219,7 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
         AND c.status IN ('fresh', 'assigned', 'in_progress')
         AND (c.mode_preference IS NULL OR c.mode_preference = 'CATI')
         AND c.checked_out_device IS NULL
+        AND NOT ${hasNoContact('c', 'CATI')}
         AND EXISTS (SELECT 1 FROM dbo.contacts ct WHERE ct.case_id = c.id AND ct.type = 'phone' AND ct.valid = 1)
         AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id
                         AND iv.status = 'in_progress' AND iv.mode <> 'CATI')`.execute(this.mtx);

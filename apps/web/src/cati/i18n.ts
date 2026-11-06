@@ -35,7 +35,10 @@ export const catiEn = {
     refusal: 'Refused',
     callback: 'Call back later',
     appointment: 'Appointment',
+    do_not_contact: 'Do not contact again',
   },
+  doNotContactHint:
+    'Every phone and e-mail of this case goes on the no-contact list, for every channel, and the case is closed as a refusal.',
   interrupted: 'The interview on this call is still open.',
   continue: 'Continue interview',
   interruptedOutcome: 'If the call ended early:',
@@ -152,7 +155,10 @@ export const catiEs: CatiCatalogue = {
     refusal: 'Rechazo',
     callback: 'Volver a llamar',
     appointment: 'Cita',
+    do_not_contact: 'No volver a contactar',
   },
+  doNotContactHint:
+    'Todos los teléfonos y correos de este caso pasan a la lista de no contacto, para todos los canales, y el caso se cierra como rechazo.',
   interrupted: 'La entrevista de esta llamada sigue abierta.',
   continue: 'Continuar la entrevista',
   interruptedOutcome: 'Si la llamada terminó antes:',

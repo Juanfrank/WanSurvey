@@ -15,7 +15,10 @@ export const ExitReason = z.object({
 export type ExitReason = z.infer<typeof ExitReason>;
 
 export const GENERIC_EXIT_REASONS: ExitReason[] = [
-  { code: 'chose_to_stop', label: { es: 'La persona decidió terminar', en: 'The person chose to stop' } },
+  {
+    code: 'chose_to_stop',
+    label: { es: 'La persona decidió terminar', en: 'The person chose to stop' },
+  },
   { code: 'no_time', label: { es: 'No tenía tiempo', en: 'No time' } },
   { code: 'call_dropped', label: { es: 'Se cortó la llamada', en: 'The call dropped' } },
   { code: 'technical', label: { es: 'Problema técnico', en: 'Technical problem' } },

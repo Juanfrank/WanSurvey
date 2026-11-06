@@ -77,7 +77,7 @@ interface Callback {
 }
 
 /** Outcomes an answered call can still end with, when its interview stopped early. */
-const INTERRUPTED: CallOutcome[] = ['callback', 'appointment', 'refusal'];
+const INTERRUPTED: CallOutcome[] = ['callback', 'appointment', 'refusal', 'do_not_contact'];
 
 function clock(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -593,6 +593,12 @@ export function CallsTab({
 
             {outcome && served.scripts?.outcomes[outcome]?.length ? (
               <ScriptBox scripts={served.scripts.outcomes[outcome]!} />
+            ) : null}
+
+            {outcome === 'do_not_contact' ? (
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm" role="note">
+                {t('cati.doNotContactHint')}
+              </p>
             ) : null}
 
             {outcome && needsCallbackTime(outcome) ? (

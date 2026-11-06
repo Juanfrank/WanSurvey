@@ -19,6 +19,25 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **People registry and no contact** ([ADR 0002](docs/adr/0002-people-registry-and-no-contact.md)):
+  Administration → People registry shows what the organisation knows of a phone or e-mail (its
+  participations and its no-contact entry), holds the **no-contact list** (per contact, for every
+  channel or some, permanent or until a date, with the reason) and loads two CSV files: the list
+  (including people marked not interested or not to be contacted) and the **history** of
+  participations since 2020. New tables `no_contact` and `participations` (migration `0026`),
+  permissions `registry.read` and `registry.manage`, and audit actions
+  `registry.no_contact_added`, `registry.no_contact_lifted`, `registry.history_loaded`.
+- **"Do not contact again"** as a call outcome: every phone and e-mail of the case goes on the list
+  for every channel, for the time the project sets (permanent by default), and the case closes as a
+  refusal; it is also allowed when an answered call is closed early.
+- **Contacting people again**, in the project's cleaning settings: an exclusion period (days, and
+  which channels count) and how long a "do not contact" from a call lasts. The call queue skips
+  people on the list for the phone channel, web invitations (e-mail and SMS) are not sent to them,
+  and a list being loaded reports and leaves out whoever is on the no-contact list
+  (`no_contact`) or took part inside the exclusion period (`recent_participation`).
+- An interview of a case that is submitted records the participation of every phone and e-mail of
+  the case, by channel, in the registry. Erasing a person removes their participations and keeps
+  their no-contact entry.
 - **Refresh frequency of the analysis model** in Administration → Organization: every 15 minutes up
   to once a week, never (on request only), or as the deployment's `BI_REFRESH_CRON` sets it, with a
   "Refresh now" button and the time of the last check. The model spans every organisation, so the

@@ -3,6 +3,7 @@ import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
 import { idOrder } from '../db/mssql/order.js';
+import { hasNoContact } from '../registry/registry-store.mssql.js';
 
 /**
  * CATI on SQL Server (Kysely): the call queue's candidates, the lock on the case being called,
@@ -57,6 +58,7 @@ export class CatiStore {
         AND EXISTS (SELECT 1 FROM dbo.contacts ct WHERE ct.case_id = c.id AND ct.type = 'phone' AND ct.valid = 1)
         AND NOT EXISTS (SELECT 1 FROM dbo.questionnaires qq WHERE qq.id = c.questionnaire_id AND qq.state <> 'active')
         AND c.checked_out_device IS NULL
+        AND NOT ${hasNoContact('c', 'CATI')}
         AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id AND iv.status = 'in_progress' AND iv.mode <> 'CATI')
       ORDER BY
         CASE WHEN c.queue_pin_user_id = ${q.userId} THEN 1 ELSE 0 END DESC,
