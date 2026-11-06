@@ -517,6 +517,12 @@ export class InterviewSession {
     return v !== null && !jsonEqual(v, this.getAnswer(key));
   }
 
+  /** True when the question has a prefill and its answer is that value, still as it came. */
+  matchesPrefill(key: string): boolean {
+    const v = this.prefillValue(key);
+    return v !== null && jsonEqual(v, this.getAnswer(key));
+  }
+
   /** Puts the prefilled value back after the interviewer changed or cleared it (L11). */
   revertToPrefill(key: string, source: AnswerSourceKind = 'interviewer'): ChangeResult {
     const v = this.prefillValue(key);

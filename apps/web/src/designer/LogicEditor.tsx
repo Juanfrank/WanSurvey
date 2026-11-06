@@ -23,6 +23,8 @@ import {
 import { flatten, isSection, locate, type Draft, type TreeNode } from './tree.js';
 import { nodeLabel, nodeName, type VarOption } from './vars.js';
 import { dispositionLabel } from '../i18n-messages.js';
+import { Suggest } from './Suggest.js';
+import { expressionSuggestions } from './suggest.js';
 
 /** A free expression (formula, prefill, option filter) with live syntax checking. */
 export function ExpressionField({
@@ -48,6 +50,10 @@ export function ExpressionField({
     () => new Set([...variables.map((v) => v.name), ...extraNames]),
     [variables, extraNames],
   );
+  const suggestions = useMemo(
+    () => expressionSuggestions(variables, extraNames),
+    [variables, extraNames],
+  );
   const unknown = parsed?.ok ? unknownNames(src, known) : [];
   const error =
     parsed && !parsed.ok
@@ -63,17 +69,20 @@ export function ExpressionField({
       <label htmlFor={id} className="text-sm font-medium text-slate-700">
         {label}
       </label>
-      <textarea
+      <Suggest
         id={id}
+        multiline
         rows={2}
-        spellCheck={false}
         className={`${inputCls} font-mono`}
         value={src}
+        suggestions={suggestions}
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-hint ${id}-err`}
-        onChange={(e) => onChange(e.target.value.trim() ? e.target.value : undefined)}
+        onChange={(v) => onChange(v.trim() ? v : undefined)}
       />
-      <Hint id={`${id}-hint`}>{hint ?? t('designer.cond.exprHelp')}</Hint>
+      <Hint id={`${id}-hint`}>
+        {hint ?? t('designer.cond.exprHelp')} {t('designer.suggest.hint')}
+      </Hint>
       <FieldError id={`${id}-err`}>{error}</FieldError>
     </div>
   );

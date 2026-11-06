@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { controlCls, inputCls } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
+import { LinkBuilder } from './LinkBuilder.js';
 import { Button } from '../routes/ui.js';
 
 interface TemplateRow {
@@ -598,7 +599,9 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
         `/projects/${projectId}/waves/${wave.id}/links`,
       ),
   });
-  const params = extra.trim().replace(/^[?&]+/, '');
+  const [built, setBuilt] = useState('');
+  // The parameters of the builder, then any typed by hand, go on every link.
+  const params = [built, extra.trim().replace(/^[?&]+/, '')].filter(Boolean).join('&');
   const withParams = (url: string) => (params ? `${url}?${params}` : url);
   const csv = () => {
     const rows = [
@@ -618,6 +621,13 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
   return (
     <div className="mb-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3" data-testid="wave-links">
       <p className="text-sm text-slate-600">{t('cawi.links.help')}</p>
+      <LinkBuilder
+        projectId={projectId}
+        questionnaireId={wave.questionnaireId}
+        baseUrl={links.data?.[0]?.url ?? null}
+        onQueryChange={setBuilt}
+        segments={false}
+      />
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">{t('cawi.links.params')}</span>
@@ -745,16 +755,19 @@ function OpenLinkSection({
         {t('cawi.openLink.active')}
       </label>
       {l?.active ? (
-        <p>
-          <span className="font-medium">{t('cawi.openLink.url')}:</span>{' '}
-          <a
-            className="break-all text-indigo-ink-700 underline"
-            href={l.url}
-            data-testid="open-link"
-          >
-            {l.url}
-          </a>
-        </p>
+        <>
+          <p>
+            <span className="font-medium">{t('cawi.openLink.url')}:</span>{' '}
+            <a
+              className="break-all text-indigo-ink-700 underline"
+              href={l.url}
+              data-testid="open-link"
+            >
+              {l.url}
+            </a>
+          </p>
+          <LinkBuilder projectId={projectId} questionnaireId={questionnaireId} baseUrl={l.url} />
+        </>
       ) : null}
     </section>
   );

@@ -4,6 +4,10 @@ Questionnaire logic is written once and runs the same way in every place it is e
 
 Expressions are parsed to an AST and interpreted. Nothing is ever `eval`'d.
 
+## Writing expressions in the designer
+
+Every expression field offers suggestions as you type, as a code editor does: variables (with their question text), `case.` fields of the project's sample, the context names (`mode`, `index`, `interviewer.firstName`…), the functions below and the keywords. Ctrl+Space shows them on an empty word, the arrow keys choose, Enter or Tab take one and Escape closes the list. Nothing is suggested inside a quoted text or a number. The cleaning rules of a project take the same help, with the fields of the file.
+
 ## Values
 
 `number`, `string` (`"…"` or `'…'`), `boolean` (`true`/`false`), dates as ISO strings (`"2026-10-12"`), codes (numbers or strings), arrays (multi-choice answers, roster columns) and `null` (unanswered).

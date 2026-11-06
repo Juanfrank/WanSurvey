@@ -401,6 +401,21 @@ export const designerEn = {
     keys: 'Enter in the last label adds one · Alt+↑↓ moves',
     duplicate: 'Codes must be unique: {{codes}}',
   },
+  suggest: {
+    hint: 'Suggestions appear as you type; Ctrl+Space shows them, ↑ ↓ choose, Enter takes one.',
+    list: 'Suggestions',
+    count_one: '{{count}} suggestion',
+    count_other: '{{count}} suggestions',
+    kinds: {
+      question: 'question',
+      computed: 'computed',
+      roster: 'roster',
+      case: 'case field',
+      context: 'context',
+      function: 'function',
+      keyword: 'word',
+    },
+  },
   logic: {
     showIf: 'Show only if',
     showIfHelp: 'Leave empty to always show it.',
@@ -435,19 +450,22 @@ export const designerEn = {
     prefillHelp: 'An expression, e.g. case.region.',
     fromData: 'From the case data',
     fromDataHelp:
-      'Data imported with the cases can answer this question, be offered to confirm, or fill it only when it came blank.',
+      'What the sample already holds about the person can be confirmed in the interview, collected only when it is missing, or simply carried into the results.',
     caseField: 'Case field',
     caseFieldNone: '— none —',
     prefillMode: 'How to use it',
     prefillModes: {
-      confirm: 'Prefilled, to confirm',
-      ifMissing: 'Ask only if it came blank',
-      fixed: 'Fill in automatically',
+      confirm: 'Confirm what is known, ask for what is missing',
+      ifMissing: 'Collect only what is missing',
+      fixed: 'Only bring it into the results',
     },
     prefillModeHints: {
-      confirm: 'Shown with the value; it can be changed and is checked as any answer.',
-      ifMissing: 'Recorded and not asked when the case has it; asked when it is blank.',
-      fixed: 'Always taken from the data and never asked, even when blank.',
+      confirm:
+        'The question is always shown. If the sample has the data, it comes filled in to confirm or correct; if not, it is asked as usual.',
+      ifMissing:
+        'If the sample has the data, it is recorded and the question is not shown; if it is blank, the question is asked.',
+      fixed:
+        'The data goes into the survey results as it is and the question is never shown, even when the sample has nothing.',
     },
     urlParam: 'Link parameter (optional)',
     urlParamHelp:
@@ -1200,6 +1218,21 @@ export const designerEs: DesignerCatalogue = {
     keys: 'Enter en la última etiqueta agrega una · Alt+↑↓ mueve',
     duplicate: 'Los códigos deben ser únicos: {{codes}}',
   },
+  suggest: {
+    hint: 'Las sugerencias aparecen al escribir; Ctrl+Espacio las muestra, ↑ ↓ eligen, Enter toma una.',
+    list: 'Sugerencias',
+    count_one: '{{count}} sugerencia',
+    count_other: '{{count}} sugerencias',
+    kinds: {
+      question: 'pregunta',
+      computed: 'calculada',
+      roster: 'lista',
+      case: 'campo del caso',
+      context: 'contexto',
+      function: 'función',
+      keyword: 'palabra',
+    },
+  },
   logic: {
     showIf: 'Mostrar solo si',
     showIfHelp: 'Déjelo vacío para mostrarlo siempre.',
@@ -1234,20 +1267,22 @@ export const designerEs: DesignerCatalogue = {
     prefillHelp: 'Una expresión, por ejemplo case.region.',
     fromData: 'Desde los datos del caso',
     fromDataHelp:
-      'Los datos importados con los casos pueden responder esta pregunta, ofrecerse para confirmar, o llenarla solo si vinieron en blanco.',
+      'Lo que la muestra ya tiene de la persona puede confirmarse en la entrevista, recogerse solo si falta, o simplemente pasar al resultado.',
     caseField: 'Campo del caso',
     caseFieldNone: '— ninguno —',
     prefillMode: 'Cómo usarlo',
     prefillModes: {
-      confirm: 'Prellenado, para confirmar',
-      ifMissing: 'Preguntar solo si vino en blanco',
-      fixed: 'Llenar automáticamente',
+      confirm: 'Confirmar lo que se sabe, preguntar lo que falta',
+      ifMissing: 'Recoger solo lo que falta',
+      fixed: 'Solo incorporar al resultado',
     },
     prefillModeHints: {
-      confirm: 'Se muestra con el valor; se puede cambiar y se valida como cualquier respuesta.',
+      confirm:
+        'La pregunta siempre se muestra. Si la muestra trae el dato, aparece llenado para confirmarlo o corregirlo; si no, se pregunta normalmente.',
       ifMissing:
-        'Se registra y no se pregunta cuando el caso lo trae; se pregunta si vino en blanco.',
-      fixed: 'Siempre se toma de los datos y nunca se pregunta, aunque venga en blanco.',
+        'Si la muestra trae el dato, se registra y la pregunta no se muestra; si vino en blanco, se pregunta.',
+      fixed:
+        'El dato pasa tal cual al resultado de la encuesta y la pregunta nunca se muestra, aunque la muestra no traiga nada.',
     },
     urlParam: 'Parámetro del enlace (opcional)',
     urlParamHelp:

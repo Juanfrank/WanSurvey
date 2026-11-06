@@ -252,6 +252,11 @@ export function QuestionView(p: QuestionViewProps) {
           })}
         </div>
       ) : null}
+      {session.matchesPrefill(entry.key) ? (
+        <p className="text-sm text-slate-600" data-testid="prefilled-note">
+          {t('question.prefilled')}
+        </p>
+      ) : null}
       {p.onRevertPrefill && session.canRevertToPrefill(entry.key) ? (
         <div>
           <button

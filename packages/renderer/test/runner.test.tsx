@@ -228,9 +228,12 @@ describe('prefilled answers', () => {
     render(<InterviewRunner session={session} mode="CAPI" lang="en" narrow={false} />);
     expect(session.getAnswer('REGION')).toBe(1);
     expect(screen.queryByRole('button', { name: 'Restore the prefilled value' })).toBeNull();
+    // As it came, it says so; once changed it does not.
+    expect(screen.getByTestId('prefilled-note').textContent).toContain('confirm it or correct it');
     const input = screen.getByRole('textbox', { name: /Region/ });
     await user.clear(input);
     await user.type(input, '4');
+    expect(screen.queryByTestId('prefilled-note')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Restore the prefilled value' }));
     expect(session.getAnswer('REGION')).toBe(1);
     expect(screen.queryByRole('button', { name: 'Restore the prefilled value' })).toBeNull();

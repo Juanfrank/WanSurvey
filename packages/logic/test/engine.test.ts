@@ -131,12 +131,15 @@ describe('interview engine — full path', () => {
     const s = start();
     drive(s, base);
     expect(s.canRevertToPrefill('E5_REGION')).toBe(false);
+    expect(s.matchesPrefill('E5_REGION')).toBe(true);
     s.jumpTo('E5_REGION');
     s.setAnswer('E5_REGION', 3);
     expect(s.canRevertToPrefill('E5_REGION')).toBe(true);
+    expect(s.matchesPrefill('E5_REGION')).toBe(false);
     s.drainEvents();
     expect(s.revertToPrefill('E5_REGION').ok).toBe(true);
     expect(s.getAnswer('E5_REGION')).toBe(2);
+    expect(s.matchesPrefill('E5_REGION')).toBe(true);
     expect(s.drainEvents()).toContainEqual(
       expect.objectContaining({ key: 'E5_REGION', reason: 'prefill_restored', newValue: 2 }),
     );

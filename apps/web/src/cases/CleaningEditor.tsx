@@ -1,6 +1,8 @@
 import type { CleaningRule, CleaningSettings } from '@wansurvey/schema';
 import { useTranslation } from 'react-i18next';
 import { controlCls, smallBtn } from '../designer/fields.js';
+import { Suggest } from '../designer/Suggest.js';
+import { fieldSuggestions } from '../designer/suggest.js';
 
 /**
  * How a list is cleaned as it is loaded: the text columns tidied, the saved rules that leave
@@ -24,6 +26,7 @@ export function CleaningEditor({
       rules: value.rules.map((r, j) => (j === i ? { ...r, ...patch } : r)),
     });
   const dupes = new Set(value.duplicateFields);
+  const suggestions = fieldSuggestions([...new Set([...fields, 'phone', 'email'])]);
   const choices = [...new Set([...fields, 'phone', 'email', ...value.duplicateFields])];
   return (
     <div className="flex flex-col gap-6" data-testid="cleaning-settings">
@@ -86,13 +89,13 @@ export function CleaningEditor({
                   {t('cases.cleaning.remove')}
                 </button>
               </div>
-              <input
+              <Suggest
                 className={`${controlCls} font-mono`}
                 value={r.expression}
-                maxLength={500}
+                suggestions={suggestions}
                 placeholder={t('cases.cleaning.expressionExample')}
                 aria-label={t('cases.cleaning.expression', { n: i + 1 })}
-                onChange={(e) => setRule(i, { expression: e.target.value })}
+                onChange={(v) => setRule(i, { expression: v.slice(0, 500) })}
               />
             </li>
           ))}

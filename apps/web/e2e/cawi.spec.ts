@@ -111,8 +111,11 @@ test('a links-only wave makes a personal link per case, ready to download', asyn
   await expect(page.getByTestId('waves-message')).toContainText(/\d+ personal links? made/);
   const links = page.getByTestId('wave-links');
   await expect(links.locator('[data-link]').first()).toContainText(/\/s\/[A-Za-z0-9_-]+/);
+  // The link builder is there; the household questionnaire has no question that takes a parameter.
+  await expect(links.getByTestId('link-builder')).toBeVisible();
+  await expect(links.getByTestId('builder-none')).toContainText('Link parameter');
   // A parameter for every link, e.g. the branch.
-  await links.getByLabel('Add to every link (optional)').fill('sede=2');
+  await links.getByLabel('Other parameters for every link (advanced, optional)').fill('sede=2');
   await expect(links.locator('[data-link]').first()).toContainText('?sede=2');
   const [file] = await Promise.all([
     page.waitForEvent('download'),

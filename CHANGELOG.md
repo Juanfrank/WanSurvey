@@ -19,6 +19,21 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Suggestions while writing expressions**, as in a code editor: in the designer's formula,
+  prefill, option-filter and similar fields, and in the cleaning rules of a project, a drop-down
+  offers the questionnaire's variables (with their question text), the sample fields as `case.x`,
+  the context names, the functions of the language (with what each does) and its keywords. It
+  opens as you type or with Ctrl+Space; up and down choose, Enter or Tab take, Escape closes. A
+  function is inserted with its brackets and the cursor inside.
+- **Link builder in the web outreach** (Difusión): under the open link and under the personal
+  links of a "links only" outreach, it lists the questions that take a link parameter, offers the
+  values each accepts (options, scale range, number, date), marks a value the survey would drop,
+  shows the address live with Copy and Try it, and can make **one address per value of a question**
+  (a link per branch or group) with the other parameters on all, as a table or a CSV.
+- **Pre-filled answers, clearer**: the three uses are named as the area states them: confirm what
+  is known and ask what is missing; collect only what is missing; only bring it into the results.
+  A question whose answer is still the one that came from the sample says so ("Already known from
+  the sample: confirm it or correct it").
 - **People registry and no contact** ([ADR 0002](docs/adr/0002-people-registry-and-no-contact.md)):
   Administration → People registry shows what the organisation knows of a phone or e-mail (its
   participations and its no-contact entry), holds the **no-contact list** (per contact, for every

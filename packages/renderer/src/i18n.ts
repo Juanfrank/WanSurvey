@@ -61,6 +61,7 @@ const en = {
     removeRow: 'Remove',
     shapeError: 'This answer could not be saved: {{error}}',
     restorePrefill: 'Restore the prefilled value',
+    prefilled: 'Already known from the sample: confirm it or correct it.',
   },
   notice: {
     cleared_one: 'This change removed 1 later answer that no longer applies: {{keys}}.',
@@ -213,6 +214,7 @@ const es: Catalogue = {
     removeRow: 'Quitar',
     shapeError: 'No se pudo guardar esta respuesta: {{error}}',
     restorePrefill: 'Restaurar el valor precargado',
+    prefilled: 'Dato ya conocido de la muestra: confírmalo o corrígelo.',
   },
   notice: {
     cleared_one: 'Este cambio eliminó 1 respuesta posterior que ya no aplica: {{keys}}.',
