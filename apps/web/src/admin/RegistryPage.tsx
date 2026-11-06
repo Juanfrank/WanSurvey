@@ -329,16 +329,36 @@ export function RegistryPage() {
             <h2 className="text-lg font-semibold">{t('admin.registry.loadsTitle')}</h2>
             <p className="max-w-3xl text-sm text-slate-600">{t('admin.registry.loadsHelp')}</p>
             <div className="flex flex-wrap gap-6 text-sm">
-              <label className="flex flex-col gap-1">
-                <span className="font-medium">{t('admin.registry.loadList')}</span>
-                <input type="file" accept=".csv,.txt,.tsv" onChange={onFile('list')} />
-                <span className="text-slate-600">{t('admin.registry.loadListCols')}</span>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-medium">{t('admin.registry.loadHistory')}</span>
-                <input type="file" accept=".csv,.txt,.tsv" onChange={onFile('history')} />
-                <span className="text-slate-600">{t('admin.registry.loadHistoryCols')}</span>
-              </label>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="registry-file-list" className="font-medium">
+                  {t('admin.registry.loadList')}
+                </label>
+                <input
+                  id="registry-file-list"
+                  type="file"
+                  accept=".csv,.txt,.tsv"
+                  aria-describedby="registry-file-list-cols"
+                  onChange={onFile('list')}
+                />
+                <span id="registry-file-list-cols" className="text-slate-600">
+                  {t('admin.registry.loadListCols')}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="registry-file-history" className="font-medium">
+                  {t('admin.registry.loadHistory')}
+                </label>
+                <input
+                  id="registry-file-history"
+                  type="file"
+                  accept=".csv,.txt,.tsv"
+                  aria-describedby="registry-file-history-cols"
+                  onChange={onFile('history')}
+                />
+                <span id="registry-file-history-cols" className="text-slate-600">
+                  {t('admin.registry.loadHistoryCols')}
+                </span>
+              </div>
             </div>
             <p role="status" className="text-sm empty:hidden">
               {load.isPending
@@ -414,7 +434,9 @@ export function RegistryPage() {
                         <th className="py-1 pr-3">{t('admin.registry.channels')}</th>
                         <th className="py-1 pr-3">{t('admin.registry.validity')}</th>
                         <th className="py-1 pr-3">{t('admin.registry.origin')}</th>
-                        <th className="py-1" />
+                        <th className="py-1">
+                          <span className="sr-only">{t('admin.registry.actions')}</span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>

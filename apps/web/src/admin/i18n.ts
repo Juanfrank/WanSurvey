@@ -103,6 +103,7 @@ export const adminEn = {
     origin: 'Origin',
     sources: { call: 'Call', manual: 'By hand', import: 'File' },
     lift: 'Lift',
+    actions: 'Actions',
     empty: 'Nothing here.',
   },
   webhooksPage: {
@@ -467,6 +468,7 @@ export const adminEs: typeof adminEn = {
     origin: 'Origen',
     sources: { call: 'Llamada', manual: 'A mano', import: 'Archivo' },
     lift: 'Levantar',
+    actions: 'Acciones',
     empty: 'No hay nada.',
   },
   webhooksPage: {
