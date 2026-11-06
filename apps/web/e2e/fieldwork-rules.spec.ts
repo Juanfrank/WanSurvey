@@ -24,7 +24,7 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
 
   // Cases expire 30 days after assignment; the list says when.
   await page.getByRole('tab', { name: 'Settings', exact: true }).click();
-  const days = page.getByLabel(/Days an interviewer has to work a case/);
+  const days = page.getByLabel(/Time an interviewer has to work a case/);
   await days.fill('30');
   await shot(page, 'settings-expiry');
   await saveSettings(page);

@@ -71,8 +71,8 @@ export const catiEn = {
   exitReasonPick: 'Choose a reason',
   pin: 'Make next',
   unpin: 'Not next',
-  pinCase: 'Make case {{id}} the next one to call',
-  unpinCase: 'Take case {{id}} off as the next one',
+  pinCase: 'Make next: case {{id}}',
+  unpinCase: 'Not next: case {{id}}',
   pinnedTag: 'Next',
   reminders: {
     on: 'You will get a browser notice when a callback is about to be due.',
@@ -191,8 +191,8 @@ export const catiEs: CatiCatalogue = {
   exitReasonPick: 'Elija un motivo',
   pin: 'Poner de siguiente',
   unpin: 'Quitar de siguiente',
-  pinCase: 'Poner el caso {{id}} como el siguiente a llamar',
-  unpinCase: 'Quitar el caso {{id}} como siguiente',
+  pinCase: 'Poner de siguiente: caso {{id}}',
+  unpinCase: 'Quitar de siguiente: caso {{id}}',
   pinnedTag: 'Siguiente',
   reminders: {
     on: 'Recibirá un aviso del navegador cuando una rellamada esté por vencer.',

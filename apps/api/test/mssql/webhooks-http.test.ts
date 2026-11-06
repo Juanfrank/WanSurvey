@@ -73,6 +73,9 @@ describe.skipIf(!configured)('SQL Server: outgoing webhooks', () => {
   const hitsOf = (id: string) => hits.filter((h) => h.path === paths.get(id));
   /** Inline jobs may be running one delivery already: wait for them, then run the rest. */
   const deliver = async () => {
+    // A delivery is due from the millisecond the database stamps it, rounded up to the next one:
+    // asking in that same millisecond (it happened in CI) finds nothing due yet.
+    await new Promise((ok) => setTimeout(ok, 25));
     await t.app.get(JobsService).drain();
     await t.app.get(WebhooksService).deliverDue();
   };
