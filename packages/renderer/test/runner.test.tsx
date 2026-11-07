@@ -239,3 +239,68 @@ describe('prefilled answers', () => {
     expect(screen.queryByRole('button', { name: 'Restore the prefilled value' })).toBeNull();
   });
 });
+
+describe('answered by the link or fixed from the data', () => {
+  const two = compile({
+    id: 'L',
+    title: { en: 'L' },
+    defaultLanguage: 'en',
+    languages: ['en'],
+    sections: [
+      {
+        id: 'S',
+        title: { en: 'S' },
+        items: [
+          {
+            kind: 'question',
+            id: 'SEDE',
+            name: 'SEDE',
+            type: 'single',
+            text: { en: 'Branch question' },
+            options: [
+              { code: 1, label: { en: 'Lima' } },
+              { code: 2, label: { en: 'Cusco' } },
+            ],
+            urlParam: 'sede',
+          },
+          {
+            kind: 'question',
+            id: 'REGION',
+            name: 'REGION',
+            type: 'numeric',
+            text: { en: 'Region question' },
+            prefill: 'case.region',
+            prefillMode: 'fixed',
+          },
+          {
+            kind: 'question',
+            id: 'NAME',
+            name: 'NAME',
+            type: 'text',
+            text: { en: 'Name question' },
+          },
+        ],
+      },
+    ],
+  });
+
+  it('keeps them for the logic and does not show them to the respondent', () => {
+    const session = createInterview(two, {
+      mode: 'CAWI',
+      context: { case: { region: 3 }, params: { sede: '2' } },
+      seed: 't',
+    });
+    render(<InterviewRunner session={session} mode="CAWI" lang="en" narrow={false} />);
+    expect(session.getAnswer('SEDE')).toBe(2);
+    expect(session.getAnswer('REGION')).toBe(3);
+    expect(screen.queryByText('Branch question')).toBeNull();
+    expect(screen.queryByText('Region question')).toBeNull();
+    expect(screen.getByText('Name question')).toBeTruthy();
+  });
+
+  it('shows the question when the link does not bring it', () => {
+    const session = createInterview(two, { mode: 'CAWI', context: { case: {} }, seed: 't' });
+    render(<InterviewRunner session={session} mode="CAWI" lang="en" narrow={false} />);
+    expect(screen.getByText('Branch question')).toBeTruthy();
+  });
+});

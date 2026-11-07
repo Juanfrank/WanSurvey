@@ -61,7 +61,9 @@ function buildPages(session: InterviewSession): string[][] {
   for (const e of session.trace()) {
     if (e.status !== 'active') continue;
     if (e.kind === 'pagebreak' || (e.kind === 'section' && e.depth === 0)) flush();
-    else if (e.kind === 'question' || e.kind === 'static') current.push(e.key);
+    // Answered by the link or by case data used as fixed or as "ask only if missing": it counts
+    // for the logic and is not shown.
+    else if ((e.kind === 'question' || e.kind === 'static') && !e.auto) current.push(e.key);
   }
   flush();
   return pages;

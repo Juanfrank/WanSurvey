@@ -114,6 +114,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- A web respondent was shown the questions already answered by the link (`?sede=2`) or filled from
+  the sample in the "only bring it into the results" mode, although they were meant to be recorded
+  and not shown. They now stay out of the pages; the logic still follows them.
 - An analysis user with read access to the `bi` schema saw no rows in the dimensions of
   organisations, projects, instruments, versions, cases and people, or only part of the calendar,
   because they were views under the row-level security of the organisation's tables; a joined
