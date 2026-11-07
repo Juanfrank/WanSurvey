@@ -121,7 +121,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   URL encoding) and returns a short link whose interview already holds them, so nothing personal
   shows in the address. The link builder offers it as "Make short link" under the open link.
   Names no question takes are refused with the list of valid ones.
-  \n- **Link with a value left for another system**: in the link builder, a question can be marked
+
+- **Link with a value left for another system**: in the link builder, a question can be marked
   "filled in by another system"; the address then ends `?codigo=<codigo>` (also on every
   personal link of a "links only" outreach), and the system swaps the placeholder for each value.
 
