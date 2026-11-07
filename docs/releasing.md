@@ -54,7 +54,8 @@ below the plain `0.1.0` it leads to (SemVer item 11).
 
 `pnpm release alpha` takes `0.1.0-alpha.7` to `0.1.0-alpha.8`; `beta` from an alpha starts at
 `beta.1`. The versions up to `0.1.0-alpha.18` were reconstructed from the git history (see the
-CHANGELOG): one per stage of the work, tagged on the commit that closes it.
+CHANGELOG): one per stage of the work, tagged on the commit that closes it. `scripts/tag-history.sh` creates those tags
+(`--push` also pushes them) from a clone that holds the whole branch.
 
 ### Before 1.0.0
 
