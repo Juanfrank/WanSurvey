@@ -111,6 +111,11 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   the refresh, and how to make a read-only analysis user.
 - The analysis model's refresh also refills the dimensions of the hierarchy, and its fingerprint of
   changes covers their sources. **Upgrade:** the migration (`0022`) fills them; nothing to do.
+- **Free-text questions fed by the link**: a text question with a link parameter is filled from
+  the URL (encoded value, up to its maximum length or 500 characters; longer values are cut).
+  The link builder checks length, pattern and e-mail/phone format, and warns that the value is
+  visible in the address. The server keeps up to 500 characters per parameter and masks `params`
+  in its logs.
 
 ### Fixed
 

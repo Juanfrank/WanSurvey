@@ -98,6 +98,61 @@ describe('link parameters', () => {
     expect(valueProblem(edad!, '')).toBeNull();
   });
 
+  it('checks a free text as the survey does, and encodes accents, spaces and symbols', () => {
+    const free = paramQuestions(
+      {
+        sections: [
+          {
+            items: [
+              {
+                kind: 'question',
+                id: 'N',
+                name: 'N',
+                type: 'text',
+                text: { es: 'Nombre' },
+                urlParam: 'nombre',
+                maxLength: 10,
+              },
+              {
+                kind: 'question',
+                id: 'M',
+                name: 'M',
+                type: 'text',
+                text: { es: 'Correo' },
+                urlParam: 'correo',
+                format: 'email',
+              },
+              {
+                kind: 'question',
+                id: 'C',
+                name: 'C',
+                type: 'text',
+                text: { es: 'Código' },
+                urlParam: 'codigo',
+                pattern: '[A-Z]{3}',
+              },
+            ],
+          },
+        ],
+      },
+      'es',
+    );
+    const [nombre, correo, codigo] = free;
+    expect(valueProblem(nombre!, 'Ana Pérez')).toBeNull();
+    expect(valueProblem(nombre!, 'Ana María de los Ángeles')).toBe('tooLong');
+    expect(valueProblem(correo!, 'ana@example.org')).toBeNull();
+    expect(valueProblem(correo!, 'ana')).toBe('badFormat');
+    expect(valueProblem(codigo!, 'ABC')).toBeNull();
+    expect(valueProblem(codigo!, 'ab1')).toBe('badFormat');
+    expect(buildQuery([{ param: 'nombre', value: 'María José & Ñ/1' }])).toBe(
+      'nombre=Mar%C3%ADa%20Jos%C3%A9%20%26%20%C3%91%2F1',
+    );
+    // It decodes back to what was typed, as the survey reads it.
+    expect(
+      new URLSearchParams('nombre=Mar%C3%ADa%20Jos%C3%A9%20%26%20%C3%91%2F1').get('nombre'),
+    ).toBe('María José & Ñ/1');
+  });
+
   it('builds an encoded query, leaves empty values out and joins to an existing one', () => {
     const query = buildQuery([
       { param: 'sede', value: '2' },

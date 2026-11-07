@@ -13,6 +13,9 @@ export interface ParamQuestion {
   options: { code: string; label: string }[];
   scale?: { min: number; max: number };
   maxLength?: number;
+  /** The checks a text answer must pass. */
+  pattern?: string;
+  format?: 'phone' | 'email';
 }
 
 type Item = { kind?: string; items?: Item[] } & Record<string, unknown>;
@@ -48,6 +51,8 @@ export function paramQuestions(
           options: opts.map((o) => ({ code: String(o.code), label: pick(o.label, lang) ?? '' })),
           ...(q.scale ? { scale: { min: q.scale.min, max: q.scale.max } } : {}),
           ...(q.maxLength ? { maxLength: q.maxLength } : {}),
+          ...(q.pattern ? { pattern: q.pattern } : {}),
+          ...(q.format ? { format: q.format } : {}),
         });
       }
     }
@@ -82,8 +87,20 @@ export function valueProblem(q: ParamQuestion, value: string): string | null {
         : 'outOfRange';
     case 'numeric':
       return Number.isFinite(n) ? null : 'notANumber';
-    case 'text':
-      return q.maxLength && v.length > q.maxLength ? 'tooLong' : null;
+    case 'text': {
+      if (v.length > (q.maxLength ?? 500)) return 'tooLong';
+      // As the survey checks a text: the whole of it must match the pattern, and the format.
+      if (q.pattern) {
+        try {
+          if (!new RegExp(`^(?:${q.pattern})$`, 'u').test(v)) return 'badFormat';
+        } catch {
+          /* a pattern the browser cannot read: the survey decides */
+        }
+      }
+      if (q.format === 'email' && !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(v)) return 'badFormat';
+      if (q.format === 'phone' && !/^\+?[\d\s\-().]{6,20}$/.test(v)) return 'badFormat';
+      return null;
+    }
     case 'date':
       return /^\d{4}-\d{2}-\d{2}$/.test(v) ? null : 'notADate';
     default:

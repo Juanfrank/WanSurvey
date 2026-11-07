@@ -82,7 +82,8 @@ function ValueField({
   }
   return (
     <input
-      className={`${controlCls} w-48`}
+      className={`${controlCls} ${q.type === 'text' ? 'w-72' : 'w-48'}`}
+      {...(q.type === 'text' ? { maxLength: q.maxLength ?? 500 } : {})}
       type={
         q.type === 'numeric' || q.type === 'scale' ? 'number' : q.type === 'date' ? 'date' : 'text'
       }
@@ -257,6 +258,11 @@ export function LinkBuilder({
                   >
                     {t('cawi.builder.remove')}
                   </button>
+                  {q?.type === 'text' ? (
+                    <p className="basis-full text-xs text-slate-600">
+                      {t('cawi.builder.textNote', { max: q.maxLength ?? 500 })}
+                    </p>
+                  ) : null}
                   {problems[i] ? (
                     <p role="alert" className="basis-full text-xs font-medium text-red-ink-800">
                       {t(`cawi.builder.problems.${problems[i]}`)}

@@ -106,6 +106,8 @@ export const cawiEn = {
     question: 'Question {{n}}',
     value: 'Value of ?{{param}}',
     pickValue: 'Choose a value',
+    textNote:
+      'Free text, up to {{max}} characters. It travels in the address (browser history, forwarded messages): do not put sensitive personal data in it; for data of each person use personal links with the sample.',
     add: 'Add a question',
     remove: 'Remove',
     result: 'Link',
@@ -121,6 +123,8 @@ export const cawiEn = {
       notANumber: 'It has to be a number.',
       tooLong: 'Longer than the question allows.',
       notADate: 'Write the date as YYYY-MM-DD.',
+      badFormat:
+        'It does not have the format the question asks for: the survey would ignore it and ask.',
     },
     segmentTitle: 'One link per segment',
     segmentHelp:
@@ -251,6 +255,8 @@ export const cawiEs: CawiCatalogue = {
     question: 'Pregunta {{n}}',
     value: 'Valor de ?{{param}}',
     pickValue: 'Elige un valor',
+    textNote:
+      'Texto libre, hasta {{max}} caracteres. Viaja en la dirección (historial del navegador, mensajes reenviados): no pongas datos personales sensibles; para datos de cada persona usa enlaces personales con la muestra.',
     add: 'Agregar una pregunta',
     remove: 'Quitar',
     result: 'Enlace',
@@ -267,6 +273,8 @@ export const cawiEs: CawiCatalogue = {
       notANumber: 'Tiene que ser un número.',
       tooLong: 'Más largo de lo que admite la pregunta.',
       notADate: 'Escribe la fecha como AAAA-MM-DD.',
+      badFormat:
+        'No tiene el formato que pide la pregunta: la encuesta lo ignoraría y preguntaría.',
     },
     segmentTitle: 'Un enlace por segmento',
     segmentHelp:

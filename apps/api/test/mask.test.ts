@@ -9,5 +9,9 @@ describe('log masking', () => {
     expect(maskTokens('/api/auth/entra/callback?code=abc&state=xyz&x=1')).toBe(
       '/api/auth/entra/callback?code=…&state=…&x=1',
     );
+    // What a link gave a free-text question travels in `params`, and stays out of the logs.
+    expect(maskTokens('/api/v1/public/o/abc?x=1&params=nombre%3DAna%20P%C3%A9rez')).toBe(
+      '/api/v1/public/o/abc?x=1&params=…',
+    );
   });
 });

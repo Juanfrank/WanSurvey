@@ -1006,7 +1006,7 @@ export class CawiService implements OnModuleInit {
       }
     const params: Record<string, string> = {};
     new URLSearchParams(linkQuery).forEach((v, k) => {
-      if (names.has(k) && !(k in params)) params[k] = v.slice(0, 200);
+      if (names.has(k) && !(k in params)) params[k] = v.slice(0, 500);
     });
     if (!Object.keys(params).length) return {};
     await tx.setInterviewContext(row.id, { ...context, params });
