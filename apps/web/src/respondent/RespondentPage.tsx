@@ -37,6 +37,8 @@ interface RespondentPayload {
   compiled: CompiledQuestionnaire;
   lastSeq: number;
   completion: { message: string; redirectUrl: string };
+  /** The information notice to show first; `accepted` when this version was already accepted. */
+  notice?: { text: string; version: number; accepted: boolean } | null;
   /** The project's look: colours, type, corners and logo (project settings). */
   branding?: Branding;
 }
@@ -293,6 +295,33 @@ export function RespondentPage({ token }: { token: string }) {
     }
   };
 
+  /** The person's answer to the information notice: kept with the version of its wording. */
+  const [notice, setNotice] = useState<'open' | 'accepted' | 'declined'>('open');
+  const answerNotice = async (accepted: boolean) => {
+    const r = ref.current;
+    if (!r || !payload?.notice) return;
+    const ops: NewOp[] = [
+      {
+        kind: 'paradata',
+        type: 'notice',
+        at: new Date().toISOString(),
+        payload: { accepted, version: payload.notice.version },
+      },
+    ];
+    const snapshot = {
+      state: r.session.state(),
+      position: r.session.currentKey(),
+      activeMs: 0,
+      totalMs: 0,
+    };
+    r.writes = r.writes
+      .then(() => r.store.record(payload.interview.id, ops, snapshot))
+      .catch(() => setSave('offline'));
+    await r.writes;
+    void sync();
+    setNotice(accepted ? 'accepted' : 'declined');
+  };
+
   const title = payload
     ? (pick(payload.compiled.questionnaire.title, payload.interview.language) ?? '')
     : '';
@@ -331,6 +360,48 @@ export function RespondentPage({ token }: { token: string }) {
     return (
       <Shell title={title} branding={payload.branding}>
         {<p aria-busy="true">{t.loading}</p>}
+      </Shell>
+    );
+  if (payload.notice && !payload.notice.accepted && notice !== 'accepted')
+    return (
+      <Shell title={title} branding={payload.branding}>
+        {notice === 'declined' ? (
+          <p role="status" data-testid="notice-declined">
+            {t.noticeDeclined}
+          </p>
+        ) : (
+          <section
+            aria-labelledby="notice-title"
+            data-testid="notice"
+            className="flex flex-col gap-4"
+          >
+            <h2 id="notice-title" className="text-lg font-semibold">
+              {t.noticeTitle}
+            </h2>
+            <p className="max-w-prose whitespace-pre-line">{payload.notice.text}</p>
+            <p>
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                {t.privacy}
+              </a>
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="rounded-md bg-indigo-600 px-5 py-2.5 font-medium text-on-fill"
+                onClick={() => void answerNotice(true)}
+              >
+                {t.noticeAccept}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 bg-white px-5 py-2.5 font-medium"
+                onClick={() => void answerNotice(false)}
+              >
+                {t.noticeDecline}
+              </button>
+            </div>
+          </section>
+        )}
       </Shell>
     );
   const finished = session.status().state !== 'in_progress';

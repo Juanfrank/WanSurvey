@@ -37,6 +37,12 @@ export const casesEn = {
     anonymised: 'Personal data removed on {{date}}.',
     retentionTitle: 'Personal data retention',
     retentionDays: 'Remove personal data this many days after a case is finished (empty: keep)',
+    retentionNone:
+      'No period is set: personal data is kept until someone deletes it. Most data protection laws ask for a period tied to the purpose of the survey.',
+    noticeTitle: 'Information notice',
+    noticeHelp:
+      'Shown to the person before the first question, in every channel (web survey, call, visit): who answers for the data, what it is for, that taking part is voluntary, how to use their rights. Their answer and the version of the wording are kept with the interview. Leave it empty to ask for none. Agree the wording with your legal area.',
+    noticeText: 'Notice text',
     retentionHelp:
       'Each night, finished and withdrawn cases older than this lose their personal sample fields, contacts, personal answers, notes and e-mail addresses. Recorded in the audit log.',
   },
@@ -562,6 +568,12 @@ export const casesEs: CasesCatalogue = {
     retentionTitle: 'Conservación de datos personales',
     retentionDays:
       'Eliminar los datos personales estos días después de terminar un caso (vacío: conservar)',
+    retentionNone:
+      'No hay plazo: los datos personales se conservan hasta que alguien los borre. La mayoría de las leyes de protección de datos piden un plazo ligado a la finalidad de la encuesta.',
+    noticeTitle: 'Aviso informativo',
+    noticeHelp:
+      'Se muestra a la persona antes de la primera pregunta, en todos los canales (encuesta web, llamada, visita): quién es responsable de los datos, para qué se usan, que participar es voluntario y cómo ejercer sus derechos. Su respuesta y la versión del texto quedan con la entrevista. Déjelo vacío para no pedir ninguno. Acuerde el texto con su área jurídica.',
+    noticeText: 'Texto del aviso',
     retentionHelp:
       'Cada noche, los casos terminados o retirados más antiguos pierden sus campos personales, contactos, respuestas personales, notas y correos. Queda registrado en la bitácora.',
   },

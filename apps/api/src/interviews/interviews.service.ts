@@ -587,6 +587,8 @@ export class InterviewsService {
         shortcuts: x.shortcuts,
         // Recording is asked for only when the project has it on and this interview was drawn.
         audio: drawFor(row.id, x.audio, row.mode),
+        // Asked of the person (and kept) before the first question; the interviewer reads it out.
+        notice: x.notice.text.trim() ? { text: x.notice.text, version: x.notice.version } : null,
       })),
       lastSeq: seq ?? 0,
       serverTime: new Date().toISOString(),

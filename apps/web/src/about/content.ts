@@ -231,7 +231,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
           id: 'retention',
           title: '8. Cuánto tiempo se conservan',
           items: [
-            'La organización puede fijar en cada proyecto un plazo tras el cual, cada noche, los casos terminados pierden sus datos personales. Si no lo fija, los datos se conservan hasta que la organización los borre. Las respuestas que no son personales se conservan para las estadísticas.',
+            'Cada proyecto nuevo empieza con un plazo de 365 días tras el cual, cada noche, los casos terminados pierden sus datos personales; la organización puede cambiarlo. En proyectos más antiguos o si lo deja vacío, los datos se conservan hasta que la organización los borre. Las respuestas que no son personales se conservan para las estadísticas.',
             'Las grabaciones de audio, si existen, se borran a los 90 días de la revisión de la entrevista salvo que el proyecto fije otro plazo.',
             'El registro de auditoría se conserva el tiempo que la organización determine, porque sirve para demostrar quién accedió a qué.',
             'Una solicitud de no ser contactado se guarda para respetarla durante el plazo que fije el proyecto; guardamos para ello solo el teléfono o el correo, no sus respuestas.',
@@ -364,7 +364,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
         id: 'retention',
         title: '8. How long it is kept',
         items: [
-          'The organisation can set in each project a period after which, every night, finished cases lose their personal data. If it sets none, the data is kept until the organisation deletes it. Answers that are not personal are kept for statistics.',
+          'Each new project starts with a period of 365 days after which, every night, finished cases lose their personal data; the organisation can change it. In older projects, or if it clears the period, the data is kept until the organisation deletes it. Answers that are not personal are kept for statistics.',
           'Audio recordings, if any, are deleted 90 days after the interview is reviewed unless the project sets another period.',
           'The audit log is kept as long as the organisation decides, because it shows who accessed what.',
           'A request not to be contacted is kept to be honoured for the period the project sets; only the phone number or e-mail is kept for it, not your answers.',

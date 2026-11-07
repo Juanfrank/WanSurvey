@@ -131,6 +131,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
   only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
   account menu and the foot of web surveys. The text needs the institution's legal review.
+- **Information notice before the first question**, in every channel (project settings →
+  Privacy): the web survey shows it with "I understand and want to take part" / "I do not want to
+  take part"; interviewers on calls and visits get a dialog they cannot skip. The answer and the
+  version of the wording are kept as paradata of the interview; a new wording is asked again. A
+  declined web survey asks nothing.
+- **Retention period for new projects**: a new project starts with 365 days before the personal
+  data of finished cases is removed, and the settings screen warns when no period is set. Existing
+  projects are not changed.
 - **Legal and compliance review** (`docs/legal-risk-review.md`): what can bring civil, penal or
   administrative liability to the owner, manager or contracting party, by priority, with the
   evidence in the code, what to do and who does it.

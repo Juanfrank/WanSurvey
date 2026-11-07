@@ -24,6 +24,7 @@ import type { Response } from 'express';
 import {
   ASSIGNMENT_MODES,
   AudioSettingsInput,
+  NoticeSettings,
   CapiSettings,
   CatiSettings,
   EarlyExitSettings,
@@ -73,6 +74,9 @@ const ProjectBody = ProjectFields.extend({
   languages: ProjectFields.shape.languages.optional(),
 });
 // No defaults here: fields left out of a PATCH keep their value.
+/** Days after which a new project removes the personal data of finished cases, until changed. */
+export const DEFAULT_RETENTION_DAYS = 365;
+
 const ProjectPatch = ProjectFields.partial().extend({
   status: z.enum(['draft', 'active', 'closed', 'archived']).optional(),
   /** Merged into the stored settings; keys left out keep their value. */
@@ -87,6 +91,7 @@ const ProjectPatch = ProjectFields.partial().extend({
       cleaning: CleaningSettings,
       capi: CapiSettings,
       audio: AudioSettingsInput,
+      notice: NoticeSettings,
       cawi: CawiSettings,
       papi: PapiSettings,
       review: ReviewSettings,
@@ -141,13 +146,20 @@ export class ProjectsController {
         defaultLanguage?: string;
         defaultTimezone?: string;
       };
-      const project = await t.createProject({
+      const created = await t.createProject({
         name: body.name,
         code: body.code,
         modesEnabled: body.modesEnabled,
         timezone: body.timezone ?? defaults.defaultTimezone ?? 'UTC',
         languages: body.languages ?? [defaults.defaultLanguage ?? 'es'],
       });
+      // A new project starts with a retention period (personal data of finished cases is removed
+      // after a year); the organisation changes it, or clears it knowingly. Projects that
+      // already exist are not touched: removing data is not something to start by itself.
+      const project =
+        (await t.updateProject(created.id, {
+          settings: { retention: { anonymiseAfterDays: DEFAULT_RETENTION_DAYS } },
+        })) ?? created;
       await t.audit(
         this.audit.fromContext(ctx, {
           action: 'project.created',
@@ -187,6 +199,15 @@ export class ProjectsController {
         const next = body.settings.audio;
         if (next.consentText !== before.consentText && next.consentVersion <= before.consentVersion)
           body.settings.audio = { ...next, consentVersion: before.consentVersion + 1 };
+      }
+      // Each wording of the information notice has its own version, kept with every answer.
+      if (body.settings?.notice) {
+        const current = await t.project(id);
+        if (!current) throw new NotFoundException('Project not found');
+        const before = projectSettings(current.settings).notice;
+        const next = body.settings.notice;
+        if (next.text !== before.text && next.version <= before.version)
+          body.settings.notice = { ...next, version: before.version + 1 };
       }
       // A cleaning rule is checked as it is saved: it must read, and its patterns be valid.
       for (const r of body.settings?.cleaning?.rules ?? []) {

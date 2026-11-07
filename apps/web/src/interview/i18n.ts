@@ -1,5 +1,12 @@
 /** Strings for the interviewer screen (namespace `app`, key `interview`). */
 export const interviewEn = {
+  notice: {
+    title: 'Read this to the person before the first question',
+    yes: 'They understand and agree to continue',
+    no: 'They do not want to take part',
+    declined:
+      'The person does not want to take part. Do not ask the questions: close the interview with the result "refusal".',
+  },
   audio: {
     title: 'Recording this interview',
     yes: 'Yes, they agree',
@@ -122,6 +129,13 @@ export const interviewEn = {
 export type InterviewCatalogue = typeof interviewEn;
 
 export const interviewEs: InterviewCatalogue = {
+  notice: {
+    title: 'Lea esto a la persona antes de la primera pregunta',
+    yes: 'Entiende y acepta continuar',
+    no: 'No desea participar',
+    declined:
+      'La persona no desea participar. No haga las preguntas: cierre la entrevista con el resultado «rechazo».',
+  },
   audio: {
     title: 'Grabación de esta entrevista',
     yes: 'Sí, está de acuerdo',

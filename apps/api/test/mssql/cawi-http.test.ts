@@ -400,6 +400,71 @@ describe.skipIf(!configured)('SQL Server: web surveys by e-mail over HTTP', () =
     ).toBe(409);
   });
 
+  it('the information notice is asked first, its answer kept with the version, and asked again when the wording changes', async () => {
+    const set = (text: string) =>
+      patch(pm, `/projects/${project}`, { settings: { notice: { text, version: 1 } } });
+    const first = await set('Somos el Instituto Demo; participar es voluntario.');
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    // Every change of wording takes the next version (the first one too).
+    const v1 = first.body.settings.notice.version as number;
+    expect(v1).toBeGreaterThanOrEqual(1);
+    await put(pm, `/projects/${project}/open-link`, { active: true, questionnaireId: qid });
+    const slug = (await get(pm, `/projects/${project}/open-link`)).body.link.slug as string;
+    const open = async () => {
+      const start = await api().post(`/api/v1/public/o/${slug}/start`);
+      return start.body.token as string;
+    };
+    const token = await open();
+    const a = await api().get(`/api/v1/public/s/${token}?device=notice-browser-1`);
+    expect(a.body.notice).toEqual({
+      text: 'Somos el Instituto Demo; participar es voluntario.',
+      version: v1,
+      accepted: false,
+    });
+    const answered = await api()
+      .post(`/api/v1/public/s/${token}/sync`)
+      .send({
+        deviceId: 'notice-browser-1',
+        ops: [
+          {
+            seq: 1,
+            kind: 'paradata',
+            type: 'notice',
+            at: new Date().toISOString(),
+            payload: { accepted: true, version: v1 },
+          },
+        ],
+        state: {},
+      });
+    expect(answered.status, JSON.stringify(answered.body)).toBe(200);
+    const b = await api().get(`/api/v1/public/s/${token}?device=notice-browser-2`);
+    expect(b.body.notice.accepted).toBe(true);
+    // A new wording gets the next version, and is asked again.
+    const second = await set('Texto nuevo del aviso.');
+    expect(second.body.settings.notice.version).toBe(v1 + 1);
+    const c = await api().get(`/api/v1/public/s/${token}?device=notice-browser-2`);
+    expect(c.body.notice).toMatchObject({ version: v1 + 1, accepted: false });
+    await set('');
+    const d = await api().get(`/api/v1/public/s/${token}?device=notice-browser-2`);
+    expect(d.body.notice).toBeNull();
+    await put(pm, `/projects/${project}/open-link`, { active: false });
+  });
+
+  it('a new project starts with a retention period', async () => {
+    const admin = await login(
+      t,
+      await createUser(t.owner, tenant.id, [{ role: 'admin' }]),
+      tenant.slug,
+    );
+    const created = await post(admin, '/projects', {
+      name: 'Retention default',
+      code: `RET-${Date.now().toString(36)}`,
+      modesEnabled: ['CAWI'],
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect(created.body.settings.retention.anonymiseAfterDays).toBe(365);
+  });
+
   it('a links-only wave makes a personal link per case, e-mail or not, and sends nothing', async () => {
     const ids = await addCases(3, 'LNK');
     // One case without any e-mail still gets its link.

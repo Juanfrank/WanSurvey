@@ -77,6 +77,15 @@ OpenStreetMap geocoding) and say nothing of those that are off. The text is in
 (legal basis, retention periods, transfers and the authority to complain to depend on the
 country) before it is published. The legal basis of each survey is a project setting.
 
+## Information notice
+
+Each project can have an information notice (Settings → Privacy): who answers for the data, what
+it is for, that taking part is voluntary and how to use one's rights. It is shown before the first
+question on the web survey, and read out by the interviewer on calls and visits; the answer and the
+version of the wording are kept as paradata (`notice`) with the interview. Leave it empty to ask
+for none. **Agree the wording with the institution's legal area** and write it before the first
+real survey; a paper form carries it printed.
+
 ## Retention and data subject requests
 
 - Set **Settings → Personal data retention** per project (days after a case is finished). Each night the worker removes the personal data of older finished and withdrawn cases; answers that are not personal stay for statistics. Each case is recorded in the audit log (`case.anonymised`).

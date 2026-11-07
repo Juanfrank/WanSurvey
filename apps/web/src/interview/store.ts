@@ -81,6 +81,8 @@ export interface DeviceCase {
   shortcuts?: ShortcutSettings;
   /** Present when the project records interviews: what the device needs to draw and ask. */
   audio?: { samplePercent: number; consentText: string; consentVersion: number };
+  /** The information notice to read before the first question. */
+  notice?: { text: string; version: number };
 }
 
 export interface LocalInterview {

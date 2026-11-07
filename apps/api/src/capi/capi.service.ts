@@ -164,6 +164,9 @@ export class CapiService implements OnModuleInit {
       settings: {
         capi: settings.capi,
         shortcuts: settings.shortcuts,
+        ...(settings.notice.text.trim()
+          ? { notice: { text: settings.notice.text, version: settings.notice.version } }
+          : {}),
         // What a device needs to draw, as the server does, whether an interview it starts
         // offline is recorded (the draw depends only on the interview's id).
         ...(settings.audio.enabled && settings.audio.consentText.trim()

@@ -988,6 +988,7 @@ export class CawiService implements OnModuleInit {
             totalMs: 0,
           },
           context: { case: {}, params: {} },
+          notice: null,
           compiled: await this.runtime.compiledOf(tx, row.questionnaireVersionId),
           lastSeq: 0,
           serverTime: new Date().toISOString(),
@@ -1012,6 +1013,7 @@ export class CawiService implements OnModuleInit {
           totalMs: p.interview.totalMs,
         },
         context: { case: p.context.case ?? {}, params },
+        notice: await this.noticeOf(tx, row.id, settings.notice),
         compiled: p.compiled,
         lastSeq: p.lastSeq,
         serverTime: p.serverTime,
@@ -1019,6 +1021,16 @@ export class CawiService implements OnModuleInit {
         branding,
       };
     });
+  }
+
+  /** The information notice to show first, and whether this version was already accepted. */
+  private async noticeOf(tx: CawiTx, interviewId: string, n: { text: string; version: number }) {
+    if (!n.text.trim()) return null;
+    return {
+      text: n.text,
+      version: n.version,
+      accepted: await tx.noticeAccepted(interviewId, n.version),
+    };
   }
 
   /** The project's look for respondents: the theme, and the logo's address when there is one. */

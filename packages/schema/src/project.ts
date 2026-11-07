@@ -37,6 +37,18 @@ export const AudioSettingsInput = AudioSettings.refine(
 );
 export type AudioSettings = z.infer<typeof AudioSettings>;
 
+/**
+ * The information notice shown before the first question, in every channel (who answers for the
+ * data, what it is for, that taking part is voluntary, how to use one's rights). Its answer, with
+ * the version of the wording, is kept as paradata of each interview. Empty: no notice is asked.
+ */
+export const NoticeSettings = z.object({
+  text: z.string().max(4000).default(''),
+  /** Raised whenever the wording changes, and kept with each answer given. */
+  version: z.number().int().min(1).max(10_000).default(1),
+});
+export type NoticeSettings = z.infer<typeof NoticeSettings>;
+
 /** Legal grounds for e-mailing a sample (W4); nothing is sent until one is declared. */
 export const LAWFUL_BASES = ['consent', 'legitimate_interest', 'contract', 'public_task'] as const;
 export type LawfulBasis = (typeof LAWFUL_BASES)[number];
@@ -249,6 +261,8 @@ export const ProjectSettings = z.object({
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
   audio: AudioSettings.default(AudioSettings.parse({})),
+  /** Information notice before the first question (all channels). */
+  notice: NoticeSettings.default(NoticeSettings.parse({})),
   /** Web surveys by e-mail. */
   cawi: CawiSettings.default(CawiSettings.parse({})),
   /** Paper forms keyed by data-entry clerks. */

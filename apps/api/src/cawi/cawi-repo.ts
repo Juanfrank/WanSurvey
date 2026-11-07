@@ -256,6 +256,8 @@ export interface CawiTx extends InterviewsTx {
   caseStatusOf(caseId: string): Promise<string | null>;
   logo(projectId: string): Promise<{ contentType: string; image: Buffer } | null>;
   setInterviewContext(id: string, context: unknown): Promise<void>;
+  /** Whether the person has accepted this version of the information notice. */
+  noticeAccepted(interviewId: string, version: number): Promise<boolean>;
   /** The case's sample for piping, as stored. */
   casePiping(caseId: string): Promise<{ sample: unknown; samplePii: string | null } | null>;
   /** A fresh or assigned case goes in progress (any other status stays). */
@@ -815,6 +817,16 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
       .where('project_id', '=', projectId)
       .executeTakeFirst();
     return l ? { contentType: l.content_type, image: l.image } : null;
+  }
+
+  async noticeAccepted(interviewId: string, version: number) {
+    const r = await ksql<{ payload: string }>`
+      SELECT payload FROM dbo.interview_paradata
+      WHERE interview_id = ${interviewId} AND type = 'notice'`.execute(this.mctx);
+    return r.rows.some((x) => {
+      const p = JSON.parse(x.payload) as { accepted?: boolean; version?: number };
+      return p.accepted === true && p.version === version;
+    });
   }
 
   async setInterviewContext(id: string, context: unknown) {

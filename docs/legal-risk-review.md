@@ -18,23 +18,23 @@ se arreglaron en esta revisión.
 
 ## Resumen por prioridad
 
-| #   | Hallazgo                                                                       | Prioridad | Quién               |
-| --- | ------------------------------------------------------------------------------ | --------- | ------------------- |
-| 1   | Conservación sin límite por defecto                                            | Alta      | Desarrollo + Org.   |
-| 2   | Sin aviso informativo obligatorio al recoger datos                             | Alta      | Desarrollo          |
-| 3   | Contacto telefónico sin base legal declarada ni listas nacionales de exclusión | Alta      | Desarrollo + Org.   |
-| 4   | Geocodificación con un servicio público gratuito (OpenStreetMap)               | Alta      | Org. (+ Desarrollo) |
-| 5   | Datos sensibles y menores sin controles específicos                            | Alta      | Desarrollo + Org.   |
-| 6   | Sin procedimiento de respuesta a incidentes de seguridad                       | Alta      | Organización        |
-| 7   | Vigilancia de entrevistadores (posición, calidad, riesgo, voz)                 | Media     | Org. (+ Desarrollo) |
-| 8   | Seguimiento de aperturas de correo sin opción de apagarlo                      | Media     | Desarrollo          |
-| 9   | Registro de auditoría sin plazo de conservación; copias de seguridad           | Media     | Desarrollo + Org.   |
-| 10  | Sin términos de uso ni compromiso de confidencialidad del personal             | Media     | Desarrollo + Org.   |
-| 11  | Enlaces para compartir resultados que pueden no caducar                        | Media     | Desarrollo          |
-| 12  | Seguridad: lo que falta para decir «razonablemente protegido»                  | Media     | Org. + Desarrollo   |
-| 13  | Texto de la Política de Privacidad inexacto en dos puntos                      | —         | **Corregido**       |
-| 14  | Licencias, propiedad intelectual y atribuciones                                | Baja      | Organización        |
-| 15  | Obligaciones administrativas fuera del código                                  | Alta      | Organización        |
+| #   | Hallazgo                                                                       | Prioridad | Quién                                  |
+| --- | ------------------------------------------------------------------------------ | --------- | -------------------------------------- |
+| 1   | Conservación sin límite por defecto                                            | Alta      | **Mitigado** (proyectos nuevos) + Org. |
+| 2   | Sin aviso informativo al recoger datos                                         | Alta      | **Implementado** + Org. (el texto)     |
+| 3   | Contacto telefónico sin base legal declarada ni listas nacionales de exclusión | Alta      | Desarrollo + Org.                      |
+| 4   | Geocodificación con un servicio público gratuito (OpenStreetMap)               | Alta      | Org. (+ Desarrollo)                    |
+| 5   | Datos sensibles y menores sin controles específicos                            | Alta      | Desarrollo + Org.                      |
+| 6   | Sin procedimiento de respuesta a incidentes de seguridad                       | Alta      | Organización                           |
+| 7   | Vigilancia de entrevistadores (posición, calidad, riesgo, voz)                 | Media     | Org. (+ Desarrollo)                    |
+| 8   | Seguimiento de aperturas de correo sin opción de apagarlo                      | Media     | Desarrollo                             |
+| 9   | Registro de auditoría sin plazo de conservación; copias de seguridad           | Media     | Desarrollo + Org.                      |
+| 10  | Sin términos de uso ni compromiso de confidencialidad del personal             | Media     | Desarrollo + Org.                      |
+| 11  | Enlaces para compartir resultados que pueden no caducar                        | Media     | Desarrollo                             |
+| 12  | Seguridad: lo que falta para decir «razonablemente protegido»                  | Media     | Org. + Desarrollo                      |
+| 13  | Texto de la Política de Privacidad inexacto en dos puntos                      | —         | **Corregido**                          |
+| 14  | Licencias, propiedad intelectual y atribuciones                                | Baja      | Organización                           |
+| 15  | Obligaciones administrativas fuera del código                                  | Alta      | Organización                           |
 
 ## 1. Conservación sin límite por defecto
 
@@ -48,6 +48,10 @@ se arreglaron en esta revisión.
 - **Qué hacer.** _Desarrollo:_ pedir el plazo al crear el proyecto (obligatorio, con una
   sugerencia) y avisar en la pantalla de ajustes cuando está vacío. _Organización:_ fijar una
   política de conservación por tipo de encuesta y documentarla.
+- **Hecho (2026-11-07).** Un proyecto **nuevo** nace con 365 días (la organización lo cambia o lo
+  deja vacío a sabiendas) y la pantalla de ajustes avisa en ámbar cuando no hay plazo. Los
+  proyectos que ya existen **no se tocan**: borrar datos no debe empezar solo. _Pendiente:_
+  revisar uno a uno los proyectos existentes.
 - **Ya hecho.** La Política de Privacidad ahora dice la verdad: «si no lo fija, los datos se
   conservan hasta que la organización los borre».
 
@@ -64,6 +68,15 @@ se arreglaron en esta revisión.
   idioma) que se muestre antes de la primera pregunta en web, aparezca como guion obligatorio en
   CATI/CAPI y se guarde con cada entrevista (como ya se hace con el audio). _Organización:_
   redactar el texto con su área jurídica.
+- **Hecho (2026-11-07).** Ajuste de proyecto «Aviso informativo» (Ajustes → Privacidad). En la
+  encuesta web aparece antes de la primera pregunta con «Entiendo y quiero participar» / «No
+  deseo participar» y un enlace a la política; en CATI y CAPI es un diálogo que el entrevistador
+  no puede saltarse («Lea esto a la persona»). La respuesta y la **versión del texto** quedan
+  como paradato de la entrevista; cada cambio de texto sube la versión y se vuelve a pedir. Si
+  la persona declina, la encuesta web no hace preguntas y el entrevistador recibe la instrucción
+  de cerrar con «rechazo». _Pendiente:_ redactar el texto en cada proyecto (mientras esté vacío
+  no se pide ninguno) y, si se quiere, exigirlo para publicar; en papel (PAPI) el aviso va
+  impreso en el formulario, fuera de esta función.
 
 ## 3. Contacto telefónico sin base legal declarada ni listas nacionales de exclusión
 
