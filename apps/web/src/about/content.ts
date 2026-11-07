@@ -194,7 +194,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
           title: '5. Para qué y con qué base legal',
           paragraphs: [
             'Los datos se usan solo para hacer la encuesta, localizar a las personas de la muestra, controlar la calidad del trabajo, producir estadísticas y proteger la seguridad de la aplicación.',
-            'La base legal (por ejemplo consentimiento, interés legítimo o misión de interés público) la declara la organización para cada encuesta; en las encuestas por correo y SMS no se envía nada hasta que se ha declarado. Si le contactaron sin su consentimiento y la base es otra, puede oponerse en cualquier momento (sección 9).',
+            'La base legal (por ejemplo consentimiento, interés legítimo o misión de interés público) la declara la organización para cada encuesta; en llamadas, visitas, correo y SMS no se contacta a nadie hasta que se ha declarado. Si le contactaron sin su consentimiento y la base es otra, puede oponerse en cualquier momento (sección 9).',
           ],
         },
         {
@@ -327,7 +327,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
         title: '5. What for, and the legal basis',
         paragraphs: [
           'Data is used only to run the survey, reach the people in the sample, check the quality of the work, produce statistics and keep the application secure.',
-          'The legal basis (for example consent, legitimate interest or a public-interest task) is declared by the organisation for each survey; in e-mail and SMS surveys nothing is sent until it has been declared. If you were contacted without consent and the basis is another one, you can object at any time (section 9).',
+          'The legal basis (for example consent, legitimate interest or a public-interest task) is declared by the organisation for each survey; for calls, visits, e-mail and SMS nobody is contacted until it has been declared. If you were contacted without consent and the basis is another one, you can object at any time (section 9).',
         ],
       },
       {

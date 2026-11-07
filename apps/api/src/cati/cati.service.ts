@@ -122,6 +122,12 @@ export class CatiService implements OnModuleInit {
     caseId?: string,
   ) {
     const settings = await this.cases.settings(t, projectId);
+    // Nothing is called until the project has declared why it may contact this sample.
+    if (!settings.contactBasis.phone)
+      throw new ConflictException({
+        code: 'NO_LAWFUL_BASIS',
+        message: 'Declare the lawful basis for calling this sample first (Settings → Privacy)',
+      });
     const tz = await this.projectTimezone(t, projectId);
     const now = new Date();
     // One request at a time per caller and project, so a caller never holds two open calls.

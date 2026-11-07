@@ -132,7 +132,8 @@ export const messagesEn = {
     CASE_CLOSED: 'This case is finished or withdrawn.',
     ENTRY_IN_PROGRESS: 'Another entry of this form is in progress.',
     IN_PROGRESS_OTHER_MODE: 'This case has an interview in progress in another mode.',
-    NO_LAWFUL_BASIS: 'Declare the lawful basis for e-mailing this sample first.',
+    NO_LAWFUL_BASIS:
+      'Declare the lawful basis for contacting this sample first (Settings → Privacy for calls and visits, Web settings for e-mail and SMS).',
     TEMPLATE_INVALID:
       'The wording uses unknown placeholders, or lacks the survey link or the unsubscribe link.',
     WAVE_SENT: 'This outreach has already been sent.',
@@ -295,7 +296,8 @@ export const messagesEs: MessagesCatalogue = {
     CASE_CLOSED: 'Este caso terminó o fue retirado.',
     ENTRY_IN_PROGRESS: 'Otra digitación de este formulario está en curso.',
     IN_PROGRESS_OTHER_MODE: 'Este caso tiene una entrevista en curso en otro modo.',
-    NO_LAWFUL_BASIS: 'Primero declare la base legal para escribir por correo a esta muestra.',
+    NO_LAWFUL_BASIS:
+      'Primero declare la base legal para contactar a esta muestra (Ajustes → Privacidad para llamadas y visitas, ajustes Web para correo y SMS).',
     TEMPLATE_INVALID:
       'El texto usa marcadores desconocidos, o le falta el enlace a la encuesta o el de baja.',
     WAVE_SENT: 'Esta difusión ya se envió.',

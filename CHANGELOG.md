@@ -131,6 +131,11 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
   only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
   account menu and the foot of web surveys. The text needs the institution's legal review.
+- **Lawful basis for calling and visiting** (project settings → Privacy): one for telephone calls
+  and one for face-to-face visits. Until a channel's basis is declared, no call is served, no
+  interview of that channel starts and no case is downloaded to a device (409 `NO_LAWFUL_BASIS`),
+  as e-mail and SMS already behaved. **Existing projects that call or visit are blocked until they
+  declare it.**
 - **Information notice before the first question**, in every channel (project settings →
   Privacy): the web survey shows it with "I understand and want to take part" / "I do not want to
   take part"; interviewers on calls and visits get a dialog they cannot skip. The answer and the

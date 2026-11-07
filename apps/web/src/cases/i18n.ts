@@ -37,6 +37,15 @@ export const casesEn = {
     anonymised: 'Personal data removed on {{date}}.',
     retentionTitle: 'Personal data retention',
     retentionDays: 'Remove personal data this many days after a case is finished (empty: keep)',
+    basisTitle: 'Lawful basis for calling and visiting',
+    basisHelp:
+      'Nothing is called or downloaded to a device until the basis for that channel is declared (e-mail and SMS have theirs in the web settings). Choose with your legal area; it is recorded in the audit log.',
+    basisPhone: 'Telephone calls',
+    basisVisit: 'Face-to-face visits',
+    basisNone: 'Not declared (nothing can be called)',
+    basisNoneVisit: 'Not declared (nothing can be downloaded)',
+    basisMissing:
+      'No basis is declared for this channel: the interviewers cannot start. Choose one above.',
     retentionNone:
       'No period is set: personal data is kept until someone deletes it. Most data protection laws ask for a period tied to the purpose of the survey.',
     noticeTitle: 'Information notice',
@@ -568,6 +577,15 @@ export const casesEs: CasesCatalogue = {
     retentionTitle: 'Conservación de datos personales',
     retentionDays:
       'Eliminar los datos personales estos días después de terminar un caso (vacío: conservar)',
+    basisTitle: 'Base legal para llamar y visitar',
+    basisHelp:
+      'No se llama ni se descarga nada a un dispositivo hasta declarar la base de ese canal (correo y SMS tienen la suya en los ajustes web). Elíjala con su área jurídica; queda en la bitácora.',
+    basisPhone: 'Llamadas telefónicas',
+    basisVisit: 'Visitas presenciales',
+    basisNone: 'Sin declarar (no se puede llamar)',
+    basisNoneVisit: 'Sin declarar (no se puede descargar)',
+    basisMissing:
+      'No hay base declarada para este canal: los entrevistadores no pueden empezar. Elija una arriba.',
     retentionNone:
       'No hay plazo: los datos personales se conservan hasta que alguien los borre. La mayoría de las leyes de protección de datos piden un plazo ligado a la finalidad de la encuesta.',
     noticeTitle: 'Aviso informativo',

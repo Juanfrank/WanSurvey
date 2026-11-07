@@ -53,6 +53,21 @@ export type NoticeSettings = z.infer<typeof NoticeSettings>;
 export const LAWFUL_BASES = ['consent', 'legitimate_interest', 'contract', 'public_task'] as const;
 export type LawfulBasis = (typeof LAWFUL_BASES)[number];
 
+/**
+ * The lawful basis on which the project contacts the sample by telephone and visits it in person
+ * (e-mail and SMS have theirs in the web settings). Nothing is called or downloaded to a device
+ * until the one for that channel is declared; null is "not declared".
+ */
+export const ContactBasisSettings = z.object({
+  phone: z.enum(LAWFUL_BASES).nullable().default(null),
+  visit: z.enum(LAWFUL_BASES).nullable().default(null),
+});
+export type ContactBasisSettings = z.infer<typeof ContactBasisSettings>;
+
+/** The channel a mode of interviewing contacts people through, when it contacts them at all. */
+export const contactChannelOf = (mode: string): 'phone' | 'visit' | null =>
+  mode === 'CATI' ? 'phone' : mode === 'CAPI' ? 'visit' : null;
+
 const Hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
 /** How the web survey looks to respondents: colours, type, corners and the project logo. */
@@ -261,6 +276,8 @@ export const ProjectSettings = z.object({
   /** Face-to-face interviewing on devices. */
   capi: CapiSettings.default(CapiSettings.parse({})),
   audio: AudioSettings.default(AudioSettings.parse({})),
+  /** Lawful basis for calling and visiting the sample. */
+  contactBasis: ContactBasisSettings.default(ContactBasisSettings.parse({})),
   /** Information notice before the first question (all channels). */
   notice: NoticeSettings.default(NoticeSettings.parse({})),
   /** Web surveys by e-mail. */

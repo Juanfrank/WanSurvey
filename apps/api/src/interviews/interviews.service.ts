@@ -13,7 +13,12 @@ import {
   type CompiledQuestionnaire,
   type InterviewOptions,
 } from '@wansurvey/logic';
-import type { ContainerItem, Mode, ProjectSettings } from '@wansurvey/schema';
+import {
+  contactChannelOf,
+  type ContainerItem,
+  type Mode,
+  type ProjectSettings,
+} from '@wansurvey/schema';
 import { AuditService } from '../audit/audit.service.js';
 import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
@@ -116,6 +121,13 @@ export class InterviewsService {
   ): Promise<InterviewRow> {
     const t = tx;
     const settings = await this.cases.settings(t, projectId);
+    // A call or a visit needs the project's declared basis for that channel.
+    const channel = contactChannelOf(body.mode);
+    if (channel && !settings.contactBasis[channel])
+      throw new ConflictException({
+        code: 'NO_LAWFUL_BASIS',
+        message: `Declare the lawful basis for ${channel === 'phone' ? 'calling' : 'visiting'} this sample first (Settings → Privacy)`,
+      });
     const c = await t.lockCase(projectId, body.caseId);
     if (!c) throw new NotFoundException('Case not found');
     if (c.status === 'finalised' || c.status === 'withdrawn')

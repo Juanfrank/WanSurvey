@@ -41,9 +41,10 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
         sql`INSERT INTO tenants (id, name, slug) VALUES (${otherTenantId}, 'Second Agency', 'demo2')`,
       );
       await run(sql`
-        INSERT INTO projects (id, tenant_id, name, code, status, modes_enabled, timezone, languages)
+        INSERT INTO projects (id, tenant_id, name, code, status, modes_enabled, timezone, languages, settings)
         VALUES (${projectId}, ${tenantId}, 'Household Survey 2026', 'HH2026', 'active',
-                ${JSON.stringify(['CATI', 'CAPI', 'CAWI', 'PAPI'])}, 'America/Lima', ${JSON.stringify(['es'])})`);
+                ${JSON.stringify(['CATI', 'CAPI', 'CAWI', 'PAPI'])}, 'America/Lima', ${JSON.stringify(['es'])},
+                ${JSON.stringify({ contactBasis: { phone: 'public_task', visit: 'public_task' } })})`);
       await run(sql`
         INSERT INTO projects (id, tenant_id, name, code, status)
         VALUES (${uuidv7()}, ${otherTenantId}, 'Business Panel', 'BIZ', 'active')`);

@@ -77,6 +77,16 @@ OpenStreetMap geocoding) and say nothing of those that are off. The text is in
 (legal basis, retention periods, transfers and the authority to complain to depend on the
 country) before it is published. The legal basis of each survey is a project setting.
 
+## Lawful basis for contacting people
+
+Before calling or visiting, a project declares why it may contact its sample (Settings → Privacy:
+consent, legitimate interest, contract or public task), one for telephone and one for visits;
+e-mail and SMS have theirs in the web settings. Without it the call queue, the start of a call or
+visit interview and the download to a tablet answer 409 `NO_LAWFUL_BASIS`. **After updating, set it
+in every project already in the field**, or its interviewers are stopped. Agree the choice with the
+institution's legal area; research and official statistics may rest on a public task, marketing
+usually does not.
+
 ## Information notice
 
 Each project can have an information notice (Settings → Privacy): who answers for the data, what

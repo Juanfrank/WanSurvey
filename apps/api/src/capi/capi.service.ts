@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  type OnModuleInit,
+} from '@nestjs/common';
 import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
@@ -53,6 +58,11 @@ export class CapiService implements OnModuleInit {
    */
   async checkout(t: InterviewsTx, ctx: AuthContext, projectId: string, body: CheckoutBody) {
     const settings = await this.cases.settings(t, projectId);
+    if (!settings.contactBasis.visit)
+      throw new ConflictException({
+        code: 'NO_LAWFUL_BASIS',
+        message: 'Declare the lawful basis for visiting this sample first (Settings → Privacy)',
+      });
     const projectName = await t.projectName(projectId);
     if (projectName === null) throw new NotFoundException('Project not found');
     // Only questionnaires fielded face to face (Q1).

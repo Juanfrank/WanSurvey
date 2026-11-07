@@ -68,7 +68,9 @@ export const get = (s: Session, path: string) => s.agent.get(`/api/v1${path}`);
 
 /** Sets the project's settings document. */
 export async function setSettings(owner: Owner, projectId: string, settings: object) {
-  await sql`UPDATE projects SET settings = ${JSON.stringify(settings)} WHERE id = ${projectId}`.execute(
+  // Tests contact the sample unless they say otherwise: the lawful basis is declared for them.
+  const withBasis = { contactBasis: { phone: 'consent', visit: 'consent' }, ...settings };
+  await sql`UPDATE projects SET settings = ${JSON.stringify(withBasis)} WHERE id = ${projectId}`.execute(
     owner,
   );
 }

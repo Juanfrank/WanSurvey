@@ -63,7 +63,7 @@ export async function createTenant(owner: Owner, slug = unique('t')) {
 
 export async function createProject(owner: Owner, tenantId: string, code = unique('P')) {
   const id = randomUUID();
-  await sql`INSERT INTO projects (id, tenant_id, name, code) VALUES (${id}, ${tenantId}, ${code}, ${code})`.execute(
+  await sql`INSERT INTO projects (id, tenant_id, name, code, settings) VALUES (${id}, ${tenantId}, ${code}, ${code}, ${JSON.stringify({ contactBasis: { phone: 'consent', visit: 'consent' } })})`.execute(
     owner,
   );
   return id;

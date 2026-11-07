@@ -1,5 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FUNCTION_KEYS, type AssignmentMode, type ProjectSettings } from '@wansurvey/schema';
+import {
+  FUNCTION_KEYS,
+  LAWFUL_BASES,
+  type AssignmentMode,
+  type LawfulBasis,
+  type ProjectSettings,
+} from '@wansurvey/schema';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -589,6 +595,48 @@ export function SettingsTab({ project }: { project: Project }) {
         <Tabs.Content value="privacy">
           {section(
             <>
+              <fieldset className="flex flex-col gap-2" data-testid="basis-settings">
+                <legend className="mb-1 font-medium">{t('cases.privacy.basisTitle')}</legend>
+                <p className="max-w-prose text-slate-600">{t('cases.privacy.basisHelp')}</p>
+                {(['phone', 'visit'] as const).map((ch) => (
+                  <label key={ch} className="flex flex-wrap items-center gap-2">
+                    <span className="w-48">
+                      {t(`cases.privacy.basis${ch === 'phone' ? 'Phone' : 'Visit'}`)}
+                    </span>
+                    <select
+                      className={`${controlCls} w-auto`}
+                      value={form.contactBasis[ch] ?? ''}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          contactBasis: {
+                            ...form.contactBasis,
+                            [ch]: (e.target.value || null) as LawfulBasis | null,
+                          },
+                        })
+                      }
+                    >
+                      <option value="">
+                        {t(
+                          ch === 'phone'
+                            ? 'cases.privacy.basisNone'
+                            : 'cases.privacy.basisNoneVisit',
+                        )}
+                      </option>
+                      {LAWFUL_BASES.map((b) => (
+                        <option key={b} value={b}>
+                          {t(`cawi.settings.bases.${b}`)}
+                        </option>
+                      ))}
+                    </select>
+                    {form.contactBasis[ch] === null ? (
+                      <span role="alert" className="text-sm font-medium text-amber-ink-900">
+                        {t('cases.privacy.basisMissing')}
+                      </span>
+                    ) : null}
+                  </label>
+                ))}
+              </fieldset>
               <fieldset className="flex flex-col gap-2" data-testid="retention-settings">
                 <legend className="mb-1 font-medium">{t('cases.privacy.retentionTitle')}</legend>
                 <label className="flex items-center gap-2">

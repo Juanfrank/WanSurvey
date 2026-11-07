@@ -94,6 +94,7 @@ export async function loadSetup(adminUrl: string, o: LoadOptions): Promise<LoadU
     };
     const settings = {
       assignmentMode: 'assigned',
+      contactBasis: { phone: 'public_task', visit: 'public_task' },
       cati: { callingHours: { from: '00:00', to: '00:00' }, maxAttempts: 3 },
     };
     await db.transaction().execute(async (tx: Tx) => {
