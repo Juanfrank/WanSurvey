@@ -131,6 +131,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
   only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
   account menu and the foot of web surveys. The text needs the institution's legal review.
+- **Legal and compliance review** (`docs/legal-risk-review.md`): what can bring civil, penal or
+  administrative liability to the owner, manager or contracting party, by priority, with the
+  evidence in the code, what to do and who does it.
 
 ### Fixed
 
@@ -142,6 +145,10 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   because they were views under the row-level security of the organisation's tables; a joined
   query, such as the SQL export, came back empty. They are tables now, filled like the rest.
 - The theme test of the browser suite waits for the sign-in page before checking it.
+- The Privacy Policy no longer says that web surveys record the device position (only interviews
+  with an interviewer do, when the project turns it on) nor that every project has a retention
+  period (none is set by default); it also informs staff about position, voice and quality
+  indicators.
 
 ## [0.1.0-alpha.19] - 2026-11-05
 

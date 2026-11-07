@@ -168,7 +168,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
             'Sus respuestas al cuestionario.',
             'Los datos de contacto y de la muestra que la organización ya tenía (por ejemplo nombre, teléfono, correo, dirección, región), que se usan para localizarle, para personalizar la encuesta y para saber a quién corresponde cada respuesta.',
             'Datos del propio trabajo de campo: fecha y hora, duración, resultado de cada intento de llamada o visita, idioma, y un identificador del navegador o dispositivo para que pueda continuar donde lo dejó.',
-            'En encuestas web, si el proyecto lo pide y su navegador lo permite, la posición aproximada del dispositivo al empezar y al terminar.',
+            'En entrevistas con entrevistador, si el proyecto lo activa, la posición del dispositivo del entrevistador al empezar y al terminar la entrevista, que indica dónde se hizo. Las encuestas web no registran la posición.',
             'En encuestas por correo, si abrió el mensaje y si pulsó el enlace. En SMS, si respondió con una palabra de baja.',
             'Si el proyecto lo activa y usted lo acepta al inicio, la grabación de audio de la entrevista presencial.',
             'Señales de calidad calculadas a partir de la entrevista (velocidad, respuestas repetidas, coincidencias entre entrevistas) para que un revisor detecte entrevistas dudosas. No se usan para decidir nada sobre usted.',
@@ -181,6 +181,8 @@ export function privacyPage(f: Facts, es: boolean): Page {
             [
               'Nombre, correo y rol. La contraseña se guarda solo de forma irreversible (hash Argon2id) y el segundo factor, cifrado.',
               'Datos de sesión: dirección IP y navegador, para proteger la cuenta y registrar los accesos.',
+              'Si el proyecto lo activa, la posición de su dispositivo al empezar y al terminar cada entrevista presencial y, si activa la grabación de audio, su voz durante la entrevista. El proyecto debe avisarle antes.',
+              'Indicadores de calidad de su trabajo (tiempos, patrones de respuesta, coincidencias con otras entrevistas y una puntuación de riesgo) que un revisor usa para decidir qué entrevistas revisar. Ninguna decisión sobre usted se toma de forma automática por este indicador.',
               'Un registro de auditoría, que solo se puede ampliar, de las acciones importantes: quién hizo qué y cuándo (inicios de sesión, cambios de roles, publicaciones, exportaciones, consulta de datos personales).',
             ],
             f.services.microsoftSignIn,
@@ -213,6 +215,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
               [
                 'Las personas de la organización que necesitan los datos para su trabajo, según su rol. Los datos personales aparecen ocultos salvo para quien tiene permiso expreso, y cada consulta queda registrada.',
                 'Los proveedores que alojan la aplicación y envían correos, que tratan los datos por encargo y solo para ese fin.',
+                'Si el personal activa las notificaciones del navegador, el servicio de notificaciones de su navegador (Google, Apple o Mozilla) las entrega; el texto es genérico y no contiene datos personales.',
               ],
               f.services.sms,
               'El proveedor de mensajes SMS, que recibe el número de teléfono y el texto del mensaje.',
@@ -228,7 +231,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
           id: 'retention',
           title: '8. Cuánto tiempo se conservan',
           items: [
-            'Cada proyecto fija un plazo tras el cual, cada noche, los casos terminados pierden sus datos personales. Las respuestas que no son personales se conservan para las estadísticas.',
+            'La organización puede fijar en cada proyecto un plazo tras el cual, cada noche, los casos terminados pierden sus datos personales. Si no lo fija, los datos se conservan hasta que la organización los borre. Las respuestas que no son personales se conservan para las estadísticas.',
             'Las grabaciones de audio, si existen, se borran a los 90 días de la revisión de la entrevista salvo que el proyecto fije otro plazo.',
             'El registro de auditoría se conserva el tiempo que la organización determine, porque sirve para demostrar quién accedió a qué.',
             'Una solicitud de no ser contactado se guarda para respetarla durante el plazo que fije el proyecto; guardamos para ello solo el teléfono o el correo, no sus respuestas.',
@@ -298,7 +301,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
           'Your answers to the questionnaire.',
           'Contact and sample data the organisation already held (for example name, phone, e-mail, address, region), used to reach you, to personalise the survey and to know whom each answer belongs to.',
           'Fieldwork data: date and time, duration, the result of each call or visit attempt, language, and a browser or device identifier so you can continue where you left off.',
-          'In web surveys, if the project asks for it and your browser allows it, the approximate position of the device at the start and the end.',
+          'In interviews with an interviewer, if the project turns it on, the position of the interviewer’s device at the start and the end of the interview, which shows where it took place. Web surveys do not record position.',
           'In e-mail surveys, whether you opened the message and whether you clicked the link. In SMS, whether you replied with a stop word.',
           'If the project turns it on and you agree at the start, an audio recording of the face-to-face interview.',
           'Quality signals computed from the interview (speed, repeated answers, matches between interviews) so a reviewer can spot doubtful interviews. They are not used to decide anything about you.',
@@ -311,6 +314,8 @@ export function privacyPage(f: Facts, es: boolean): Page {
           [
             'Name, e-mail and role. The password is kept only in irreversible form (Argon2id hash) and the second factor encrypted.',
             'Session data: IP address and browser, to protect the account and record access.',
+            'If the project turns it on, the position of your device at the start and the end of each face-to-face interview and, if it turns audio recording on, your voice during the interview. The project must tell you beforehand.',
+            'Quality indicators about your work (timing, answer patterns, matches with other interviews and a risk score) that a reviewer uses to decide which interviews to check. No decision about you is taken automatically from this indicator.',
             'An audit log, which can only be added to, of the important actions: who did what and when (sign-ins, role changes, publications, exports, views of personal data).',
           ],
           f.services.microsoftSignIn,
@@ -343,6 +348,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
             [
               'People in the organisation who need the data for their work, by role. Personal data is hidden except for those with explicit permission, and every view is logged.',
               'The providers that host the application and send e-mail, who handle the data on its behalf and only for that purpose.',
+              'If staff turn on browser notifications, the notification service of their browser (Google, Apple or Mozilla) delivers them; the text is generic and holds no personal data.',
             ],
             f.services.sms,
             'The SMS provider, which receives the phone number and the text of the message.',
@@ -358,7 +364,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
         id: 'retention',
         title: '8. How long it is kept',
         items: [
-          'Each project sets a period after which, every night, finished cases lose their personal data. Answers that are not personal are kept for statistics.',
+          'The organisation can set in each project a period after which, every night, finished cases lose their personal data. If it sets none, the data is kept until the organisation deletes it. Answers that are not personal are kept for statistics.',
           'Audio recordings, if any, are deleted 90 days after the interview is reviewed unless the project sets another period.',
           'The audit log is kept as long as the organisation decides, because it shows who accessed what.',
           'A request not to be contacted is kept to be honoured for the period the project sets; only the phone number or e-mail is kept for it, not your answers.',
