@@ -174,6 +174,12 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByLabel('Intentos por caso').fill('1');
   await page.getByRole('button', { name: 'Guardar configuración' }).click();
   await expect(page.getByText('Configuración guardada.')).toBeVisible();
+  // Nobody is called until the project says on what basis it may contact the sample.
+  await page.getByRole('tab', { name: 'Privacidad', exact: true }).click();
+  await expect(page.getByText(/No hay base declarada para este canal/).first()).toBeVisible();
+  await page.getByLabel('Llamadas telefónicas').selectOption({ label: 'Misión pública' });
+  await page.getByRole('button', { name: 'Guardar configuración' }).click();
+  await expect(page.getByText('Configuración guardada.')).toBeVisible();
 
   // 5. The interviewer, in their own browser, lands on their cases and calls.
   const { ctx: ivCtx, page: iv } = await newBrowser(browser);
