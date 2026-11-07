@@ -23,6 +23,7 @@ test('the information notice is written in the settings and asked before the fir
   const days = page.getByRole('spinbutton', { name: /Remove personal data this many days/ });
   await days.fill('');
   await expect(page.getByText(/No period is set/)).toBeVisible();
+  await shot(page, 'settings-privacy-warning', { fullPage: true });
   await days.fill('365');
   await expect(page.getByText(/No period is set/)).toHaveCount(0);
 

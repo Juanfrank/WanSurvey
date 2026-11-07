@@ -380,7 +380,7 @@ export function RespondentPage({ token }: { token: string }) {
             </h2>
             <p className="max-w-prose whitespace-pre-line">{payload.notice.text}</p>
             <p>
-              <a href="/privacy" target="_blank" rel="noopener noreferrer">
+              <a className="underline" href="/privacy" target="_blank" rel="noopener noreferrer">
                 {t.privacy}
               </a>
             </p>
