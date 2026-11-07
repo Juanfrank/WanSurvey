@@ -223,7 +223,7 @@ export interface CawiTx extends InterviewsTx {
     tokenHash: string;
     tokenEnc: string;
     language: string;
-  }): Promise<void>;
+  }): Promise<string>;
 
   // Dispatch
   /** Queued invitations and due reminders, leased until `leaseUntil` (others skip them). */
@@ -694,11 +694,13 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
   }
 
   async insertOpenInvitation(v: Parameters<CawiTx['insertOpenInvitation']>[0]) {
+    const id = randomUUID();
     await ksql`
       INSERT INTO dbo.invitations (id, tenant_id, project_id, questionnaire_id, token_hash,
         token_enc, language, status, sent_at)
-      VALUES (${randomUUID()}, ${this.mten}, ${v.projectId}, ${v.questionnaireId}, ${v.tokenHash},
+      VALUES (${id}, ${this.mten}, ${v.projectId}, ${v.questionnaireId}, ${v.tokenHash},
         ${v.tokenEnc}, ${v.language}, 'sent', SYSDATETIMEOFFSET())`.execute(this.mctx);
+    return id;
   }
 
   async leaseBatch(now: Date, limit: number, leaseUntil: Date) {

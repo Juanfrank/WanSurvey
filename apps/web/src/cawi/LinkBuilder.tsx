@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -108,6 +108,7 @@ export function LinkBuilder({
   baseUrl,
   onQueryChange,
   segments = true,
+  shortLink = false,
 }: {
   projectId: string;
   questionnaireId: string;
@@ -116,6 +117,8 @@ export function LinkBuilder({
   /** Receives the query string as it is built, for addresses made elsewhere (every personal link). */
   onQueryChange?(query: string): void;
   segments?: boolean;
+  /** Offers a short link that keeps the answers on the server (the open link only). */
+  shortLink?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const uid = useId();
@@ -144,6 +147,13 @@ export function LinkBuilder({
   const [rows, setRows] = useState<Row[]>([]);
   const [next, setNext] = useState(1);
   const [copied, setCopied] = useState('');
+  const short = useMutation({
+    mutationFn: (answers: Record<string, string>) =>
+      api<{ url: string }>(`/projects/${projectId}/open-link/prefilled`, {
+        method: 'POST',
+        body: { answers },
+      }),
+  });
   const used = new Set(rows.map((r) => r.param));
   const free = questions.filter((q) => !used.has(q.param));
   const problems = rows.map((r) => {
@@ -307,6 +317,50 @@ export function LinkBuilder({
                 </span>
               </div>
               <p className="text-xs text-slate-600">{t('cawi.builder.hidden')}</p>
+            </div>
+          ) : null}
+
+          {shortLink && rows.length > 0 && url ? (
+            <div className="flex flex-col gap-1 border-t border-slate-200 pt-3">
+              <span className="font-medium">{t('cawi.builder.shortTitle')}</span>
+              <p className="max-w-prose text-xs text-slate-600">{t('cawi.builder.shortHelp')}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={smallBtn}
+                  disabled={short.isPending || problems.some(Boolean) || rows.some((r) => !r.value)}
+                  onClick={() =>
+                    short.mutate(Object.fromEntries(rows.map((r) => [r.param, r.value])))
+                  }
+                >
+                  {t('cawi.builder.shortMake')}
+                </button>
+                {short.data ? (
+                  <>
+                    <code
+                      className="break-all rounded bg-slate-100 p-1 text-xs"
+                      data-testid="short-url"
+                    >
+                      {short.data.url}
+                    </code>
+                    <button
+                      type="button"
+                      className={smallBtn}
+                      onClick={() => void copy(short.data.url, 'short')}
+                    >
+                      {t('cawi.builder.copy')}
+                    </button>
+                    <span role="status" className="text-xs text-emerald-ink-800">
+                      {copied === 'short' ? t('cawi.builder.copied') : ''}
+                    </span>
+                  </>
+                ) : null}
+                {short.isError ? (
+                  <span role="alert" className="text-xs text-red-700">
+                    {t('cawi.builder.shortError')}
+                  </span>
+                ) : null}
+              </div>
             </div>
           ) : null}
 

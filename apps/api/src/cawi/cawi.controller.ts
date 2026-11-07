@@ -14,7 +14,13 @@ import { z } from 'zod';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CAWI_REPO, type CawiRepo } from './cawi-repo.js';
-import { CawiService, OpenLinkBody, TemplateBody, WaveBody } from './cawi.service.js';
+import {
+  CawiService,
+  OpenLinkBody,
+  PrefilledLinkBody,
+  TemplateBody,
+  WaveBody,
+} from './cawi.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
 const TEMPLATES = ['email.templates', 'cawi.waves'] as const;
@@ -126,5 +132,21 @@ export class CawiController {
     return this.repo.inTenant(ctx.tenantId, async (t) => ({
       link: await this.cawi.setOpenLink(t, projectId, body),
     }));
+  }
+
+  /**
+   * For an outside system or a person: the answers already known, as plain values, give back
+   * a short link that starts the survey with them (confirmed, collected or only kept, as each
+   * question's prefill mode says).
+   */
+  @Post('open-link/prefilled')
+  @RequirePermission('cawi.waves', PERM)
+  @ApiBody({ schema: z.toJSONSchema(PrefilledLinkBody) as object })
+  prefilledLink(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body(new ZodPipe(PrefilledLinkBody)) body: z.infer<typeof PrefilledLinkBody>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) => this.cawi.prefilledLink(t, projectId, body));
   }
 }

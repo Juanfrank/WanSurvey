@@ -113,6 +113,11 @@ export const cawiEn = {
     result: 'Link',
     copy: 'Copy',
     copyOf: 'Copy the link of {{name}}',
+    shortTitle: 'Short link, nothing in the address',
+    shortHelp:
+      'Makes a link that already holds these answers, kept on our side: the respondent sees nothing but a short address. Each press makes a new link. A system can do the same by sending the answers as plain JSON (see the API).',
+    shortMake: 'Make short link',
+    shortError: 'Could not make the link.',
     copied: 'Copied.',
     test: 'Try it',
     hidden:
@@ -262,6 +267,11 @@ export const cawiEs: CawiCatalogue = {
     result: 'Enlace',
     copy: 'Copiar',
     copyOf: 'Copiar el enlace de {{name}}',
+    shortTitle: 'Enlace corto, sin datos en la dirección',
+    shortHelp:
+      'Crea un enlace que ya guarda estas respuestas de nuestro lado: quien responde solo ve una dirección corta. Cada vez que lo pulsas se crea un enlace nuevo. Un sistema externo puede hacer lo mismo enviando las respuestas como JSON normal (ver la API).',
+    shortMake: 'Crear enlace corto',
+    shortError: 'No se pudo crear el enlace.',
     copied: 'Copiado.',
     test: 'Probarlo',
     hidden:

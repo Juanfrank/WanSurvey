@@ -74,6 +74,15 @@ export const OpenLinkBody = z.strictObject({
   questionnaireId: z.uuid().optional(),
 });
 
+/** Answers known beforehand, by the link parameter of the question they feed. */
+export const PrefilledLinkBody = z.strictObject({
+  answers: z
+    .record(z.string().min(1).max(64), z.union([z.string().max(500), z.number(), z.boolean()]))
+    .refine((a) => Object.keys(a).length > 0 && Object.keys(a).length <= 50, {
+      message: 'Between 1 and 50 answers',
+    }),
+});
+
 export const WebhookBody = z.object({
   events: z
     .array(
@@ -555,6 +564,53 @@ export class CawiService implements OnModuleInit {
     return this.openLink(t, projectId);
   }
 
+  /**
+   * A short link of the open link's questionnaire with the answers already given, written as
+   * plain values (no URL encoding): the interview is created with them kept as if they had
+   * come in the address, so nothing personal is visible in the link.
+   */
+  async prefilledLink(t: CawiTx, projectId: string, body: z.infer<typeof PrefilledLinkBody>) {
+    const open = await t.openLinkOf(projectId);
+    if (!open || !open.active)
+      throw new ConflictException({ code: 'NOT_FOUND', message: 'There is no active open link' });
+    const target = await this.startTarget(t, projectId, open.questionnaireId);
+    const compiled = target.version.compiled;
+    const known = new Set<string>();
+    for (const n of compiled.nodes)
+      if (n.kind === 'question') {
+        const name = (n.def as { urlParam?: string }).urlParam;
+        if (name) known.add(name);
+      }
+    const params: Record<string, string> = {};
+    const unknown: string[] = [];
+    for (const [k, v] of Object.entries(body.answers)) {
+      if (!known.has(k)) unknown.push(k);
+      else params[k] = String(v).slice(0, 500);
+    }
+    if (unknown.length)
+      throw new BadRequestException({
+        code: 'UNKNOWN_PARAM',
+        message: `No question takes: ${unknown.join(', ')}. Available: ${[...known].join(', ') || 'none'}`,
+      });
+    const { token, tokenHash, tokenEnc } = this.newToken();
+    const language = compiled.questionnaire.defaultLanguage;
+    const id = await t.insertOpenInvitation({
+      projectId,
+      questionnaireId: target.questionnaireId,
+      tokenHash,
+      tokenEnc,
+      language,
+    });
+    await this.createInterview(
+      t,
+      { id, projectId, caseId: null, language } as unknown as InvitationRow,
+      `pending-${id}`,
+      target.version,
+      params,
+    );
+    return { url: this.surveyUrl(token), answers: Object.keys(params) };
+  }
+
   // -------------------------------------------------------------------------
   // Dispatch (called by the dispatcher, per organisation)
   // -------------------------------------------------------------------------
@@ -1018,6 +1074,7 @@ export class CawiService implements OnModuleInit {
     inv: InvitationRow,
     deviceId: string,
     version: { id: string; version: number; compiled: CompiledQuestionnaire },
+    params?: Record<string, string>,
   ) {
     let sample: Record<string, unknown> = {};
     if (inv.caseId) {
@@ -1037,12 +1094,13 @@ export class CawiService implements OnModuleInit {
       interviewerId: null,
       language: inv.language,
       // Sealed as the case's personal fields are (`InterviewsService.contextOf` opens it).
-      context: Object.keys(sample).length
-        ? {
-            case: {},
-            casePii: encryptField(JSON.stringify(sample), this.config.ENCRYPTION_KEY),
-          }
-        : { case: {} },
+      context: {
+        case: {},
+        ...(Object.keys(sample).length
+          ? { casePii: encryptField(JSON.stringify(sample), this.config.ENCRYPTION_KEY) }
+          : {}),
+        ...(params ? { params } : {}),
+      },
       deviceId,
     });
     // The interview and the start time in one update of the invitation.

@@ -349,6 +349,57 @@ describe.skipIf(!configured)('SQL Server: web surveys by e-mail over HTTP', () =
     ).toBe(404);
   });
 
+  it('a short link carries answers written as plain values, nothing visible in the address', async () => {
+    const withParam = {
+      ...definition,
+      id: 'WEBP',
+      sections: [
+        {
+          id: 'S',
+          title: { es: 'S' },
+          items: [
+            {
+              kind: 'question',
+              id: 'NOMBRE',
+              name: 'NOMBRE',
+              type: 'text',
+              urlParam: 'nombre',
+              text: { es: '¿Y su nombre?' },
+            },
+            { kind: 'question', id: 'AGE', name: 'AGE', type: 'numeric', text: { es: '¿Edad?' } },
+          ],
+        },
+      ],
+    };
+    const q2 = await createQuestionnaire(t.owner, tenant.id, project, {
+      definition: withParam,
+      publish: true,
+    });
+    await put(pm, `/projects/${project}/open-link`, { active: true, questionnaireId: q2 });
+    const bad = await post(pm, `/projects/${project}/open-link/prefilled`, {
+      answers: { otro: 'x' },
+    });
+    expect(bad.status).toBe(400);
+    expect(JSON.stringify(bad.body)).toContain('nombre');
+    const made = await post(pm, `/projects/${project}/open-link/prefilled`, {
+      answers: { nombre: 'María José & Ñ' },
+    });
+    expect(made.status, JSON.stringify(made.body)).toBe(201);
+    expect(made.body.url).toMatch(/^http:\/\/survey\.test\/s\/[A-Za-z0-9_-]+$/);
+    const token = (made.body.url as string).split('/s/')[1];
+    const s = await api().get(`/api/v1/public/s/${token}?device=short-browser-1`);
+    expect(s.status).toBe(200);
+    expect(s.body.context.params).toEqual({ nombre: 'María José & Ñ' });
+    // Another visit, even with another value in the address, keeps what the link had.
+    const again = await api().get(`/api/v1/public/s/${token}?device=short-browser-2&nombre=Otro`);
+    expect(again.body.context.params).toEqual({ nombre: 'María José & Ñ' });
+    await put(pm, `/projects/${project}/open-link`, { active: false });
+    expect(
+      (await post(pm, `/projects/${project}/open-link/prefilled`, { answers: { nombre: 'x' } }))
+        .status,
+    ).toBe(409);
+  });
+
   it('a links-only wave makes a personal link per case, e-mail or not, and sends nothing', async () => {
     const ids = await addCases(3, 'LNK');
     // One case without any e-mail still gets its link.

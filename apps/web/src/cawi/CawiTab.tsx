@@ -766,7 +766,12 @@ function OpenLinkSection({
               {l.url}
             </a>
           </p>
-          <LinkBuilder projectId={projectId} questionnaireId={questionnaireId} baseUrl={l.url} />
+          <LinkBuilder
+            projectId={projectId}
+            questionnaireId={questionnaireId}
+            baseUrl={l.url}
+            shortLink
+          />
         </>
       ) : null}
     </section>
