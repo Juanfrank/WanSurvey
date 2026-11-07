@@ -261,7 +261,9 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByRole('button', { name: 'Crear difusión' }).click();
   await page.getByRole('button', { name: 'Generar los enlaces de Enlaces sede Centro' }).click();
   const links = page.getByTestId('wave-links');
-  await links.getByLabel('Agregar a todos los enlaces (opcional)').fill('sede=3');
+  await links
+    .getByLabel('Otros parámetros para todos los enlaces (avanzado, opcional)')
+    .fill('sede=3');
   const linkText = await links.locator('[data-link]').first().textContent();
   const url = linkText!.match(/http\S+?\?sede=3/)![0];
   const phone = await newBrowser(browser, true);
