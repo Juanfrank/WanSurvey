@@ -4,6 +4,7 @@ import type { Me } from '../api.js';
 import { LANGUAGES, setLanguage } from '../i18n.js';
 import { THEMES, useTheme, type ThemePref } from '../theme.js';
 import { Notifications } from './Notifications.js';
+import { InfoLinks } from './ui.js';
 import { ChevronDownIcon, LogoutIcon } from './icons.js';
 
 /** Up to two initials from a person's name, or the first letter of their e-mail. */
@@ -149,6 +150,7 @@ export function AccountMenu({
           </select>
         </label>
         <Notifications />
+        <InfoLinks className="border-t border-slate-200 pt-3" />
       </div>
     </div>
   );

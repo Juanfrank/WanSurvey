@@ -106,6 +106,21 @@ export function QueryState({
   return <>{children}</>;
 }
 
+/** Links to the About and Privacy pages (public, so also before signing in). */
+export function InfoLinks({ className = '' }: { className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <nav aria-label={t('info.about')} className={`flex flex-wrap gap-4 text-sm ${className}`}>
+      <a className="text-indigo-ink-700 underline" href="/about">
+        {t('info.about')}
+      </a>
+      <a className="text-indigo-ink-700 underline" href="/privacy">
+        {t('info.privacy')}
+      </a>
+    </nav>
+  );
+}
+
 export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
@@ -118,6 +133,7 @@ export function AuthShell({ title, children }: { title: string; children: ReactN
           <h1 className="mb-4 text-xl font-bold">{title}</h1>
           {children}
         </Card>
+        <InfoLinks className="mt-4 justify-center" />
       </div>
     </main>
   );

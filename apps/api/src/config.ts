@@ -112,6 +112,13 @@ const Env = z.object({
    * itself from the zip, through Vite's proxy in development.
    */
   PUBLIC_URL: z.string().url().default('http://localhost:5173'),
+  /**
+   * The organisation that runs this installation, for the About and Privacy pages: who answers
+   * for the personal data (the controller) and where people write about it. Left out, the pages
+   * say the installation's administrator holds them.
+   */
+  ORG_NAME: z.string().max(200).optional(),
+  PRIVACY_CONTACT: z.string().max(200).optional(),
   /** Microsoft identity platform host; overridable for tests or sovereign clouds. */
   ENTRA_AUTHORITY_HOST: z.string().url().default('https://login.microsoftonline.com'),
   /**

@@ -189,6 +189,8 @@ test('the theme follows the device until one is chosen', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/login');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  // The page loads lazily: check it once it is there.
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await expectAccessible(page);
   await shot(page, 'dark-login', { fullPage: false });
   await page.emulateMedia({ colorScheme: 'light' });

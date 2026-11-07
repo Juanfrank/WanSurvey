@@ -65,6 +65,16 @@
     "slotSetting": false
   },
   {
+    "name": "ORG_NAME",
+    "value": "",
+    "slotSetting": false
+  },
+  {
+    "name": "PRIVACY_CONTACT",
+    "value": "",
+    "slotSetting": false
+  },
+  {
     "name": "PUBLIC_SURVEY_URL",
     "value": "",
     "slotSetting": false

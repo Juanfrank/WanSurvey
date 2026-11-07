@@ -62,6 +62,21 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 - Redis holds only queues and pub/sub; it can be lost. Scheduled jobs are re-created when the worker starts, and a nightly recompute rebuilds the figures.
 - `ENCRYPTION_KEY` is backed up separately from the database backups.
 
+## About and Privacy pages
+
+`/about` and `/privacy` are public pages (no sign-in), linked from the sign-in page, the account
+menu and the foot of every web survey. They say what the application does with data, and they
+name the organisation that answers for it from two settings: `ORG_NAME` (the controller) and
+`PRIVACY_CONTACT` (an e-mail address or a postal address where people write about their data).
+Without them the pages say the organisation that runs the installation answers, and to write to
+the person who sent the invitation. **Set both before the first real survey.**
+
+The pages also name the outside services that are on (the SMS provider, Microsoft sign-in,
+OpenStreetMap geocoding) and say nothing of those that are off. The text is in
+`apps/web/src/about/content.ts`; **the institution's legal area should read it and agree it**
+(legal basis, retention periods, transfers and the authority to complain to depend on the
+country) before it is published. The legal basis of each survey is a project setting.
+
 ## Retention and data subject requests
 
 - Set **Settings → Personal data retention** per project (days after a case is finished). Each night the worker removes the personal data of older finished and withdrawn cases; answers that are not personal stay for statistics. Each case is recorded in the audit log (`case.anonymised`).

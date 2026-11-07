@@ -26,6 +26,7 @@ export const TEXT = {
     unsubscribeButton: 'Confirmar',
     unsubscribed: 'Listo: no recibirá más correos sobre esta encuesta.',
     start: 'Empezar la encuesta',
+    privacy: 'Política de Privacidad',
   },
   en: {
     loading: 'Loading the survey…',
@@ -49,6 +50,7 @@ export const TEXT = {
     unsubscribeButton: 'Confirm',
     unsubscribed: 'Done: you will not receive more e-mails about this survey.',
     start: 'Start the survey',
+    privacy: 'Privacy Policy',
   },
 };
 

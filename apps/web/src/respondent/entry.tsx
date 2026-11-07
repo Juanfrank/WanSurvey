@@ -52,7 +52,17 @@ function PublicApp() {
         </main>
       );
   }
-  return <Suspense fallback={null}>{page}</Suspense>;
+  return (
+    <>
+      <Suspense fallback={null}>{page}</Suspense>
+      {/* Anyone answering can read how their data is handled; a plain link, no extra code. */}
+      {route?.page === 'f' ? null : (
+        <footer style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
+          <a href="/privacy">{respondentText(respondentLang(navigator.language)).privacy}</a>
+        </footer>
+      )}
+    </>
+  );
 }
 
 export function startPublic() {

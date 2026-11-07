@@ -96,6 +96,18 @@ const unsubscribeRoute = createRoute({
   component: lazyRouteComponent(() => import('./respondent/RouterPages.js'), 'UnsubscribeRoute'),
 });
 
+// About and Privacy: public, so a person can read them before signing in or answering.
+const aboutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/about',
+  component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'AboutPage'),
+});
+const privacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/privacy',
+  component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'PrivacyPage'),
+});
+
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: AppLayout });
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: HomePage });
 const waitingRoute = createRoute({
@@ -275,6 +287,8 @@ const routeTree = rootRoute.addChildren([
   feedbackRoute,
   unsubscribeRoute,
   shareRoute,
+  aboutRoute,
+  privacyRoute,
   appRoute.addChildren([
     homeRoute,
     waitingRoute,

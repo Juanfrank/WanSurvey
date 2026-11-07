@@ -125,6 +125,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 - **Link with a value left for another system**: in the link builder, a question can be marked
   "filled in by another system"; the address then ends `?codigo=<codigo>` (also on every
   personal link of a "links only" outreach), and the system swaps the placeholder for each value.
+- **About and Privacy Policy pages** (`/about`, `/privacy`), public and in Spanish and English:
+  what the application is, and what data it handles about people who answer and people who use it,
+  why, who receives it, cookies and storage, retention, rights and security. They name the
+  organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
+  only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
+  account menu and the foot of web surveys. The text needs the institution's legal review.
 
 ### Fixed
 
@@ -135,6 +141,7 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisations, projects, instruments, versions, cases and people, or only part of the calendar,
   because they were views under the row-level security of the organisation's tables; a joined
   query, such as the SQL export, came back empty. They are tables now, filled like the rest.
+- The theme test of the browser suite waits for the sign-in page before checking it.
 
 ## [0.1.0-alpha.19] - 2026-11-05
 
