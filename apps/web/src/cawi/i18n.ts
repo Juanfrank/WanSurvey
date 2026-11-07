@@ -109,6 +109,9 @@ export const cawiEn = {
     textNote:
       'Free text, up to {{max}} characters. It travels in the address (browser history, forwarded messages): do not put sensitive personal data in it; for data of each person use personal links with the sample.',
     add: 'Add a question',
+    pending: 'Filled in by another system (the address ends ?{{param}}=<{{param}}>)',
+    pendingNote:
+      'The part between < > is a placeholder: the system that hands out the link replaces it with each value (already URL-encoded) before sending the person to it.',
     remove: 'Remove',
     result: 'Link',
     copy: 'Copy',
@@ -263,6 +266,9 @@ export const cawiEs: CawiCatalogue = {
     textNote:
       'Texto libre, hasta {{max}} caracteres. Viaja en la dirección (historial del navegador, mensajes reenviados): no pongas datos personales sensibles; para datos de cada persona usa enlaces personales con la muestra.',
     add: 'Agregar una pregunta',
+    pending: 'Lo completa otro sistema (la dirección termina en ?{{param}}=<{{param}}>)',
+    pendingNote:
+      'Lo que va entre < > es un marcador: el sistema que reparte el enlace lo cambia por cada valor (ya codificado para URL) antes de enviar a la persona.',
     remove: 'Quitar',
     result: 'Enlace',
     copy: 'Copiar',

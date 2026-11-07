@@ -109,10 +109,15 @@ export function valueProblem(q: ParamQuestion, value: string): string | null {
 }
 
 /** `param=value` pairs as a query string, each part encoded; pairs without a value are left out. */
-export function buildQuery(entries: { param: string; value: string }[]): string {
+export function buildQuery(entries: { param: string; value: string; pending?: boolean }[]): string {
   return entries
-    .filter((e) => e.param && e.value.trim() !== '')
-    .map((e) => `${encodeURIComponent(e.param)}=${encodeURIComponent(e.value.trim())}`)
+    .filter((e) => e.param && (e.pending || e.value.trim() !== ''))
+    .map((e) =>
+      // A pending value is left for whoever hands the link out (a system) to put in its place.
+      e.pending
+        ? `${encodeURIComponent(e.param)}=<${e.param}>`
+        : `${encodeURIComponent(e.param)}=${encodeURIComponent(e.value.trim())}`,
+    )
     .join('&');
 }
 
@@ -128,7 +133,7 @@ export function withQuery(url: string, query: string): string {
  */
 export function segmentLinks(
   base: string,
-  fixed: { param: string; value: string }[],
+  fixed: { param: string; value: string; pending?: boolean }[],
   segment: ParamQuestion,
   values: string[],
 ): { value: string; label: string; url: string }[] {

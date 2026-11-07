@@ -16,6 +16,8 @@ interface Row {
   key: number;
   param: string;
   value: string;
+  /** The value is put in by whoever uses the link (a system): the address ends `?param=<param>`. */
+  pending?: boolean;
 }
 
 /** The value box of one parameter, by what its question takes. */
@@ -158,7 +160,7 @@ export function LinkBuilder({
   const free = questions.filter((q) => !used.has(q.param));
   const problems = rows.map((r) => {
     const q = byParam.get(r.param);
-    return q ? valueProblem(q, r.value) : null;
+    return q && !r.pending ? valueProblem(q, r.value) : null;
   });
   const query = buildQuery(rows);
   const url = baseUrl ? withQuery(baseUrl, query) : null;
@@ -251,7 +253,7 @@ export function LinkBuilder({
                       </option>
                     ))}
                   </select>
-                  {q ? (
+                  {q && !r.pending ? (
                     <ValueField
                       q={q}
                       value={r.value}
@@ -261,6 +263,20 @@ export function LinkBuilder({
                       }
                     />
                   ) : null}
+                  <label className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={!!r.pending}
+                      onChange={(e) =>
+                        setRows(
+                          rows.map((x) =>
+                            x.key === r.key ? { ...x, pending: e.target.checked, value: '' } : x,
+                          ),
+                        )
+                      }
+                    />
+                    {t('cawi.builder.pending', { param: r.param })}
+                  </label>
                   <button
                     type="button"
                     className={smallBtn}
@@ -316,6 +332,11 @@ export function LinkBuilder({
                   {copied === 'url' ? t('cawi.builder.copied') : ''}
                 </span>
               </div>
+              {rows.some((r) => r.pending) ? (
+                <p className="text-xs text-slate-600" data-testid="pending-note">
+                  {t('cawi.builder.pendingNote')}
+                </p>
+              ) : null}
               <p className="text-xs text-slate-600">{t('cawi.builder.hidden')}</p>
             </div>
           ) : null}
@@ -328,7 +349,11 @@ export function LinkBuilder({
                 <button
                   type="button"
                   className={smallBtn}
-                  disabled={short.isPending || problems.some(Boolean) || rows.some((r) => !r.value)}
+                  disabled={
+                    short.isPending ||
+                    problems.some(Boolean) ||
+                    rows.some((r) => r.pending || !r.value)
+                  }
                   onClick={() =>
                     short.mutate(Object.fromEntries(rows.map((r) => [r.param, r.value])))
                   }

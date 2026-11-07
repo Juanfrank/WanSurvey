@@ -262,4 +262,31 @@ describe('the link builder', () => {
     const post = calls.find((c) => c.url.endsWith('/open-link/prefilled'))!;
     expect(JSON.parse(post.body!)).toEqual({ answers: { sede: '2' } });
   });
+
+  it('leaves a value for another system: the address ends with a placeholder', async () => {
+    mockApi();
+    const user = userEvent.setup();
+    const seen: string[] = [];
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <LinkBuilder
+          projectId="p"
+          questionnaireId="q"
+          baseUrl="https://x/o/abc"
+          onQueryChange={(s) => seen.push(s)}
+        />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /Agregar una pregunta|Add a question/ }),
+    );
+    const row = document.querySelector('[data-param-row="sede"]') as HTMLElement;
+    await user.click(within(row).getByRole('checkbox'));
+    expect(screen.getByTestId('builder-url').textContent).toBe('https://x/o/abc?sede=<sede>');
+    expect(seen.at(-1)).toBe('sede=<sede>');
+    expect(screen.getByTestId('pending-note')).toBeTruthy();
+    expect(buildQuery([{ param: 'codigo', value: '', pending: true }])).toBe('codigo=<codigo>');
+  });
 });
