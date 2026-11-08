@@ -50,8 +50,8 @@ export const casesEn = {
       'No period is set: personal data is kept until someone deletes it. Most data protection laws ask for a period tied to the purpose of the survey.',
     noticeTitle: 'Information notice',
     noticeHelp:
-      'Shown to the person before the first question, in every channel (web survey, call, visit): who answers for the data, what it is for, that taking part is voluntary, how to use their rights. Their answer and the version of the wording are kept with the interview. Leave it empty to ask for none. Agree the wording with your legal area.',
-    noticeText: 'Notice text',
+      'The notice is part of the questionnaire, as its first question: a consent text and the question that accepts or refuses (add it with the Information notice button of the designer). Translated, previewed, printed on paper and exported like any other item. A refusal ends the interview.',
+    noticeRequired: 'Do not publish a questionnaire that does not open with the information notice',
     retentionHelp:
       'Each night, finished and withdrawn cases older than this lose their personal sample fields, contacts, personal answers, notes and e-mail addresses. Recorded in the audit log.',
   },
@@ -590,8 +590,8 @@ export const casesEs: CasesCatalogue = {
       'No hay plazo: los datos personales se conservan hasta que alguien los borre. La mayoría de las leyes de protección de datos piden un plazo ligado a la finalidad de la encuesta.',
     noticeTitle: 'Aviso informativo',
     noticeHelp:
-      'Se muestra a la persona antes de la primera pregunta, en todos los canales (encuesta web, llamada, visita): quién es responsable de los datos, para qué se usan, que participar es voluntario y cómo ejercer sus derechos. Su respuesta y la versión del texto quedan con la entrevista. Déjelo vacío para no pedir ninguno. Acuerde el texto con su área jurídica.',
-    noticeText: 'Texto del aviso',
+      'El aviso es parte del cuestionario, como su primera pregunta: un texto de consentimiento y la pregunta que acepta o rechaza (agréguelo con el botón Aviso informativo del diseñador). Se traduce, se ve en la vista previa, se imprime en papel y se exporta como cualquier otro elemento. Un rechazo termina la entrevista.',
+    noticeRequired: 'No publicar un cuestionario que no empiece con el aviso informativo',
     retentionHelp:
       'Cada noche, los casos terminados o retirados más antiguos pierden sus campos personales, contactos, respuestas personales, notas y correos. Queda registrado en la bitácora.',
   },

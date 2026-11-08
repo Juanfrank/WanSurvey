@@ -327,6 +327,59 @@ describe.skipIf(!configured)('SQL Server: questionnaires over HTTP', () => {
     ).toEqual([1, 2]);
   });
 
+  it('refuses to publish a questionnaire without an information notice when the project requires one', async () => {
+    const proj = await createProject(t.owner, tenant.id);
+    const at = `/api/v1/projects/${proj}/questionnaires`;
+    const withNotice = () => {
+      const d = small();
+      d.sections[0]!.items.unshift(
+        {
+          kind: 'static',
+          id: 'NOTICE_TEXT',
+          role: 'consent',
+          text: { en: 'We are the Institute.' },
+        },
+        {
+          kind: 'question',
+          id: 'NOTICE',
+          name: 'NOTICE_ACCEPT',
+          type: 'yesno',
+          text: { en: 'Do you agree to take part?' },
+          allowDK: false,
+          endIf: [{ when: 'NOTICE_ACCEPT == 2', disposition: 'REFUSAL' }],
+        },
+      );
+      return d;
+    };
+    const created = await post(pm, at, {
+      modes: ALL_MODES,
+      name: 'Sin aviso',
+      source: { kind: 'json', definition: small() },
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const url = `${at}/${created.body.id}`;
+    let rev = created.body.draftRevision as number;
+
+    // Not required: published as ever.
+    await sql`UPDATE projects SET settings = ${JSON.stringify({ notice: { required: true } })} WHERE id = ${proj}`.execute(
+      t.owner,
+    );
+    const check = await post(pm, `${url}/publish-check`, {});
+    expect(check.body.noticeMissing).toBe(true);
+    expect(check.body.ok).toBe(false);
+    const refused = await post(pm, `${url}/publish`, { baseRevision: rev });
+    expect(refused.status).toBe(422);
+    expect(refused.body.code).toBe('NOTICE_REQUIRED');
+
+    // With the notice (a consent text, then the question that refuses), it goes.
+    const edited = await put(pm, `${url}/draft`, { definition: withNotice(), baseRevision: rev });
+    expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+    rev = edited.body.draftRevision;
+    expect((await post(pm, `${url}/publish-check`, {})).body.noticeMissing).toBe(false);
+    const ok = await post(pm, `${url}/publish`, { baseRevision: rev });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+  });
+
   it('asks for an approval before publishing when the project says so: someone else, for the draft as it is', async () => {
     const proj = await createProject(t.owner, tenant.id);
     const at = `/api/v1/projects/${proj}/questionnaires`;

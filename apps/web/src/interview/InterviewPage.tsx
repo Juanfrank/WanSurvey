@@ -262,29 +262,6 @@ export function InterviewPage() {
         ) : null}
         <SaveBadge state={iv.save} />
       </header>
-      {iv.notice === 'ask' ? (
-        // No way round it: the notice is answered before the first question.
-        <Dialog title={t('interview.notice.title')} onClose={() => undefined}>
-          <div className="flex flex-col gap-4" data-testid="info-notice">
-            <p className="whitespace-pre-line">{payload.settings?.notice?.text}</p>
-            <div className="flex gap-3">
-              <Button onClick={() => iv.answerNotice(true)}>{t('interview.notice.yes')}</Button>
-              <Button variant="secondary" onClick={() => iv.answerNotice(false)}>
-                {t('interview.notice.no')}
-              </Button>
-            </div>
-          </div>
-        </Dialog>
-      ) : null}
-      {iv.notice === 'declined' ? (
-        <p
-          role="alert"
-          data-testid="notice-declined"
-          className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-amber-ink-900"
-        >
-          {t('interview.notice.declined')}
-        </p>
-      ) : null}
       {iv.audio === 'ask' ? (
         <Dialog title={t('interview.audio.title')} onClose={() => void iv.answerConsent(false)}>
           <div className="flex flex-col gap-4" data-testid="audio-consent">

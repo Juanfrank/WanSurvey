@@ -31,7 +31,7 @@ import {
   type QuestionnairesRepo,
   type QuestionnairesTx,
 } from './questionnaires-repo.js';
-import { checkDraft } from './publish-checks.js';
+import { checkDraft, hasNotice } from './publish-checks.js';
 import { questionsOf, rankSimilar, type QuestionSource } from './similar.js';
 import { QUESTIONNAIRE_STATES } from './state.js';
 import { trimUnderscores } from '../common/text.js';
@@ -336,13 +336,21 @@ export class QuestionnairesController {
   ) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
       const q = await this.questionnaire(t, projectId, qid);
-      const { check } = checkDraft(
+      const { check, questionnaire } = checkDraft(
         q.draft,
         await t.scenarios(qid),
         await t.previous(qid),
         body.mapping,
       );
-      return { ...check, draftRevision: q.draftRevision };
+      // The project asks for an information notice at the start, and the draft has none.
+      const noticeMissing =
+        !!questionnaire && (await t.noticeRequired(projectId)) && !hasNotice(questionnaire);
+      return {
+        ...check,
+        ok: check.ok && !noticeMissing,
+        noticeMissing,
+        draftRevision: q.draftRevision,
+      };
     });
   }
 
@@ -374,6 +382,12 @@ export class QuestionnairesController {
         previous,
         body.mapping,
       );
+      if (questionnaire && (await t.noticeRequired(projectId)) && !hasNotice(questionnaire))
+        throw new UnprocessableEntityException({
+          code: 'NOTICE_REQUIRED',
+          message:
+            'This project needs an information notice at the start of the questionnaire (a consent text followed by the question that accepts or refuses)',
+        });
       if (check.unchanged) {
         throw new ConflictException({
           code: 'NOTHING_TO_PUBLISH',

@@ -145,6 +145,9 @@ export function PublishDialog({
                       : t('designer.publish.compatible', { version: check.previousVersion })
                 }
               />
+              {check.noticeMissing ? (
+                <CheckLine ok={false} text={t('designer.publish.noticeMissing')} />
+              ) : null}
               {check.unchanged ? (
                 <CheckLine
                   ok={false}

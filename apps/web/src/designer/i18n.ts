@@ -111,6 +111,10 @@ export const designerEn = {
     addQuestionLabel: 'Add a question',
     addStructure: 'Structure',
     addStructureLabel: 'Add structure: a section, block, text…',
+    addNotice: 'Information notice',
+    addNoticeLabel: 'Add the information notice at the start of the questionnaire',
+    noticeAdded:
+      'Information notice added at the start: complete the organisation, the purpose and the contact.',
     pickType: 'Choose what to add',
     menu: 'Actions for {{name}}',
     menuAddQuestion: 'Add question below…',
@@ -770,6 +774,8 @@ export const designerEn = {
     breaking_one: '{{count}} change breaks compatibility: say what happens to existing data',
     breaking_other: '{{count}} changes break compatibility: say what happens to existing data',
     unchanged: 'Nothing changed since version {{version}}',
+    noticeMissing:
+      'This project needs the information notice at the start (use the Information notice button of the outline)',
     mappingTitle: 'Data from version {{version}}',
     mappingHelp:
       'Interviews already collected keep their version. Choose how their data lines up with the new one in merged exports.',
@@ -920,6 +926,10 @@ export const designerEs: DesignerCatalogue = {
     addQuestionLabel: 'Agregar una pregunta',
     addStructure: 'Estructura',
     addStructureLabel: 'Agregar estructura: una sección, bloque, texto…',
+    addNotice: 'Aviso informativo',
+    addNoticeLabel: 'Agregar el aviso informativo al inicio del cuestionario',
+    noticeAdded:
+      'Aviso informativo agregado al inicio: complete la organización, la finalidad y el contacto.',
     pickType: 'Elija qué agregar',
     menu: 'Acciones de {{name}}',
     menuAddQuestion: 'Agregar pregunta debajo…',
@@ -1590,6 +1600,8 @@ export const designerEs: DesignerCatalogue = {
     breaking_other:
       '{{count}} cambios rompen la compatibilidad: indique qué pasa con los datos existentes',
     unchanged: 'Nada cambió desde la versión {{version}}',
+    noticeMissing:
+      'Este proyecto exige el aviso informativo al inicio (use el botón Aviso informativo del esquema)',
     mappingTitle: 'Datos de la versión {{version}}',
     mappingHelp:
       'Las entrevistas ya recolectadas conservan su versión. Elija cómo se alinean sus datos con la nueva en las exportaciones combinadas.',

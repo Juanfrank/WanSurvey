@@ -27,10 +27,6 @@ export const TEXT = {
     unsubscribed: 'Listo: no recibirá más correos sobre esta encuesta.',
     start: 'Empezar la encuesta',
     privacy: 'Política de Privacidad',
-    noticeTitle: 'Antes de empezar',
-    noticeAccept: 'Entiendo y quiero participar',
-    noticeDecline: 'No deseo participar',
-    noticeDeclined: 'Gracias. No continuaremos con la encuesta ni le haremos preguntas.',
   },
   en: {
     loading: 'Loading the survey…',
@@ -55,10 +51,6 @@ export const TEXT = {
     unsubscribed: 'Done: you will not receive more e-mails about this survey.',
     start: 'Start the survey',
     privacy: 'Privacy Policy',
-    noticeTitle: 'Before you start',
-    noticeAccept: 'I understand and want to take part',
-    noticeDecline: 'I do not want to take part',
-    noticeDeclined: 'Thank you. We will not continue with the survey or ask you any questions.',
   },
 };
 

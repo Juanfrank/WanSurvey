@@ -236,6 +236,79 @@ export function sectionOf(draft: Draft, id: string): Section | null {
   return at && isSection(at.node) ? at.node : null;
 }
 
+const NOTICE_TEXT = {
+  es: 'Somos [su organización]. Esta encuesta es voluntaria: puede negarse a responder o dejarla en cualquier momento. Sus respuestas se usan solo para [finalidad de la encuesta] y se tratan según nuestra Política de Privacidad (/privacy). Puede pedir ver, corregir o borrar sus datos escribiendo a [contacto].',
+  en: 'We are [your organisation]. This survey is voluntary: you may refuse to answer or stop at any time. Your answers are used only for [purpose of the survey] and handled under our Privacy Policy (/privacy). You can ask to see, correct or delete your data by writing to [contact].',
+} as const;
+const NOTICE_ASK = {
+  es: '¿Entiende lo anterior y acepta participar?',
+  en: 'Do you understand the above and agree to take part?',
+} as const;
+const noticeIn = (lang: string, from: Record<'es' | 'en', string>) =>
+  lang in from ? from[lang as 'es' | 'en'] : from.en;
+
+/** Whether the draft opens with an information notice (a consent text, then the refusing question). */
+export function hasNotice(draft: Draft): boolean {
+  let consent = false;
+  let found: boolean | null = null;
+  const walk = (items: readonly unknown[]) => {
+    for (const raw of items) {
+      if (found !== null) return;
+      const it = raw as {
+        kind: string;
+        role?: string;
+        endIf?: { disposition?: string }[];
+        items?: unknown[];
+      };
+      if (it.kind === 'static' && it.role === 'consent') consent = true;
+      else if (it.kind === 'question')
+        found = consent && (it.endIf ?? []).some((e) => e.disposition === 'REFUSAL');
+      else if (Array.isArray(it.items)) walk(it.items);
+    }
+  };
+  for (const s of draft.sections ?? []) {
+    walk(s.items);
+    if (found !== null) break;
+  }
+  return found === true;
+}
+
+/**
+ * Puts the standard information notice at the very start: a consent text (to complete with the
+ * organisation, purpose and contact, in every language of the questionnaire) and the question
+ * that accepts or refuses; a refusal ends the interview as such.
+ */
+export function addNotice(draft: Draft): { draft: Draft; newId: string } {
+  let newId = '';
+  const next = edit(draft, (d) => {
+    const used = usedNames(d);
+    const langs = d.languages ?? ['en'];
+    const by = (from: Record<'es' | 'en', string>) =>
+      Object.fromEntries(langs.map((l) => [l, noticeIn(l, from)]));
+    if (!d.sections?.length) d.sections = [{ id: 'SEC_1', title: text(d, ''), items: [] }];
+    const textId = freshName(used, 'NOTICE_TEXT');
+    used.add(textId);
+    const askId = freshName(used, 'NOTICE');
+    used.add(askId);
+    const nameVar = freshName(used, 'NOTICE_ACCEPT');
+    used.add(nameVar);
+    newId = textId;
+    d.sections[0]!.items.unshift(
+      { kind: 'static', id: textId, role: 'consent', text: by(NOTICE_TEXT) },
+      {
+        kind: 'question',
+        id: askId,
+        name: nameVar,
+        type: 'yesno',
+        text: by(NOTICE_ASK),
+        allowDK: false,
+        endIf: [{ when: `${nameVar} == 2`, disposition: 'REFUSAL' }],
+      },
+    );
+  });
+  return { draft: next, newId };
+}
+
 export type NewKind =
   | { kind: 'question'; type: QuestionType }
   | { kind: 'static' }

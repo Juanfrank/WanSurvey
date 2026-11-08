@@ -38,14 +38,14 @@ export const AudioSettingsInput = AudioSettings.refine(
 export type AudioSettings = z.infer<typeof AudioSettings>;
 
 /**
- * The information notice shown before the first question, in every channel (who answers for the
- * data, what it is for, that taking part is voluntary, how to use one's rights). Its answer, with
- * the version of the wording, is kept as paradata of each interview. Empty: no notice is asked.
+ * Whether a questionnaire must carry an information notice before it can be published: a text with
+ * the role "consent" (who answers for the data, what it is for, that taking part is voluntary,
+ * how to use one's rights) followed by the question that accepts or refuses, which ends the
+ * interview as a refusal. The notice is an ordinary part of the questionnaire, so it is
+ * translated, previewed, printed on paper and exported as any other item.
  */
 export const NoticeSettings = z.object({
-  text: z.string().max(4000).default(''),
-  /** Raised whenever the wording changes, and kept with each answer given. */
-  version: z.number().int().min(1).max(10_000).default(1),
+  required: z.boolean().default(false),
 });
 export type NoticeSettings = z.infer<typeof NoticeSettings>;
 

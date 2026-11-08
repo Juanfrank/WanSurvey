@@ -30,6 +30,8 @@ export interface PublishCheckResult {
   breaking: BreakingChange[];
   mappingProblems: MappingProblem[];
   unchanged: boolean;
+  /** The project asks for an information notice at the start and the draft has none. */
+  noticeMissing?: boolean;
   previousVersion: number | null;
   draftRevision: number;
 }

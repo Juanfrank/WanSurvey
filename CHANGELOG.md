@@ -136,11 +136,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   interview of that channel starts and no case is downloaded to a device (409 `NO_LAWFUL_BASIS`),
   as e-mail and SMS already behaved. **Existing projects that call or visit are blocked until they
   declare it.**
-- **Information notice before the first question**, in every channel (project settings →
-  Privacy): the web survey shows it with "I understand and want to take part" / "I do not want to
-  take part"; interviewers on calls and visits get a dialog they cannot skip. The answer and the
-  version of the wording are kept as paradata of the interview; a new wording is asked again. A
-  declined web survey asks nothing.
+- **Information notice as part of the questionnaire**: the notice is the questionnaire's first
+  question, with the same look, language and engine as any other: a consent text and the question
+  that accepts or refuses, which ends the interview as a refusal. The designer adds the standard
+  pair with the **Information notice** button (to complete with the organisation, the purpose and
+  the contact, in every language). It is translated, previewed, printed on paper and exported like
+  any item, and its version is the questionnaire's. A project can **require** it (Settings →
+  Privacy): a questionnaire that does not open with it cannot be published
+  (`NOTICE_REQUIRED`, and the publish check says so).
 - **Retention period for new projects**: a new project starts with 365 days before the personal
   data of finished cases is removed, and the settings screen warns when no period is set. Existing
   projects are not changed.

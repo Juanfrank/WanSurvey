@@ -68,15 +68,14 @@ se arreglaron en esta revisión.
   idioma) que se muestre antes de la primera pregunta en web, aparezca como guion obligatorio en
   CATI/CAPI y se guarde con cada entrevista (como ya se hace con el audio). _Organización:_
   redactar el texto con su área jurídica.
-- **Hecho (2026-11-07).** Ajuste de proyecto «Aviso informativo» (Ajustes → Privacidad). En la
-  encuesta web aparece antes de la primera pregunta con «Entiendo y quiero participar» / «No
-  deseo participar» y un enlace a la política; en CATI y CAPI es un diálogo que el entrevistador
-  no puede saltarse («Lea esto a la persona»). La respuesta y la **versión del texto** quedan
-  como paradato de la entrevista; cada cambio de texto sube la versión y se vuelve a pedir. Si
-  la persona declina, la encuesta web no hace preguntas y el entrevistador recibe la instrucción
-  de cerrar con «rechazo». _Pendiente:_ redactar el texto en cada proyecto (mientras esté vacío
-  no se pide ninguno) y, si se quiere, exigirlo para publicar; en papel (PAPI) el aviso va
-  impreso en el formulario, fuera de esta función.
+- **Hecho (2026-11-08).** El aviso es **parte del cuestionario**, su primera pregunta: un texto de
+  consentimiento más la pregunta que acepta o rechaza, y un rechazo termina la entrevista como
+  tal. El botón «Aviso informativo» del diseñador agrega el par estándar en cada idioma del
+  cuestionario; se traduce, se ve en la vista previa, se imprime en papel y se exporta como
+  cualquier elemento, y su versión es la del cuestionario. Un proyecto puede **exigirlo**
+  (Ajustes → Privacidad): no se publica un cuestionario que no empiece con él. _Pendiente:_
+  completar el texto (organización, finalidad, contacto) en cada cuestionario con el área
+  jurídica.
 
 ## 3. Contacto telefónico sin base legal declarada ni listas nacionales de exclusión
 

@@ -260,6 +260,8 @@ export interface QuestionnairesTx {
   // ─── Approval before publishing ─────────────────────────────────────────────────────
   /** Whether the project asks for an approval before a questionnaire is published. */
   approvalRequired(projectId: string): Promise<boolean>;
+  /** The project asks every questionnaire to open with an information notice. */
+  noticeRequired(projectId: string): Promise<boolean>;
   /** The questionnaire's requests, newest first. */
   approvals(questionnaireId: string): Promise<ApprovalView[]>;
   approval(id: string): Promise<ApprovalView | null>;
@@ -941,6 +943,16 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
       .executeTakeFirst();
     const settings = r ? json<{ publishApproval?: { required?: boolean } }>(r.settings) : null;
     return settings?.publishApproval?.required === true;
+  }
+
+  async noticeRequired(projectId: string) {
+    const r = await this.tx
+      .selectFrom('projects')
+      .select('settings')
+      .where('id', '=', projectId)
+      .executeTakeFirst();
+    const settings = r ? json<{ notice?: { required?: boolean } }>(r.settings) : null;
+    return settings?.notice?.required === true;
   }
 
   private approvalView(r: Record<string, unknown>): ApprovalView {

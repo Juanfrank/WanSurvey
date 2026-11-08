@@ -145,6 +145,8 @@ export const messagesEn = {
     CALL_ANSWERED: 'An answered call can only end as a callback or a refusal.',
     DRAFT_CONFLICT: 'Someone else saved this questionnaire in the meantime.',
     NOTHING_TO_PUBLISH: 'Nothing changed since the last version.',
+    NOTICE_REQUIRED:
+      'This project needs the information notice at the start of the questionnaire (a consent text and the question that accepts or refuses).',
     PUBLISH_BLOCKED: 'The questionnaire cannot be published yet.',
     UNREADABLE_FILE: 'The file could not be read. Upload a .csv or .xlsx file.',
     INVALID_ROWS: 'Some rows have problems; fix the file or choose to leave them out.',
@@ -310,6 +312,8 @@ export const messagesEs: MessagesCatalogue = {
     CALL_ANSWERED: 'Una llamada contestada solo puede terminar como rellamada o rechazo.',
     DRAFT_CONFLICT: 'Otra persona guardó este cuestionario mientras tanto.',
     NOTHING_TO_PUBLISH: 'Nada cambió desde la última versión.',
+    NOTICE_REQUIRED:
+      'Este proyecto exige el aviso informativo al inicio del cuestionario (un texto de consentimiento y la pregunta que acepta o rechaza).',
     PUBLISH_BLOCKED: 'El cuestionario aún no se puede publicar.',
     UNREADABLE_FILE: 'No se pudo leer el archivo. Suba un archivo .csv o .xlsx.',
     INVALID_ROWS: 'Algunas filas tienen problemas; corrija el archivo o elija omitirlas.',

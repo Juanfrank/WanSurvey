@@ -89,12 +89,14 @@ usually does not.
 
 ## Information notice
 
-Each project can have an information notice (Settings → Privacy): who answers for the data, what
-it is for, that taking part is voluntary and how to use one's rights. It is shown before the first
-question on the web survey, and read out by the interviewer on calls and visits; the answer and the
-version of the wording are kept as paradata (`notice`) with the interview. Leave it empty to ask
-for none. **Agree the wording with the institution's legal area** and write it before the first
-real survey; a paper form carries it printed.
+The information notice (who answers for the data, what it is for, that taking part is voluntary,
+how to use one's rights) is the first question of the questionnaire: a text with the role
+"consent" followed by the yes/no question whose refusal ends the interview. Add it in the designer
+with the **Information notice** button of the outline, complete the organisation, the purpose and
+the contact in each language, and it is shown, translated, previewed, printed on paper and
+exported like any item. A project can require it (Settings → Privacy → "Do not publish a
+questionnaire that does not open with the information notice"). **Agree the wording with the
+institution's legal area.**
 
 ## Retention and data subject requests
 

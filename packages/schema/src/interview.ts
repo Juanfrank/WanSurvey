@@ -101,8 +101,6 @@ export const PARADATA_TYPES = [
   'gps',
   /** The respondent's answer to the request to record the interview (ADR 0001, decision 5). */
   'audio_consent',
-  /** The respondent's answer to the information notice shown before the first question. */
-  'notice',
   /** Paper form date and duration as written on it (PAPI entry). */
   'paper_meta',
 ] as const;

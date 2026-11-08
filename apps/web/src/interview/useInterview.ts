@@ -62,8 +62,6 @@ export interface InterviewPayload {
     shortcuts?: ShortcutSettings;
     /** Whether this interview is recorded, and what to ask before (ADR 0001, decision 5). */
     audio?: { record: boolean; consentText?: string; consentVersion?: number };
-    /** The information notice to read before the first question (null: none). */
-    notice?: { text: string; version: number } | null;
   };
   lastSeq: number;
   serverTime: string;
@@ -166,7 +164,6 @@ async function localPayload(
           settings: {
             capi: c.capi,
             ...(c.shortcuts ? { shortcuts: c.shortcuts } : {}),
-            ...(c.notice ? { notice: c.notice } : {}),
             audio:
               c.audio && (await drawnLocally(local.id, c.audio.samplePercent))
                 ? {
@@ -219,8 +216,6 @@ export function useInterview(id: string) {
   const [, setTick] = useState(0);
   /** Recording of the interview: not asked, waiting for the respondent's answer, on, or stopped. */
   const [audio, setAudio] = useState<'off' | 'ask' | 'recording' | 'declined'>('off');
-  /** The information notice the interviewer reads out: asked once per interview and wording. */
-  const [notice, setNotice] = useState<'off' | 'ask' | 'declined'>('off');
   const audioRef = useRef<{ store: IdbSegmentStore; recorder: SegmentRecorder } | null>(null);
   const ref = useRef<{
     store: InterviewStore;
@@ -321,18 +316,6 @@ export function useInterview(id: string) {
     void flushSegments(store, id);
   }, [id]);
 
-  const noticeKey = (p: InterviewPayload) =>
-    `ws.notice.${p.interview.id}.${p.settings?.notice?.version ?? 0}`;
-  const initNotice = useCallback((p: InterviewPayload) => {
-    const n = p.settings?.notice;
-    if (!n?.text.trim() || (p.interview.mode !== 'CATI' && p.interview.mode !== 'CAPI')) return;
-    try {
-      if (localStorage.getItem(noticeKey(p))) return;
-    } catch {
-      // Asked again when this device cannot keep the answer.
-    }
-    setNotice('ask');
-  }, []);
   const initAudio = useCallback(
     async (p: InterviewPayload) => {
       const a = p.settings?.audio;
@@ -345,24 +328,6 @@ export function useInterview(id: string) {
       else setAudio('declined');
     },
     [id, startAudio],
-  );
-
-  /** The person's answer to the information notice, kept as paradata with its version. */
-  const answerNotice = useCallback(
-    (accepted: boolean) => {
-      const n = payload?.settings?.notice;
-      if (!payload || !n) return;
-      record([paradata('notice', { accepted, version: n.version })]);
-      if (accepted) {
-        try {
-          localStorage.setItem(noticeKey(payload), '1');
-        } catch {
-          // Nothing more to do: it is in the interview's paradata.
-        }
-        setNotice('off');
-      } else setNotice('declined');
-    },
-    [payload, record, paradata],
   );
 
   /** The respondent's answer: kept as paradata with the version of the text, then acted on. */
@@ -440,7 +405,6 @@ export function useInterview(id: string) {
         record([paradata('enter_question', { key: s.currentKey(), resumed: !fresh })]);
         if (fresh && p.settings?.capi?.gps === 'start_end' && p.interview.mode === 'CAPI')
           void position().then((at) => record([paradata('gps', { when: 'start', ...at })]));
-        initNotice(p);
         void initAudio(p);
         void keepStorage();
         setLowSpace(await lowOnSpace());
@@ -452,7 +416,7 @@ export function useInterview(id: string) {
       cancelled = true;
       store?.close();
     };
-  }, [id, record, paradata, initAudio, initNotice]);
+  }, [id, record, paradata, initAudio]);
 
   /** After every change in the runner: answer history, navigation paradata, then save. */
   const onChange = useCallback(() => {
@@ -633,8 +597,6 @@ export function useInterview(id: string) {
     submit,
     sync,
     audio,
-    notice,
-    answerNotice,
     answerConsent,
     stopRecording: () => answerConsent(false),
   };

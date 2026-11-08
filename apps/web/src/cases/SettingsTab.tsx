@@ -668,16 +668,13 @@ export function SettingsTab({ project }: { project: Project }) {
               <fieldset className="flex flex-col gap-2" data-testid="notice-settings">
                 <legend className="mb-1 font-medium">{t('cases.privacy.noticeTitle')}</legend>
                 <p className="max-w-prose text-slate-600">{t('cases.privacy.noticeHelp')}</p>
-                <label className="flex flex-col gap-1">
-                  <span>{t('cases.privacy.noticeText')}</span>
-                  <textarea
-                    className={`${controlCls} min-h-32 max-w-3xl`}
-                    maxLength={4000}
-                    value={form.notice.text}
-                    onChange={(e) =>
-                      setForm({ ...form, notice: { ...form.notice, text: e.target.value } })
-                    }
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={form.notice.required}
+                    onChange={(e) => setForm({ ...form, notice: { required: e.target.checked } })}
                   />
+                  {t('cases.privacy.noticeRequired')}
                 </label>
               </fieldset>
             </>,

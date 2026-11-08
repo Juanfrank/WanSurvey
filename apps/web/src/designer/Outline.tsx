@@ -12,8 +12,10 @@ import { smallBtn } from './fields.js';
 import { iconKeyOf, KindIcon, questionMenu, structureMenu } from './kinds.js';
 import { below, Menu, type MenuEntry } from './Menu.js';
 import {
+  addNotice,
   duplicate,
   flatten,
+  hasNotice,
   indent,
   insert,
   isSection,
@@ -416,6 +418,20 @@ export function Outline({
             >
               <span aria-hidden>+</span> {t('designer.outline.addQuestion')}
             </button>
+            {!hasNotice(draft) ? (
+              <button
+                type="button"
+                className={`${smallBtn} inline-flex items-center gap-1`}
+                aria-label={t('designer.outline.addNoticeLabel')}
+                onClick={() => {
+                  const r = addNotice(draft);
+                  structural(r.draft, r.newId);
+                  announce(t('designer.outline.noticeAdded'));
+                }}
+              >
+                <span aria-hidden>+</span> {t('designer.outline.addNotice')}
+              </button>
+            ) : null}
             <button
               ref={addStructureRef}
               type="button"

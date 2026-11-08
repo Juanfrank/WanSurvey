@@ -202,15 +202,6 @@ export class ProjectsController {
         if (next.consentText !== before.consentText && next.consentVersion <= before.consentVersion)
           body.settings.audio = { ...next, consentVersion: before.consentVersion + 1 };
       }
-      // Each wording of the information notice has its own version, kept with every answer.
-      if (body.settings?.notice) {
-        const current = await t.project(id);
-        if (!current) throw new NotFoundException('Project not found');
-        const before = projectSettings(current.settings).notice;
-        const next = body.settings.notice;
-        if (next.text !== before.text && next.version <= before.version)
-          body.settings.notice = { ...next, version: before.version + 1 };
-      }
       // A cleaning rule is checked as it is saved: it must read, and its patterns be valid.
       for (const r of body.settings?.cleaning?.rules ?? []) {
         const problem = ruleProblem(r.expression);
