@@ -10,37 +10,12 @@ import {
   type Diagnostic,
   type MappingProblem,
 } from '@wansurvey/logic';
-import { Questionnaire, Scenario, type VersionMapping } from '@wansurvey/schema';
-
-/**
- * Whether a questionnaire opens with an information notice: before any question there is a text
- * with the role "consent", and the first question refuses to go on (it ends the interview as a
- * refusal). Projects can require this before publishing.
- */
-export function hasNotice(q: Questionnaire): boolean {
-  let consent = false;
-  let found: boolean | null = null;
-  const walk = (items: readonly unknown[]) => {
-    for (const raw of items) {
-      if (found !== null) return;
-      const it = raw as {
-        kind: string;
-        role?: string;
-        endIf?: { disposition?: string }[];
-        items?: unknown[];
-      };
-      if (it.kind === 'static' && it.role === 'consent') consent = true;
-      else if (it.kind === 'question')
-        found = consent && (it.endIf ?? []).some((e) => e.disposition === 'REFUSAL');
-      else if (Array.isArray(it.items)) walk(it.items);
-    }
-  };
-  for (const s of q.sections) {
-    walk(s.items);
-    if (found !== null) break;
-  }
-  return found === true;
-}
+import {
+  Questionnaire,
+  Scenario,
+  sensitiveAsPersonal,
+  type VersionMapping,
+} from '@wansurvey/schema';
 
 export interface ScenarioOutcome {
   id: string;
@@ -101,7 +76,8 @@ export function checkDraft(
       },
     };
   }
-  const q = parsed.data;
+  // A sensitive answer is personal data too: stored so, every consumer treats it as such.
+  const q = sensitiveAsPersonal(parsed.data);
   const { diagnostics, canPublish } = analyze(q);
   const compiled = canPublish ? compile(q) : undefined;
 

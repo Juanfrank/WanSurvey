@@ -32,6 +32,10 @@ export interface PublishCheckResult {
   unchanged: boolean;
   /** The project asks for an information notice at the start and the draft has none. */
   noticeMissing?: boolean;
+  /** Why: the project asks for it, or a sensitive question needs it. */
+  noticeReason?: 'project' | 'sensitive' | null;
+  /** The project sets a minimum age and the draft has no age screen. */
+  ageScreenMissing?: boolean;
   previousVersion: number | null;
   draftRevision: number;
 }

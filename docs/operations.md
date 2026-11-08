@@ -98,6 +98,20 @@ exported like any item. A project can require it (Settings → Privacy → "Do n
 questionnaire that does not open with the information notice"). **Agree the wording with the
 institution's legal area.**
 
+## Sensitive data and minors
+
+Mark a question as **sensitive** in the designer (health, racial or ethnic origin, political
+opinions, religion, sexual orientation, trade-union membership, biometric or genetic data,
+judicial record): it is kept as personal data (masked, encrypted, left out of exports without
+`pii.view`), and the questionnaire cannot be published without the information notice; consider an
+express-consent question too. Under many laws such data needs a prior impact assessment.
+
+To keep minors out, set a minimum age in Settings → Privacy: the designer offers an **Age screen**
+button (a question about age that ends the interview as not eligible, `SCREENED_OUT`, under that
+age) and the questionnaire cannot be published without it. The usual age is 18 but depends on the
+country. Interviewing minors needs their guardian's consent and a decision of the institution's
+legal area; this feature only excludes them.
+
 ## Retention and data subject requests
 
 - Set **Settings → Personal data retention** per project (days after a case is finished). Each night the worker removes the personal data of older finished and withdrawn cases; answers that are not personal stay for statistics. Each case is recorded in the audit log (`case.anonymised`).

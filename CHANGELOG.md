@@ -131,6 +131,13 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
   only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
   account menu and the foot of web surveys. The text needs the institution's legal review.
+- **Sensitive data and minors**: a question can be marked as special-category data (health, racial
+  or ethnic origin, political opinions, religion, sexual orientation, trade-union membership,
+  biometric or genetic data, judicial record). It is stored as personal data too (masked, encrypted,
+  left out of exports without permission), and a questionnaire with one cannot be published without
+  the information notice. A project can set a **minimum age**: the designer then offers an **Age
+  screen** (a question about age that ends the interview as not eligible under that age) and the
+  questionnaire cannot be published without it (`AGE_SCREEN_REQUIRED`).
 - **Lawful basis for calling and visiting** (project settings → Privacy): one for telephone calls
   and one for face-to-face visits. Until a channel's basis is declared, no call is served, no
   interview of that channel starts and no case is downloaded to a device (409 `NO_LAWFUL_BASIS`),

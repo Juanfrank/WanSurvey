@@ -22,6 +22,9 @@ test('the information notice is part of the questionnaire: added from the design
   await page
     .getByLabel('Do not publish a questionnaire that does not open with the information notice')
     .check();
+  await page
+    .getByLabel('Exclude people under this age (the questionnaire must screen by age):')
+    .check();
   await page.getByRole('button', { name: 'Save settings', exact: true }).click();
   await expect(page.getByText('Settings saved.', { exact: true })).toBeVisible();
   await shot(page, 'settings-notice', { fullPage: true });
@@ -44,6 +47,19 @@ test('the information notice is part of the questionnaire: added from the design
   await expect(page.getByTestId('save-status')).toHaveAttribute('data-status', 'saved', {
     timeout: 10_000,
   });
+  // The project sets a minimum age: the outline offers the age screen after the notice.
+  await page
+    .getByRole('button', { name: 'Add the age screen: under 18 the interview ends' })
+    .click();
+  await expect(outlineItem(page, 'AGE_SCREEN')).toBeVisible();
+  // A question marked as sensitive is personal data too.
+  await outlineItem(page, 'NOTICE_ACCEPT').click();
+  await page.getByLabel('Sensitive data (special category)').selectOption({ label: 'Health' });
+  await expect(page.getByRole('checkbox', { name: 'Personal data' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Personal data' })).toBeDisabled();
+  await page
+    .getByLabel('Sensitive data (special category)')
+    .selectOption({ label: 'Not sensitive' });
   await shot(page, 'designer-notice', { fullPage: false });
   await expectAccessible(page);
 
@@ -53,6 +69,9 @@ test('the information notice is part of the questionnaire: added from the design
   await page.getByRole('tab', { name: 'Privacy', exact: true }).click();
   await page
     .getByLabel('Do not publish a questionnaire that does not open with the information notice')
+    .uncheck();
+  await page
+    .getByLabel('Exclude people under this age (the questionnaire must screen by age):')
     .uncheck();
   await page.getByRole('button', { name: 'Save settings', exact: true }).click();
   await expect(page.getByText('Settings saved.', { exact: true })).toBeVisible();

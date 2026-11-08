@@ -20,7 +20,15 @@ import {
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { analyze } from '@wansurvey/logic';
-import { Mode, Questionnaire, Scenario, VersionMapping } from '@wansurvey/schema';
+import {
+  hasAgeScreen,
+  hasSensitiveQuestions,
+  Mode,
+  opensWithNotice,
+  Questionnaire,
+  Scenario,
+  VersionMapping,
+} from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
@@ -31,7 +39,7 @@ import {
   type QuestionnairesRepo,
   type QuestionnairesTx,
 } from './questionnaires-repo.js';
-import { checkDraft, hasNotice } from './publish-checks.js';
+import { checkDraft } from './publish-checks.js';
 import { questionsOf, rankSimilar, type QuestionSource } from './similar.js';
 import { QUESTIONNAIRE_STATES } from './state.js';
 import { trimUnderscores } from '../common/text.js';
@@ -324,6 +332,29 @@ export class QuestionnairesController {
   }
 
   /** Dry run of publishing: what would block it, and which changes need a mapping. */
+  /**
+   * What the project asks of a questionnaire that it lacks: an information notice (asked by the
+   * project, or needed by any sensitive question) and, when the project sets a minimum age, a
+   * screening question about it.
+   */
+  private async publishProblems(
+    t: QuestionnairesTx,
+    projectId: string,
+    questionnaire: Questionnaire | undefined | null,
+  ): Promise<{ notice: 'project' | 'sensitive' | null; age: boolean }> {
+    if (!questionnaire) return { notice: null, age: false };
+    const rules = await t.publishRules(projectId);
+    const sensitive = hasSensitiveQuestions(questionnaire);
+    const notice =
+      (rules.notice || sensitive) && !opensWithNotice(questionnaire)
+        ? sensitive
+          ? 'sensitive'
+          : 'project'
+        : null;
+    const age = rules.minAge !== null && !hasAgeScreen(questionnaire);
+    return { notice, age };
+  }
+
   @Post(':qid/publish-check')
   @HttpCode(200)
   @RequirePermission('questionnaires.publish', PERM)
@@ -342,13 +373,15 @@ export class QuestionnairesController {
         await t.previous(qid),
         body.mapping,
       );
-      // The project asks for an information notice at the start, and the draft has none.
-      const noticeMissing =
-        !!questionnaire && (await t.noticeRequired(projectId)) && !hasNotice(questionnaire);
+      const rules = await this.publishProblems(t, projectId, questionnaire);
+      const noticeMissing = rules.notice !== null;
+      const ageScreenMissing = rules.age;
       return {
         ...check,
-        ok: check.ok && !noticeMissing,
+        ok: check.ok && !noticeMissing && !ageScreenMissing,
         noticeMissing,
+        noticeReason: rules.notice,
+        ageScreenMissing,
         draftRevision: q.draftRevision,
       };
     });
@@ -382,11 +415,20 @@ export class QuestionnairesController {
         previous,
         body.mapping,
       );
-      if (questionnaire && (await t.noticeRequired(projectId)) && !hasNotice(questionnaire))
+      const rules = await this.publishProblems(t, projectId, questionnaire);
+      if (rules.notice)
         throw new UnprocessableEntityException({
           code: 'NOTICE_REQUIRED',
           message:
-            'This project needs an information notice at the start of the questionnaire (a consent text followed by the question that accepts or refuses)',
+            rules.notice === 'sensitive'
+              ? 'A questionnaire with sensitive questions needs an information notice at the start (a consent text and the question that accepts or refuses)'
+              : 'This project needs an information notice at the start of the questionnaire (a consent text and the question that accepts or refuses)',
+        });
+      if (rules.age)
+        throw new UnprocessableEntityException({
+          code: 'AGE_SCREEN_REQUIRED',
+          message:
+            'This project excludes people under a minimum age: the questionnaire needs a question about age that ends the interview as not eligible',
         });
       if (check.unchanged) {
         throw new ConflictException({

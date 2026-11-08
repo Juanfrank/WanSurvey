@@ -309,6 +309,45 @@ export function addNotice(draft: Draft): { draft: Draft; newId: string } {
   return { draft: next, newId };
 }
 
+const AGE_ASK = {
+  es: '¿Cuál es su edad en años cumplidos?',
+  en: 'How old are you, in completed years?',
+} as const;
+
+/**
+ * Puts the age screen right after the information notice (or at the very start): a question about
+ * age that ends the interview as not eligible (screened out) for anyone under `minAge`.
+ */
+export function addAgeScreen(draft: Draft, minAge: number): { draft: Draft; newId: string } {
+  let newId = '';
+  const next = edit(draft, (d) => {
+    const used = usedNames(d);
+    const langs = d.languages ?? ['en'];
+    if (!d.sections?.length) d.sections = [{ id: 'SEC_1', title: text(d, ''), items: [] }];
+    const id = freshName(used, 'AGE_SCREEN');
+    used.add(id);
+    newId = id;
+    const items = d.sections[0]!.items;
+    // After the notice's refusing question when the questionnaire opens with one.
+    const at = items.findIndex(
+      (it) =>
+        it.kind === 'question' &&
+        (it.endIf ?? []).some((e: { disposition?: string }) => e.disposition === 'REFUSAL'),
+    );
+    items.splice(at >= 0 ? at + 1 : 0, 0, {
+      kind: 'question',
+      id,
+      name: id,
+      type: 'numeric',
+      min: 0,
+      max: 120,
+      text: Object.fromEntries(langs.map((l) => [l, noticeIn(l, AGE_ASK)])),
+      endIf: [{ when: `${id} < ${minAge}`, disposition: 'SCREENED_OUT' }],
+    });
+  });
+  return { draft: next, newId };
+}
+
 export type NewKind =
   | { kind: 'question'; type: QuestionType }
   | { kind: 'static' }

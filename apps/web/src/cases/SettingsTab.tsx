@@ -672,10 +672,47 @@ export function SettingsTab({ project }: { project: Project }) {
                   <input
                     type="checkbox"
                     checked={form.notice.required}
-                    onChange={(e) => setForm({ ...form, notice: { required: e.target.checked } })}
+                    onChange={(e) =>
+                      setForm({ ...form, notice: { ...form.notice, required: e.target.checked } })
+                    }
                   />
                   {t('cases.privacy.noticeRequired')}
                 </label>
+                <label className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={form.notice.minAge !== null}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        notice: { ...form.notice, minAge: e.target.checked ? 18 : null },
+                      })
+                    }
+                  />
+                  {t('cases.privacy.minAge')}
+                  {form.notice.minAge !== null ? (
+                    <input
+                      type="number"
+                      min={5}
+                      max={30}
+                      aria-label={t('cases.privacy.minAgeValue')}
+                      className={`${controlCls} w-20`}
+                      value={form.notice.minAge}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          notice: {
+                            ...form.notice,
+                            minAge: Math.min(30, Math.max(5, Number(e.target.value) || 18)),
+                          },
+                        })
+                      }
+                    />
+                  ) : null}
+                </label>
+                <p className="max-w-prose text-sm text-slate-600">
+                  {t('cases.privacy.minAgeHelp')}
+                </p>
               </fieldset>
             </>,
           )}

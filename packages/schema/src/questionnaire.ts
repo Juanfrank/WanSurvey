@@ -149,6 +149,22 @@ const itemCommon = {
   variants: Variants.optional(),
 };
 
+/**
+ * The kinds of data that laws single out (special categories): an answer marked with one is
+ * personal data too, and needs an information notice at the start of the questionnaire.
+ */
+export const SENSITIVE_CATEGORIES = [
+  'health',
+  'ethnic',
+  'political',
+  'religion',
+  'sexual',
+  'union',
+  'biometric',
+  'judicial',
+] as const;
+export type SensitiveCategory = (typeof SENSITIVE_CATEGORIES)[number];
+
 export const Question = z.strictObject({
   ...itemCommon,
   kind: z.literal('question'),
@@ -159,6 +175,8 @@ export const Question = z.strictObject({
   required: z.boolean().optional(),
   /** Marks the answer as personal data (masked and excluded from exports without PII permission). */
   personal: z.boolean().optional(),
+  /** Special-category data (health, ethnic origin, beliefs…): personal data, with stricter care. */
+  sensitive: z.enum(SENSITIVE_CATEGORIES).optional(),
 
   // choice questions
   options: z.array(AnswerOption).optional(),
@@ -416,3 +434,94 @@ export const Questionnaire = z.strictObject({
 });
 export type Questionnaire = z.infer<typeof Questionnaire>;
 export type QuestionnaireInput = z.input<typeof Questionnaire>;
+
+type AnyItem = { kind: string; items?: AnyItem[]; sensitive?: string; personal?: boolean };
+
+function eachQuestion(q: { sections: { items: unknown[] }[] }, fn: (it: AnyItem) => void) {
+  const walk = (items: unknown[]) => {
+    for (const raw of items) {
+      const it = raw as AnyItem;
+      if (it.kind === 'question') fn(it);
+      else if (Array.isArray(it.items)) walk(it.items);
+    }
+  };
+  for (const s of q.sections) walk(s.items);
+}
+
+/** Whether any question of the questionnaire is marked as special-category data. */
+export function hasSensitiveQuestions(q: { sections: { items: unknown[] }[] }): boolean {
+  let found = false;
+  eachQuestion(q, (it) => {
+    if (it.sensitive) found = true;
+  });
+  return found;
+}
+
+/**
+ * A copy in which every sensitive question is also personal, so masking, encryption, exports,
+ * erasure and the analysis model treat it as personal data without each knowing about "sensitive".
+ */
+export function sensitiveAsPersonal<T extends { sections: { items: unknown[] }[] }>(q: T): T {
+  const copy = JSON.parse(JSON.stringify(q)) as T;
+  eachQuestion(copy, (it) => {
+    if (it.sensitive) it.personal = true;
+  });
+  return copy;
+}
+
+/**
+ * Whether the questionnaire opens with an information notice: before any question there is a text
+ * with the role "consent", and the first question refuses to go on (it ends the interview as a
+ * refusal).
+ */
+export function opensWithNotice(q: { sections: { items: unknown[] }[] }): boolean {
+  let consent = false;
+  let found: boolean | null = null;
+  const walk = (items: unknown[]) => {
+    for (const raw of items) {
+      if (found !== null) return;
+      const it = raw as {
+        kind: string;
+        role?: string;
+        endIf?: { disposition?: string }[];
+        items?: unknown[];
+      };
+      if (it.kind === 'static' && it.role === 'consent') consent = true;
+      else if (it.kind === 'question')
+        found = consent && (it.endIf ?? []).some((e) => e.disposition === 'REFUSAL');
+      else if (Array.isArray(it.items)) walk(it.items);
+    }
+  };
+  for (const s of q.sections) {
+    walk(s.items);
+    if (found !== null) break;
+  }
+  return found === true;
+}
+
+/**
+ * Whether the questionnaire screens people by age: a question about age or date of birth that ends
+ * the interview as not eligible (screened out).
+ */
+export function hasAgeScreen(q: { sections: { items: unknown[] }[] }): boolean {
+  let found = false;
+  const walk = (items: unknown[]) => {
+    for (const raw of items) {
+      const it = raw as {
+        kind: string;
+        name?: string;
+        endIf?: { disposition?: string }[];
+        items?: unknown[];
+      };
+      if (it.kind === 'question') {
+        if (
+          /age|edad|birth|nacim/i.test(it.name ?? '') &&
+          (it.endIf ?? []).some((e) => e.disposition === 'SCREENED_OUT')
+        )
+          found = true;
+      } else if (Array.isArray(it.items)) walk(it.items);
+    }
+  };
+  for (const s of q.sections) walk(s.items);
+  return found;
+}

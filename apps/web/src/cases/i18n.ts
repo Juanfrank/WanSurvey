@@ -51,6 +51,10 @@ export const casesEn = {
     noticeTitle: 'Information notice',
     noticeHelp:
       'The notice is part of the questionnaire, as its first question: a consent text and the question that accepts or refuses (add it with the Information notice button of the designer). Translated, previewed, printed on paper and exported like any other item. A refusal ends the interview.',
+    minAge: 'Exclude people under this age (the questionnaire must screen by age):',
+    minAgeValue: 'Minimum age',
+    minAgeHelp:
+      'The age depends on the country (usually 18). The designer then offers the Age screen button: a question about age that ends the interview as not eligible. Interviewing minors needs the consent of their guardian and your legal area’s decision; this setting does not do that.',
     noticeRequired: 'Do not publish a questionnaire that does not open with the information notice',
     retentionHelp:
       'Each night, finished and withdrawn cases older than this lose their personal sample fields, contacts, personal answers, notes and e-mail addresses. Recorded in the audit log.',
@@ -591,6 +595,10 @@ export const casesEs: CasesCatalogue = {
     noticeTitle: 'Aviso informativo',
     noticeHelp:
       'El aviso es parte del cuestionario, como su primera pregunta: un texto de consentimiento y la pregunta que acepta o rechaza (agréguelo con el botón Aviso informativo del diseñador). Se traduce, se ve en la vista previa, se imprime en papel y se exporta como cualquier otro elemento. Un rechazo termina la entrevista.',
+    minAge: 'Excluir a menores de esta edad (el cuestionario debe filtrar por edad):',
+    minAgeValue: 'Edad mínima',
+    minAgeHelp:
+      'La edad depende del país (normalmente 18). El diseñador ofrece entonces el botón Filtro de edad: una pregunta de edad que termina la entrevista como no elegible. Entrevistar a menores exige el consentimiento de su tutor y la decisión de su área jurídica; este ajuste no lo resuelve.',
     noticeRequired: 'No publicar un cuestionario que no empiece con el aviso informativo',
     retentionHelp:
       'Cada noche, los casos terminados o retirados más antiguos pierden sus campos personales, contactos, respuestas personales, notas y correos. Queda registrado en la bitácora.',

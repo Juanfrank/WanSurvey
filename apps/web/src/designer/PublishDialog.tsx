@@ -146,7 +146,17 @@ export function PublishDialog({
                 }
               />
               {check.noticeMissing ? (
-                <CheckLine ok={false} text={t('designer.publish.noticeMissing')} />
+                <CheckLine
+                  ok={false}
+                  text={t(
+                    check.noticeReason === 'sensitive'
+                      ? 'designer.publish.noticeMissingSensitive'
+                      : 'designer.publish.noticeMissing',
+                  )}
+                />
+              ) : null}
+              {check.ageScreenMissing ? (
+                <CheckLine ok={false} text={t('designer.publish.ageScreenMissing')} />
               ) : null}
               {check.unchanged ? (
                 <CheckLine

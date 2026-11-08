@@ -127,7 +127,10 @@ export function DesignerPage() {
   // The project's sample fields are offered as case.* in conditions.
   const project = useQuery({
     queryKey: ['project', projectId],
-    queryFn: () => api<{ name: string }>(`/projects/${projectId}`),
+    queryFn: () =>
+      api<{ name: string; settings?: { notice?: { minAge?: number | null } } }>(
+        `/projects/${projectId}`,
+      ),
   });
   const sampleFields = useQuery({
     queryKey: ['sample-fields', projectId],
@@ -380,6 +383,7 @@ export function DesignerPage() {
                         others={others}
                         commentCounts={commentCounts}
                         onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
+                        minAge={project.data?.settings?.notice?.minAge ?? null}
                         onSaveToLibrary={(id) => {
                           setSelected(id);
                           setSavingToLibrary(true);

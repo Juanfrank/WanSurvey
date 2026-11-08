@@ -7,11 +7,13 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from 'react';
+import { hasAgeScreen } from '@wansurvey/schema';
 import { useTranslation } from 'react-i18next';
 import { smallBtn } from './fields.js';
 import { iconKeyOf, KindIcon, questionMenu, structureMenu } from './kinds.js';
 import { below, Menu, type MenuEntry } from './Menu.js';
 import {
+  addAgeScreen,
   addNotice,
   duplicate,
   flatten,
@@ -58,6 +60,7 @@ export function Outline({
   commentCounts,
   onInsertFromLibrary,
   onSaveToLibrary,
+  minAge = null,
 }: {
   draft: Draft;
   selected: string;
@@ -79,6 +82,8 @@ export function Outline({
   onInsertFromLibrary?(afterId: string | null, inside: boolean): void;
   /** Saves a row (not a section) to the question library. */
   onSaveToLibrary?(id: string): void;
+  /** The project's minimum age: with one, the outline offers the age screen. */
+  minAge?: number | null;
 }) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -430,6 +435,20 @@ export function Outline({
                 }}
               >
                 <span aria-hidden>+</span> {t('designer.outline.addNotice')}
+              </button>
+            ) : null}
+            {minAge !== null && !hasAgeScreen(draft) ? (
+              <button
+                type="button"
+                className={`${smallBtn} inline-flex items-center gap-1`}
+                aria-label={t('designer.outline.addAgeScreenLabel', { age: minAge })}
+                onClick={() => {
+                  const r = addAgeScreen(draft, minAge);
+                  structural(r.draft, r.newId);
+                  announce(t('designer.outline.ageScreenAdded', { age: minAge }));
+                }}
+              >
+                <span aria-hidden>+</span> {t('designer.outline.addAgeScreen')}
               </button>
             ) : null}
             <button

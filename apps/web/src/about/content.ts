@@ -172,6 +172,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
             'En encuestas por correo, si abrió el mensaje y si pulsó el enlace. En SMS, si respondió con una palabra de baja.',
             'Si el proyecto lo activa y usted lo acepta al inicio, la grabación de audio de la entrevista presencial.',
             'Señales de calidad calculadas a partir de la entrevista (velocidad, respuestas repetidas, coincidencias entre entrevistas) para que un revisor detecte entrevistas dudosas. No se usan para decidir nada sobre usted.',
+            'Si el cuestionario lo pregunta, datos de categorías especiales (salud, origen, creencias, orientación sexual, afiliación sindical, datos biométricos o antecedentes judiciales). Se tratan con cuidado reforzado, se protegen como datos personales y solo se preguntan después del aviso informativo. Las encuestas pueden excluir a las personas menores de una edad mínima, y en ese caso la entrevista termina.',
           ],
         },
         {
@@ -305,6 +306,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
           'In e-mail surveys, whether you opened the message and whether you clicked the link. In SMS, whether you replied with a stop word.',
           'If the project turns it on and you agree at the start, an audio recording of the face-to-face interview.',
           'Quality signals computed from the interview (speed, repeated answers, matches between interviews) so a reviewer can spot doubtful interviews. They are not used to decide anything about you.',
+          'If the questionnaire asks for it, special-category data (health, origin, beliefs, sexual orientation, trade-union membership, biometric data or criminal records). It gets stricter care, is protected as personal data and is asked only after the information notice. Surveys can exclude people under a minimum age, and then the interview ends.',
         ],
       },
       {

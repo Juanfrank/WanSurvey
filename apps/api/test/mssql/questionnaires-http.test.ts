@@ -380,6 +380,98 @@ describe.skipIf(!configured)('SQL Server: questionnaires over HTTP', () => {
     expect(ok.status, JSON.stringify(ok.body)).toBe(201);
   });
 
+  it('a sensitive question needs the information notice and is kept as personal data; a minimum age needs the age screen', async () => {
+    const proj = await createProject(t.owner, tenant.id);
+    const at = `/api/v1/projects/${proj}/questionnaires`;
+    const notice = [
+      { kind: 'static', id: 'NOTICE_TEXT', role: 'consent', text: { en: 'We are the Institute.' } },
+      {
+        kind: 'question',
+        id: 'NOTICE',
+        name: 'NOTICE_ACCEPT',
+        type: 'yesno',
+        text: { en: 'Do you agree?' },
+        allowDK: false,
+        endIf: [{ when: 'NOTICE_ACCEPT == 2', disposition: 'REFUSAL' }],
+      },
+    ];
+    const ageScreen = {
+      kind: 'question',
+      id: 'AGE_SCREEN',
+      name: 'AGE_SCREEN',
+      type: 'numeric',
+      min: 0,
+      max: 120,
+      text: { en: 'How old are you?' },
+      endIf: [{ when: 'AGE_SCREEN < 18', disposition: 'SCREENED_OUT' }],
+    };
+    const health = {
+      kind: 'question',
+      id: 'HEALTH',
+      name: 'HEALTH',
+      type: 'text',
+      sensitive: 'health',
+      text: { en: 'Any health condition?' },
+    };
+    const build = (...first: object[]) => {
+      const d = small();
+      d.sections[0]!.items.unshift(...(first as never[]));
+      return d;
+    };
+    const created = await post(pm, at, {
+      modes: ALL_MODES,
+      name: 'Sensibles',
+      source: { kind: 'json', definition: build(health) },
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const url = `${at}/${created.body.id}`;
+    let rev = created.body.draftRevision as number;
+
+    // No project setting at all: the sensitive question alone asks for the notice.
+    const check = await post(pm, `${url}/publish-check`, {});
+    expect(check.body).toMatchObject({ noticeMissing: true, noticeReason: 'sensitive', ok: false });
+    expect((await post(pm, `${url}/publish`, { baseRevision: rev })).body.code).toBe(
+      'NOTICE_REQUIRED',
+    );
+
+    // With the notice it goes, and the answer is stored as personal data.
+    const ok1 = await put(pm, `${url}/draft`, {
+      definition: build(...notice, health),
+      baseRevision: rev,
+    });
+    rev = ok1.body.draftRevision;
+    const published = await post(pm, `${url}/publish`, { baseRevision: rev });
+    expect(published.status, JSON.stringify(published.body)).toBe(201);
+    const stored = await rows(sql`SELECT definition FROM questionnaire_versions
+      WHERE questionnaire_id = ${created.body.id} AND version = 1`);
+    const def = JSON.parse(stored[0]!.definition as string) as {
+      sections: { items: { name?: string; sensitive?: string; personal?: boolean }[] }[];
+    };
+    const q = def.sections[0]!.items.find((i) => i.name === 'HEALTH')!;
+    expect(q).toMatchObject({ sensitive: 'health', personal: true });
+
+    // A minimum age: the questionnaire must screen by age.
+    await sql`UPDATE projects SET settings = ${JSON.stringify({ notice: { minAge: 18 } })} WHERE id = ${proj}`.execute(
+      t.owner,
+    );
+    const ok2 = await put(pm, `${url}/draft`, {
+      definition: build(...notice, health, { ...health, id: 'H2', name: 'H2' }),
+      baseRevision: rev,
+    });
+    rev = ok2.body.draftRevision;
+    const noAge = await post(pm, `${url}/publish`, { baseRevision: rev });
+    expect(noAge.status).toBe(422);
+    expect(noAge.body.code).toBe('AGE_SCREEN_REQUIRED');
+    expect((await post(pm, `${url}/publish-check`, {})).body.ageScreenMissing).toBe(true);
+    const ok3 = await put(pm, `${url}/draft`, {
+      definition: build(...notice, ageScreen, health),
+      baseRevision: rev,
+    });
+    rev = ok3.body.draftRevision;
+    const withAge = await post(pm, `${url}/publish`, { baseRevision: rev });
+    expect(withAge.status, JSON.stringify(withAge.body)).toBe(201);
+  });
+
   it('asks for an approval before publishing when the project says so: someone else, for the draft as it is', async () => {
     const proj = await createProject(t.owner, tenant.id);
     const at = `/api/v1/projects/${proj}/questionnaires`;

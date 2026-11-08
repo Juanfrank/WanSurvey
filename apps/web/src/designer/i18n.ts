@@ -111,6 +111,9 @@ export const designerEn = {
     addQuestionLabel: 'Add a question',
     addStructure: 'Structure',
     addStructureLabel: 'Add structure: a section, block, text…',
+    addAgeScreen: 'Age screen',
+    addAgeScreenLabel: 'Add the age screen: under {{age}} the interview ends',
+    ageScreenAdded: 'Age screen added: anyone under {{age}} ends the interview as not eligible.',
     addNotice: 'Information notice',
     addNoticeLabel: 'Add the information notice at the start of the questionnaire',
     noticeAdded:
@@ -266,6 +269,23 @@ export const designerEn = {
   required: 'Answer required',
   allowDK: "Offer Don't know",
   allowRefused: 'Offer Refused',
+  sensitive: {
+    label: 'Sensitive data (special category)',
+    none: 'Not sensitive',
+    hint: 'Health, origin, beliefs… They get stricter care: the questionnaire then needs the information notice.',
+    warning:
+      'Treated as personal data too (masked, left out of exports without permission), and the questionnaire needs the information notice at the start. Consider an express consent question.',
+    categories: {
+      health: 'Health',
+      ethnic: 'Racial or ethnic origin',
+      political: 'Political opinions',
+      religion: 'Religion or beliefs',
+      sexual: 'Sexual orientation',
+      union: 'Trade-union membership',
+      biometric: 'Biometric or genetic data',
+      judicial: 'Criminal or judicial record',
+    },
+  },
   personal: 'Personal data',
   answers: 'Answers',
   answerSet: 'Answer set',
@@ -774,6 +794,10 @@ export const designerEn = {
     breaking_one: '{{count}} change breaks compatibility: say what happens to existing data',
     breaking_other: '{{count}} changes break compatibility: say what happens to existing data',
     unchanged: 'Nothing changed since version {{version}}',
+    noticeMissingSensitive:
+      'A questionnaire with sensitive questions needs the information notice at the start (use the Information notice button of the outline)',
+    ageScreenMissing:
+      'This project excludes people under a minimum age: add the age screen (button in the outline)',
     noticeMissing:
       'This project needs the information notice at the start (use the Information notice button of the outline)',
     mappingTitle: 'Data from version {{version}}',
@@ -926,6 +950,10 @@ export const designerEs: DesignerCatalogue = {
     addQuestionLabel: 'Agregar una pregunta',
     addStructure: 'Estructura',
     addStructureLabel: 'Agregar estructura: una sección, bloque, texto…',
+    addAgeScreen: 'Filtro de edad',
+    addAgeScreenLabel: 'Agregar el filtro de edad: con menos de {{age}} la entrevista termina',
+    ageScreenAdded:
+      'Filtro de edad agregado: quien tenga menos de {{age}} termina la entrevista como no elegible.',
     addNotice: 'Aviso informativo',
     addNoticeLabel: 'Agregar el aviso informativo al inicio del cuestionario',
     noticeAdded:
@@ -1082,6 +1110,23 @@ export const designerEs: DesignerCatalogue = {
   required: 'Respuesta obligatoria',
   allowDK: 'Ofrecer No sabe',
   allowRefused: 'Ofrecer Rehúsa',
+  sensitive: {
+    label: 'Dato sensible (categoría especial)',
+    none: 'No sensible',
+    hint: 'Salud, origen, creencias… Reciben un cuidado mayor: el cuestionario necesita entonces el aviso informativo.',
+    warning:
+      'Se trata también como dato personal (oculto, fuera de las exportaciones sin permiso), y el cuestionario necesita el aviso informativo al inicio. Considere una pregunta de consentimiento expreso.',
+    categories: {
+      health: 'Salud',
+      ethnic: 'Origen racial o étnico',
+      political: 'Opiniones políticas',
+      religion: 'Religión o creencias',
+      sexual: 'Orientación sexual',
+      union: 'Afiliación sindical',
+      biometric: 'Datos biométricos o genéticos',
+      judicial: 'Antecedentes penales o judiciales',
+    },
+  },
   personal: 'Dato personal',
   answers: 'Respuestas',
   answerSet: 'Conjunto de respuestas',
@@ -1600,6 +1645,10 @@ export const designerEs: DesignerCatalogue = {
     breaking_other:
       '{{count}} cambios rompen la compatibilidad: indique qué pasa con los datos existentes',
     unchanged: 'Nada cambió desde la versión {{version}}',
+    noticeMissingSensitive:
+      'Un cuestionario con preguntas sensibles necesita el aviso informativo al inicio (use el botón Aviso informativo del esquema)',
+    ageScreenMissing:
+      'Este proyecto excluye a menores de una edad mínima: agregue el filtro de edad (botón del esquema)',
     noticeMissing:
       'Este proyecto exige el aviso informativo al inicio (use el botón Aviso informativo del esquema)',
     mappingTitle: 'Datos de la versión {{version}}',

@@ -1,5 +1,6 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import {
+  SENSITIVE_CATEGORIES,
   type Block,
   type Computed,
   type ContainerItem,
@@ -7,6 +8,7 @@ import {
   type QuestionType,
   type Roster,
   type Section,
+  type SensitiveCategory,
   type StaticText,
 } from '@wansurvey/schema';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
@@ -593,10 +595,26 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
         />
         <CheckField
           label={t('designer.personal')}
-          checked={!!q.personal}
+          checked={!!q.personal || !!q.sensitive}
+          disabled={!!q.sensitive}
           onChange={(on) => p({ personal: on || undefined })}
         />
       </div>
+      <SelectField
+        label={t('designer.sensitive.label')}
+        value={q.sensitive ?? ''}
+        hint={q.sensitive ? t('designer.sensitive.warning') : t('designer.sensitive.hint')}
+        options={[
+          { value: '', label: t('designer.sensitive.none') },
+          ...SENSITIVE_CATEGORIES.map((c) => ({
+            value: c,
+            label: t(`designer.sensitive.categories.${c}`),
+          })),
+        ]}
+        onChange={(v) =>
+          p({ sensitive: v === '' ? undefined : (v as SensitiveCategory), personal: undefined })
+        }
+      />
 
       {CHOICE.includes(q.type) ? (
         <Group title={t('designer.answers')}>

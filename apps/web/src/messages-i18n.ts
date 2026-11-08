@@ -145,6 +145,8 @@ export const messagesEn = {
     CALL_ANSWERED: 'An answered call can only end as a callback or a refusal.',
     DRAFT_CONFLICT: 'Someone else saved this questionnaire in the meantime.',
     NOTHING_TO_PUBLISH: 'Nothing changed since the last version.',
+    AGE_SCREEN_REQUIRED:
+      'This project excludes people under a minimum age: the questionnaire needs a question about age that ends the interview as not eligible.',
     NOTICE_REQUIRED:
       'This project needs the information notice at the start of the questionnaire (a consent text and the question that accepts or refuses).',
     PUBLISH_BLOCKED: 'The questionnaire cannot be published yet.',
@@ -312,6 +314,8 @@ export const messagesEs: MessagesCatalogue = {
     CALL_ANSWERED: 'Una llamada contestada solo puede terminar como rellamada o rechazo.',
     DRAFT_CONFLICT: 'Otra persona guardó este cuestionario mientras tanto.',
     NOTHING_TO_PUBLISH: 'Nada cambió desde la última versión.',
+    AGE_SCREEN_REQUIRED:
+      'Este proyecto excluye a menores de una edad mínima: el cuestionario necesita una pregunta de edad que termine la entrevista como no elegible.',
     NOTICE_REQUIRED:
       'Este proyecto exige el aviso informativo al inicio del cuestionario (un texto de consentimiento y la pregunta que acepta o rechaza).',
     PUBLISH_BLOCKED: 'El cuestionario aún no se puede publicar.',

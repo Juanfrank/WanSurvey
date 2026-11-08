@@ -18,23 +18,23 @@ se arreglaron en esta revisión.
 
 ## Resumen por prioridad
 
-| #   | Hallazgo                                                                       | Prioridad | Quién                                         |
-| --- | ------------------------------------------------------------------------------ | --------- | --------------------------------------------- |
-| 1   | Conservación sin límite por defecto                                            | Alta      | **Mitigado** (proyectos nuevos) + Org.        |
-| 2   | Sin aviso informativo al recoger datos                                         | Alta      | **Implementado** + Org. (el texto)            |
-| 3   | Contacto telefónico sin base legal declarada ni listas nacionales de exclusión | Alta      | **Implementado** (base legal) + Org. (listas) |
-| 4   | Geocodificación con un servicio público gratuito (OpenStreetMap)               | Alta      | Org. (+ Desarrollo)                           |
-| 5   | Datos sensibles y menores sin controles específicos                            | Alta      | Desarrollo + Org.                             |
-| 6   | Sin procedimiento de respuesta a incidentes de seguridad                       | Alta      | Organización                                  |
-| 7   | Vigilancia de entrevistadores (posición, calidad, riesgo, voz)                 | Media     | Org. (+ Desarrollo)                           |
-| 8   | Seguimiento de aperturas de correo sin opción de apagarlo                      | Media     | Desarrollo                                    |
-| 9   | Registro de auditoría sin plazo de conservación; copias de seguridad           | Media     | Desarrollo + Org.                             |
-| 10  | Sin términos de uso ni compromiso de confidencialidad del personal             | Media     | Desarrollo + Org.                             |
-| 11  | Enlaces para compartir resultados que pueden no caducar                        | Media     | Desarrollo                                    |
-| 12  | Seguridad: lo que falta para decir «razonablemente protegido»                  | Media     | Org. + Desarrollo                             |
-| 13  | Texto de la Política de Privacidad inexacto en dos puntos                      | —         | **Corregido**                                 |
-| 14  | Licencias, propiedad intelectual y atribuciones                                | Baja      | Organización                                  |
-| 15  | Obligaciones administrativas fuera del código                                  | Alta      | Organización                                  |
+| #   | Hallazgo                                                                       | Prioridad | Quién                                           |
+| --- | ------------------------------------------------------------------------------ | --------- | ----------------------------------------------- |
+| 1   | Conservación sin límite por defecto                                            | Alta      | **Mitigado** (proyectos nuevos) + Org.          |
+| 2   | Sin aviso informativo al recoger datos                                         | Alta      | **Implementado** + Org. (el texto)              |
+| 3   | Contacto telefónico sin base legal declarada ni listas nacionales de exclusión | Alta      | **Implementado** (base legal) + Org. (listas)   |
+| 4   | Geocodificación con un servicio público gratuito (OpenStreetMap)               | Alta      | Org. (+ Desarrollo)                             |
+| 5   | Datos sensibles y menores sin controles específicos                            | Alta      | **Implementado** + Org. (evaluación de impacto) |
+| 6   | Sin procedimiento de respuesta a incidentes de seguridad                       | Alta      | Organización                                    |
+| 7   | Vigilancia de entrevistadores (posición, calidad, riesgo, voz)                 | Media     | Org. (+ Desarrollo)                             |
+| 8   | Seguimiento de aperturas de correo sin opción de apagarlo                      | Media     | Desarrollo                                      |
+| 9   | Registro de auditoría sin plazo de conservación; copias de seguridad           | Media     | Desarrollo + Org.                               |
+| 10  | Sin términos de uso ni compromiso de confidencialidad del personal             | Media     | Desarrollo + Org.                               |
+| 11  | Enlaces para compartir resultados que pueden no caducar                        | Media     | Desarrollo                                      |
+| 12  | Seguridad: lo que falta para decir «razonablemente protegido»                  | Media     | Org. + Desarrollo                               |
+| 13  | Texto de la Política de Privacidad inexacto en dos puntos                      | —         | **Corregido**                                   |
+| 14  | Licencias, propiedad intelectual y atribuciones                                | Baja      | Organización                                    |
+| 15  | Obligaciones administrativas fuera del código                                  | Alta      | Organización                                    |
 
 ## 1. Conservación sin límite por defecto
 
@@ -130,6 +130,16 @@ se arreglaron en esta revisión.
   aviso informativo específico, exclusión por defecto de las exportaciones y del modelo de BI) y
   plantilla de «pregunta de edad con salida». _Organización:_ evaluación de impacto antes de
   cualquier encuesta con datos sensibles o de menores; consentimiento del tutor cuando proceda.
+
+- **Hecho (2026-11-08).** Marca «Dato sensible» por pregunta, con categoría (salud, origen
+  racial o étnico, opiniones políticas, religión, orientación sexual, afiliación sindical, datos
+  biométricos o genéticos, antecedentes judiciales): se guarda también como dato personal (oculto,
+  cifrado, fuera de las exportaciones sin permiso) y un cuestionario con una no se publica sin el
+  aviso informativo. Edad mínima por proyecto: el diseñador ofrece el **Filtro de edad** (pregunta
+  de edad que termina la entrevista como «no elegible» por debajo de ella) y no se publica sin
+  él. _Pendiente:_ un permiso aparte para exportar datos sensibles (hoy rige `pii.view`), una
+  pregunta de consentimiento expreso como plantilla, y la vía con consentimiento del tutor, que
+  no se implementó a propósito.
 
 ## 6. Sin procedimiento de respuesta a incidentes de seguridad
 

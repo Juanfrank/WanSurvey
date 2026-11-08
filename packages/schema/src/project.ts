@@ -46,6 +46,12 @@ export type AudioSettings = z.infer<typeof AudioSettings>;
  */
 export const NoticeSettings = z.object({
   required: z.boolean().default(false),
+  /**
+   * The age under which people do not take part: when set, every questionnaire must screen by age
+   * (a question about age that ends the interview as not eligible) before it can be published.
+   * Null: no age screening is required.
+   */
+  minAge: z.number().int().min(5).max(30).nullable().default(null),
 });
 export type NoticeSettings = z.infer<typeof NoticeSettings>;
 
