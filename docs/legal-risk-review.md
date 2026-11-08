@@ -27,10 +27,10 @@ se arreglaron en esta revisión.
 | 5   | Datos sensibles y menores sin controles específicos                            | Alta      | **Implementado** + Org. (evaluación de impacto) |
 | 6   | Sin procedimiento de respuesta a incidentes de seguridad                       | Alta      | Organización                                    |
 | 7   | Vigilancia de entrevistadores (posición, calidad, riesgo, voz)                 | Media     | Org. (+ Desarrollo)                             |
-| 8   | Seguimiento de aperturas de correo sin opción de apagarlo                      | Media     | Desarrollo                                      |
+| 8   | Seguimiento de aperturas de correo sin opción de apagarlo                      | Media     | **Implementado**                                |
 | 9   | Registro de auditoría sin plazo de conservación; copias de seguridad           | Media     | Desarrollo + Org.                               |
 | 10  | Sin términos de uso ni compromiso de confidencialidad del personal             | Media     | Desarrollo + Org.                               |
-| 11  | Enlaces para compartir resultados que pueden no caducar                        | Media     | Desarrollo                                      |
+| 11  | Enlaces para compartir resultados que pueden no caducar                        | Media     | **Implementado**                                |
 | 12  | Seguridad: lo que falta para decir «razonablemente protegido»                  | Media     | Org. + Desarrollo                               |
 | 13  | Texto de la Política de Privacidad inexacto en dos puntos                      | —         | **Corregido**                                   |
 | 14  | Licencias, propiedad intelectual y atribuciones                                | Baja      | Organización                                    |
@@ -182,6 +182,11 @@ se arreglaron en esta revisión.
   proyectos que lo declaren necesario) manteniendo el seguimiento de clics necesario para el
   enlace personal.
 
+- **Hecho (2026-11-08).** Ajuste del proyecto «Medir cuándo se abre un correo» (Ajustes → Web):
+  apagado, el correo no lleva la imagen invisible y el embudo no muestra aperturas; el enlace
+  personal sigue contando el clic y el inicio. Sigue **encendido por defecto** para no cambiar lo
+  que ya funcionaba: decida con su área jurídica si en su país debe estar apagado.
+
 ## 9. Registro de auditoría sin plazo; copias de seguridad
 
 - **Qué vi.** El registro de auditoría guarda correos de personal y direcciones IP y **no tiene
@@ -216,6 +221,11 @@ se arreglaron en esta revisión.
 - **Qué hacer.** _Desarrollo:_ tope máximo (por ejemplo 90 días), aviso al crearlo y una lista
   para revocar. Comprobar que los resúmenes compartidos nunca contienen respuestas marcadas como
   personales ni celdas con muy pocas personas.
+
+- **Hecho (2026-11-08).** Un enlace nuevo dura como máximo **90 días** (30 por defecto) y ya no
+  existe «hasta revocarlo». Los enlaces antiguos sin caducidad siguen como estaban:
+  _pendiente:_ revisarlos y revocar los que no hagan falta. Falta aún comprobar que los
+  resúmenes compartidos nunca contienen respuestas personales ni celdas con muy pocas personas.
 
 ## 12. Seguridad: lo que falta para poder decir «razonablemente protegido»
 

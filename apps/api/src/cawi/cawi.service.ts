@@ -709,7 +709,7 @@ export class CawiService implements OnModuleInit {
         to: inv.email!,
         subject: t.subject,
         text: t.body,
-        html: htmlBody(t.body, this.pixelUrl(token)),
+        html: htmlBody(t.body, prepared.settings.cawi.trackOpens ? this.pixelUrl(token) : null),
         ...(prepared.settings.cawi.senderName
           ? { fromName: prepared.settings.cawi.senderName }
           : {}),
@@ -1192,11 +1192,12 @@ const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** The text body as simple HTML, links made clickable, with the open pixel. */
-function htmlBody(text: string, pixel: string) {
+export function htmlBody(text: string, pixel: string | null) {
   const html = escapeHtml(text)
     .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>')
     .replace(/\n/g, '<br>\n');
-  return `<!doctype html><html><body style="font-family:sans-serif;line-height:1.5">${html}<img src="${escapeHtml(pixel)}" width="1" height="1" alt=""></body></html>`;
+  const img = pixel ? `<img src="${escapeHtml(pixel)}" width="1" height="1" alt="">` : '';
+  return `<!doctype html><html><body style="font-family:sans-serif;line-height:1.5">${html}${img}</body></html>`;
 }
 
 function maskEmail(e: string | null) {

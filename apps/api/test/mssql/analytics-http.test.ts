@@ -313,6 +313,9 @@ describe.skipIf(!configured)(
 
     it('shares a read-only summary by link until it is revoked', async () => {
       expect((await post(sup, `/projects/${project}/share-links`, {})).status).toBe(403);
+      // A link always ends: at most 90 days, never "until revoked".
+      expect((await post(pm, `/projects/${project}/share-links`, { days: 365 })).status).toBe(400);
+      expect((await post(pm, `/projects/${project}/share-links`, { days: null })).status).toBe(400);
       const link = await post(pm, `/projects/${project}/share-links`, { days: 7 });
       expect(link.status, JSON.stringify(link.body)).toBe(201);
       const token = (link.body.url as string).split('/share/')[1]!;

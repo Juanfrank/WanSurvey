@@ -131,6 +131,11 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
   only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
   account menu and the foot of web surveys. The text needs the institution's legal review.
+- **E-mail opens can be switched off** (project settings → Web): without the invisible image the
+  funnel shows no opens, only clicks and starts; the personal link still works. On by default, as
+  before.
+- **Share links always end**: a link to a project's summary is valid for at most 90 days (30 by
+  default) and can no longer be "until revoked". Links already made keep their date.
 - **Sensitive data and minors**: a question can be marked as special-category data (health, racial
   or ethnic origin, political opinions, religion, sexual orientation, trade-union membership,
   biometric or genetic data, judicial record). It is stored as personal data too (masked, encrypted,

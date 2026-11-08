@@ -12,6 +12,9 @@ export const cawiEn = {
       contract: 'Contract',
       public_task: 'Public task',
     },
+    trackOpens: 'Measure when an e-mail is opened (invisible image)',
+    trackOpensHelp:
+      'Off: the funnel shows no opens, only clicks and starts. Some laws ask for consent for this kind of measurement, so turn it off unless you need it.',
     senderName: 'Sender name',
     completionMessage: 'Message when a respondent finishes',
     completionHelp: 'Leave empty for the default thank-you message in the survey’s language.',
@@ -169,6 +172,9 @@ export const cawiEs: CawiCatalogue = {
       contract: 'Contrato',
       public_task: 'Misión pública',
     },
+    trackOpens: 'Medir cuándo se abre un correo (imagen invisible)',
+    trackOpensHelp:
+      'Apagado: el embudo no muestra aperturas, solo clics e inicios. Algunas leyes piden consentimiento para este tipo de medición; apáguelo si no lo necesita.',
     senderName: 'Nombre del remitente',
     completionMessage: 'Mensaje al terminar',
     completionHelp: 'Déjelo vacío para el agradecimiento por defecto en el idioma de la encuesta.',

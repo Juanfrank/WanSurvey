@@ -153,6 +153,15 @@ function SendingSettings({ project }: { project: Project }) {
           {t('cawi.settings.lawfulHelp')}
         </span>
       </label>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={form.trackOpens}
+          onChange={(e) => setForm({ ...form, trackOpens: e.target.checked })}
+        />
+        <span>{t('cawi.settings.trackOpens')}</span>
+      </label>
+      <p className="max-w-prose text-sm text-slate-600">{t('cawi.settings.trackOpensHelp')}</p>
       <label className="flex flex-col gap-1">
         <span className="font-medium">{t('cawi.settings.senderName')}</span>
         <input

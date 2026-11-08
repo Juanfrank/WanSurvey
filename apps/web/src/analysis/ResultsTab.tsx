@@ -320,7 +320,7 @@ function ShareLinks({ projectId }: { projectId: string }) {
     mutationFn: () =>
       api(`/projects/${projectId}/share-links`, {
         method: 'POST',
-        body: { days: days ? Number(days) : null },
+        body: { days: Math.min(90, Math.max(1, Number(days) || 30)) },
       }),
     onSuccess: refresh,
     onError: (e) => setError(localiseError(t, e)),
@@ -341,10 +341,9 @@ function ShareLinks({ projectId }: { projectId: string }) {
           <input
             type="number"
             min={1}
-            max={365}
+            max={90}
             className={`${controlCls} w-24`}
             value={days}
-            placeholder={t('analysis.results.share.forever')}
             onChange={(e) => setDays(e.target.value)}
           />
         </label>

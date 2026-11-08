@@ -7,8 +7,8 @@ import { CONFIG, type AppConfig } from '../config.js';
 import type { AnalysisTx } from './analysis-repo.js';
 
 export const ShareBody = z.object({
-  /** Days the link works; none means until revoked. */
-  days: z.number().int().min(1).max(365).nullable().default(30),
+  /** Days the link works: at most 90, and always an end (a link that never ends stays open for good). */
+  days: z.number().int().min(1).max(90).default(30),
 });
 
 /**
@@ -44,7 +44,7 @@ export class ShareService {
     body: z.infer<typeof ShareBody>,
   ) {
     const token = randomToken(24);
-    const expiresAt = body.days ? new Date(Date.now() + body.days * 86_400_000) : null;
+    const expiresAt = new Date(Date.now() + body.days * 86_400_000);
     const id = await t.createShareLink({
       projectId,
       tokenHash: sha256Hex(token),

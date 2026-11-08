@@ -91,6 +91,12 @@ export type CawiTheme = z.infer<typeof CawiTheme>;
 
 export const CawiSettings = z.object({
   lawfulBasis: z.enum(LAWFUL_BASES).nullable().default(null),
+  /**
+   * Whether e-mails carry an invisible image that tells when a message was opened. Off: the funnel
+   * shows no opens (the personal link still counts the click and the start). Some laws ask for
+   * consent for it.
+   */
+  trackOpens: z.boolean().default(true),
   /** Shown as the sender of invitations ("Encuesta de hogares <…>"). */
   senderName: z.string().max(100).default(''),
   /** Shown when a respondent finishes; a default message when empty. */
