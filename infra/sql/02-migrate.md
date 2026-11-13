@@ -36,5 +36,19 @@ What the users may do, checked on SQL Server 2022:
   application's schema, so a later broad grant to a role cannot open them. The personal questions are
   marked in `bi.dim_pregunta.personal` (see `docs/bi.md`).
 
+## Scripts to make and check the users by hand
+
+Optional, for a DBA who wants to make the users and verify them (run them as the owner, in the
+database; the usage is at the top of each file). They do what the migrations do for the users, and
+are safe to repeat:
+
+- `03-users.sql`: makes or updates the schema, the read/write user and the read-only user (password,
+  default schema, the reader's `GRANT`/`DENY`). The tables' grants of the read/write user come from the
+  migrations, never from here.
+- `04-check-permissions.sql`: changes nothing; lists the users, roles and permissions and checks the
+  least-privilege rules (no role, nothing on schemas, no write on the audit log; the reader sees only
+  `bi`). It fails with a `FAIL` line if a permission was changed outside the migrations.
+- `05-drop-users.sql`: removes a user (to retire the reader); refuses the read/write user.
+
 The seed of demonstration data (`pnpm db:seed`, `pnpm db:seed-demo`) and the load-test setup work in
 the schema in `DATABASE_SCHEMA`: export it, with `DATABASE_ADMIN_URL`, when you run them.

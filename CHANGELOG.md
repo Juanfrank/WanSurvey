@@ -19,6 +19,10 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Scripts to make and check the SQL users by hand** (`infra/sql/03-users.sql`,
+  `04-check-permissions.sql`, `05-drop-users.sql`): the schema, the read/write and read-only users
+  with the names you choose, a read-only check of their permissions against the least-privilege
+  rules, and removal of the reader. Described in `infra/sql/02-migrate.md`.
 - **Creating accounts on the first Microsoft sign-in is a choice of each organisation** (Organisation
   page, `autoProvision` in `PUT /tenant/sso`, default yes, as before): the person gets an account and a
   membership with no role. When off, only people already added or invited get in; others are refused
