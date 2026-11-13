@@ -90,6 +90,7 @@ export interface MssqlSchema {
     client_secret_enc: string | null;
     enabled: Generated<boolean>;
     enforce_sso: Generated<boolean>;
+    auto_provision: Generated<boolean>;
     allowed_domains: JsonText;
     updated_at: Instant;
   };

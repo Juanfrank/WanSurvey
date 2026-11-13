@@ -100,6 +100,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: sign-in identity', () => {
         clientSecretEnc: 'enc-1',
         enabled: true,
         enforceSso: false,
+        autoProvision: true,
         allowedDomains: [org],
       }),
     );
@@ -109,6 +110,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: sign-in identity', () => {
       clientSecretEnc: 'enc-1',
       enabled: true,
       enforceSso: false,
+      autoProvision: true,
       allowedDomains: [org],
     });
     const second = await app.withTenant(a.id, (tx) =>
@@ -116,12 +118,14 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: sign-in identity', () => {
         ...first,
         clientSecretEnc: null,
         enforceSso: true,
+        autoProvision: true,
         allowedDomains: [org, com],
       }),
     );
     expect(second).toMatchObject({
       clientSecretEnc: null,
       enforceSso: true,
+      autoProvision: true,
       allowedDomains: [org, com],
     });
     expect(second.updatedAt.getTime()).toBeGreaterThanOrEqual(first.updatedAt.getTime());

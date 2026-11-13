@@ -19,9 +19,11 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
-- **`ENTRA_AUTO_PROVISION`** (default `true`): whoever first signs in with Microsoft from an allowed
-  domain gets an account and a membership with no role, as before. With `false`, only people already
-  added or invited get in; others are refused with `not_provisioned`.
+- **Creating accounts on the first Microsoft sign-in is a choice of each organisation** (Organisation
+  page, `autoProvision` in `PUT /tenant/sso`, default yes, as before): the person gets an account and a
+  membership with no role. When off, only people already added or invited get in; others are refused
+  with `not_provisioned`. `ENTRA_AUTO_PROVISION=false` in the deployment forbids it for all. New
+  migration `0029_sso_auto_provision.sql`.
 - **Suggestions while writing expressions**, as in a code editor: in the designer's formula,
   prefill, option-filter and similar fields, and in the cleaning rules of a project, a drop-down
   offers the questionnaire's variables (with their question text), the sample fields as `case.x`,

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { encryptField } from '../../src/common/crypto.js';
+import { SsoConfigs } from '../../src/auth/sso-config.js';
 import { CONFIG, resetConfigCache } from '../../src/config.js';
 import { ownerQuery } from './fixtures.js';
 import {
@@ -208,22 +209,37 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
     ).toHaveLength(0);
   });
 
-  it('ENTRA_AUTO_PROVISION=false refuses people not yet in the organisation, and lets members in', async () => {
+  it('each organisation chooses whether first sign-ins create accounts; the deployment can forbid it', async () => {
     const org = await ssoTenant();
+    const stranger = () => person(`new-${uuidv7()}@agency.org`);
+    const setting = (v: boolean) =>
+      admin`update tenant_sso set auto_provision = ${v ? 1 : 0} where tenant_id = ${org.id}`;
     const cfg = t.app.get<{ ENTRA_AUTO_PROVISION: boolean }>(CONFIG);
-    cfg.ENTRA_AUTO_PROVISION = false;
-    try {
-      const stranger = person(`new-${uuidv7()}@agency.org`);
-      expect((await signIn(org.slug, stranger)).callback.headers.location).toBe(
+    const sso = t.app.get(SsoConfigs);
+    const refused = async () => {
+      await sso.changed(org.id);
+      const p = stranger();
+      expect((await signIn(org.slug, p)).callback.headers.location).toBe(
         `${WEB}/login?sso_error=not_provisioned`,
       );
-      expect(await admin`select 1 from users where email = ${stranger.email}`).toHaveLength(0);
-      const member = await createUser(t.owner, org.id, [{ role: 'interviewer' }], {
-        email: `in-${uuidv7()}@agency.org`,
-      });
-      expect((await signIn(org.slug, person(member.email))).callback.headers.location).toBe(
-        `${WEB}/`,
-      );
+      expect(await admin`select 1 from users where email = ${p.email}`).toHaveLength(0);
+    };
+    // The organisation turns it off: strangers are refused, members are not.
+    await setting(false);
+    await refused();
+    const member = await createUser(t.owner, org.id, [{ role: 'interviewer' }], {
+      email: `in-${uuidv7()}@agency.org`,
+    });
+    expect((await signIn(org.slug, person(member.email))).callback.headers.location).toBe(
+      `${WEB}/`,
+    );
+    // On: a stranger is created. The deployment forbidding it wins over the organisation.
+    await setting(true);
+    await sso.changed(org.id);
+    expect((await signIn(org.slug, stranger())).callback.headers.location).toBe(`${WEB}/`);
+    cfg.ENTRA_AUTO_PROVISION = false;
+    try {
+      await refused();
     } finally {
       cfg.ENTRA_AUTO_PROVISION = true;
     }

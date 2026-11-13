@@ -56,6 +56,8 @@ const SsoSettings = z
     clientSecret: z.string().min(1).max(512).optional(),
     enabled: z.boolean(),
     enforceSso: z.boolean().default(false),
+    /** Omit to keep the stored choice (a new organisation: true). */
+    autoProvision: z.boolean().optional(),
     allowedDomains: z
       .array(z.string().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i, 'A domain such as agency.org'))
       .max(50)
@@ -228,6 +230,7 @@ export class SsoSettingsController {
         clientSecretEnc: secretEnc,
         enabled: body.enabled,
         enforceSso: body.enforceSso,
+        autoProvision: body.autoProvision ?? current?.autoProvision ?? true,
         allowedDomains: domains,
       });
       const { clientSecret: _secret, ...audited } = body;
@@ -257,6 +260,9 @@ export class SsoSettingsController {
       hasClientSecret: !!directory || !!row?.clientSecretEnc,
       enabled: row?.enabled ?? false,
       enforceSso: row?.enforceSso ?? false,
+      autoProvision: row?.autoProvision ?? true,
+      /** ENTRA_AUTO_PROVISION=false: the deployment forbids it for every organisation. */
+      autoProvisionAllowed: this.config.ENTRA_AUTO_PROVISION,
       allowedDomains: row?.allowedDomains ?? [],
       /** Domains the deployment's directory serves, when it limits them (empty: any). */
       deploymentDomains: directory?.allowedDomains ?? [],

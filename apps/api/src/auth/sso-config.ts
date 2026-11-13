@@ -15,6 +15,8 @@ export interface SsoConfig {
   clientSecret: string | null;
   enabled: boolean;
   enforceSso: boolean;
+  /** Create the account (no role) of whoever first signs in; false: only people already added. */
+  autoProvision: boolean;
   allowedDomains: string[];
   /** From the deployment's settings (ENTRA_*), not from the organisation's own. */
   fromDeployment: boolean;
@@ -190,6 +192,7 @@ export class SsoConfigs implements OnModuleDestroy {
             : null,
           enabled: row.enabled,
           enforceSso: row.enforceSso,
+          autoProvision: row.autoProvision,
           allowedDomains: row.allowedDomains,
           fromDeployment: false,
         }

@@ -15,6 +15,7 @@ export interface SsoRow {
   clientSecretEnc: string | null;
   enabled: boolean;
   enforceSso: boolean;
+  autoProvision: boolean;
   allowedDomains: string[];
   updatedAt: Date;
 }
@@ -25,6 +26,7 @@ export interface SsoValues {
   clientSecretEnc: string | null;
   enabled: boolean;
   enforceSso: boolean;
+  autoProvision: boolean;
   allowedDomains: string[];
 }
 
@@ -111,6 +113,7 @@ export class IdentityStore {
           clientSecretEnc: r.client_secret_enc,
           enabled: !!r.enabled,
           enforceSso: !!r.enforce_sso,
+          autoProvision: !!r.auto_provision,
           allowedDomains: JSON.parse(r.allowed_domains) as string[],
           updatedAt: r.updated_at,
         }
@@ -145,6 +148,7 @@ export class IdentityStore {
       client_secret_enc: v.clientSecretEnc,
       enabled: v.enabled,
       enforce_sso: v.enforceSso,
+      auto_provision: v.autoProvision,
       allowed_domains: JSON.stringify(v.allowedDomains),
       updated_at: instant(new Date()),
     };

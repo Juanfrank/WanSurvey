@@ -311,6 +311,8 @@ export const adminEn = {
     secretKept: 'A secret is stored; leave empty to keep it.',
     enabled: 'Allow signing in with Microsoft',
     enforce: 'Require it (no password sign-in)',
+    autoProvision:
+      'Create the account of anyone from these domains who signs in for the first time (with no role until an administrator assigns one)',
     domains: 'Allowed e-mail domains',
     domainsHint: 'Separated by commas, e.g. agency.org. Empty: any domain of the directory.',
     saveSso: 'Save sign-in settings',
@@ -677,6 +679,8 @@ export const adminEs: typeof adminEn = {
     secretKept: 'Hay un secreto guardado; déjalo vacío para conservarlo.',
     enabled: 'Permitir entrar con Microsoft',
     enforce: 'Exigirlo (sin entrar con contraseña)',
+    autoProvision:
+      'Crear la cuenta de quien ingrese por primera vez desde estos dominios (sin rol hasta que un administrador se lo asigne)',
     domains: 'Dominios de correo permitidos',
     domainsHint:
       'Separados por comas, p. ej. agencia.org. Vacío: cualquier dominio del directorio.',

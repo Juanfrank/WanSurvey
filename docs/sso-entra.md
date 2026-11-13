@@ -32,15 +32,17 @@ PUT /api/v1/tenant/sso
   "clientSecret": "<secret value>",
   "enabled": true,
   "enforceSso": false,
+  "autoProvision": true,
   "allowedDomains": ["agency.org"]
 }
 ```
 
-| Field            | Meaning                                                                                                                                                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clientSecret`   | Encrypted at rest and never returned. Omit it on later updates to keep the stored one. When the secret expires in Entra, save the new one here.                                     |
-| `allowedDomains` | People whose e-mail is in one of these domains may be **linked** to an existing WanSurvey account or **created** on their first Microsoft sign-in. Required when `enabled` is true. |
-| `enforceSso`     | When true, password sign-in to this organisation is refused, except for its **owners**, who keep a password as a break-glass route.                                                 |
+| Field            | Meaning                                                                                                                                                                                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clientSecret`   | Encrypted at rest and never returned. Omit it on later updates to keep the stored one. When the secret expires in Entra, save the new one here.                                                                                                                                             |
+| `allowedDomains` | People whose e-mail is in one of these domains may be **linked** to an existing WanSurvey account or **created** on their first Microsoft sign-in. Required when `enabled` is true.                                                                                                         |
+| `autoProvision`  | Default true. When false, nobody is created by a first Microsoft sign-in: only people already added or invited get in (anyone else is refused with `not_provisioned`). Omit it to keep the stored choice. `ENTRA_AUTO_PROVISION=false` in the deployment forbids it for every organisation. |
+| `enforceSso`     | When true, password sign-in to this organisation is refused, except for its **owners**, who keep a password as a break-glass route.                                                                                                                                                         |
 
 ## 3. How sign-in works
 
@@ -51,12 +53,12 @@ PUT /api/v1/tenant/sso
    - by e-mail, if the domain is allowed: an existing account is linked, otherwise a new account is created.
 4. Membership of the organisation:
 
-   | Membership  | Result                                                                                                |
-   | ----------- | ----------------------------------------------------------------------------------------------------- |
-   | Active      | Signed in with their roles                                                                            |
-   | Invited     | The invitation is accepted                                                                            |
-   | Deactivated | Refused                                                                                               |
-   | None        | Added as a member **with no role** (refused with `not_provisioned` when `ENTRA_AUTO_PROVISION=false`) |
+   | Membership  | Result                                                                                                                                                          |
+   | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | Active      | Signed in with their roles                                                                                                                                      |
+   | Invited     | The invitation is accepted                                                                                                                                      |
+   | Deactivated | Refused                                                                                                                                                         |
+   | None        | Added as a member **with no role** (refused with `not_provisioned` when the organisation, or the deployment's `ENTRA_AUTO_PROVISION=false`, turns creation off) |
 
 5. The browser returns to `PUBLIC_URL + returnTo` with a session. On failure it goes to `PUBLIC_URL/login?sso_error=<code>`. Possible codes:
    - `sso_not_configured`
@@ -89,7 +91,7 @@ ENTRA_CLIENT_ID=<Application (client) ID>
 ENTRA_CLIENT_SECRET=<the secret, or a Key Vault reference>
 ENTRA_REDIRECT_URI=https://encuestas.example.org/api/auth/entra/callback   # as registered in Entra
 ENTRA_ALLOWED_DOMAINS=agency.org          # optional, comma-separated: the domains the directory serves
-ENTRA_AUTO_PROVISION=true                 # optional (default true): false = only people already added get in
+ENTRA_AUTO_PROVISION=true                 # optional (default true): false forbids creating accounts in every organisation
 PASSWORD_LOGIN=false                      # optional: Microsoft only, no passwords
 ```
 

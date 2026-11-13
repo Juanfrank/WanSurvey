@@ -30,6 +30,9 @@ interface Sso {
   hasClientSecret: boolean;
   enabled: boolean;
   enforceSso: boolean;
+  autoProvision?: boolean;
+  /** False when the deployment (ENTRA_AUTO_PROVISION=false) forbids creating accounts. */
+  autoProvisionAllowed?: boolean;
   allowedDomains: string[];
   redirectUri: string;
 }
@@ -191,6 +194,7 @@ function SsoEditor({ sso }: { sso: Sso }) {
   const [secret, setSecret] = useState('');
   const [enabled, setEnabled] = useState(sso.enabled);
   const [enforce, setEnforce] = useState(sso.enforceSso);
+  const [autoProvision, setAutoProvision] = useState(sso.autoProvision ?? true);
   const [domains, setDomains] = useState(sso.allowedDomains.join(', '));
   const [saved, setSaved] = useState<string | null>(null);
   // The directory, application and secret of the deployment are shown, not edited, and not sent.
@@ -209,6 +213,7 @@ function SsoEditor({ sso }: { sso: Sso }) {
               }),
           enabled,
           enforceSso: enabled && enforce,
+          autoProvision,
           allowedDomains: domains
             .split(/[,\s]+/)
             .map((d) => d.trim())
@@ -310,6 +315,14 @@ function SsoEditor({ sso }: { sso: Sso }) {
           onChange={setEnforce}
           disabled={!enabled}
         />
+        {sso.autoProvisionAllowed === false ? null : (
+          <CheckField
+            label={t('admin.org.autoProvision')}
+            checked={enabled && autoProvision}
+            onChange={setAutoProvision}
+            disabled={!enabled}
+          />
+        )}
         {save.isError ? <ErrorText>{save.error.message || t('admin.org.error')}</ErrorText> : null}
         <div className="flex items-center gap-3">
           <Button

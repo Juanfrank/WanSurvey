@@ -145,10 +145,10 @@ const Env = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   /**
-   * Create the account and the membership of whoever first signs in with Microsoft from an allowed
-   * domain, with no role (they wait on the access page until an administrator assigns one). 'false':
-   * only people already in the organisation (invited or added) get in; anyone else is refused
-   * with `not_provisioned`.
+   * Whether organisations may create the account (no role) of whoever first signs in with Microsoft
+   * from their domains. Each organisation chooses on its own Organisation page (default: yes);
+   * 'false' here forbids it for all of them: only people already added or invited get in, anyone
+   * else is refused with `not_provisioned`.
    */
   ENTRA_AUTO_PROVISION: z
     .enum(['true', 'false'])
