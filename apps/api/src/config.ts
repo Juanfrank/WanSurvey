@@ -145,6 +145,16 @@ const Env = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   /**
+   * Create the account and the membership of whoever first signs in with Microsoft from an allowed
+   * domain, with no role (they wait on the access page until an administrator assigns one). 'false':
+   * only people already in the organisation (invited or added) get in; anyone else is refused
+   * with `not_provisioned`.
+   */
+  ENTRA_AUTO_PROVISION: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /**
    * The deployment's Microsoft directory (App Service settings), used by every organisation
    * that turns Microsoft sign-in on instead of a directory of its own: the organisation is found
    * from the e-mail's domain. ENTRA_CLIENT_SECRET is the secret itself or a Key Vault reference

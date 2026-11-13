@@ -120,6 +120,11 @@
     "slotSetting": false
   },
   {
+    "name": "ENTRA_AUTO_PROVISION",
+    "value": "true",
+    "slotSetting": false
+  },
+  {
     "name": "ENTRA_ALLOWED_DOMAINS",
     "value": "<example.org>",
     "slotSetting": false

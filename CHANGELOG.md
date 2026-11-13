@@ -19,6 +19,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **`ENTRA_AUTO_PROVISION`** (default `true`): whoever first signs in with Microsoft from an allowed
+  domain gets an account and a membership with no role, as before. With `false`, only people already
+  added or invited get in; others are refused with `not_provisioned`.
 - **Suggestions while writing expressions**, as in a code editor: in the designer's formula,
   prefill, option-filter and similar fields, and in the cleaning rules of a project, a drop-down
   offers the questionnaire's variables (with their question text), the sample fields as `case.x`,

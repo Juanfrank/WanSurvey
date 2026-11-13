@@ -263,6 +263,8 @@ export class SsoService {
         // An identity linked elsewhere (another organisation on the same directory) joins this
         // one only with an address of its domains, as a new identity would.
         if (!member && !config.allowedDomains.includes(domain)) throw fail('domain_not_allowed');
+        // ENTRA_AUTO_PROVISION=false: the account and membership are created by an administrator.
+        if (!member && !this.config.ENTRA_AUTO_PROVISION) throw fail('not_provisioned');
         if (!existingId) {
           await t.createSsoAccount({
             id: userId,

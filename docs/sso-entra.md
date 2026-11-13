@@ -51,12 +51,12 @@ PUT /api/v1/tenant/sso
    - by e-mail, if the domain is allowed: an existing account is linked, otherwise a new account is created.
 4. Membership of the organisation:
 
-   | Membership  | Result                             |
-   | ----------- | ---------------------------------- |
-   | Active      | Signed in with their roles         |
-   | Invited     | The invitation is accepted         |
-   | Deactivated | Refused                            |
-   | None        | Added as a member **with no role** |
+   | Membership  | Result                                                                                                |
+   | ----------- | ----------------------------------------------------------------------------------------------------- |
+   | Active      | Signed in with their roles                                                                            |
+   | Invited     | The invitation is accepted                                                                            |
+   | Deactivated | Refused                                                                                               |
+   | None        | Added as a member **with no role** (refused with `not_provisioned` when `ENTRA_AUTO_PROVISION=false`) |
 
 5. The browser returns to `PUBLIC_URL + returnTo` with a session. On failure it goes to `PUBLIC_URL/login?sso_error=<code>`. Possible codes:
    - `sso_not_configured`
@@ -66,6 +66,7 @@ PUT /api/v1/tenant/sso
    - `token_exchange_failed`
    - `invalid_token`
    - `domain_not_allowed`
+   - `not_provisioned`
    - `link_required` / `link_not_allowed`
    - `account_disabled`
    - `membership_deactivated`
@@ -88,6 +89,7 @@ ENTRA_CLIENT_ID=<Application (client) ID>
 ENTRA_CLIENT_SECRET=<the secret, or a Key Vault reference>
 ENTRA_REDIRECT_URI=https://encuestas.example.org/api/auth/entra/callback   # as registered in Entra
 ENTRA_ALLOWED_DOMAINS=agency.org          # optional, comma-separated: the domains the directory serves
+ENTRA_AUTO_PROVISION=true                 # optional (default true): false = only people already added get in
 PASSWORD_LOGIN=false                      # optional: Microsoft only, no passwords
 ```
 

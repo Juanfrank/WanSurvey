@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { encryptField } from '../../src/common/crypto.js';
-import { resetConfigCache } from '../../src/config.js';
+import { CONFIG, resetConfigCache } from '../../src/config.js';
 import { ownerQuery } from './fixtures.js';
 import {
   PASSWORD,
@@ -206,6 +206,27 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
     expect(
       await admin`select 1 from tenant_members where user_id = ${victim.id} and tenant_id = ${attacker.id}`,
     ).toHaveLength(0);
+  });
+
+  it('ENTRA_AUTO_PROVISION=false refuses people not yet in the organisation, and lets members in', async () => {
+    const org = await ssoTenant();
+    const cfg = t.app.get<{ ENTRA_AUTO_PROVISION: boolean }>(CONFIG);
+    cfg.ENTRA_AUTO_PROVISION = false;
+    try {
+      const stranger = person(`new-${uuidv7()}@agency.org`);
+      expect((await signIn(org.slug, stranger)).callback.headers.location).toBe(
+        `${WEB}/login?sso_error=not_provisioned`,
+      );
+      expect(await admin`select 1 from users where email = ${stranger.email}`).toHaveLength(0);
+      const member = await createUser(t.owner, org.id, [{ role: 'interviewer' }], {
+        email: `in-${uuidv7()}@agency.org`,
+      });
+      expect((await signIn(org.slug, person(member.email))).callback.headers.location).toBe(
+        `${WEB}/`,
+      );
+    } finally {
+      cfg.ENTRA_AUTO_PROVISION = true;
+    }
   });
 
   it('links an account of several organisations when its owner is signed in with it', async () => {
