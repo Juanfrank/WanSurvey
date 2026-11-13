@@ -75,8 +75,8 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     const [clerk] = await db.all(`select id from users where email = ?`, [CLERK]);
     const id2 = uuidv7();
     await db.run(
-      `insert into users (id, email, name, first_name, status, password_hash)
-       values (?, ?, 'Second Clerk', 'Second', 'active', ?)`,
+      `insert into users (id, email, name, first_name, status, password_hash, terms_version, terms_accepted_at)
+       values (?, ?, 'Second Clerk', 'Second', 'active', ?, 1, sysdatetimeoffset())`,
       [id2, CLERK2, await hash(PASSWORD, { algorithm: 2 })],
     );
     await db.run(

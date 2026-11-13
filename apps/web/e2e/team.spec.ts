@@ -100,6 +100,13 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(inesBrowser.page.getByText('Your invitation was accepted.')).toBeVisible();
   await inesBrowser.page.getByRole('link', { name: 'Go to sign in' }).click();
   await login(inesBrowser.page, INES);
+  // A person invited just now accepts the terms of use before working.
+  const gate = inesBrowser.page.getByTestId('terms-gate');
+  await expect(gate).toBeVisible();
+  await gate
+    .getByLabel('I have read and accept the terms of use and the confidentiality undertaking')
+    .check();
+  await gate.getByRole('button', { name: 'Accept and continue' }).click();
   await expect(inesBrowser.page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
   // An interviewer does not see the team.
   await expect(
