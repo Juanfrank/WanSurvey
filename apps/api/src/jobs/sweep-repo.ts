@@ -37,7 +37,7 @@ export class MssqlSweepRepo implements SweepRepo {
       const offers: SweepOffer[] = [];
       let failed = 0;
       for (const w of WORK) {
-        const table = ksql.raw(`dbo.${w.table}`);
+        const table = ksql.raw(`${w.table}`);
         const due = await ksql<{ id: string; attempts: number }>`
           SELECT id, attempts FROM ${table}
           WHERE attempts < ${MAX_JOB_ATTEMPTS}

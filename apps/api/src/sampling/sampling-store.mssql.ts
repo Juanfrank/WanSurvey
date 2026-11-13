@@ -154,7 +154,7 @@ export class SamplingStore {
         exclusion: u.exclusion ?? null,
       }));
       const res = await sql<{ n: number }>`
-        INSERT INTO dbo.frame_units (id, tenant_id, project_id, questionnaire_id, external_id,
+        INSERT INTO frame_units (id, tenant_id, project_id, questionnaire_id, external_id,
           source_label, sample, sample_pii, contacts, import_id, eligible, exclusion)
         SELECT j.id, ${v.tenantId}, ${v.projectId}, ${v.questionnaireId}, j.ext, j.label, j.sample,
           j.pii, j.contacts, j.importId, j.eligible, j.exclusion
@@ -164,7 +164,7 @@ export class SamplingStore {
           exclusion nvarchar(max)
         ) j
         WHERE NOT EXISTS (
-          SELECT 1 FROM dbo.frame_units f WITH (UPDLOCK, HOLDLOCK)
+          SELECT 1 FROM frame_units f WITH (UPDLOCK, HOLDLOCK)
           WHERE f.project_id = ${v.projectId}
             AND ISNULL(f.questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier)) = ISNULL(CAST(${v.questionnaireId} AS uniqueidentifier), CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier))
             AND f.external_id = j.ext
@@ -237,7 +237,7 @@ export class SamplingStore {
       await sql`
         UPDATE f SET role = j.role, release_order = j.releaseOrder, inclusion_prob = j.prob,
           base_weight = j.weight, stratum = j.stratum, eligible = j.eligible, exclusion = j.exclusion
-        FROM dbo.frame_units f
+        FROM frame_units f
         JOIN OPENJSON(${JSON.stringify(rows)}) WITH (
           id uniqueidentifier, role nvarchar(32), releaseOrder int, prob float, weight float,
           stratum nvarchar(450), eligible bit, exclusion nvarchar(max)
@@ -270,33 +270,33 @@ export class SamplingStore {
       }));
       const res = await sql<{ id: string; frame_unit_id: string }>`
         DECLARE @out TABLE (id uniqueidentifier, frame_unit_id uniqueidentifier);
-        INSERT INTO dbo.cases (id, tenant_id, project_id, questionnaire_id, external_id, sample,
+        INSERT INTO cases (id, tenant_id, project_id, questionnaire_id, external_id, sample,
           sample_pii, import_id, frame_unit_id, selection_role, substitute_for, inclusion_prob,
           base_weight)
         OUTPUT inserted.id, inserted.frame_unit_id INTO @out
         SELECT m.caseId, f.tenant_id, f.project_id, f.questionnaire_id, f.external_id, f.sample,
           f.sample_pii, f.import_id, f.id, m.role, m.substituteFor, m.prob, m.weight
-        FROM dbo.frame_units f
+        FROM frame_units f
         JOIN OPENJSON(${JSON.stringify(rows)}) WITH (
           unitId uniqueidentifier, caseId uniqueidentifier, role nvarchar(32),
           substituteFor uniqueidentifier, prob float, weight float
         ) m ON m.unitId = f.id
         WHERE f.project_id = ${v.projectId}
           AND NOT EXISTS (
-            SELECT 1 FROM dbo.cases c WITH (UPDLOCK, HOLDLOCK)
+            SELECT 1 FROM cases c WITH (UPDLOCK, HOLDLOCK)
             WHERE c.project_id = f.project_id
               AND ISNULL(c.questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier)) = ISNULL(f.questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier))
               AND c.external_id = f.external_id
           );
-        INSERT INTO dbo.contacts (id, tenant_id, case_id, type, value, label)
+        INSERT INTO contacts (id, tenant_id, case_id, type, value, label)
         SELECT NEWID(), f.tenant_id, o.id, k.type, k.value, k.label
         FROM @out o
-        JOIN dbo.frame_units f ON f.id = o.frame_unit_id
+        JOIN frame_units f ON f.id = o.frame_unit_id
         CROSS APPLY OPENJSON(f.contacts) WITH (
           type nvarchar(32), value nvarchar(450), label nvarchar(450)
         ) k;
         UPDATE f SET case_id = o.id
-        FROM dbo.frame_units f JOIN @out o ON o.frame_unit_id = f.id;
+        FROM frame_units f JOIN @out o ON o.frame_unit_id = f.id;
         SELECT id, frame_unit_id FROM @out;`.execute(tx);
       made.push(
         ...res.rows.map((r) => ({
@@ -318,7 +318,7 @@ export class SamplingStore {
   ): Promise<string[]> {
     const res = await sql<{ id: string }>`
       WITH next AS (
-        SELECT TOP (${v.count}) * FROM dbo.frame_units WITH (UPDLOCK, READPAST, ROWLOCK, INDEX(frame_units_reserve_idx))
+        SELECT TOP (${v.count}) * FROM frame_units WITH (UPDLOCK, READPAST, ROWLOCK, INDEX(frame_units_reserve_idx))
         WHERE project_id = ${v.projectId}
           AND ISNULL(questionnaire_id, CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier)) = ISNULL(CAST(${v.questionnaireId} AS uniqueidentifier), CAST(${NO_QUESTIONNAIRE} AS uniqueidentifier))
           AND role = 'reserve' AND released_at IS NULL
@@ -378,7 +378,7 @@ export class SamplingStore {
       SELECT id, user_id, questionnaire_id, frequency,
         CONVERT(varchar(10), starts_on, 23) AS starts_on, CONVERT(varchar(10), ends_on, 23) AS ends_on,
         target
-      FROM dbo.interviewer_goals WHERE project_id = ${projectId}
+      FROM interviewer_goals WHERE project_id = ${projectId}
       ORDER BY starts_on, id`.execute(tx);
     return res.rows;
   }

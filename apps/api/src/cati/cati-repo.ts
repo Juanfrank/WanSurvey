@@ -202,26 +202,26 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
 
   async attemptForUpdate(id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT * FROM dbo.call_attempts WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(this.mtx);
+      SELECT * FROM call_attempts WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(this.mtx);
     return res.rows[0] ? toAttempt(res.rows[0]) : null;
   }
 
   async caseOf(id: string) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases WHERE id = ${id}`.execute(this.mtx);
+      SELECT * FROM cases WHERE id = ${id}`.execute(this.mtx);
     return res.rows[0] ? toCase(res.rows[0]) : null;
   }
 
   async callable(projectId: string, caseId: string, lock: boolean) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases c ${ksql.raw(lock ? 'WITH (UPDLOCK, ROWLOCK)' : '')}
+      SELECT * FROM cases c ${ksql.raw(lock ? 'WITH (UPDLOCK, ROWLOCK)' : '')}
       WHERE c.id = ${caseId} AND c.project_id = ${projectId}
         AND c.status IN ('fresh', 'assigned', 'in_progress')
         AND (c.mode_preference IS NULL OR c.mode_preference = 'CATI')
         AND c.checked_out_device IS NULL
         AND NOT ${hasNoContact('c', 'CATI')}
-        AND EXISTS (SELECT 1 FROM dbo.contacts ct WHERE ct.case_id = c.id AND ct.type = 'phone' AND ct.valid = 1)
-        AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id
+        AND EXISTS (SELECT 1 FROM contacts ct WHERE ct.case_id = c.id AND ct.type = 'phone' AND ct.valid = 1)
+        AND NOT EXISTS (SELECT 1 FROM interviews iv WHERE iv.case_id = c.id
                         AND iv.status = 'in_progress' AND iv.mode <> 'CATI')`.execute(this.mtx);
     return res.rows[0] ? toCase(res.rows[0]) : null;
   }
@@ -233,7 +233,7 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
 
   async lockSkipping(id: string) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases WITH (UPDLOCK, READPAST, ROWLOCK) WHERE id = ${id}`.execute(this.mtx);
+      SELECT * FROM cases WITH (UPDLOCK, READPAST, ROWLOCK) WHERE id = ${id}`.execute(this.mtx);
     return res.rows[0] ? toCase(res.rows[0]) : null;
   }
 
@@ -343,8 +343,8 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
 
   async usableQuestionnaires(projectId: string) {
     const res = await ksql<{ id: string; name: string }>`
-      SELECT DISTINCT q.id, q.name FROM dbo.questionnaires q
-      JOIN dbo.questionnaire_versions v ON v.questionnaire_id = q.id
+      SELECT DISTINCT q.id, q.name FROM questionnaires q
+      JOIN questionnaire_versions v ON v.questionnaire_id = q.id
       WHERE q.project_id = ${projectId} AND v.status = 'published' AND q.state = 'active'
       ORDER BY q.name`.execute(this.mtx);
     return res.rows.map((r) => ({ id: low(r.id), name: r.name }));
@@ -431,7 +431,7 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
 
   async closeCallOfInterview(row: InterviewRow, disposition: string) {
     await ksql`
-      UPDATE dbo.call_attempts SET disposition = ${disposition}, ended_at = SYSDATETIMEOFFSET()
+      UPDATE call_attempts SET disposition = ${disposition}, ended_at = SYSDATETIMEOFFSET()
       WHERE interview_id = ${row.id} AND disposition IS NULL`.execute(this.mtx);
     await this.mtx
       .updateTable('cases')
@@ -457,16 +457,16 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
   async callbacks(projectId: string, userId: string, pool: boolean) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
       SELECT TOP (200) c.*,
-        (SELECT u.name FROM dbo.users u WHERE u.id = c.callback_user_id) AS for_user_name,
-        (SELECT TOP (1) a.outcome FROM dbo.call_attempts a
+        (SELECT u.name FROM users u WHERE u.id = c.callback_user_id) AS for_user_name,
+        (SELECT TOP (1) a.outcome FROM call_attempts a
           WHERE a.case_id = c.id AND a.callback_at IS NOT NULL ORDER BY a.ended_at DESC) AS b_outcome,
-        (SELECT TOP (1) a.note FROM dbo.call_attempts a
+        (SELECT TOP (1) a.note FROM call_attempts a
           WHERE a.case_id = c.id AND a.callback_at IS NOT NULL ORDER BY a.ended_at DESC) AS b_note,
-        (SELECT TOP (1) u.name FROM dbo.call_attempts a LEFT JOIN dbo.users u ON u.id = a.interviewer_id
+        (SELECT TOP (1) u.name FROM call_attempts a LEFT JOIN users u ON u.id = a.interviewer_id
           WHERE a.case_id = c.id AND a.callback_at IS NOT NULL ORDER BY a.ended_at DESC) AS b_by,
-        CASE WHEN EXISTS (SELECT 1 FROM dbo.contacts ct WHERE ct.case_id = c.id AND ct.type = 'phone' AND ct.valid = 1) THEN 1 ELSE 0 END AS has_phone,
-        CASE WHEN EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id AND iv.status = 'in_progress' AND iv.mode <> 'CATI') THEN 1 ELSE 0 END AS other_mode
-      FROM dbo.cases c
+        CASE WHEN EXISTS (SELECT 1 FROM contacts ct WHERE ct.case_id = c.id AND ct.type = 'phone' AND ct.valid = 1) THEN 1 ELSE 0 END AS has_phone,
+        CASE WHEN EXISTS (SELECT 1 FROM interviews iv WHERE iv.case_id = c.id AND iv.status = 'in_progress' AND iv.mode <> 'CATI') THEN 1 ELSE 0 END AS other_mode
+      FROM cases c
       WHERE c.project_id = ${projectId} AND c.disposition = 'CALLBACK'
         AND c.status IN ('fresh', 'assigned', 'in_progress')
         AND (c.callback_user_id = ${userId}

@@ -392,9 +392,9 @@ export class MssqlReviewTx extends MssqlInterviewsTx implements ReviewTx {
   async submitCounts(interviewId: string) {
     const res = await ksql<{ warnings: number; differences: number }>`
       SELECT
-        (SELECT COUNT(*) FROM dbo.interview_paradata
+        (SELECT COUNT(*) FROM interview_paradata
           WHERE interview_id = ${interviewId} AND type = 'warning_confirmed') AS warnings,
-        (SELECT COUNT(*) FROM dbo.entry_mismatches
+        (SELECT COUNT(*) FROM entry_mismatches
           WHERE second_interview_id = ${interviewId}) AS differences`.execute(this.mtx);
     return { warnings: res.rows[0]?.warnings ?? 0, differences: res.rows[0]?.differences ?? 0 };
   }

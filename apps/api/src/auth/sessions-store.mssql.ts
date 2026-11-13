@@ -176,7 +176,7 @@ export class SessionsStore {
 
   /** Revokes the person's live sessions in every organisation (password reset). */
   async revokeEverywhere(tx: MssqlTx, userId: string): Promise<number> {
-    const res = await sql<{ n: number }>`EXEC dbo.revoke_user_sessions ${userId}`.execute(tx);
+    const res = await sql<{ n: number }>`EXEC revoke_user_sessions ${userId}`.execute(tx);
     return res.rows[0]?.n ?? 0;
   }
 

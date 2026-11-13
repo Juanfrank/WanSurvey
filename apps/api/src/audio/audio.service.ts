@@ -125,7 +125,7 @@ export class AudioService implements OnModuleInit {
         });
       // Nothing is kept without the respondent's yes, recorded as paradata of the interview.
       const consent = await sql<{ payload: string }>`
-        SELECT TOP (1) payload FROM dbo.interview_paradata
+        SELECT TOP (1) payload FROM interview_paradata
         WHERE interview_id = ${interviewId} AND type = 'audio_consent'
         ORDER BY at DESC, seq DESC`.execute(tx);
       const granted =
@@ -305,8 +305,8 @@ export class AudioService implements OnModuleInit {
             const days = projectSettings(JSON.parse(p.settings)).audio.retentionDays;
             const cutoff = new Date(now.getTime() - days * 86_400_000);
             const due = await sql<{ id: string }>`
-              SELECT DISTINCT a.interview_id AS id FROM dbo.interview_audio a
-              JOIN dbo.interviews i ON i.id = a.interview_id
+              SELECT DISTINCT a.interview_id AS id FROM interview_audio a
+              JOIN interviews i ON i.id = a.interview_id
               WHERE a.project_id = ${p.id} AND i.status IN ('approved', 'rejected')
                 AND COALESCE(i.reviewed_at, i.submitted_at) < ${cutoff.toISOString()}`.execute(tx);
             const ids = due.rows.map((r) => r.id.toLowerCase());

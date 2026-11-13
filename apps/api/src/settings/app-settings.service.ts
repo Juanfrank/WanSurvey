@@ -9,7 +9,7 @@ export interface StoredSetting {
 }
 
 /**
- * Settings of the installation as a whole, kept in `dbo.app_settings` (mssql/0025). The
+ * Settings of the installation as a whole, kept in `app_settings` (mssql/0025). The
  * application reaches them only through the owner procedures `app_setting_get` and `app_setting_set`.
  */
 @Injectable()
@@ -21,7 +21,7 @@ export class AppSettingsService {
       value: string | null;
       updated_at: Date;
       updated_by: string | null;
-    }>`EXEC dbo.app_setting_get ${key}`.execute(this.engine.sql.db);
+    }>`EXEC app_setting_get ${key}`.execute(this.engine.sql.db);
     const row = res.rows[0];
     if (!row || row.value === null) return null;
     return { value: row.value, updatedAt: new Date(row.updated_at), updatedBy: row.updated_by };
@@ -29,6 +29,6 @@ export class AppSettingsService {
 
   /** `null` removes the setting, so the deployment's default applies again. */
   async set(key: string, value: string | null, by: string | null): Promise<void> {
-    await sql`EXEC dbo.app_setting_set ${key}, ${value}, ${by}`.execute(this.engine.sql.db);
+    await sql`EXEC app_setting_set ${key}, ${value}, ${by}`.execute(this.engine.sql.db);
   }
 }

@@ -88,7 +88,7 @@ export class QuestionnaireStore {
     id: string,
   ): Promise<QuestionnaireRow | undefined> {
     const res = await sql<Selectable<MssqlSchema['questionnaires']>>`
-      SELECT * FROM dbo.questionnaires WITH (UPDLOCK, ROWLOCK)
+      SELECT * FROM questionnaires WITH (UPDLOCK, ROWLOCK)
       WHERE id = ${id} AND project_id = ${projectId}`.execute(tx);
     const r = res.rows[0];
     return r && toQuestionnaire({ ...r, id: r.id.toLowerCase() });
@@ -362,12 +362,12 @@ export class QuestionnaireStore {
     // heartbeats of one person arriving together neither insert twice nor deadlock.
     await sql`
       BEGIN TRY
-        INSERT INTO dbo.questionnaire_presence (tenant_id, questionnaire_id, user_id, item_id)
+        INSERT INTO questionnaire_presence (tenant_id, questionnaire_id, user_id, item_id)
         VALUES (${v.tenantId}, ${v.questionnaireId}, ${v.userId}, ${v.itemId});
       END TRY
       BEGIN CATCH
         IF ERROR_NUMBER() IN (2601, 2627)
-          UPDATE dbo.questionnaire_presence
+          UPDATE questionnaire_presence
           SET item_id = ${v.itemId}, last_seen = SYSDATETIMEOFFSET()
           WHERE questionnaire_id = ${v.questionnaireId} AND user_id = ${v.userId};
         ELSE

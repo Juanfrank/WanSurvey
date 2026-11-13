@@ -466,7 +466,7 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
         SUM(CASE WHEN status = 'suppressed' THEN 1 ELSE 0 END) AS suppressed,
         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
         COALESCE(SUM(reminders_sent), 0) AS reminders
-      FROM dbo.invitations
+      FROM invitations
       WHERE project_id = ${projectId} AND wave_id IS NOT NULL
       GROUP BY wave_id`.execute(this.mctx);
     return res.rows.map((r) => ({
@@ -521,7 +521,7 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
 
   async waveCandidates(projectId: string, questionnaireId: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT id, sample, sample_pii, status, priority, mode_preference FROM dbo.cases
+      SELECT id, sample, sample_pii, status, priority, mode_preference FROM cases
       WHERE project_id = ${projectId}
         AND (questionnaire_id IS NULL OR questionnaire_id = ${questionnaireId})
         AND status IN ('fresh', 'assigned')
@@ -610,7 +610,7 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
   async waveLinkRows(projectId: string, waveId: string) {
     const res = await ksql<Record<string, unknown>>`
       SELECT i.token_enc, c.external_id, i.started_at, i.completed_at
-      FROM dbo.invitations i JOIN dbo.cases c ON c.id = i.case_id
+      FROM invitations i JOIN cases c ON c.id = i.case_id
       WHERE i.project_id = ${projectId} AND i.wave_id = ${waveId}
       ORDER BY c.external_id`.execute(this.mctx);
     return res.rows.map((r) => ({
@@ -673,10 +673,10 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
   async openLinkTarget(id: string) {
     const res = await ksql<Record<string, unknown>>`
       SELECT l.project_id, l.questionnaire_id, q.state, q.successor_id, v.id AS version_id, v.version
-      FROM dbo.open_links l
-      JOIN dbo.questionnaires q ON q.id = l.questionnaire_id
+      FROM open_links l
+      JOIN questionnaires q ON q.id = l.questionnaire_id
       OUTER APPLY (
-        SELECT TOP 1 id, version FROM dbo.questionnaire_versions
+        SELECT TOP 1 id, version FROM questionnaire_versions
         WHERE questionnaire_id = q.id AND status = 'published' ORDER BY version DESC
       ) v
       WHERE l.id = ${id}`.execute(this.mctx);
@@ -696,7 +696,7 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
   async insertOpenInvitation(v: Parameters<CawiTx['insertOpenInvitation']>[0]) {
     const id = randomUUID();
     await ksql`
-      INSERT INTO dbo.invitations (id, tenant_id, project_id, questionnaire_id, token_hash,
+      INSERT INTO invitations (id, tenant_id, project_id, questionnaire_id, token_hash,
         token_enc, language, status, sent_at)
       VALUES (${id}, ${this.mten}, ${v.projectId}, ${v.questionnaireId}, ${v.tokenHash},
         ${v.tokenEnc}, ${v.language}, 'sent', SYSDATETIMEOFFSET())`.execute(this.mctx);
@@ -717,9 +717,9 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
 
   async markWavesSent() {
     await ksql`
-      UPDATE dbo.waves SET status = 'sent'
+      UPDATE waves SET status = 'sent'
       WHERE status = 'sending' AND NOT EXISTS (
-        SELECT 1 FROM dbo.invitations i WHERE i.wave_id = waves.id AND i.status = 'queued')`.execute(
+        SELECT 1 FROM invitations i WHERE i.wave_id = waves.id AND i.status = 'queued')`.execute(
       this.mctx,
     );
   }
@@ -753,7 +753,7 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
 
   async lockInvitation(id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT * FROM dbo.invitations WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(this.mctx);
+      SELECT * FROM invitations WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(this.mctx);
     return res.rows[0] ? toInvitation(res.rows[0]) : null;
   }
 
@@ -874,9 +874,9 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
   async questionnaireTarget(questionnaireId: string, projectId: string) {
     const res = await ksql<Record<string, unknown>>`
       SELECT q.state, q.successor_id, v.id AS version_id, v.version
-      FROM dbo.questionnaires q
+      FROM questionnaires q
       OUTER APPLY (
-        SELECT TOP 1 id, version FROM dbo.questionnaire_versions
+        SELECT TOP 1 id, version FROM questionnaire_versions
         WHERE questionnaire_id = q.id AND status = 'published' ORDER BY version DESC
       ) v
       WHERE q.id = ${questionnaireId} AND q.project_id = ${projectId}`.execute(this.mctx);

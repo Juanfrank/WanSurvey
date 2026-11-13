@@ -209,7 +209,7 @@ export class PushService implements OnModuleInit {
       payload: string;
       attempt: number;
     }>`
-      UPDATE TOP (${BATCH}) dbo.push_outbox
+      UPDATE TOP (${BATCH}) push_outbox
       SET claimed_until = DATEADD(millisecond, ${CLAIM_MS}, SYSDATETIMEOFFSET()), attempt = attempt + 1
       OUTPUT inserted.id, inserted.user_id, inserted.category, inserted.payload, inserted.attempt
       WHERE status = 'pending' AND next_attempt_at <= SYSDATETIMEOFFSET()
@@ -229,7 +229,7 @@ export class PushService implements OnModuleInit {
         .select(['id', 'endpoint', 'p256dh', 'auth', 'categories', 'lang'])
         .where('user_id', '=', d.user_id)
         .where(
-          sql<boolean>`EXISTS (SELECT 1 FROM dbo.tenant_members m WHERE m.tenant_id = push_subscriptions.tenant_id AND m.user_id = push_subscriptions.user_id AND m.status = 'active')`,
+          sql<boolean>`EXISTS (SELECT 1 FROM tenant_members m WHERE m.tenant_id = push_subscriptions.tenant_id AND m.user_id = push_subscriptions.user_id AND m.status = 'active')`,
         )
         .execute(),
     );
@@ -309,7 +309,7 @@ export class PushService implements OnModuleInit {
       try {
         n += await this.engine.sql.withTenant(tenantId, async (tx) => {
           const rows = await sql<{ user_id: string; n: number }>`
-            SELECT callback_user_id AS user_id, COUNT(*) AS n FROM dbo.cases
+            SELECT callback_user_id AS user_id, COUNT(*) AS n FROM cases
             WHERE callback_user_id IS NOT NULL AND next_contact_at IS NOT NULL
               AND next_contact_at <= ${until.toISOString()}
               AND next_contact_at > ${new Date(now.getTime() - CALLBACK_AHEAD_MS).toISOString()}

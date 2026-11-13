@@ -65,12 +65,12 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 ## Creating the database with least privilege
 
 `infra/sql/` has the provisioning scripts, tested end to end on SQL Server 2022: `01-create-database.sql`
-(the database, its owner login and the application user), `02-migrate.md` (the migrations, run with the
-owner) and `03-create-readonly-user.sql` (a reader of the analysis model). Three principals: the **owner**
-(owns the database, deploys, has no server role, then disable it), the **application** `wansurvey_app`
-(no role, only the grants of the migrations, always under row-level security) and the **reader** (only
-`SELECT` on schema `bi`). The application's objects live in schema `dbo` (plus `rls` and `bi`) and the
-application user is named `wansurvey_app`: both are fixed by the migrations.
+(the database and its owner login) and `02-migrate.md` (the migrations, run with the owner, which make the
+schema, the tables and the two users). Three principals: the **owner** (owns the database, deploys, has no
+server role, then disable it), the **application** (no role, only the grants of the migrations, always under
+row-level security) and the **reader** (only `SELECT` on schema `bi`). The names are yours: `DATABASE_SCHEMA`
+(the schema of the tables; `rls` and `bi` keep theirs), the user of `DATABASE_URL` and the user of
+`DATABASE_READONLY_URL`. See `02-migrate.md`.
 
 ## About and Privacy pages
 

@@ -31,7 +31,7 @@ export class StatsStore {
       .where('day', '=', v.day)
       .execute();
     await sql`
-      INSERT INTO dbo.stats_daily (tenant_id, project_id, day, mode, interviewer_id, submitted,
+      INSERT INTO stats_daily (tenant_id, project_id, day, mode, interviewer_id, submitted,
         completes, approved, rejected, active_ms)
       SELECT ${v.tenantId}, ${v.projectId}, ${v.day}, i.mode, i.interviewer_id,
         SUM(CASE WHEN i.status <> 'returned' THEN 1 ELSE 0 END),
@@ -40,7 +40,7 @@ export class StatsStore {
         SUM(CASE WHEN i.status = 'rejected' THEN 1 ELSE 0 END),
         COALESCE(SUM(CASE WHEN i.status IN (${sql.join(COUNTED)}) AND i.disposition = 'COMPLETE'
                           THEN CAST(i.active_ms AS bigint) ELSE 0 END), 0)
-      FROM dbo.interviews i
+      FROM interviews i
       WHERE i.project_id = ${v.projectId} AND i.submitted_at IS NOT NULL AND i.entry_pass = 1
         AND i.status IN ('submitted', 'in_review', 'approved', 'rejected', 'returned')
         AND i.submitted_at >= ${from.toISOString()} AND i.submitted_at < ${to.toISOString()}
@@ -89,7 +89,7 @@ export class StatsStore {
     }>`
       SELECT CONVERT(varchar(10), day, 23) AS day, mode, interviewer_id, submitted, completes,
         approved, rejected, active_ms
-      FROM dbo.stats_daily
+      FROM stats_daily
       WHERE project_id = ${v.projectId}
         ${v.from ? sql`AND day >= ${v.from}` : sql``}
         ${v.to ? sql`AND day <= ${v.to}` : sql``}
@@ -114,7 +114,7 @@ export class StatsStore {
     }>`
       SELECT SUM(submitted) AS submitted, SUM(completes) AS completes, SUM(approved) AS approved,
         SUM(rejected) AS rejected, SUM(active_ms) AS active_ms
-      FROM dbo.stats_daily
+      FROM stats_daily
       WHERE project_id = ${v.projectId}
         ${v.from ? sql`AND day >= ${v.from}` : sql``} ${v.to ? sql`AND day <= ${v.to}` : sql``}`.execute(
       tx,

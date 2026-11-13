@@ -117,7 +117,7 @@ export class InterviewsStore {
   /** Row lock for the rest of the transaction: syncs, submits and reviews of one interview queue up. */
   async lock(tx: MssqlTx, id: string): Promise<InterviewRow | undefined> {
     const res = await sql<Selectable<MssqlSchema['interviews']>>`
-      SELECT * FROM dbo.interviews WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(tx);
+      SELECT * FROM interviews WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(tx);
     const r = res.rows[0];
     return r && toRow(r);
   }
@@ -158,17 +158,17 @@ export class InterviewsStore {
   ): Promise<number> {
     const res = await sql<{ last_seq: number }>`
       BEGIN TRY
-        INSERT INTO dbo.interview_devices (tenant_id, interview_id, device_id)
+        INSERT INTO interview_devices (tenant_id, interview_id, device_id)
         VALUES (${v.tenantId}, ${v.interviewId}, ${v.deviceId});
       END TRY
       BEGIN CATCH
         IF ERROR_NUMBER() IN (2601, 2627)
-          UPDATE dbo.interview_devices SET updated_at = SYSDATETIMEOFFSET()
+          UPDATE interview_devices SET updated_at = SYSDATETIMEOFFSET()
           WHERE interview_id = ${v.interviewId} AND device_id = ${v.deviceId};
         ELSE
           THROW;
       END CATCH;
-      SELECT last_seq FROM dbo.interview_devices
+      SELECT last_seq FROM interview_devices
       WHERE interview_id = ${v.interviewId} AND device_id = ${v.deviceId}`.execute(tx);
     return res.rows[0]?.last_seq ?? 0;
   }
@@ -204,7 +204,7 @@ export class InterviewsStore {
         reason: o.reason ?? null,
       }));
       await sql`
-        INSERT INTO dbo.interview_answer_events (id, tenant_id, interview_id, device_id, seq,
+        INSERT INTO interview_answer_events (id, tenant_id, interview_id, device_id, seq,
           variable, old_value, new_value, at, by_user_id, source, reason)
         SELECT j.id, ${v.tenantId}, ${v.interviewId}, ${v.deviceId}, j.seq, j.variable, j.oldValue,
           j.newValue, j.at, j.byUserId, j.source, j.reason
@@ -231,7 +231,7 @@ export class InterviewsStore {
         payload: JSON.stringify(o.payload ?? {}),
       }));
       await sql`
-        INSERT INTO dbo.interview_paradata (id, tenant_id, interview_id, device_id, seq, type, at,
+        INSERT INTO interview_paradata (id, tenant_id, interview_id, device_id, seq, type, at,
           monotonic_ms, payload)
         SELECT j.id, ${v.tenantId}, ${v.interviewId}, ${v.deviceId}, j.seq, j.type, j.at,
           j.monotonicMs, j.payload

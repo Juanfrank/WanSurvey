@@ -72,7 +72,7 @@ The tables are created empty, except the dimensions of the hierarchy, which migr
 
 ## Access
 
-The model **spans every organisation** and has no row-level security: the tables are filled by the owner, whose reads the policy lets through. The application user (`wansurvey_app`) may only run the refresh procedures and cannot read anything in `bi`. An analysis user is made apart, in the application's database, with read access to the schema only:
+The model **spans every organisation** and has no row-level security: the tables are filled by the owner, whose reads the policy lets through. The application user (`wansurvey_app`) may only run the refresh procedures and cannot read anything in `bi`. An analysis user is made apart, in the application's database, with read access to the schema only. The simplest way is to give the application `DATABASE_READONLY_URL` (the name and password of the user are those of the URL): the migrations make it and give it `SELECT` on `bi` and nothing else. By hand, the equivalent:
 
 ```sql
 -- SQL Server: a login at the server, and a user in the database.

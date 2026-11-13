@@ -17,7 +17,7 @@ export async function claimJob(
 ): Promise<boolean> {
   const now = (opts.now ?? new Date()).toISOString();
   const res = await sql<{ id: string }>`
-    UPDATE ${sql.raw(`dbo.${table}`)}
+    UPDATE ${sql.raw(`${table}`)}
     SET status = 'running', started_at = ${now}, attempts = attempts + 1
     OUTPUT inserted.id
     WHERE id = ${id} AND attempts < ${opts.maxAttempts}

@@ -327,7 +327,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
     const hint = ksql.raw(lock ? 'WITH (UPDLOCK, ROWLOCK)' : '');
     const where = q === null ? ksql`questionnaire_id IS NULL` : ksql`questionnaire_id = ${q}`;
     const res = await ksql<Parameters<MssqlSampleTx['planView']>[0]>`
-      SELECT * FROM dbo.sampling_plans ${hint}
+      SELECT * FROM sampling_plans ${hint}
       WHERE project_id = ${projectId} AND ${where}`.execute(this.mtx);
     const r = res.rows[0];
     return r ? this.planView(r) : null;
@@ -463,7 +463,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
     const res = await ksql<{ id: string }>`
       UPDATE c SET status = 'withdrawn', updated_at = SYSDATETIMEOFFSET()
       OUTPUT inserted.id
-      FROM dbo.cases c
+      FROM cases c
       WHERE c.project_id = ${projectId}
         AND ${
           questionnaireId
@@ -475,7 +475,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
         AND c.attempts = 0
         AND c.checked_out_device IS NULL
         AND (c.call_lock_until IS NULL OR c.call_lock_until < SYSDATETIMEOFFSET())
-        AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id)`.execute(this.mtx);
+        AND NOT EXISTS (SELECT 1 FROM interviews iv WHERE iv.case_id = c.id)`.execute(this.mtx);
     return res.rows.map((r) => r.id.toLowerCase());
   }
 
@@ -603,7 +603,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
       }));
       const first = rows[0]!;
       await ksql`
-        INSERT INTO dbo.frame_units (id, tenant_id, project_id, questionnaire_id, external_id,
+        INSERT INTO frame_units (id, tenant_id, project_id, questionnaire_id, external_id,
           source_label, sample, sample_pii, contacts, import_id)
         SELECT j.id, ${this.tenant}, ${first.projectId}, ${first.questionnaireId}, j.ext, j.label,
           j.sample, j.pii, j.contacts, j.importId
@@ -658,7 +658,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
       disposition: string | null;
       frame_unit_id: string | null;
     }>`SELECT id, questionnaire_id, disposition, frame_unit_id
-       FROM dbo.cases WITH (UPDLOCK, ROWLOCK) WHERE id = ${id} AND project_id = ${projectId}`.execute(
+       FROM cases WITH (UPDLOCK, ROWLOCK) WHERE id = ${id} AND project_id = ${projectId}`.execute(
       this.mtx,
     );
     const r = res.rows[0];
@@ -704,7 +704,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
       }));
       const res = await ksql<{ id: string; external_id: string; frame_unit_id: string | null }>`
         DECLARE @out TABLE (id uniqueidentifier, external_id nvarchar(450), frame_unit_id uniqueidentifier);
-        INSERT INTO dbo.cases (id, tenant_id, project_id, questionnaire_id, external_id, sample,
+        INSERT INTO cases (id, tenant_id, project_id, questionnaire_id, external_id, sample,
           sample_pii, sample_pii_index, priority, mode_preference, import_id, frame_unit_id,
           selection_role, substitute_for, inclusion_prob, base_weight)
         OUTPUT inserted.id, inserted.external_id, inserted.frame_unit_id INTO @out
@@ -717,7 +717,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
           subst uniqueidentifier, prob float, weight float
         ) j
         WHERE NOT EXISTS (
-          SELECT 1 FROM dbo.cases c WITH (UPDLOCK, HOLDLOCK)
+          SELECT 1 FROM cases c WITH (UPDLOCK, HOLDLOCK)
           WHERE c.project_id = ${projectId}
             AND ISNULL(c.questionnaire_id, CAST(${NONE} AS uniqueidentifier)) = ISNULL(j.q, CAST(${NONE} AS uniqueidentifier))
             AND c.external_id = j.ext
@@ -737,7 +737,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
   async insertContacts(rows: Parameters<SampleTx['insertContacts']>[0]) {
     for (let i = 0; i < rows.length; i += 2000)
       await ksql`
-        INSERT INTO dbo.contacts (id, tenant_id, case_id, type, value, label)
+        INSERT INTO contacts (id, tenant_id, case_id, type, value, label)
         SELECT NEWID(), ${this.tenant}, j.caseId, j.type, j.value, j.label
         FROM OPENJSON(${JSON.stringify(rows.slice(i, i + 2000))}) WITH (
           caseId uniqueidentifier, type nvarchar(32), value nvarchar(450), label nvarchar(450)
@@ -799,9 +799,9 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
   ) {
     const list = ksql.join(results.map((r) => ksql`${r}`));
     const res = await ksql<{ id: string; sample: string; sample_pii_index: string | null }>`
-      SELECT c.id, c.sample, c.sample_pii_index FROM dbo.cases c
+      SELECT c.id, c.sample, c.sample_pii_index FROM cases c
       WHERE ${scope === 'project' ? ksql`c.project_id = ${projectId}` : ksql`1 = 1`}
-        AND (EXISTS (SELECT 1 FROM dbo.interviews i WHERE i.case_id = c.id
+        AND (EXISTS (SELECT 1 FROM interviews i WHERE i.case_id = c.id
                 AND i.disposition IN (${list})
                 AND i.status NOT IN ('in_progress', 'rejected')
                 AND i.submitted_at >= ${instant(since)})
@@ -867,7 +867,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
 
   async importRow(projectId: string, id: string, lock = false) {
     const res = await ksql<Parameters<MssqlSampleTx['importView']>[0]>`
-      SELECT * FROM dbo.sample_imports ${ksql.raw(lock ? 'WITH (UPDLOCK, ROWLOCK)' : '')}
+      SELECT * FROM sample_imports ${ksql.raw(lock ? 'WITH (UPDLOCK, ROWLOCK)' : '')}
       WHERE id = ${id} AND project_id = ${projectId}`.execute(this.mtx);
     const r = res.rows[0];
     return r ? this.importView(r) : null;
@@ -916,7 +916,7 @@ export class MssqlSampleTx extends MssqlCasesTx implements SampleTx {
         .slice(i, i + 2000)
         .map((data, j) => ({ no: i + j + 1, data: JSON.stringify(data) }));
       await ksql`
-        INSERT INTO dbo.sample_import_rows (tenant_id, import_id, row_no, data)
+        INSERT INTO sample_import_rows (tenant_id, import_id, row_no, data)
         SELECT ${this.tenant}, ${importId}, j.no, j.data
         FROM OPENJSON(${JSON.stringify(part)}) WITH (no int, data nvarchar(max)) j`.execute(
         this.mtx,

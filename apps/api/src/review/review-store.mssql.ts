@@ -52,7 +52,7 @@ export class ReviewStore {
       ${f.to ? sql`AND i.submitted_at <= ${`${f.to}T23:59:59.999Z`}` : sql``}`;
     const total = await sql<{
       n: number;
-    }>`SELECT COUNT(*) AS n FROM dbo.interviews i WHERE ${where}`.execute(tx);
+    }>`SELECT COUNT(*) AS n FROM interviews i WHERE ${where}`.execute(tx);
     const rows = await sql<{
       id: string;
       external_id: string | null;
@@ -70,10 +70,10 @@ export class ReviewStore {
     }>`
       SELECT i.id, c.external_id, u.name AS interviewer, i.interviewer_id, i.mode, i.status,
         i.disposition, i.submitted_at, i.active_ms, i.flags, i.sampled, i.submissions,
-        (SELECT COUNT(*) FROM dbo.review_comments rc WHERE rc.interview_id = i.id) AS comments
-      FROM dbo.interviews i
-      LEFT JOIN dbo.cases c ON c.id = i.case_id
-      LEFT JOIN dbo.users u ON u.id = i.interviewer_id
+        (SELECT COUNT(*) FROM review_comments rc WHERE rc.interview_id = i.id) AS comments
+      FROM interviews i
+      LEFT JOIN cases c ON c.id = i.case_id
+      LEFT JOIN users u ON u.id = i.interviewer_id
       WHERE ${where}
       ORDER BY ${
         f.sort === 'risk'
@@ -98,9 +98,9 @@ export class ReviewStore {
   /** Time on each question of the latest counted interviews of a questionnaire version. */
   async dwellSample(tx: MssqlTx, versionId: string, excludeId: string, interviews: number) {
     const res = await sql<{ payload: string }>`
-      SELECT p.payload FROM dbo.interview_paradata p
+      SELECT p.payload FROM interview_paradata p
       WHERE p.type = 'leave_question' AND p.interview_id IN (
-        SELECT TOP (${interviews}) i.id FROM dbo.interviews i
+        SELECT TOP (${interviews}) i.id FROM interviews i
         WHERE i.questionnaire_version_id = ${versionId} AND i.id <> ${excludeId}
           AND i.status IN (${sql.join(COUNTED)})
         ORDER BY i.submitted_at DESC)`.execute(tx);
@@ -123,8 +123,8 @@ export class ReviewStore {
     const res = await sql<{ lat: number; lng: number }>`
       SELECT TRY_CAST(JSON_VALUE(p.payload, '$.lat') AS float) AS lat,
              TRY_CAST(JSON_VALUE(p.payload, '$.lng') AS float) AS lng
-      FROM dbo.interview_paradata p
-      JOIN dbo.interviews i ON i.id = p.interview_id
+      FROM interview_paradata p
+      JOIN interviews i ON i.id = p.interview_id
       WHERE p.type = 'gps' AND JSON_VALUE(p.payload, '$.when') = 'start'
         AND i.project_id = ${projectId} AND i.interviewer_id = ${interviewerId}
         AND i.id <> ${excludeId} AND i.status IN (${sql.join(COUNTED)})
@@ -135,7 +135,7 @@ export class ReviewStore {
   /** The first geocoded contact of a case, as the address to compare an interview's position to. */
   async caseAddress(tx: MssqlTx, caseId: string) {
     const res = await sql<{ lat: number; lng: number }>`
-      SELECT TOP (1) lat, lng FROM dbo.contacts
+      SELECT TOP (1) lat, lng FROM contacts
       WHERE case_id = ${caseId} AND lat IS NOT NULL AND lng IS NOT NULL`.execute(tx);
     return res.rows[0] ?? null;
   }
@@ -149,7 +149,7 @@ export class ReviewStore {
       questionnaire_version_id: string;
       flags: string;
     }>`
-      SELECT id, interviewer_id, case_id, questionnaire_version_id, flags FROM dbo.interviews
+      SELECT id, interviewer_id, case_id, questionnaire_version_id, flags FROM interviews
       WHERE project_id = ${projectId} AND status IN (${sql.join(COUNTED)})
         AND submitted_at >= ${since.toISOString()}`.execute(tx);
     return res.rows.map((r) => ({
@@ -162,9 +162,7 @@ export class ReviewStore {
   }
 
   async setFlags(tx: MssqlTx, id: string, flags: Record<string, unknown>) {
-    await sql`UPDATE dbo.interviews SET flags = ${JSON.stringify(flags)} WHERE id = ${id}`.execute(
-      tx,
-    );
+    await sql`UPDATE interviews SET flags = ${JSON.stringify(flags)} WHERE id = ${id}`.execute(tx);
   }
 
   /** The person's interviews sent back for fixing, with the latest comment of each. */
@@ -178,11 +176,11 @@ export class ReviewStore {
       comment: string | null;
     }>`
       SELECT i.id, c.external_id, i.mode, i.reviewed_at, u.name AS reviewer,
-        (SELECT TOP (1) rc.body FROM dbo.review_comments rc WHERE rc.interview_id = i.id
+        (SELECT TOP (1) rc.body FROM review_comments rc WHERE rc.interview_id = i.id
          ORDER BY rc.created_at DESC) AS comment
-      FROM dbo.interviews i
-      LEFT JOIN dbo.cases c ON c.id = i.case_id
-      LEFT JOIN dbo.users u ON u.id = i.reviewed_by
+      FROM interviews i
+      LEFT JOIN cases c ON c.id = i.case_id
+      LEFT JOIN users u ON u.id = i.reviewed_by
       WHERE i.project_id = ${projectId} AND i.interviewer_id = ${userId} AND i.status = 'returned'
       ORDER BY i.reviewed_at DESC`.execute(tx);
     return res.rows.map((r) => ({ ...r, id: r.id.toLowerCase() }));
@@ -304,11 +302,11 @@ export class ReviewStore {
       source?: string;
     },
   ): Promise<number> {
-    await sql`SELECT id FROM dbo.interviews WITH (UPDLOCK, ROWLOCK) WHERE id = ${v.interviewId}`.execute(
+    await sql`SELECT id FROM interviews WITH (UPDLOCK, ROWLOCK) WHERE id = ${v.interviewId}`.execute(
       tx,
     );
     const last = await sql<{ n: number }>`
-      SELECT COALESCE(MAX(seq), 0) AS n FROM dbo.interview_answer_events
+      SELECT COALESCE(MAX(seq), 0) AS n FROM interview_answer_events
       WHERE interview_id = ${v.interviewId} AND device_id = ${REVIEW_DEVICE}`.execute(tx);
     let seq = last.rows[0]?.n ?? 0;
     if (!v.events.length) return seq;
@@ -321,7 +319,7 @@ export class ReviewStore {
       reason: e.reason ?? null,
     }));
     await sql`
-      INSERT INTO dbo.interview_answer_events (id, tenant_id, interview_id, device_id, seq,
+      INSERT INTO interview_answer_events (id, tenant_id, interview_id, device_id, seq,
         variable, old_value, new_value, at, by_user_id, source, reason)
       SELECT j.id, ${v.tenantId}, ${v.interviewId}, ${REVIEW_DEVICE}, j.seq, j.variable, j.oldValue,
         j.newValue, SYSDATETIMEOFFSET(), ${v.userId}, ${v.source ?? 'reviewer'}, j.reason
@@ -358,7 +356,7 @@ export class ReviewStore {
   async otherTexts(tx: MssqlTx, projectId: string, variable?: string) {
     const res = await sql<{ key: string; value: string; interview_id: string }>`
       SELECT a.[key] AS [key], a.[value] AS [value], i.id AS interview_id
-      FROM dbo.interviews i
+      FROM interviews i
       CROSS APPLY OPENJSON(i.answers) a
       WHERE i.project_id = ${projectId} AND i.status IN (${sql.join(COUNTED)})
         AND a.type = 1 AND a.[key] LIKE '%[_]OTHER' AND LEN(LTRIM(RTRIM(a.[value]))) > 0`.execute(
@@ -479,12 +477,12 @@ export class ReviewStore {
       for (const text of keys)
         await sql`
           BEGIN TRY
-            INSERT INTO dbo.coded_texts (id, tenant_id, project_id, variable, text, code, coded_by)
+            INSERT INTO coded_texts (id, tenant_id, project_id, variable, text, code, coded_by)
             VALUES (${randomUUID()}, ${v.tenantId}, ${v.projectId}, ${v.variable}, ${text}, ${v.code}, ${v.userId});
           END TRY
           BEGIN CATCH
             IF ERROR_NUMBER() IN (2601, 2627)
-              UPDATE dbo.coded_texts SET code = ${v.code}, coded_by = ${v.userId}, coded_at = SYSDATETIMEOFFSET()
+              UPDATE coded_texts SET code = ${v.code}, coded_by = ${v.userId}, coded_at = SYSDATETIMEOFFSET()
               WHERE project_id = ${v.projectId} AND variable = ${v.variable} AND text = ${text};
             ELSE
               THROW;
@@ -497,7 +495,7 @@ export class ReviewStore {
     for (const h of hits) {
       const codeKey = h.key.replace(/_OTHER$/, '_CODE');
       const locked = await sql<{ answers: string }>`
-        SELECT answers FROM dbo.interviews WITH (UPDLOCK, ROWLOCK) WHERE id = ${h.interview_id}`.execute(
+        SELECT answers FROM interviews WITH (UPDLOCK, ROWLOCK) WHERE id = ${h.interview_id}`.execute(
         tx,
       );
       const answers = parse<Record<string, unknown>>(locked.rows[0]!.answers);

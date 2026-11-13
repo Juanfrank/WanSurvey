@@ -204,7 +204,7 @@ export class ApiKeysService {
     // last_used_at moves at most once a minute; a failure to record it never stops the request.
     void this.engine.sql
       .withTenant(tenantId, (tx) =>
-        sql`UPDATE dbo.api_keys SET last_used_at = SYSDATETIMEOFFSET()
+        sql`UPDATE api_keys SET last_used_at = SYSDATETIMEOFFSET()
             WHERE id = ${id} AND (last_used_at IS NULL
               OR last_used_at < DATEADD(millisecond, ${-TOUCH_MS}, SYSDATETIMEOFFSET()))`.execute(
           tx,

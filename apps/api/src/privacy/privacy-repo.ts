@@ -93,7 +93,7 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
 
   async caseRow(projectId: string, caseId: string) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases WHERE id = ${caseId} AND project_id = ${projectId}`.execute(this.xtx);
+      SELECT * FROM cases WHERE id = ${caseId} AND project_id = ${projectId}`.execute(this.xtx);
     const r = res.rows[0];
     if (!r) return null;
     const g = (k: string) => r[k] as never;
@@ -113,7 +113,7 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
 
   async unsealed(projectId: string, fields: string[]) {
     const res = await ksql<{ id: string; sample: string; sample_pii: string | null }>`
-      SELECT c.id, c.sample, c.sample_pii FROM dbo.cases c
+      SELECT c.id, c.sample, c.sample_pii FROM cases c
       WHERE c.project_id = ${projectId}
         AND EXISTS (SELECT 1 FROM OPENJSON(c.sample) s
                     WHERE s.[key] COLLATE DATABASE_DEFAULT IN
@@ -158,8 +158,8 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
   async deleteContacts(caseId: string) {
     // Who took part in what goes with the person's contacts; the no-contact list stays, so an
     // erased person is still not contacted (ADR 0002).
-    await ksql`DELETE p FROM dbo.participations p
-      WHERE EXISTS (SELECT 1 FROM dbo.contacts ct WHERE ct.case_id = ${caseId}
+    await ksql`DELETE p FROM participations p
+      WHERE EXISTS (SELECT 1 FROM contacts ct WHERE ct.case_id = ${caseId}
         AND ct.tenant_id = p.tenant_id AND ct.value = p.value)`.execute(this.xtx);
     const r = await this.xtx
       .deleteFrom('contacts')
@@ -170,7 +170,7 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
 
   async scrubCalls(caseId: string) {
     // Calls with a result are history: the owner procedure clears only the note and the number.
-    await ksql`EXEC dbo.erase_call_notes @case = ${caseId}`.execute(this.xtx);
+    await ksql`EXEC erase_call_notes @case = ${caseId}`.execute(this.xtx);
   }
 
   async scrubInvitations(caseId: string) {
@@ -230,8 +230,8 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
 
   async deleteScanPages(caseId: string) {
     await ksql`
-      DELETE FROM dbo.papi_scan_pages
-      WHERE form_id IN (SELECT id FROM dbo.papi_scan_forms WHERE case_id = ${caseId})`.execute(
+      DELETE FROM papi_scan_pages
+      WHERE form_id IN (SELECT id FROM papi_scan_forms WHERE case_id = ${caseId})`.execute(
       this.xtx,
     );
   }
@@ -286,7 +286,7 @@ export class MssqlPrivacyTx extends MssqlCasesTx implements PrivacyTx {
   }
 
   async eraseHistory(interviewId: string, names: string[]) {
-    await ksql`EXEC dbo.erase_interview_history @interview = ${interviewId}, @variables = ${JSON.stringify(names)}`.execute(
+    await ksql`EXEC erase_interview_history @interview = ${interviewId}, @variables = ${JSON.stringify(names)}`.execute(
       this.xtx,
     );
   }

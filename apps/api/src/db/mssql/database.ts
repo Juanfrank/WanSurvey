@@ -103,7 +103,7 @@ export class MssqlDatabase {
         const res = await sql<{
           id: string;
           tenant_id: string;
-        }>`EXEC ${sql.raw(`dbo.${lookup}`)} ${sql.raw(`@${LOOKUP_PARAM[lookup]}`)} = ${key}`.execute(
+        }>`EXEC ${sql.raw(`${lookup}`)} ${sql.raw(`@${LOOKUP_PARAM[lookup]}`)} = ${key}`.execute(
           tx,
         );
         const r = res.rows[0];
@@ -172,9 +172,7 @@ export class MssqlDatabase {
 
   /** An organisation's id by slug, before any session (a procedure that runs as the owner). */
   async tenantIdBySlug(slug: string): Promise<string | null> {
-    const res = await sql<{ id: string }>`EXEC dbo.tenant_id_by_slug @slug = ${slug}`.execute(
-      this.db,
-    );
+    const res = await sql<{ id: string }>`EXEC tenant_id_by_slug @slug = ${slug}`.execute(this.db);
     return res.rows[0]?.id.toLowerCase() ?? null;
   }
 
@@ -193,14 +191,14 @@ export class MssqlDatabase {
       status: string;
       totp_enabled: boolean;
       last_tenant_id: string | null;
-    }>`EXEC dbo.auth_user_by_email @email = ${email}`.execute(this.db);
+    }>`EXEC auth_user_by_email @email = ${email}`.execute(this.db);
     return res.rows[0] ?? null;
   }
 
   /** The organisation and id of a live share link, from the hash of its token. */
   async shareLinkByHash(hash: string): Promise<{ id: string; tenantId: string } | null> {
     const res = await sql<{ id: string; tenant_id: string }>`
-      EXEC dbo.share_link_by_hash @hash = ${hash}`.execute(this.db);
+      EXEC share_link_by_hash @hash = ${hash}`.execute(this.db);
     const r = res.rows[0];
     return r ? { id: r.id.toLowerCase(), tenantId: r.tenant_id.toLowerCase() } : null;
   }
@@ -209,47 +207,45 @@ export class MssqlDatabase {
   async invitationTenant(id: string): Promise<string | null> {
     if (!isUuid(id)) return null;
     const res = await sql<{ tenant_id: string }>`
-      EXEC dbo.invitation_tenant @id = ${id}`.execute(this.db);
+      EXEC invitation_tenant @id = ${id}`.execute(this.db);
     return res.rows[0]?.tenant_id.toLowerCase() ?? null;
   }
 
   /** The organisations with invitations or reminders to send. */
   async tenantsWithMailDue(): Promise<string[]> {
-    const res = await sql<{ tenant_id: string }>`EXEC dbo.tenants_with_mail_due`.execute(this.db);
+    const res = await sql<{ tenant_id: string }>`EXEC tenants_with_mail_due`.execute(this.db);
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
   /** The organisations with web notifications due. */
   async tenantsWithPushDue(): Promise<string[]> {
-    const res = await sql<{ tenant_id: string }>`EXEC dbo.tenants_with_push_due`.execute(this.db);
+    const res = await sql<{ tenant_id: string }>`EXEC tenants_with_push_due`.execute(this.db);
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
   /** The organisations that invited this address (an SMS reply carries only the number). */
   async tenantsInvitedAt(address: string): Promise<string[]> {
     const res = await sql<{ tenant_id: string }>`
-      EXEC dbo.tenants_invited_at @address = ${address}`.execute(this.db);
+      EXEC tenants_invited_at @address = ${address}`.execute(this.db);
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
   /** The organisations with webhook deliveries due. */
   async tenantsWithWebhooksDue(): Promise<string[]> {
-    const res = await sql<{ tenant_id: string }>`EXEC dbo.tenants_with_webhooks_due`.execute(
-      this.db,
-    );
+    const res = await sql<{ tenant_id: string }>`EXEC tenants_with_webhooks_due`.execute(this.db);
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
   /** Every organisation, for nightly jobs. */
   async allTenantIds(): Promise<string[]> {
-    const res = await sql<{ tenant_id: string }>`EXEC dbo.all_tenant_ids`.execute(this.db);
+    const res = await sql<{ tenant_id: string }>`EXEC all_tenant_ids`.execute(this.db);
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 
   /** The account an external identity is linked to, in any organisation. */
   async userByIdentity(issuer: string, subject: string): Promise<string | null> {
     const res = await sql<{ user_id: string }>`
-      EXEC dbo.user_by_identity @issuer = ${issuer}, @subject = ${subject}`.execute(this.db);
+      EXEC user_by_identity @issuer = ${issuer}, @subject = ${subject}`.execute(this.db);
     return res.rows[0]?.user_id.toLowerCase() ?? null;
   }
 
@@ -259,7 +255,7 @@ export class MssqlDatabase {
     purpose: string,
   ): Promise<{ user_id: string; tenant_id: string | null } | null> {
     const res = await sql<{ user_id: string; tenant_id: string | null }>`
-      EXEC dbo.peek_user_token @token_hash = ${tokenHash}, @purpose = ${purpose}`.execute(this.db);
+      EXEC peek_user_token @token_hash = ${tokenHash}, @purpose = ${purpose}`.execute(this.db);
     return res.rows[0] ?? null;
   }
 
@@ -275,28 +271,28 @@ export class MssqlDatabase {
       expires_at: Date;
       created_by: string;
       revoked_at: Date | null;
-    }>`EXEC dbo.api_key_lookup @key_id = ${keyId}`.execute(this.db);
+    }>`EXEC api_key_lookup @key_id = ${keyId}`.execute(this.db);
     return res.rows[0] ?? null;
   }
 
   /** Until when the account is locked after failed attempts; null when it is not. */
   async accountLockedUntil(userId: string): Promise<Date | null> {
     const res = await sql<{ until: Date | null }>`
-      EXEC dbo.account_locked_until @user_id = ${userId}`.execute(this.db);
+      EXEC account_locked_until @user_id = ${userId}`.execute(this.db);
     return res.rows[0]?.until ? new Date(res.rows[0].until) : null;
   }
 
   /** Counts a failed password or code; returns the end of the lock it caused, if any. */
   async accountFailed(userId: string, max: number, lockSeconds: number): Promise<Date | null> {
     const res = await sql<{ until: Date | null }>`
-      EXEC dbo.account_failed @user_id = ${userId}, @max = ${max}, @lock_seconds = ${lockSeconds}`.execute(
+      EXEC account_failed @user_id = ${userId}, @max = ${max}, @lock_seconds = ${lockSeconds}`.execute(
       this.db,
     );
     return res.rows[0]?.until ? new Date(res.rows[0].until) : null;
   }
 
   async accountSucceeded(userId: string): Promise<void> {
-    await sql`EXEC dbo.account_succeeded @user_id = ${userId}`.execute(this.db);
+    await sql`EXEC account_succeeded @user_id = ${userId}`.execute(this.db);
   }
 
   /** Organisations the person is an active member of (or every membership). */
@@ -305,7 +301,7 @@ export class MssqlDatabase {
     includeInactive = false,
   ): Promise<{ id: string; slug: string; name: string; memberStatus: string }[]> {
     const res = await sql<{ id: string; slug: string; name: string; member_status: string }>`
-      EXEC dbo.user_tenants @user_id = ${userId}, @include_inactive = ${includeInactive ? 1 : 0}`.execute(
+      EXEC user_tenants @user_id = ${userId}, @include_inactive = ${includeInactive ? 1 : 0}`.execute(
       this.db,
     );
     return res.rows.map((r) => ({
@@ -322,7 +318,7 @@ export class MssqlDatabase {
   ): Promise<{ tenantId: string; entraTenantId: string }[]> {
     if (tenantIds.length === 0) return [];
     const res = await sql<{ tenant_id: string; entra_tenant_id: string }>`
-      EXEC dbo.sso_enforced_tenants @tenant_ids = ${JSON.stringify(tenantIds)}`.execute(this.db);
+      EXEC sso_enforced_tenants @tenant_ids = ${JSON.stringify(tenantIds)}`.execute(this.db);
     return res.rows.map((r) => ({
       tenantId: r.tenant_id.toLowerCase(),
       entraTenantId: r.entra_tenant_id,
@@ -331,14 +327,12 @@ export class MssqlDatabase {
 
   /** Public Microsoft settings of an organisation by slug (never the secret). */
   async ssoConfigBySlug(slug: string) {
-    const res = await sql<SsoRow>`EXEC dbo.sso_config_by_slug @slug = ${slug}`.execute(this.db);
+    const res = await sql<SsoRow>`EXEC sso_config_by_slug @slug = ${slug}`.execute(this.db);
     return res.rows[0] ? ssoPublic(res.rows[0]) : null;
   }
 
   async ssoTenantsForDomain(domain: string) {
-    const res = await sql<SsoRow>`EXEC dbo.sso_tenants_for_domain @domain = ${domain}`.execute(
-      this.db,
-    );
+    const res = await sql<SsoRow>`EXEC sso_tenants_for_domain @domain = ${domain}`.execute(this.db);
     return res.rows.map(ssoPublic);
   }
 

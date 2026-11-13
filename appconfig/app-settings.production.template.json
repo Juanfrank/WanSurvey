@@ -60,6 +60,16 @@
     "slotSetting": false
   },
   {
+    "name": "DATABASE_SCHEMA",
+    "value": "dbo",
+    "slotSetting": false
+  },
+  {
+    "name": "DATABASE_READONLY_URL",
+    "value": "",
+    "slotSetting": false
+  },
+  {
     "name": "PUBLIC_URL",
     "value": "<https://encuestas.example.org>",
     "slotSetting": false

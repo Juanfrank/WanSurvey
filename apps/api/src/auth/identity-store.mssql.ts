@@ -35,7 +35,7 @@ export class IdentityStore {
    */
   async acceptTotpStep(tx: MssqlTx, userId: string, step: number): Promise<boolean> {
     const res = await sql`
-      UPDATE dbo.users SET totp_last_step = ${step}
+      UPDATE users SET totp_last_step = ${step}
       WHERE id = ${userId} AND (totp_last_step IS NULL OR totp_last_step < ${step})`.execute(tx);
     return Number(res.numAffectedRows) === 1;
   }
@@ -133,9 +133,7 @@ export class IdentityStore {
 
   /** The organisations whose enabled Microsoft sign-in claims a domain. */
   async domainOwners(tx: MssqlTx, domain: string): Promise<string[]> {
-    const res = await sql<{ tenant_id: string }>`EXEC dbo.sso_tenants_for_domain ${domain}`.execute(
-      tx,
-    );
+    const res = await sql<{ tenant_id: string }>`EXEC sso_tenants_for_domain ${domain}`.execute(tx);
     return res.rows.map((r) => r.tenant_id.toLowerCase());
   }
 

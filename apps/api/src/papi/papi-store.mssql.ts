@@ -46,7 +46,7 @@ export class PapiStore {
           : JSON.stringify(d.secondValue),
     }));
     await sql`
-      INSERT INTO dbo.entry_mismatches (id, tenant_id, project_id, case_id, first_interview_id,
+      INSERT INTO entry_mismatches (id, tenant_id, project_id, case_id, first_interview_id,
         second_interview_id, variable, first_value, second_value)
       SELECT j.id, ${v.tenantId}, ${v.projectId}, ${v.caseId}, ${v.firstInterviewId},
         ${v.secondInterviewId}, j.variable, j.first, j.second
@@ -72,9 +72,9 @@ export class PapiStore {
     }>`
       SELECT m.id, m.case_id, c.external_id, m.variable, m.first_value, m.second_value, m.status,
         m.resolved_value, m.resolved_by, u.name AS resolver, m.resolved_at, m.first_interview_id
-      FROM dbo.entry_mismatches m
-      JOIN dbo.cases c ON c.id = m.case_id
-      LEFT JOIN dbo.users u ON u.id = m.resolved_by
+      FROM entry_mismatches m
+      JOIN cases c ON c.id = m.case_id
+      LEFT JOIN users u ON u.id = m.resolved_by
       WHERE m.project_id = ${projectId} ${status === 'all' ? sql`` : sql`AND m.status = ${status}`}
       ORDER BY c.external_id, m.variable`.execute(tx);
     return res.rows.map((r) => ({

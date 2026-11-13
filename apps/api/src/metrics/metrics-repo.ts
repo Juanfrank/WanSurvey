@@ -177,7 +177,7 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
       SELECT g.id, g.user_id, u.name, g.frequency, g.questionnaire_id,
              CONVERT(varchar(10), g.starts_on, 23) AS starts_on,
              CONVERT(varchar(10), g.ends_on, 23) AS ends_on, g.target
-      FROM dbo.interviewer_goals g LEFT JOIN dbo.users u ON u.id = g.user_id
+      FROM interviewer_goals g LEFT JOIN users u ON u.id = g.user_id
       WHERE g.project_id = ${projectId}
         ${scope.userId ? ksql`AND (g.user_id = ${scope.userId} OR g.user_id IS NULL)` : ksql``}
       ORDER BY g.starts_on, u.name`.execute(this.xtx);
@@ -202,8 +202,8 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
   ) {
     const res = await ksql<{ n: number }>`
       SELECT COUNT(*) AS n
-      FROM dbo.interviews i
-      JOIN dbo.questionnaire_versions v ON v.id = i.questionnaire_version_id
+      FROM interviews i
+      JOIN questionnaire_versions v ON v.id = i.questionnaire_version_id
       WHERE i.project_id = ${projectId}
         ${g.userId ? ksql`AND i.interviewer_id = ${g.userId}` : ksql``}
         AND i.disposition = 'COMPLETE'
@@ -239,7 +239,7 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
 
   async goal(projectId: string, id: string) {
     const res = await ksql<Parameters<typeof goalRow>[0]>`
-      SELECT ${GOAL_COLS} FROM dbo.interviewer_goals
+      SELECT ${GOAL_COLS} FROM interviewer_goals
       WHERE id = ${id} AND project_id = ${projectId}`.execute(this.xtx);
     return res.rows[0] ? goalRow(res.rows[0]) : null;
   }
@@ -257,7 +257,7 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
     if (Object.keys(set).length)
       await this.xtx.updateTable('interviewer_goals').set(set).where('id', '=', id).execute();
     const res = await ksql<Parameters<typeof goalRow>[0]>`
-      SELECT ${GOAL_COLS} FROM dbo.interviewer_goals WHERE id = ${id}`.execute(this.xtx);
+      SELECT ${GOAL_COLS} FROM interviewer_goals WHERE id = ${id}`.execute(this.xtx);
     return goalRow(res.rows[0]!);
   }
 
@@ -293,7 +293,7 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
     }>`
       SELECT interviewer_id AS id, CONVERT(varchar(10), day, 23) AS day, SUM(submitted) AS submitted,
              SUM(completes) AS completes, SUM(approved) AS approved, SUM(rejected) AS rejected
-      FROM dbo.stats_daily
+      FROM stats_daily
       WHERE project_id = ${f.projectId} AND interviewer_id IS NOT NULL
         ${f.from ? ksql`AND day >= ${f.from}` : ksql``} ${f.to ? ksql`AND day <= ${f.to}` : ksql``}
         ${this.mode('mode', f)} ${this.who('interviewer_id', f)}
@@ -318,9 +318,9 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
           WHERE e.type = 5 AND JSON_PATH_EXISTS(e.[value], '$."$special"') = 1) AS specials,
         JSON_PATH_EXISTS(i.flags, '$.speeding') AS speeding,
         JSON_PATH_EXISTS(i.flags, '$.straightlining') AS straight,
-        (SELECT COUNT(*) FROM dbo.interview_paradata pd
+        (SELECT COUNT(*) FROM interview_paradata pd
           WHERE pd.interview_id = i.id AND pd.type = 'navigate_back') AS back
-      FROM dbo.interviews i
+      FROM interviews i
       WHERE i.project_id = ${f.projectId} AND i.interviewer_id IS NOT NULL AND i.entry_pass = 1
         AND i.status IN (${counted}) AND i.disposition = 'COMPLETE'
         ${this.range('i.submitted_at', f)} ${this.mode('i.mode', f)} ${this.who('i.interviewer_id', f)}`.execute(
@@ -336,7 +336,7 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
 
   async dialCounts(f: MetricsFilter) {
     const res = await ksql<{ id: string; n: number }>`
-      SELECT interviewer_id AS id, COUNT(*) AS n FROM dbo.call_attempts
+      SELECT interviewer_id AS id, COUNT(*) AS n FROM call_attempts
       WHERE project_id = ${f.projectId} ${this.range('started_at', f)} ${this.who('interviewer_id', f)}
       GROUP BY interviewer_id`.execute(this.xtx);
     return res.rows.map((r) => ({ ...r, id: low(r.id) }));
@@ -345,14 +345,14 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
   async workedCases(f: MetricsFilter) {
     const res = await ksql<{ id: string; disposition: string | null }>`
       SELECT w.id, c.disposition FROM (
-        SELECT interviewer_id AS id, case_id FROM dbo.call_attempts
+        SELECT interviewer_id AS id, case_id FROM call_attempts
           WHERE project_id = ${f.projectId} ${this.range('started_at', f)} ${this.who('interviewer_id', f)}
             ${f.mode && f.mode !== 'CATI' ? ksql`AND 1 = 0` : ksql``}
         UNION
-        SELECT interviewer_id, case_id FROM dbo.interviews
+        SELECT interviewer_id, case_id FROM interviews
           WHERE project_id = ${f.projectId} AND interviewer_id IS NOT NULL AND case_id IS NOT NULL
             AND entry_pass = 1 ${this.range('started_at', f)} ${this.mode('mode', f)} ${this.who('interviewer_id', f)}
-      ) w JOIN dbo.cases c ON c.id = w.case_id`.execute(this.xtx);
+      ) w JOIN cases c ON c.id = w.case_id`.execute(this.xtx);
     return res.rows.map((r) => ({ ...r, id: low(r.id) }));
   }
 
@@ -362,7 +362,7 @@ export class MssqlMetricsTx extends MssqlCasesTx implements MetricsTx {
         PERCENTILE_CONT(0.5) WITHIN GROUP (
           ORDER BY DATEDIFF_BIG(millisecond, e.at, e.received_at) / 1000.0
         ) OVER (PARTITION BY i.interviewer_id) AS s
-      FROM dbo.interview_answer_events e JOIN dbo.interviews i ON i.id = e.interview_id
+      FROM interview_answer_events e JOIN interviews i ON i.id = e.interview_id
       WHERE i.project_id = ${f.projectId} AND i.mode = 'CAPI' AND i.interviewer_id IS NOT NULL
         AND e.received_at IS NOT NULL ${this.range('e.at', f)} ${this.who('i.interviewer_id', f)}`.execute(
       this.xtx,

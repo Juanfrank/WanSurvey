@@ -43,6 +43,7 @@ const SECRET_SETTINGS = new Set([
   'SMS_WEBHOOK_SECRET',
   'DATABASE_URL',
   'DATABASE_ADMIN_URL',
+  'DATABASE_READONLY_URL',
 ]);
 const EXAMPLE_SECRET = /(^|[:/@=])(dev-|change-me|admin1234)|change-me/i;
 
@@ -82,6 +83,20 @@ const Env = z.object({
   DATABASE_URL: z.string().url(),
   /** `mssql://…` as the database owner, used only for migrations and seeding. */
   DATABASE_ADMIN_URL: z.string().url().optional(),
+  /**
+   * The schema of the application's tables, procedures and views (default `dbo`). The application
+   * itself names none: its database user has this schema as its default, which the migrations set,
+   * so choose it before the first migration and keep it.
+   */
+  DATABASE_SCHEMA: z
+    .string()
+    .regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/, 'Letters, digits and underscores')
+    .default('dbo'),
+  /**
+   * `mssql://…` for a read-only user of the analysis model (schema `bi`): the migrations make it, with
+   * the name and password given here, and it sees nothing else. Optional.
+   */
+  DATABASE_READONLY_URL: z.string().url().optional(),
   /**
    * Database connections per process (API, worker). Size them so that, over every instance of
    * both, they stay under what the database allows (Azure SQL: the limit of the service tier).

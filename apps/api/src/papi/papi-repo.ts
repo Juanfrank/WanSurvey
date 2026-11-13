@@ -308,7 +308,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
   ) {
     const res = await ksql<Record<string, unknown>>`
       SELECT id, external_id, sample, sample_pii, status, priority, mode_preference, assigned_to
-      FROM dbo.cases
+      FROM cases
       WHERE project_id = ${projectId}
         ${q.userId ? ksql`AND assigned_to = ${q.userId}` : ksql``}
         ${
@@ -336,7 +336,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
 
   async paperInterviews(caseId: string) {
     const res = await ksql<{ id: string }>`
-      SELECT id FROM dbo.interviews WHERE case_id = ${caseId} AND mode = 'PAPI'
+      SELECT id FROM interviews WHERE case_id = ${caseId} AND mode = 'PAPI'
       ORDER BY started_at DESC`.execute(this.pmtx);
     const out: InterviewRow[] = [];
     for (const r of res.rows) {
@@ -398,7 +398,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
       second: json(r.secondValue),
     }));
     await ksql`
-      INSERT INTO dbo.entry_mismatches (id, tenant_id, project_id, case_id, first_interview_id,
+      INSERT INTO entry_mismatches (id, tenant_id, project_id, case_id, first_interview_id,
         second_interview_id, variable, first_value, second_value)
       SELECT j.id, ${this.pmten}, ${first.projectId}, ${first.caseId}, ${first.firstInterviewId},
         ${first.secondInterviewId}, j.variable, j.first, j.second
@@ -412,10 +412,10 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
       SELECT TOP (1000) m.id, m.case_id, c.external_id, m.variable, m.first_value, m.second_value,
         m.status, m.resolved_value, u.name AS resolver, m.resolved_at, m.first_interview_id,
         i.questionnaire_version_id
-      FROM dbo.entry_mismatches m
-      JOIN dbo.cases c ON c.id = m.case_id
-      JOIN dbo.interviews i ON i.id = m.first_interview_id
-      LEFT JOIN dbo.users u ON u.id = m.resolved_by
+      FROM entry_mismatches m
+      JOIN cases c ON c.id = m.case_id
+      JOIN interviews i ON i.id = m.first_interview_id
+      LEFT JOIN users u ON u.id = m.resolved_by
       WHERE m.project_id = ${projectId} ${status === 'all' ? ksql`` : ksql`AND m.status = ${status}`}
       ORDER BY c.external_id, m.variable`.execute(this.pmtx);
     return res.rows.map((r) => ({
@@ -436,7 +436,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
 
   async lockMismatch(projectId: string, id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT * FROM dbo.entry_mismatches WITH (UPDLOCK, ROWLOCK)
+      SELECT * FROM entry_mismatches WITH (UPDLOCK, ROWLOCK)
       WHERE id = ${id} AND project_id = ${projectId}`.execute(this.pmtx);
     return res.rows[0] ? toMismatch(res.rows[0]) : null;
   }
@@ -482,14 +482,14 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
 
   async nextEventSeq(interviewId: string, deviceId: string) {
     const res = await ksql<{ n: number }>`
-      SELECT ISNULL(MAX(seq), 0) + 1 AS n FROM dbo.interview_answer_events
+      SELECT ISNULL(MAX(seq), 0) + 1 AS n FROM interview_answer_events
       WHERE interview_id = ${interviewId} AND device_id = ${deviceId}`.execute(this.pmtx);
     return Number(res.rows[0]!.n);
   }
 
   async openMismatches(secondInterviewId: string) {
     const res = await ksql<{ n: number }>`
-      SELECT COUNT(*) AS n FROM dbo.entry_mismatches
+      SELECT COUNT(*) AS n FROM entry_mismatches
       WHERE second_interview_id = ${secondInterviewId} AND status = 'open'`.execute(this.pmtx);
     return Number(res.rows[0]!.n);
   }
@@ -550,7 +550,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
 
   async caseInProject(projectId: string, id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT * FROM dbo.cases WHERE id = ${id} AND project_id = ${projectId}`.execute(this.pmtx);
+      SELECT * FROM cases WHERE id = ${id} AND project_id = ${projectId}`.execute(this.pmtx);
     return res.rows[0] ? toCase(res.rows[0] as never) : null;
   }
 
@@ -609,7 +609,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
   async batches(projectId: string) {
     const res = await ksql<Record<string, unknown>>`
       SELECT TOP (50) b.id, b.file_name, b.status, b.pages, b.error, b.created_at, u.name AS uploader
-      FROM dbo.papi_scan_batches b LEFT JOIN dbo.users u ON u.id = b.uploaded_by
+      FROM papi_scan_batches b LEFT JOIN users u ON u.id = b.uploaded_by
       WHERE b.project_id = ${projectId}
       ORDER BY b.created_at DESC`.execute(this.pmtx);
     return res.rows.map((r) => ({
@@ -627,9 +627,9 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
     const res = await ksql<Record<string, unknown>>`
       SELECT f.id, f.batch_id, f.case_id, c.external_id, f.interview_id, f.status,
         f.pages_expected, f.pages_found, f.issues, i.status AS interview_status
-      FROM dbo.papi_scan_forms f
-      JOIN dbo.cases c ON c.id = f.case_id
-      LEFT JOIN dbo.interviews i ON i.id = f.interview_id
+      FROM papi_scan_forms f
+      JOIN cases c ON c.id = f.case_id
+      LEFT JOIN interviews i ON i.id = f.interview_id
       WHERE f.batch_id IN (SELECT value FROM OPENJSON(${JSON.stringify(batchIds)}))
       ORDER BY c.external_id`.execute(this.pmtx);
     return res.rows.map((r) => ({
@@ -648,7 +648,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
 
   async strayPages(batchIds: string[]) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT batch_id, page_no, problem FROM dbo.papi_scan_pages
+      SELECT batch_id, page_no, problem FROM papi_scan_pages
       WHERE batch_id IN (SELECT value FROM OPENJSON(${JSON.stringify(batchIds)}))
         AND problem IS NOT NULL
       ORDER BY page_no`.execute(this.pmtx);
@@ -707,7 +707,7 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
 
   async claimInterview(interviewId: string, userId: string) {
     const res = await ksql<{ id: string }>`
-      UPDATE dbo.interviews SET interviewer_id = ${userId}, updated_at = SYSDATETIMEOFFSET()
+      UPDATE interviews SET interviewer_id = ${userId}, updated_at = SYSDATETIMEOFFSET()
       OUTPUT inserted.id
       WHERE id = ${interviewId} AND status = 'in_progress'`.execute(this.pmtx);
     return res.rows[0] ? low(res.rows[0].id) : null;

@@ -211,10 +211,10 @@ export class MssqlFeedbackTx implements FeedbackTx {
   async point(projectId: string, id: string, lock = false) {
     const res = lock
       ? await ksql<Record<string, unknown>>`
-          SELECT * FROM dbo.feedback_points WITH (UPDLOCK, ROWLOCK)
+          SELECT * FROM feedback_points WITH (UPDLOCK, ROWLOCK)
           WHERE id = ${id} AND project_id = ${projectId}`.execute(this.tx)
       : await ksql<Record<string, unknown>>`
-          SELECT * FROM dbo.feedback_points WHERE id = ${id} AND project_id = ${projectId}`.execute(
+          SELECT * FROM feedback_points WHERE id = ${id} AND project_id = ${projectId}`.execute(
           this.tx,
         );
     return res.rows[0] ? toPoint(res.rows[0]) : null;
@@ -308,7 +308,7 @@ export class MssqlFeedbackTx implements FeedbackTx {
 
   async lockResponse(pointId: string, id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT * FROM dbo.feedback_responses WITH (UPDLOCK, ROWLOCK)
+      SELECT * FROM feedback_responses WITH (UPDLOCK, ROWLOCK)
       WHERE id = ${id} AND point_id = ${pointId}`.execute(this.tx);
     return res.rows[0] ? toResponse(res.rows[0]) : null;
   }

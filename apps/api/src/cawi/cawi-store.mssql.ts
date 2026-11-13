@@ -50,12 +50,12 @@ export class CawiStore {
   ): Promise<void> {
     await sql`
       BEGIN TRY
-        INSERT INTO dbo.email_templates (id, tenant_id, project_id, kind, language, subject, body, updated_by)
+        INSERT INTO email_templates (id, tenant_id, project_id, kind, language, subject, body, updated_by)
         VALUES (${randomUUID()}, ${v.tenantId}, ${v.projectId}, ${v.kind}, ${v.language}, ${v.subject}, ${v.body}, ${v.userId});
       END TRY
       BEGIN CATCH
         IF ERROR_NUMBER() IN (2601, 2627)
-          UPDATE dbo.email_templates SET subject = ${v.subject}, body = ${v.body}, updated_by = ${v.userId},
+          UPDATE email_templates SET subject = ${v.subject}, body = ${v.body}, updated_by = ${v.userId},
             updated_at = SYSDATETIMEOFFSET()
           WHERE project_id = ${v.projectId} AND kind = ${v.kind} AND language = ${v.language};
         ELSE
@@ -120,7 +120,7 @@ export class CawiStore {
   async lockWave(tx: MssqlTx, id: string): Promise<WaveRow | undefined> {
     const res = await sql<
       Selectable<MssqlSchema['waves']>
-    >`SELECT * FROM dbo.waves WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(tx);
+    >`SELECT * FROM waves WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(tx);
     return res.rows[0] && toWave(res.rows[0]);
   }
 
@@ -157,7 +157,7 @@ export class CawiStore {
         COALESCE(SUM(CASE WHEN i.completed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS completed,
         COALESCE(SUM(CASE WHEN i.bounced_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS bounced,
         COALESCE(SUM(i.reminders_sent), 0) AS reminders
-      FROM dbo.waves w LEFT JOIN dbo.invitations i ON i.wave_id = w.id
+      FROM waves w LEFT JOIN invitations i ON i.wave_id = w.id
       WHERE w.project_id = ${projectId}
       GROUP BY w.id, w.name, w.status, w.created_at
       ORDER BY w.created_at, w.id`.execute(tx);
@@ -194,7 +194,7 @@ export class CawiStore {
         status: r.status ?? 'queued',
       }));
       const res = await sql<{ n: number }>`
-        INSERT INTO dbo.invitations (id, tenant_id, project_id, questionnaire_id, wave_id, case_id,
+        INSERT INTO invitations (id, tenant_id, project_id, questionnaire_id, wave_id, case_id,
           contact_id, email, token_hash, token_enc, language, status, sent_at)
         SELECT j.id, ${v.tenantId}, ${v.projectId}, ${v.questionnaireId}, ${v.waveId}, j.caseId,
           j.contactId, j.email, j.tokenHash, j.tokenEnc, j.language, j.status,
@@ -205,7 +205,7 @@ export class CawiStore {
           language nvarchar(32), status nvarchar(32)
         ) j
         WHERE NOT EXISTS (
-          SELECT 1 FROM dbo.invitations x WITH (UPDLOCK, HOLDLOCK)
+          SELECT 1 FROM invitations x WITH (UPDLOCK, HOLDLOCK)
           WHERE x.wave_id = ${v.waveId} AND x.case_id = j.caseId
         );
         SELECT @@ROWCOUNT AS n`.execute(tx);
@@ -283,17 +283,17 @@ export class CawiStore {
   ): Promise<{ invitation: InvitationRow; kind: 'invitation' | 'reminder' }[]> {
     const now = v.now.toISOString();
     const free = sql`(i.lease_until IS NULL OR i.lease_until < ${now})`;
-    const active = sql`EXISTS (SELECT 1 FROM dbo.questionnaires q WHERE q.id = i.questionnaire_id AND q.state = 'active')`;
+    const active = sql`EXISTS (SELECT 1 FROM questionnaires q WHERE q.id = i.questionnaire_id AND q.state = 'active')`;
     const queued = await sql<{ id: string }>`
-      SELECT TOP (${v.limit}) i.id FROM dbo.invitations i
-      JOIN dbo.waves w ON w.id = i.wave_id
+      SELECT TOP (${v.limit}) i.id FROM invitations i
+      JOIN waves w ON w.id = i.wave_id
       WHERE i.status = 'queued' AND ${free} AND (w.send_at IS NULL OR w.send_at <= ${now}) AND ${active}
       ORDER BY i.queued_at, i.id`.execute(tx);
     const due = await sql<{ id: string }>`
-      SELECT TOP (${v.limit}) i.id FROM dbo.invitations i
-      JOIN dbo.waves w ON w.id = i.wave_id
+      SELECT TOP (${v.limit}) i.id FROM invitations i
+      JOIN waves w ON w.id = i.wave_id
       WHERE i.status = 'sent' AND i.completed_at IS NULL AND ${free} AND ${active}
-        AND NOT EXISTS (SELECT 1 FROM dbo.cases c WHERE c.id = i.case_id AND c.status IN ('finalised', 'withdrawn'))
+        AND NOT EXISTS (SELECT 1 FROM cases c WHERE c.id = i.case_id AND c.status IN ('finalised', 'withdrawn'))
         AND i.reminders_sent < (SELECT COUNT(*) FROM OPENJSON(w.reminder_days))
         AND DATEADD(day, CAST(JSON_VALUE(w.reminder_days, CONCAT('$[', i.reminders_sent, ']')) AS int), i.sent_at) <= ${now}
       ORDER BY i.sent_at, i.id`.execute(tx);
@@ -302,7 +302,7 @@ export class CawiStore {
     const taken = await sql<InvitationRow>`
       UPDATE i SET lease_until = DATEADD(millisecond, ${v.leaseMs}, ${now})
       OUTPUT inserted.*
-      FROM dbo.invitations i WITH (UPDLOCK, READPAST, ROWLOCK)
+      FROM invitations i WITH (UPDLOCK, READPAST, ROWLOCK)
       WHERE i.id IN (${sql.join(ids)}) AND i.status IN ('queued', 'sent') AND ${free}`.execute(tx);
     return taken.rows.map((r) => ({
       invitation: r,
@@ -313,7 +313,7 @@ export class CawiStore {
   /** The invitation went out (or a reminder did): counted, and the lease let go. */
   async markSent(tx: MssqlTx, id: string, kind: 'invitation' | 'reminder'): Promise<void> {
     await sql`
-      UPDATE dbo.invitations SET lease_until = NULL, last_error = NULL,
+      UPDATE invitations SET lease_until = NULL, last_error = NULL,
         send_attempts = send_attempts + 1,
         status = CASE WHEN ${kind} = 'invitation' THEN 'sent' ELSE status END,
         sent_at = CASE WHEN ${kind} = 'invitation' THEN SYSDATETIMEOFFSET() ELSE sent_at END,
@@ -325,7 +325,7 @@ export class CawiStore {
   /** The send failed: the attempt is counted and, after `maxAttempts`, the invitation is failed. */
   async markFailed(tx: MssqlTx, id: string, error: string, maxAttempts: number): Promise<void> {
     await sql`
-      UPDATE dbo.invitations SET send_attempts = send_attempts + 1, last_error = ${error},
+      UPDATE invitations SET send_attempts = send_attempts + 1, last_error = ${error},
         lease_until = NULL,
         status = CASE WHEN send_attempts + 1 >= ${maxAttempts} AND status = 'queued' THEN 'failed' ELSE status END
       WHERE id = ${id}`.execute(tx);
@@ -352,7 +352,7 @@ export class CawiStore {
       clicked: 'clicked_at',
       started: 'started_at',
     }[event];
-    await sql`UPDATE dbo.invitations SET ${sql.raw(column)} = SYSDATETIMEOFFSET() WHERE id = ${id} AND ${sql.raw(column)} IS NULL`.execute(
+    await sql`UPDATE invitations SET ${sql.raw(column)} = SYSDATETIMEOFFSET() WHERE id = ${id} AND ${sql.raw(column)} IS NULL`.execute(
       tx,
     );
   }
@@ -406,7 +406,7 @@ export class CawiStore {
   ): Promise<void> {
     await sql`
       BEGIN TRY
-        INSERT INTO dbo.suppressions (id, tenant_id, email, reason)
+        INSERT INTO suppressions (id, tenant_id, email, reason)
         VALUES (${randomUUID()}, ${v.tenantId}, ${v.email}, ${v.reason});
       END TRY
       BEGIN CATCH

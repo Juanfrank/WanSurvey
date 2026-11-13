@@ -193,7 +193,7 @@ export class ExportsStore {
   /** Exports finished before `before`: removes their rows and returns the storage keys to delete. */
   async purge(tx: MssqlTx, v: { projectId: string; before: Date }): Promise<string[]> {
     const res = await sql<{ storage_key: string | null }>`
-      DELETE FROM dbo.exports OUTPUT deleted.storage_key
+      DELETE FROM exports OUTPUT deleted.storage_key
       WHERE project_id = ${v.projectId} AND finished_at IS NOT NULL AND finished_at < ${v.before.toISOString()}`.execute(
       tx,
     );
@@ -244,11 +244,11 @@ export class ExportsStore {
         c.selection_role AS role, fu.stratum, c.inclusion_prob AS prob, c.base_weight AS weight,
         ${f.paradata ? sql`pd.back, pd.notes, pd.pauses, pd.warnings` : sql`NULL AS back, NULL AS notes, NULL AS pauses, NULL AS warnings`},
         CONVERT(varchar(33), i.submitted_at, 127) AS page_at
-      FROM dbo.interviews i
-      JOIN dbo.questionnaire_versions v ON v.id = i.questionnaire_version_id
-      LEFT JOIN dbo.users u ON u.id = i.interviewer_id
-      LEFT JOIN dbo.cases c ON c.id = i.case_id
-      LEFT JOIN dbo.frame_units fu ON fu.id = c.frame_unit_id
+      FROM interviews i
+      JOIN questionnaire_versions v ON v.id = i.questionnaire_version_id
+      LEFT JOIN users u ON u.id = i.interviewer_id
+      LEFT JOIN cases c ON c.id = i.case_id
+      LEFT JOIN frame_units fu ON fu.id = c.frame_unit_id
       ${
         f.paradata
           ? sql`OUTER APPLY (
@@ -256,7 +256,7 @@ export class ExportsStore {
                      SUM(CASE WHEN type = 'note_added' THEN 1 ELSE 0 END) AS notes,
                      SUM(CASE WHEN type = 'pause' THEN 1 ELSE 0 END) AS pauses,
                      SUM(CASE WHEN type = 'warning_confirmed' THEN 1 ELSE 0 END) AS warnings
-              FROM dbo.interview_paradata p WHERE p.interview_id = i.id) pd`
+              FROM interview_paradata p WHERE p.interview_id = i.id) pd`
           : sql``
       }
       WHERE i.project_id = ${f.projectId} AND v.questionnaire_id = ${f.questionnaireId}

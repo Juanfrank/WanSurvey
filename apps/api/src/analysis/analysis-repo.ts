@@ -152,7 +152,7 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
   async questionnairesWithVersions(projectId: string) {
     const res = await ksql<{ id: string; name: string; version: number }>`
       SELECT q.id, q.name, MAX(v.version) AS version
-      FROM dbo.questionnaires q JOIN dbo.questionnaire_versions v ON v.questionnaire_id = q.id
+      FROM questionnaires q JOIN questionnaire_versions v ON v.questionnaire_id = q.id
       WHERE q.project_id = ${projectId}
       GROUP BY q.id, q.name ORDER BY MAX(v.published_at) DESC`.execute(this.xtx);
     return res.rows.map((r) => ({ ...r, id: low(r.id) }));
@@ -200,7 +200,7 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
                  SUM(CASE WHEN type = 'note_added' THEN 1 ELSE 0 END) AS notes,
                  SUM(CASE WHEN type = 'pause' THEN 1 ELSE 0 END) AS pauses,
                  SUM(CASE WHEN type = 'warning_confirmed' THEN 1 ELSE 0 END) AS warnings
-          FROM dbo.interview_paradata pd WHERE pd.interview_id = i.id) pd`
+          FROM interview_paradata pd WHERE pd.interview_id = i.id) pd`
       : ksql``;
     const res = await ksql<Record<string, unknown>>`
       SELECT ${page ? ksql`TOP (${page.size})` : ksql``}
@@ -210,11 +210,11 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
              i.active_ms, v.version, i.language, i.answers, i.flags,
              CONVERT(varchar(40), i.submitted_at, 127) AS page_at
              ${paradataCols}
-      FROM dbo.interviews i
-      JOIN dbo.questionnaire_versions v ON v.id = i.questionnaire_version_id
-      LEFT JOIN dbo.users u ON u.id = i.interviewer_id
-      LEFT JOIN dbo.cases c ON c.id = i.case_id
-      LEFT JOIN dbo.frame_units fu ON fu.id = c.frame_unit_id
+      FROM interviews i
+      JOIN questionnaire_versions v ON v.id = i.questionnaire_version_id
+      LEFT JOIN users u ON u.id = i.interviewer_id
+      LEFT JOIN cases c ON c.id = i.case_id
+      LEFT JOIN frame_units fu ON fu.id = c.frame_unit_id
       ${paradataJoin}
       WHERE i.project_id = ${projectId} AND v.questionnaire_id = ${src.questionnaireId}
         AND i.entry_pass = 1 AND i.status IN (${statuses})
@@ -264,10 +264,10 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
   async dataStamp(projectId: string) {
     const a = await ksql<{ n: number; m: string | null }>`
       SELECT COUNT(*) AS n, CONVERT(varchar(40), MAX(updated_at), 127) AS m
-      FROM dbo.interviews WHERE project_id = ${projectId}`.execute(this.xtx);
+      FROM interviews WHERE project_id = ${projectId}`.execute(this.xtx);
     const b = await ksql<{ m: string | null }>`
       SELECT CONVERT(varchar(40), MAX(v.published_at), 127) AS m
-      FROM dbo.questionnaire_versions v JOIN dbo.questionnaires qq ON qq.id = v.questionnaire_id
+      FROM questionnaire_versions v JOIN questionnaires qq ON qq.id = v.questionnaire_id
       WHERE qq.project_id = ${projectId}`.execute(this.xtx);
     return `${a.rows[0]?.n ?? 0}:${a.rows[0]?.m ?? ''}|${b.rows[0]?.m ?? ''}`;
   }

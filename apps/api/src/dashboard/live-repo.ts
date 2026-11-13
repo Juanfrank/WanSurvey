@@ -99,7 +99,7 @@ export class MssqlLiveTx extends MssqlCasesTx implements LiveTx {
     const since = new Date(`${today}T00:00:00Z`);
     since.setUTCDate(since.getUTCDate() - 30);
     const res = await ksql<{ day: string; n: number }>`
-      SELECT CONVERT(varchar(10), day, 23) AS day, SUM(completes) AS n FROM dbo.stats_daily
+      SELECT CONVERT(varchar(10), day, 23) AS day, SUM(completes) AS n FROM stats_daily
       WHERE project_id = ${projectId} AND day > ${since.toISOString().slice(0, 10)}
       GROUP BY day ORDER BY day`.execute(this.xtx);
     return res.rows;
@@ -110,7 +110,7 @@ export class MssqlLiveTx extends MssqlCasesTx implements LiveTx {
       SELECT qid, compiled FROM (
         SELECT v.questionnaire_id AS qid, v.compiled,
           ROW_NUMBER() OVER (PARTITION BY v.questionnaire_id ORDER BY v.version DESC) AS rn
-        FROM dbo.questionnaire_versions v JOIN dbo.questionnaires q ON q.id = v.questionnaire_id
+        FROM questionnaire_versions v JOIN questionnaires q ON q.id = v.questionnaire_id
         WHERE q.project_id = ${projectId}
       ) t WHERE rn = 1`.execute(this.xtx);
     return res.rows.map((r) => ({
@@ -123,7 +123,7 @@ export class MssqlLiveTx extends MssqlCasesTx implements LiveTx {
     const counted = ksql.join(COUNTED.map((s) => ksql`${s}`));
     const res = await ksql<{ qid: string; answers: string; context: string; mode: string }>`
       SELECT v.questionnaire_id AS qid, i.answers, i.context, i.mode
-      FROM dbo.interviews i JOIN dbo.questionnaire_versions v ON v.id = i.questionnaire_version_id
+      FROM interviews i JOIN questionnaire_versions v ON v.id = i.questionnaire_version_id
       WHERE i.project_id = ${projectId} AND i.entry_pass = 1 AND i.disposition = 'COMPLETE'
         AND i.status IN (${counted})`.execute(this.xtx);
     return res.rows.map((r) => ({
@@ -161,7 +161,7 @@ export class MssqlLiveTx extends MssqlCasesTx implements LiveTx {
       SELECT COUNT(*) AS total, COUNT(sent_at) AS sent, COUNT(opened_at) AS opened,
              COUNT(started_at) AS started, COUNT(completed_at) AS completed,
              SUM(CASE WHEN bounce_type = 'hard' THEN 1 ELSE 0 END) AS bounced
-      FROM dbo.invitations WHERE project_id = ${projectId}`.execute(this.xtx);
+      FROM invitations WHERE project_id = ${projectId}`.execute(this.xtx);
     const r = res.rows[0]!;
     return { ...r, bounced: r.bounced ?? 0 };
   }
@@ -180,8 +180,8 @@ export class MssqlLiveTx extends MssqlCasesTx implements LiveTx {
         SELECT i.interviewer_id AS user_id, u.name, i.mode, i.case_id, c.external_id,
           i.updated_at AS last_at,
           ROW_NUMBER() OVER (PARTITION BY i.interviewer_id ORDER BY i.updated_at DESC) AS rn
-        FROM dbo.interviews i JOIN dbo.users u ON u.id = i.interviewer_id
-        LEFT JOIN dbo.cases c ON c.id = i.case_id
+        FROM interviews i JOIN users u ON u.id = i.interviewer_id
+        LEFT JOIN cases c ON c.id = i.case_id
         WHERE i.project_id = ${projectId} AND i.interviewer_id IS NOT NULL
           AND i.updated_at > ${instant(since)}
       ) t WHERE rn = 1 ORDER BY user_id`.execute(this.xtx);

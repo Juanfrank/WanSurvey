@@ -216,7 +216,7 @@ export class MssqlExportsTx extends MssqlAnalysisTx implements ExportsTx {
   async claimExport(id: string) {
     const stuck = new Date(Date.now() - STUCK_AFTER_MS);
     const res = await ksql<Record<string, unknown>>`
-      UPDATE dbo.exports SET status = 'running', started_at = SYSDATETIMEOFFSET(),
+      UPDATE exports SET status = 'running', started_at = SYSDATETIMEOFFSET(),
         attempts = attempts + 1
       OUTPUT inserted.*
       WHERE id = ${id} AND attempts < ${MAX_JOB_ATTEMPTS}
@@ -260,7 +260,7 @@ export class MssqlExportsTx extends MssqlAnalysisTx implements ExportsTx {
 
   async expireExports(before: Date) {
     const res = await ksql<{ id: string; storage_key: string | null }>`
-      UPDATE dbo.exports SET status = 'expired', [file] = NULL, storage_key = NULL
+      UPDATE exports SET status = 'expired', [file] = NULL, storage_key = NULL
       OUTPUT inserted.id, deleted.storage_key
       WHERE status = 'done' AND finished_at < ${instant(before)}`.execute(this.metx);
     return res.rows.map((r) => ({ id: low(r.id), key: r.storage_key }));

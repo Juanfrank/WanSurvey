@@ -87,7 +87,7 @@ export class WebhooksService implements OnModuleInit {
         .orderBy('created_at')
         .execute();
       const counts = await sql<{ endpoint_id: string; status: string; n: number }>`
-        SELECT endpoint_id, status, COUNT(*) AS n FROM dbo.webhook_deliveries
+        SELECT endpoint_id, status, COUNT(*) AS n FROM webhook_deliveries
         WHERE created_at > DATEADD(day, -7, SYSDATETIMEOFFSET()) GROUP BY endpoint_id, status`.execute(
         tx,
       );
@@ -341,7 +341,7 @@ export class WebhooksService implements OnModuleInit {
 
   private async claim(tx: MssqlTx): Promise<Due[]> {
     const res = await sql<Due>`
-      UPDATE TOP (${BATCH}) dbo.webhook_deliveries
+      UPDATE TOP (${BATCH}) webhook_deliveries
       SET claimed_until = DATEADD(millisecond, ${CLAIM_MS}, SYSDATETIMEOFFSET()), attempt = attempt + 1
       OUTPUT inserted.id, inserted.endpoint_id, inserted.event_id, inserted.event, inserted.payload, inserted.attempt
       WHERE status = 'pending' AND next_attempt_at <= SYSDATETIMEOFFSET()
@@ -431,7 +431,7 @@ export class WebhooksService implements OnModuleInit {
           .where('id', '=', d.endpoint_id)
           .where('enabled', '=', true)
           .execute();
-        await sql`INSERT INTO dbo.audit_log (id, tenant_id, action, target_type, target_id, details)
+        await sql`INSERT INTO audit_log (id, tenant_id, action, target_type, target_id, details)
           VALUES (NEWID(), ${tenantId}, 'webhook.disabled', 'webhook', ${d.endpoint_id},
                   ${JSON.stringify({ reason: 'failures' })})`.execute(tx);
       }

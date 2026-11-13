@@ -608,10 +608,10 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
       UPDATE c SET status = 'finalised', disposition = 'FIELDWORK_CLOSED',
                    next_contact_at = NULL, updated_at = SYSDATETIMEOFFSET()
       OUTPUT inserted.id
-      FROM dbo.cases c
+      FROM cases c
       WHERE c.questionnaire_id = ${id} AND c.status IN ('fresh', 'assigned')
         AND c.checked_out_device IS NULL
-        AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv
+        AND NOT EXISTS (SELECT 1 FROM interviews iv
                         WHERE iv.case_id = c.id AND iv.status = 'in_progress')`.execute(this.tx);
     if (res.rows.length)
       await this.tx
@@ -979,12 +979,12 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
   }
 
   private readonly approvalColumns = ksql`
-    r.*, (SELECT u.name FROM dbo.users u WHERE u.id = r.requested_by) AS requested_by_name,
-         (SELECT u.name FROM dbo.users u WHERE u.id = r.decided_by) AS decided_by_name`;
+    r.*, (SELECT u.name FROM users u WHERE u.id = r.requested_by) AS requested_by_name,
+         (SELECT u.name FROM users u WHERE u.id = r.decided_by) AS decided_by_name`;
 
   async approvals(questionnaireId: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT TOP (20) ${this.approvalColumns} FROM dbo.publish_requests r
+      SELECT TOP (20) ${this.approvalColumns} FROM publish_requests r
       WHERE r.questionnaire_id = ${questionnaireId} ORDER BY r.requested_at DESC, r.id`.execute(
       this.tx,
     );
@@ -993,9 +993,7 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
 
   async approval(id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT ${this.approvalColumns} FROM dbo.publish_requests r WHERE r.id = ${id}`.execute(
-      this.tx,
-    );
+      SELECT ${this.approvalColumns} FROM publish_requests r WHERE r.id = ${id}`.execute(this.tx);
     return res.rows[0] ? this.approvalView(res.rows[0]) : null;
   }
 
@@ -1006,13 +1004,13 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
     userId: string;
   }) {
     await ksql`
-      UPDATE dbo.publish_requests SET status = 'withdrawn'
+      UPDATE publish_requests SET status = 'withdrawn'
       WHERE questionnaire_id = ${v.questionnaireId} AND status IN ('pending', 'approved')`.execute(
       this.tx,
     );
     const id = randomUUID();
     await ksql`
-      INSERT INTO dbo.publish_requests (id, tenant_id, questionnaire_id, draft_revision, note, requested_by)
+      INSERT INTO publish_requests (id, tenant_id, questionnaire_id, draft_revision, note, requested_by)
       VALUES (${id}, ${this.tenantId}, ${v.questionnaireId}, ${v.draftRevision}, ${v.note}, ${v.userId})`.execute(
       this.tx,
     );
@@ -1021,7 +1019,7 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
 
   async decideApproval(id: string, v: { approved: boolean; userId: string; note: string | null }) {
     await ksql`
-      UPDATE dbo.publish_requests
+      UPDATE publish_requests
       SET status = ${v.approved ? 'approved' : 'rejected'}, decided_by = ${v.userId},
           decided_at = SYSDATETIMEOFFSET(), decision_note = ${v.note}
       WHERE id = ${id} AND status = 'pending'`.execute(this.tx);
@@ -1029,16 +1027,14 @@ class MssqlQuestionnairesTx implements QuestionnairesTx {
 
   async approvedFor(questionnaireId: string, draftRevision: number) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT TOP (1) ${this.approvalColumns} FROM dbo.publish_requests r
+      SELECT TOP (1) ${this.approvalColumns} FROM publish_requests r
       WHERE r.questionnaire_id = ${questionnaireId} AND r.draft_revision = ${draftRevision}
         AND r.status = 'approved' ORDER BY r.decided_at DESC`.execute(this.tx);
     return res.rows[0] ? this.approvalView(res.rows[0]) : null;
   }
 
   async consumeApproval(id: string) {
-    await ksql`UPDATE dbo.publish_requests SET status = 'consumed' WHERE id = ${id}`.execute(
-      this.tx,
-    );
+    await ksql`UPDATE publish_requests SET status = 'consumed' WHERE id = ${id}`.execute(this.tx);
   }
 
   audit(entry: AuditEntry) {

@@ -563,7 +563,7 @@ export class MssqlCasesTx implements CasesTx {
       const res = await ksql<{ id: string }>`
         UPDATE c SET status = 'withdrawn', updated_at = SYSDATETIMEOFFSET()
         OUTPUT inserted.id
-        FROM dbo.cases c
+        FROM cases c
         WHERE c.project_id = ${projectId} AND c.id IN (${ksql.join(ids.slice(i, i + CHUNK))})
           AND c.status IN ('fresh', 'assigned') AND c.checked_out_device IS NULL
           AND (c.call_lock_until IS NULL OR c.call_lock_until < SYSDATETIMEOFFSET())`.execute(
@@ -936,7 +936,7 @@ export class MssqlCasesTx implements CasesTx {
     }>`
       SELECT user_id, frequency, CONVERT(varchar(10), starts_on, 23) AS starts_on,
              CONVERT(varchar(10), ends_on, 23) AS ends_on, target
-      FROM dbo.interviewer_goals
+      FROM interviewer_goals
       WHERE project_id = ${projectId} AND starts_on <= ${today} AND ends_on >= ${today}
         ${
           questionnaireId
@@ -1046,9 +1046,9 @@ export class MssqlCasesTx implements CasesTx {
       name: string;
     }>`
       SELECT c.type, c.value, k.id AS case_id, p.id AS project_id, p.name
-      FROM dbo.contacts c
-      JOIN dbo.cases k ON k.id = c.case_id
-      JOIN dbo.projects p ON p.id = k.project_id
+      FROM contacts c
+      JOIN cases k ON k.id = c.case_id
+      JOIN projects p ON p.id = k.project_id
       JOIN OPENJSON(${JSON.stringify(pairs.map(([type, value]) => ({ type, value })))})
         WITH (type nvarchar(64), value nvarchar(450)) j
         ON j.type = c.type COLLATE DATABASE_DEFAULT AND j.value = c.value COLLATE DATABASE_DEFAULT
@@ -1067,13 +1067,13 @@ export class MssqlCasesTx implements CasesTx {
       UPDATE c SET status = 'finalised', disposition = 'EXPIRED', next_contact_at = NULL,
                    updated_at = ${instant(now)}
       OUTPUT inserted.id, inserted.assigned_to, inserted.assigned_at
-      FROM dbo.cases c
+      FROM cases c
       WHERE c.project_id = ${projectId} AND c.status IN ('assigned', 'in_progress')
         AND c.assigned_to IS NOT NULL
         AND c.assigned_at < ${instant(new Date(now.getTime() - hours * 3_600_000))}
         AND c.checked_out_device IS NULL
         AND (c.call_lock_until IS NULL OR c.call_lock_until < ${instant(now)})
-        AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv
+        AND NOT EXISTS (SELECT 1 FROM interviews iv
                         WHERE iv.case_id = c.id AND iv.status = 'in_progress')`.execute(this.tx);
     return res.rows.map((r) => ({
       id: low(r.id),

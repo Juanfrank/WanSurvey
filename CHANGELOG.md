@@ -131,6 +131,13 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
   only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
   account menu and the foot of web surveys. The text needs the institution's legal review.
+- **The schema and the database users have the names you choose**: `DATABASE_SCHEMA` (default
+  `dbo`) puts the tables, procedures and views in another schema, such as `survey`; the application
+  user is the one in `DATABASE_URL` (no longer always `wansurvey_app`); and `DATABASE_READONLY_URL`
+  makes a user that reads only the analysis model (schema `bi`), with explicit refusals on the rest.
+  The application names no schema in its queries: its user has the schema as default. Choose them
+  before the first migration. The provisioning scripts in `infra/sql/` and `02-migrate.md` follow.
+  The seed of demo data and the load setup still need `dbo`.
 - **Terms of use and confidentiality undertaking** (`/terms`, public): everyone who works in the
   application must read and accept them before using it, once per version of the text; the
   acceptance is kept with its version and date (`users.terms_version`, migration 0028) and in the

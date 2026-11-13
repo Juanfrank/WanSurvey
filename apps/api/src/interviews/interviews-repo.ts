@@ -355,7 +355,7 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
 
   async lockCase(projectId: string, id: string) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases WITH (UPDLOCK, ROWLOCK) WHERE id = ${id} AND project_id = ${projectId}`.execute(
+      SELECT * FROM cases WITH (UPDLOCK, ROWLOCK) WHERE id = ${id} AND project_id = ${projectId}`.execute(
       this.itx,
     );
     return res.rows[0] ? toCase(res.rows[0]) : null;
@@ -364,7 +364,7 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
   async lockCases(projectId: string, ids: string[]) {
     if (!ids.length) return [];
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases WITH (UPDLOCK, ROWLOCK)
+      SELECT * FROM cases WITH (UPDLOCK, ROWLOCK)
       WHERE project_id = ${projectId}
         AND id IN (SELECT CAST(j.[value] AS uniqueidentifier) FROM OPENJSON(${JSON.stringify(ids)}) j)
       ORDER BY id`.execute(this.itx);
@@ -373,7 +373,7 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
 
   async lockCaseById(id: string) {
     const res = await ksql<Record<string, unknown> & { sample: string }>`
-      SELECT * FROM dbo.cases WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(this.itx);
+      SELECT * FROM cases WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(this.itx);
     return res.rows[0] ? toCase(res.rows[0]) : null;
   }
 
@@ -411,7 +411,7 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
 
   async checkIn(projectId: string, ids: string[], deviceId: string, userId: string) {
     const res = await ksql<{ id: string }>`
-      UPDATE dbo.cases SET checked_out_device = NULL, checked_out_by = NULL, checked_out_at = NULL
+      UPDATE cases SET checked_out_device = NULL, checked_out_by = NULL, checked_out_at = NULL
       OUTPUT inserted.id
       WHERE project_id = ${projectId}
         AND id IN (SELECT CAST(j.[value] AS uniqueidentifier) FROM OPENJSON(${JSON.stringify(ids)}) j)
@@ -636,8 +636,8 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
         SELECT q.id, q.name,
           JSON_QUERY(v.compiled, '$.questionnaire.modes') AS modes,
           ROW_NUMBER() OVER (PARTITION BY q.id ORDER BY v.version DESC) AS rn
-        FROM dbo.questionnaires q
-        JOIN dbo.questionnaire_versions v ON v.questionnaire_id = q.id
+        FROM questionnaires q
+        JOIN questionnaire_versions v ON v.questionnaire_id = q.id
         WHERE q.project_id = ${projectId} AND v.status = 'published' AND q.state = 'active'
       ) t WHERE rn = 1 ORDER BY id`.execute(this.itx);
     return res.rows.map((r) => ({

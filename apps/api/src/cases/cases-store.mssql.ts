@@ -123,7 +123,7 @@ export class CasesStore {
         importId: c.importId ?? null,
       }));
       await sql`
-        INSERT INTO dbo.cases (id, tenant_id, project_id, questionnaire_id, external_id, sample,
+        INSERT INTO cases (id, tenant_id, project_id, questionnaire_id, external_id, sample,
           sample_pii, sample_pii_index, priority, mode_preference, import_id)
         SELECT j.id, ${v.tenantId}, ${v.projectId}, j.qid, j.ext, j.sample, j.pii, j.piiIndex,
           j.priority, j.mode, j.importId
@@ -143,7 +143,7 @@ export class CasesStore {
       );
       if (contacts.length)
         await sql`
-          INSERT INTO dbo.contacts (id, tenant_id, case_id, type, value, label)
+          INSERT INTO contacts (id, tenant_id, case_id, type, value, label)
           SELECT j.id, ${v.tenantId}, j.caseId, j.type, j.value, j.label
           FROM OPENJSON(${JSON.stringify(contacts)}) WITH (
             id uniqueidentifier, caseId uniqueidentifier, type nvarchar(32), value nvarchar(450),
@@ -239,7 +239,7 @@ export class CasesStore {
         details: JSON.stringify(e.details ?? {}),
       }));
       await sql`
-        INSERT INTO dbo.case_events (id, tenant_id, case_id, type, details, actor_user_id)
+        INSERT INTO case_events (id, tenant_id, case_id, type, details, actor_user_id)
         SELECT j.id, ${tenantId}, j.caseId, j.type, j.details, ${actorUserId}
         FROM OPENJSON(${JSON.stringify(rows)}) WITH (
           id uniqueidentifier, caseId uniqueidentifier, type nvarchar(64), details nvarchar(max)
@@ -305,7 +305,7 @@ export class CasesStore {
     let changed: { id: string; from: string | null }[] = [];
     for (const part of chunks(v.caseIds, ID_CHUNK)) {
       let q = sql<{ id: string; from: string | null }>`
-        SELECT id, assigned_to AS [from] FROM dbo.cases WITH (UPDLOCK, ROWLOCK)
+        SELECT id, assigned_to AS [from] FROM cases WITH (UPDLOCK, ROWLOCK)
         WHERE project_id = ${v.projectId} AND id IN (${sql.join(part)})`;
       if (v.only?.statuses?.length) q = sql`${q} AND status IN (${sql.join(v.only.statuses)})`;
       if (v.only?.unassigned) q = sql`${q} AND assigned_to IS NULL`;
@@ -377,7 +377,7 @@ export class CasesStore {
   ): Promise<string | null> {
     const res = await sql<{ id: string }>`
       WITH next AS (
-        SELECT TOP (1) * FROM dbo.cases WITH (UPDLOCK, READPAST, ROWLOCK, INDEX(cases_pool_idx))
+        SELECT TOP (1) * FROM cases WITH (UPDLOCK, READPAST, ROWLOCK, INDEX(cases_pool_idx))
         WHERE project_id = ${v.projectId} AND assigned_to IS NULL AND status = 'fresh'
           ${v.questionnaireId ? sql`AND (questionnaire_id = ${v.questionnaireId} OR questionnaire_id IS NULL)` : sql``}
         ORDER BY priority DESC, id
@@ -401,14 +401,14 @@ export class CasesStore {
       UPDATE c SET status = 'finalised', disposition = 'EXPIRED', next_contact_at = NULL,
         updated_at = SYSDATETIMEOFFSET()
       OUTPUT inserted.id, inserted.assigned_to, deleted.assigned_at
-      FROM dbo.cases c
+      FROM cases c
       WHERE c.project_id = ${v.projectId}
         AND c.status IN ('assigned', 'in_progress')
         AND c.assigned_to IS NOT NULL
         AND c.assigned_at < DATEADD(day, ${-v.days}, SYSDATETIMEOFFSET())
         AND c.checked_out_device IS NULL
         AND (c.call_lock_until IS NULL OR c.call_lock_until < SYSDATETIMEOFFSET())
-        AND NOT EXISTS (SELECT 1 FROM dbo.interviews iv WHERE iv.case_id = c.id AND iv.status = 'in_progress')`.execute(
+        AND NOT EXISTS (SELECT 1 FROM interviews iv WHERE iv.case_id = c.id AND iv.status = 'in_progress')`.execute(
       tx,
     );
     return res.rows.map((r) => ({

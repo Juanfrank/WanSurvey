@@ -5,7 +5,7 @@ import { BiStore } from './bi-store.mssql.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { AppSettingsService } from '../settings/app-settings.service.js';
 
-/** Setting keys (`dbo.app_settings`): minutes between refreshes (`0` never), and the last run. */
+/** Setting keys (`app_settings`): minutes between refreshes (`0` never), and the last run. */
 export const BI_MINUTES_KEY = 'bi.refreshMinutes';
 const LAST_KEY = 'bi.lastRefreshAt';
 /** How often the job that honours the setting wakes up; the setting cannot be finer than this. */
