@@ -98,6 +98,17 @@ const Env = z.object({
    */
   DATABASE_READONLY_URL: z.string().url().optional(),
   /**
+   * 'false': the DBA makes the SQL users (any kind: contained, or mapped from a login) and the
+   * migrations only make the schema and the tables and grant the permissions to them. The users
+   * must exist, with the application's schema as default schema; their passwords are not needed
+   * here (the URL of the application still has the name). Nothing about users or database
+   * containment is created or changed. Default 'true': the migrations make them (02-migrate.md).
+   */
+  DATABASE_MANAGE_USERS: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /**
    * Database connections per process (API, worker). Size them so that, over every instance of
    * both, they stay under what the database allows (Azure SQL: the limit of the service tier).
    */

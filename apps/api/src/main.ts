@@ -12,6 +12,7 @@ initObservability(config);
 if (config.DATABASE_ADMIN_URL)
   await runMssqlMigrations(config.DATABASE_ADMIN_URL, config.DATABASE_URL, {
     schema: config.DATABASE_SCHEMA,
+    manageUsers: config.DATABASE_MANAGE_USERS,
     ...(config.DATABASE_READONLY_URL ? { readonlyUrl: config.DATABASE_READONLY_URL } : {}),
   });
 // A new installation has nobody to create the first organisation: INITIAL_ADMIN_USER does.

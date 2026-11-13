@@ -65,6 +65,11 @@
     "slotSetting": false
   },
   {
+    "name": "DATABASE_MANAGE_USERS",
+    "value": "true",
+    "slotSetting": false
+  },
+  {
     "name": "DATABASE_READONLY_URL",
     "value": "",
     "slotSetting": false

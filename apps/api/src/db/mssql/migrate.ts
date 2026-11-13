@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { createMssqlDb, parseMssqlUrl } from './connection.js';
 import { byCode } from '../../common/sort.js';
 
@@ -86,6 +86,11 @@ export interface MigrationOptions {
   schema?: string;
   /** `mssql://…` as the read-only user of the analysis model (schema `bi`); none by default. */
   readonlyUrl?: string;
+  /**
+   * false: the users already exist, made by the DBA; only the schema, the tables and the grants are
+   * made (default: the `DATABASE_MANAGE_USERS` setting, else true).
+   */
+  manageUsers?: boolean;
 }
 
 /** The user name and password of an `mssql://` URL. */
@@ -113,6 +118,28 @@ export function migrationFiles(dir = MIGRATIONS): { name: string; batches: strin
     }));
 }
 
+/** With the users made by the DBA: they must be there, with the schema as default, before granting. */
+async function requireUsers(
+  tx: Kysely<Record<string, never>>,
+  schema: string,
+  names: string[],
+): Promise<void> {
+  for (const n of names) {
+    const r = await sql<{ s: string | null }>`SELECT default_schema_name AS s
+      FROM sys.database_principals WHERE name = ${n} AND type IN ('S', 'U', 'E', 'X')`.execute(tx);
+    if (!r.rows.length)
+      throw new Error(
+        `The SQL user ${n} does not exist in the database: DATABASE_MANAGE_USERS is false, so the DBA makes it (infra/sql/03-users.sql)`,
+      );
+    // The application writes no schema in its queries: its user finds the tables by its default
+    // schema, which the DBA sets when making it.
+    if (r.rows[0]?.s?.toLowerCase() !== schema.toLowerCase())
+      throw new Error(
+        `The SQL user ${n} has the default schema ${r.rows[0]?.s ?? '(none)'}, not ${schema}: ALTER USER [${n}] WITH DEFAULT_SCHEMA = [${schema}]`,
+      );
+  }
+}
+
 /**
  * Ensures the restricted application user exists (password taken from the app's URL), then
  * applies the T-SQL migrations as the owner. The user is a contained database user, so the same
@@ -130,13 +157,16 @@ export async function runMssqlMigrations(
   );
   const app = credentialsOf(appUrl);
   const appUser = sqlName('The application user', app.userName);
+  const manageUsers = options.manageUsers ?? process.env.DATABASE_MANAGE_USERS !== 'false';
   const password = app.password;
-  if (!password) throw new Error('DATABASE_URL needs the application user’s password');
+  if (manageUsers && !password)
+    throw new Error('DATABASE_URL needs the application user’s password');
   const readonlyUrl = options.readonlyUrl ?? (process.env.DATABASE_READONLY_URL || undefined);
   const reader = readonlyUrl ? credentialsOf(readonlyUrl) : null;
   if (reader) {
     sqlName('The read-only user', reader.userName);
-    if (!reader.password) throw new Error('DATABASE_READONLY_URL needs the user’s password');
+    if (manageUsers && !reader.password)
+      throw new Error('DATABASE_READONLY_URL needs the user’s password');
     if (reader.userName.toLowerCase() === appUser.toLowerCase())
       throw new Error('The read-only user must not be the application user');
   }
@@ -151,7 +181,7 @@ export async function runMssqlMigrations(
     const edition = await sql<{
       e: number;
     }>`SELECT CAST(SERVERPROPERTY('EngineEdition') AS int) AS e`.execute(db);
-    if (edition.rows[0]?.e !== 5) {
+    if (manageUsers && edition.rows[0]?.e !== 5) {
       // Only when it is off: an instance whose DBA turned it on needs no server permission here.
       await sql
         .raw(
@@ -182,7 +212,8 @@ export async function runMssqlMigrations(
           .execute(tx);
       const user = (name: string, pw: string) =>
         `IF DATABASE_PRINCIPAL_ID('${name}') IS NULL CREATE USER [${name}] WITH PASSWORD = '${lit(pw)}', DEFAULT_SCHEMA = [${schema}]; ELSE ALTER USER [${name}] WITH PASSWORD = '${lit(pw)}', DEFAULT_SCHEMA = [${schema}];`;
-      await sql.raw(user(appUser, password)).execute(tx);
+      if (manageUsers) await sql.raw(user(appUser, password)).execute(tx);
+      else await requireUsers(tx, schema, [appUser, ...(reader ? [reader.userName] : [])]);
       await sql
         .raw(
           `IF OBJECT_ID('${schema}.__migrations') IS NULL
@@ -214,7 +245,7 @@ export async function runMssqlMigrations(
       // The read-only user of the analysis model: it reads schema bi and nothing of the
       // application's own tables (explicit refusals, so a broad grant to a role cannot open them).
       if (reader) {
-        await sql.raw(user(reader.userName, reader.password)).execute(tx);
+        if (manageUsers) await sql.raw(user(reader.userName, reader.password)).execute(tx);
         const r = `[${reader.userName}]`;
         await sql
           .raw(

@@ -38,6 +38,32 @@ What the users may do, checked on SQL Server 2022:
   application's schema, so a later broad grant to a role cannot open them. The personal questions are
   marked in `bi.dim_pregunta.personal` (see `docs/bi.md`).
 
+## When the DBA makes the users (`DATABASE_MANAGE_USERS=false`)
+
+If the users are the DBA's to make, set `DATABASE_MANAGE_USERS=false`. The migrations then make
+**only the schema and the tables, and grant the permissions** to the users that already exist; they
+create no user, change no password and touch neither the containment of the database nor any server
+setting (so the owner needs no server permission at all). The passwords stay out of the application's
+settings for the migration (the URLs still carry the user names).
+
+1. The DBA makes the two users, of any kind (contained with a password, or mapped from a login), with
+   the schema as default schema: `03-users.sql` does it for contained users; for logins:
+
+   ```sql
+   CREATE USER [survey_rw] FOR LOGIN [survey_rw] WITH DEFAULT_SCHEMA = [survey];
+   CREATE USER [survey_ro] FOR LOGIN [survey_ro] WITH DEFAULT_SCHEMA = [survey];
+   ```
+
+   The schema need not exist yet; the migrations make it.
+
+2. The login in `DATABASE_ADMIN_URL` must be the **owner of the database** (it is `dbo` in it: see
+   `01-existing-database.sql`, with `OwnerLogin="keep"` to use the current owner). With users made from
+   logins you need nothing else from step 1: it only turns on contained users, which they do not use.
+3. Migrate with `DATABASE_ADMIN_URL` (the owner), `DATABASE_URL` and `DATABASE_READONLY_URL` (the
+   user names), `DATABASE_SCHEMA` and `DATABASE_MANAGE_USERS=false`. It stops with a clear message if a
+   user does not exist or its default schema is not the schema.
+4. `04-check-permissions.sql` to check what was granted.
+
 ## Scripts to make and check the users by hand
 
 Optional, for a DBA who wants to make the users and verify them (run them as the owner, in the

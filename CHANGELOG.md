@@ -19,6 +19,10 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **`DATABASE_MANAGE_USERS=false`: the DBA makes the SQL users** (contained or from logins) and the
+  migrations only make the schema and the tables and grant the permissions to them: no user,
+  password, containment or server setting is created or changed. They stop with a clear message if a
+  user is missing or its default schema is not `DATABASE_SCHEMA`. Described in `infra/sql/02-migrate.md`.
 - **`01-existing-database.sql`** for a database that already exists: it creates nothing, turns on
   contained users if they are off, and leaves or changes the owner of the database as you say. The
   migrations no longer ask the owner for server permission when contained users are already on.
