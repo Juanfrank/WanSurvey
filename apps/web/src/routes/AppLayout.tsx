@@ -92,7 +92,8 @@ export function AppLayout() {
   const waiting = me.data.access.state === 'no_role';
   // Nobody works before accepting the current terms of use and confidentiality undertaking
   // (an answer cached by an older version of the app carries no terms: it does not block).
-  if (me.data.terms && !me.data.terms.accepted)
+  // A person with no role yet sees the waiting page first: they accept when they can work.
+  if (!waiting && me.data.terms && !me.data.terms.accepted)
     return <TermsGate version={me.data.terms.version} onSignOut={() => void logout()} />;
 
   return (
