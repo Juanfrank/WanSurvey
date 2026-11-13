@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createMssqlDb } from '../../src/db/mssql/connection.js';
+import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 
@@ -25,9 +25,9 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: identity', () => {
   const email = (n: string) => `${n}-${stamp}@Example.org`;
 
   const owner = async <T>(
-    fn: (db: ReturnType<typeof createMssqlDb<Record<string, never>>>) => Promise<T>,
+    fn: (db: ReturnType<typeof createOwnerDb<Record<string, never>>>) => Promise<T>,
   ) => {
-    const db = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const db = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       return await fn(db);
     } finally {

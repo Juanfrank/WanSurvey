@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CasesStore } from '../../src/cases/cases-store.mssql.js';
-import { createMssqlDb } from '../../src/db/mssql/connection.js';
+import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import { SamplingStore } from '../../src/sampling/sampling-store.mssql.js';
@@ -38,7 +38,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
   beforeAll(async () => {
     await runMssqlMigrations(ADMIN!, APP!);
     app = new MssqlDatabase(APP!, { max: 8 });
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       for (const x of [a, b]) {
         await sql`INSERT INTO tenants (id, name, slug) VALUES (${x.id}, ${x.slug}, ${x.slug})`.execute(
@@ -112,7 +112,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
 
   it('allows one case per external id with no questionnaire, and the same id under another', async () => {
     const q1 = randomUUID();
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       await sql`INSERT INTO questionnaires (id, tenant_id, project_id, name, draft) VALUES (${q1}, ${a.id}, ${a.project}, 'Q', '{}')`.execute(
         owner,
@@ -290,7 +290,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
   });
 
   it('gives simultaneous claimNext calls different cases, the highest priority first', async () => {
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     const pool = { id: randomUUID(), project: randomUUID() };
     try {
       await sql`INSERT INTO projects (id, tenant_id, name, code) VALUES (${pool.project}, ${a.id}, 'Pool', ${'POOL-' + stamp})`.execute(
@@ -340,7 +340,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
     await expect(
       app.withTenant(a.id, (tx) => sql`DELETE FROM case_events WHERE case_id = ${id}`.execute(tx)),
     ).rejects.toThrow(/permission was denied/i);
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       await expect(
         sql`UPDATE case_events SET type = 'x' WHERE case_id = ${id}`.execute(owner),
@@ -375,7 +375,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
 
   it('adds frame units skipping those already there, even when two loads race', async () => {
     const proj = randomUUID();
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       await sql`INSERT INTO projects (id, tenant_id, name, code) VALUES (${proj}, ${a.id}, 'Frame', ${'FR-' + stamp})`.execute(
         owner,
@@ -403,7 +403,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
 
   it('records a selection, makes cases with contacts from the units once, and releases reserves in order', async () => {
     const proj = randomUUID();
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       await sql`INSERT INTO projects (id, tenant_id, name, code) VALUES (${proj}, ${a.id}, 'Select', ${'SE-' + stamp})`.execute(
         owner,
@@ -557,7 +557,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: cases and sampling', () => {
 
   it('clears a frame that was not selected', async () => {
     const proj = randomUUID();
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       await sql`INSERT INTO projects (id, tenant_id, name, code) VALUES (${proj}, ${a.id}, 'Clear', ${'CL-' + stamp})`.execute(
         owner,

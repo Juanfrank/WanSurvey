@@ -5,7 +5,7 @@ import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
 import { PiiCipher } from '../cases/pii.js';
 import { localDay } from '../stats/zoned-day.js';
-import { createMssqlDb } from './mssql/connection.js';
+import { createOwnerDb } from './mssql/owner-schema.js';
 import { simulateInterview } from './simulate.js';
 
 type Tx = Transaction<Record<string, never>>;
@@ -23,7 +23,7 @@ const at = (d: Date) => sql`CAST(${d.toISOString()} AS datetimeoffset(3))`;
  * daily figures. Idempotent: does nothing if the demo cases exist.
  */
 export async function seedDemoData(adminUrl: string, password: string, count = 60): Promise<void> {
-  const db = createMssqlDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
+  const db = createOwnerDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
   try {
     const p = (
       await sql<{ id: string; tenant_id: string; timezone: string }>`

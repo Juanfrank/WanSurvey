@@ -6,7 +6,7 @@ import { sql, type Transaction } from 'kysely';
 import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
 import { PiiCipher } from '../cases/pii.js';
-import { createMssqlDb } from './mssql/connection.js';
+import { createOwnerDb } from './mssql/owner-schema.js';
 
 type Tx = Transaction<Record<string, never>>;
 
@@ -21,7 +21,7 @@ export const at = (d: Date) => sql`CAST(${d.toISOString()} AS datetimeoffset(3))
  * Owners and admins enrol TOTP on first login. Idempotent: does nothing if the tenant exists.
  */
 export async function seed(adminUrl: string, password: string): Promise<void> {
-  const db = createMssqlDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
+  const db = createOwnerDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
   try {
     const existing = await sql`SELECT id FROM tenants WHERE slug = 'demo'`.execute(db);
     if (existing.rows.length) {

@@ -7,7 +7,7 @@ import { createApp } from '../../src/app.js';
 import type { AppModuleOptions } from '../../src/app.module.js';
 import { hashPassword } from '../../src/auth/auth.service.js';
 import { encryptField, generateTotpSecret, totp } from '../../src/common/crypto.js';
-import { createMssqlDb } from '../../src/db/mssql/connection.js';
+import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import { MemoryMailer } from '../../src/mail/mailer.js';
 
@@ -22,7 +22,7 @@ export const ADMIN_URL = process.env.MSSQL_ADMIN_URL;
 export const APP_URL = process.env.MSSQL_URL;
 export const configured = !!ADMIN_URL && !!APP_URL;
 
-type Owner = ReturnType<typeof createMssqlDb<Record<string, never>>>;
+type Owner = ReturnType<typeof createOwnerDb<Record<string, never>>>;
 let passwordHash: Promise<string> | null = null;
 let counter = 0;
 
@@ -43,7 +43,7 @@ export async function bootstrap(
   const mailer = new MemoryMailer();
   const app = await createApp({ ...opts, mailer });
   await app.init();
-  const owner = createMssqlDb<Record<string, never>>(ADMIN_URL!, { max: 2 });
+  const owner = createOwnerDb<Record<string, never>>(ADMIN_URL!, { max: 2 });
   return {
     app,
     mailer,

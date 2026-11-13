@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
-import { createMssqlDb } from '../../src/db/mssql/connection.js';
+import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 
 /**
@@ -25,7 +25,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: isolation by organisation', () => {
     await runMssqlMigrations(ADMIN!, APP!);
     app = new MssqlDatabase(APP!, { max: 4 });
     // The owner is not filtered, as the migrations and the seed are not.
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     for (const t of [a, b])
       await sql`INSERT INTO tenants (id, name, slug) VALUES (${t.id}, ${t.slug}, ${t.slug})`.execute(
         owner,
@@ -138,7 +138,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: isolation by organisation', () => {
       app.withTenant(a.id, (tx) => sql`DELETE FROM audit_log WHERE id = ${id}`.execute(tx)),
     ).rejects.toThrow(/permission was denied/i);
     // The owner has the privilege, and the trigger still refuses.
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       await expect(
         sql`UPDATE audit_log SET action = 'y' WHERE id = ${id}`.execute(owner),

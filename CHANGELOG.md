@@ -137,7 +137,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   makes a user that reads only the analysis model (schema `bi`), with explicit refusals on the rest.
   The application names no schema in its queries: its user has the schema as default. Choose them
   before the first migration. The provisioning scripts in `infra/sql/` and `02-migrate.md` follow.
-  The seed of demo data and the load setup still need `dbo`.
+  The seed and demo data (`pnpm db:seed`, `db:seed-demo`) and the load setup work in whatever
+  schema `DATABASE_SCHEMA` names: the owner's connection names it in the statements (`createOwnerDb`).
 - **Terms of use and confidentiality undertaking** (`/terms`, public): everyone who works in the
   application must read and accept them before using it, once per version of the text; the
   acceptance is kept with its version and date (`users.terms_version`, migration 0028) and in the

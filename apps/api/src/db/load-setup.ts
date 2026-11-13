@@ -6,7 +6,7 @@ import { Questionnaire } from '@wansurvey/schema';
 import { sql, type Transaction } from 'kysely';
 import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
-import { createMssqlDb } from './mssql/connection.js';
+import { createOwnerDb } from './mssql/owner-schema.js';
 
 type Tx = Transaction<Record<string, never>>;
 
@@ -73,7 +73,7 @@ const CHUNK = 100;
  * accounts are ordinary ones (password sign-in); nothing here turns a protection off.
  */
 export async function loadSetup(adminUrl: string, o: LoadOptions): Promise<LoadUsers> {
-  const db = createMssqlDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
+  const db = createOwnerDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
   try {
     const stamp = Date.now().toString(36);
     const tenantId = uuidv7();

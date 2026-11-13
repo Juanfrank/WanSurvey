@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createMssqlDb } from '../../src/db/mssql/connection.js';
+import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import { ProjectsStore } from '../../src/projects/projects-store.mssql.js';
@@ -25,7 +25,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: organisations and projects', () => 
   beforeAll(async () => {
     await runMssqlMigrations(ADMIN!, APP!);
     app = new MssqlDatabase(APP!, { max: 4 });
-    const db = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const db = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       for (const t of [a, b])
         await sql`INSERT INTO tenants (id, name, slug) VALUES (${t.id}, ${t.slug}, ${t.slug})`.execute(

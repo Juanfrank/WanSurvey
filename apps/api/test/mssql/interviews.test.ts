@@ -3,7 +3,7 @@ import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CasesStore } from '../../src/cases/cases-store.mssql.js';
 import { CatiStore } from '../../src/cati/cati-store.mssql.js';
-import { createMssqlDb } from '../../src/db/mssql/connection.js';
+import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import { InterviewsStore } from '../../src/interviews/interviews-store.mssql.js';
@@ -33,9 +33,9 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: interviews and CATI', () => {
   let questionnaireId: string;
 
   const owner = async <T>(
-    fn: (db: ReturnType<typeof createMssqlDb<Record<string, never>>>) => Promise<T>,
+    fn: (db: ReturnType<typeof createOwnerDb<Record<string, never>>>) => Promise<T>,
   ) => {
-    const db = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const db = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       return await fn(db);
     } finally {

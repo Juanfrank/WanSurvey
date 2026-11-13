@@ -1,12 +1,12 @@
 import { sql } from 'kysely';
-import { createMssqlDb } from './connection.js';
+import { createOwnerDb } from './owner-schema.js';
 
 /**
  * Plain SQL with `?` placeholders on an owner connection, for the browser tests' setup and
  * checks (`apps/web/e2e/db.ts`). Not used by the application.
  */
 export function openRaw(url: string) {
-  const db = createMssqlDb<Record<string, never>>(url, { max: 1 });
+  const db = createOwnerDb<Record<string, never>>(url, { max: 1 });
   return {
     async query(text: string, params: unknown[] = []): Promise<Record<string, unknown>[]> {
       const parts = text.split('?');

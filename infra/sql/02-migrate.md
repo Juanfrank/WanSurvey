@@ -36,5 +36,5 @@ What the users may do, checked on SQL Server 2022:
   application's schema, so a later broad grant to a role cannot open them. The personal questions are
   marked in `bi.dim_pregunta.personal` (see `docs/bi.md`).
 
-The seed of demonstration data (`pnpm db:seed`) and the load-test setup are development tools and
-need the schema `dbo`.
+The seed of demonstration data (`pnpm db:seed`, `pnpm db:seed-demo`) and the load-test setup work in
+the schema in `DATABASE_SCHEMA`: export it, with `DATABASE_ADMIN_URL`, when you run them.

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createMssqlDb } from '../../src/db/mssql/connection.js';
+import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import {
@@ -29,7 +29,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: questionnaires', () => {
   beforeAll(async () => {
     await runMssqlMigrations(ADMIN!, APP!);
     app = new MssqlDatabase(APP!, { max: 6 });
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       for (const t of [a, b]) {
         await sql`INSERT INTO tenants (id, name, slug) VALUES (${t.id}, ${t.slug}, ${t.slug})`.execute(
@@ -161,7 +161,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: questionnaires', () => {
         sql`DELETE FROM questionnaire_versions WHERE questionnaire_id = ${id}`.execute(tx),
       ),
     ).rejects.toThrow(/permission was denied/i);
-    const owner = createMssqlDb<Record<string, never>>(ADMIN!, { max: 1 });
+    const owner = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
     try {
       await expect(
         sql`DELETE FROM questionnaire_versions WHERE questionnaire_id = ${id}`.execute(owner),
