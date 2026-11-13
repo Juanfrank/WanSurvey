@@ -39,8 +39,8 @@ const contactLine = (f: Facts, es: boolean) =>
       ? `Escriba a ${f.privacyContact}.`
       : `Write to ${f.privacyContact}.`
     : es
-      ? 'Escriba a la persona que le envió la invitación a la encuesta o al administrador de su organización.'
-      : 'Write to the person who sent you the invitation to the survey, or to your organisation’s administrator.';
+      ? 'Escriba al administrador de su organización.'
+      : 'Write to your organisation’s administrator.';
 
 export function aboutPage(f: Facts, es: boolean): Page {
   return es
@@ -67,7 +67,9 @@ export function aboutPage(f: Facts, es: boolean): Page {
             id: 'who',
             title: 'Quién la administra',
             paragraphs: [
-              `Esta instalación la administra ${who(f, true)}. Esa organización decide qué encuestas se hacen, a quién se contacta y durante cuánto tiempo se conservan los datos.`,
+              f.organisation
+                ? `Esta instalación la administra ${f.organisation}. Esa organización decide qué encuestas se hacen, a quién se contacta y durante cuánto tiempo se conservan los datos.`
+                : 'La organización que administra esta instalación decide qué encuestas se hacen, a quién se contacta y durante cuánto tiempo se conservan los datos.',
               'Para saber cómo se tratan los datos personales, vea la Política de Privacidad.',
             ],
           },
@@ -115,7 +117,9 @@ export function aboutPage(f: Facts, es: boolean): Page {
             id: 'who',
             title: 'Who runs it',
             paragraphs: [
-              `This installation is run by ${who(f, false)}. That organisation decides which surveys are made, whom to contact and how long data is kept.`,
+              f.organisation
+                ? `This installation is run by ${f.organisation}. That organisation decides which surveys are made, whom to contact and how long data is kept.`
+                : 'The organisation that runs this installation decides which surveys are made, whom to contact and how long data is kept.',
               'To know how personal data is handled, see the Privacy Policy.',
             ],
           },
