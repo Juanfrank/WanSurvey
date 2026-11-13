@@ -185,6 +185,8 @@ export class PeopleStore {
       totpSecretEnc: string | null;
       totpEnabled: boolean;
       totpLastStep: number | null;
+      termsVersion: number;
+      termsAcceptedAt: Date;
     }>,
   ): Promise<void> {
     await tx
@@ -198,6 +200,8 @@ export class PeopleStore {
         ...(v.passwordHash !== undefined ? { password_hash: v.passwordHash } : {}),
         ...(v.totpSecretEnc !== undefined ? { totp_secret_enc: v.totpSecretEnc } : {}),
         ...(v.totpEnabled !== undefined ? { totp_enabled: v.totpEnabled } : {}),
+        ...(v.termsVersion !== undefined ? { terms_version: v.termsVersion } : {}),
+        ...(v.termsAcceptedAt !== undefined ? { terms_accepted_at: v.termsAcceptedAt } : {}),
         ...(v.totpLastStep !== undefined ? { totp_last_step: v.totpLastStep } : {}),
       })
       .where('id', '=', userId)

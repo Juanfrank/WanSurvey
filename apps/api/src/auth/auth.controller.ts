@@ -26,6 +26,7 @@ const LoginBody = z.object({
   tenant: z.string().min(1).max(64).optional(),
 });
 const SwitchBody = z.object({ tenantId: z.string().uuid() });
+const TermsBody = z.object({ version: z.number().int().min(1) });
 const CodeBody = z.object({ code: z.string().regex(/^\d{6}$/) });
 const Password = z
   .string()
@@ -121,6 +122,16 @@ export class AuthController {
   @Get('me')
   me(@Auth() ctx: AuthContext) {
     return this.auth.me(ctx);
+  }
+
+  /** The person accepts the terms of use and the confidentiality undertaking (version kept). */
+  @Post('terms/accept')
+  @HttpCode(200)
+  acceptTerms(
+    @Auth() ctx: AuthContext,
+    @Body(new ZodPipe(TermsBody)) body: z.infer<typeof TermsBody>,
+  ) {
+    return this.auth.acceptTerms(ctx, body.version);
   }
 
   @AllowPendingMfa()

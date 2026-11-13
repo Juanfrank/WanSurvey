@@ -117,6 +117,9 @@ export function InfoLinks({ className = '' }: { className?: string }) {
       <a className="text-indigo-ink-700 underline" href="/privacy">
         {t('info.privacy')}
       </a>
+      <a className="text-indigo-ink-700 underline" href="/terms">
+        {t('info.terms')}
+      </a>
     </nav>
   );
 }

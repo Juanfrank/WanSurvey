@@ -81,6 +81,8 @@ export interface Me {
   memberships: { role: string; projectId: string | null; permissions?: string[] }[];
   permissions: string[];
   access: { state: 'ok' | 'no_role'; message: string | null };
+  /** The terms of use and confidentiality every person accepts before working. */
+  terms?: { version: number; acceptedVersion: number | null; accepted: boolean };
 }
 
 export interface LoginResponse {

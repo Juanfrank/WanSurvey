@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { aboutPage, privacyPage, type Facts, type Page } from '../about/content.js';
+import { aboutPage, privacyPage, termsPage, type Facts, type Page } from '../about/content.js';
 import { LogoMark, LogoName } from './Logo.js';
 
 /** What the server says about this installation (public: nobody needs to sign in to read it). */
-function useFacts() {
+export function useFacts() {
   return useQuery({
     queryKey: ['about'],
     queryFn: () => api<Facts>('/public/about'),
@@ -15,7 +16,7 @@ function useFacts() {
   });
 }
 
-function InfoShell({ page }: { page: Page }) {
+export function InfoShell({ page, extra }: { page: Page; extra?: ReactNode }) {
   const { t } = useTranslation();
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-4 py-10">
@@ -40,6 +41,7 @@ function InfoShell({ page }: { page: Page }) {
               ))}
             </ul>
           </nav>
+          {extra}
           {page.sections.map((s) => (
             <section
               key={s.id}
@@ -73,6 +75,9 @@ function InfoShell({ page }: { page: Page }) {
         <Link to="/privacy" className="text-indigo-ink-700 underline">
           {t('info.privacy')}
         </Link>
+        <Link to="/terms" className="text-indigo-ink-700 underline">
+          {t('info.terms')}
+        </Link>
         <Link to="/" className="text-indigo-ink-700 underline">
           {t('info.back')}
         </Link>
@@ -91,3 +96,4 @@ function InfoPage({ build }: { build: (f: Facts, es: boolean) => Page }) {
 
 export const AboutPage = () => <InfoPage build={aboutPage} />;
 export const PrivacyPage = () => <InfoPage build={privacyPage} />;
+export const TermsPage = () => <InfoPage build={termsPage} />;

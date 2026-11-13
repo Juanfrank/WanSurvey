@@ -131,6 +131,11 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   organisation and contact from the new `ORG_NAME` and `PRIVACY_CONTACT` settings, and mention
   only the outside services that are switched on (`GET /public/about`). Linked from sign-in, the
   account menu and the foot of web surveys. The text needs the institution's legal review.
+- **Terms of use and confidentiality undertaking** (`/terms`, public): everyone who works in the
+  application must read and accept them before using it, once per version of the text; the
+  acceptance is kept with its version and date (`users.terms_version`, migration 0028) and in the
+  activity log (`user.terms_accepted`). Raising `TERMS_VERSION` asks everyone again. The demo
+  accounts come already accepted. The text needs the institution's legal review.
 - **E-mail opens can be switched off** (project settings → Web): without the invisible image the
   funnel shows no opens, only clicks and starts; the personal link still works. On by default, as
   before.

@@ -37,6 +37,9 @@ export interface MssqlSchema {
     totp_secret_enc: string | null;
     totp_enabled: Generated<boolean>;
     totp_last_step: number | null;
+    /** The version of the terms of use this person accepted, and when. */
+    terms_version: number | null;
+    terms_accepted_at: Instant | null;
     failed_logins: Generated<number>;
     locked_until: InstantOrNull;
     last_tenant_id: string | null;

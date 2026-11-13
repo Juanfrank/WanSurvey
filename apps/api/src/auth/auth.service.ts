@@ -1,4 +1,4 @@
-import { orgTheme } from '@wansurvey/schema';
+import { orgTheme, TERMS_VERSION } from '@wansurvey/schema';
 import {
   BadRequestException,
   ConflictException,
@@ -363,6 +363,12 @@ export class AuthService {
       idCode: account.idCode,
       phoneExtension: account.phoneExtension,
     };
+    // The terms every person accepts before working: the current version and whether theirs is it.
+    const terms = {
+      version: TERMS_VERSION,
+      acceptedVersion: account?.termsVersion ?? null,
+      accepted: account?.termsVersion === TERMS_VERSION,
+    };
     const permissions = new Set<Permission>();
     for (const m of ctx.memberships)
       if (m.projectId === null)
@@ -374,6 +380,7 @@ export class AuthService {
     const theme = orgTheme(await this.repo.inTenant(ctx.tenantId, (t) => t.branding()));
     return {
       user,
+      terms,
       tenantId: ctx.tenantId,
       tenants,
       theme,
@@ -393,6 +400,26 @@ export class AuthService {
   }
 
   // --- two-factor (per account, valid in every organisation) ----------------------
+
+  /** Records that the person accepted the terms of use and confidentiality (current version only). */
+  async acceptTerms(ctx: AuthContext, version: number) {
+    if (version !== TERMS_VERSION)
+      throw new ConflictException({
+        code: 'TERMS_VERSION',
+        message: 'The terms changed: read the current version before accepting',
+      });
+    await this.repo.inTenant(
+      ctx.tenantId,
+      async (t) => {
+        await t.acceptTerms(ctx.userId, version);
+        await t.audit(
+          this.audit.fromContext(ctx, { action: 'user.terms_accepted', details: { version } }),
+        );
+      },
+      ctx.userId,
+    );
+    return { version, accepted: true };
+  }
 
   async setupTotp(ctx: AuthContext) {
     return this.repo.inTenant(

@@ -37,6 +37,8 @@ export interface Account {
   totpEnabled: boolean;
   idCode: string | null;
   phoneExtension: string | null;
+  /** The version of the terms this person accepted; null when none yet. */
+  termsVersion: number | null;
 }
 
 /** A session found by its cookie, with what the guard decides on. */
@@ -134,6 +136,8 @@ export interface AuthTx extends AccountTx {
   saveSso(v: SsoValues): Promise<SsoRow>;
   roles(userId: string): Promise<string[]>;
   account(userId: string): Promise<Account | null>;
+  /** Records that the person accepted this version of the terms, now. */
+  acceptTerms(userId: string, version: number): Promise<void>;
   /** The organisation's branding (its look); readable by every member. */
   branding(): Promise<unknown>;
   /** Opens a session; the person's last organisation is set when it differs. */
@@ -380,6 +384,7 @@ class MssqlAuthTx implements AuthTx {
         'u.first_name',
         'u.languages',
         'u.totp_enabled',
+        'u.terms_version',
         'm.id_code',
         'm.phone_extension',
       ])
@@ -394,8 +399,16 @@ class MssqlAuthTx implements AuthTx {
           totpEnabled: !!r.totp_enabled,
           idCode: r.id_code,
           phoneExtension: r.phone_extension,
+          termsVersion: r.terms_version ?? null,
         }
       : null;
+  }
+
+  acceptTerms(userId: string, version: number) {
+    return this.stores.people.updateAccount(this.tx, userId, {
+      termsVersion: version,
+      termsAcceptedAt: new Date(),
+    });
   }
 
   async openSession(v: NewSession, lastTenantId: string | null) {

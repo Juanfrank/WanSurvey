@@ -108,6 +108,12 @@ const privacyRoute = createRoute({
   component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'PrivacyPage'),
 });
 
+const termsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/terms',
+  component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'TermsPage'),
+});
+
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: AppLayout });
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: HomePage });
 const waitingRoute = createRoute({
@@ -289,6 +295,7 @@ const routeTree = rootRoute.addChildren([
   shareRoute,
   aboutRoute,
   privacyRoute,
+  termsRoute,
   appRoute.addChildren([
     homeRoute,
     waitingRoute,

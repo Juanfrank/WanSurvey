@@ -29,7 +29,7 @@ se arreglaron en esta revisión.
 | 7   | Vigilancia de entrevistadores (posición, calidad, riesgo, voz)                 | Media     | Org. (+ Desarrollo)                             |
 | 8   | Seguimiento de aperturas de correo sin opción de apagarlo                      | Media     | **Implementado**                                |
 | 9   | Registro de auditoría sin plazo de conservación; copias de seguridad           | Media     | Desarrollo + Org.                               |
-| 10  | Sin términos de uso ni compromiso de confidencialidad del personal             | Media     | Desarrollo + Org.                               |
+| 10  | Sin términos de uso ni compromiso de confidencialidad del personal             | Media     | **Implementado** + Org. (texto y contrato)      |
 | 11  | Enlaces para compartir resultados que pueden no caducar                        | Media     | **Implementado**                                |
 | 12  | Seguridad: lo que falta para decir «razonablemente protegido»                  | Media     | Org. + Desarrollo                               |
 | 13  | Texto de la Política de Privacidad inexacto en dos puntos                      | —         | **Corregido**                                   |
@@ -210,6 +210,16 @@ se arreglaron en esta revisión.
   con versión y fecha, y reaceptación al cambiar. _Organización:_ redactar los términos
   (uso aceptable, prohibición de copiar datos, consecuencias) y firmar contrato de encargo con
   quien actúe como encargado.
+
+- **Hecho (2026-11-13).** Términos de uso y compromiso de confidencialidad (`/terms`): quien trabaja
+  en la aplicación debe leerlos y aceptarlos antes de usarla, una vez por versión del texto. Cubre
+  el uso permitido, la confidencialidad (no copiar datos fuera de los medios autorizados, no
+  revelarlos, no identificar a quien respondió), lo prohibido, lo que se registra, cómo avisar de
+  un incidente, las consecuencias y que el secreto no termina con el trabajo. La aceptación queda
+  con versión y fecha y en la bitácora (`user.terms_accepted`); al subir `TERMS_VERSION` se pide
+  a todos de nuevo. _Pendiente:_ que el área jurídica acuerde el texto y cómo encaja con el
+  contrato de cada persona (laboral o de servicios), y firmar el contrato de encargo con quien
+  actúe como encargado. No alcanza a las llaves de integración, que no pasan por la pantalla.
 
 ## 11. Enlaces para compartir resultados que pueden no caducar
 

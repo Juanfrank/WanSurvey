@@ -5,6 +5,7 @@ export const AUDIT_ACTIONS = [
   'auth.logout',
   'auth.tenant_switched',
   'auth.sso_failed',
+  'user.terms_accepted',
   'user.provisioned_sso',
   'user.identity_linked',
   'tenant.sso_updated',

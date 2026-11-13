@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { household, sampleRows } from '@wansurvey/fixtures';
 import { compile } from '@wansurvey/logic';
-import { Questionnaire, ROLES } from '@wansurvey/schema';
+import { Questionnaire, ROLES, TERMS_VERSION } from '@wansurvey/schema';
 import { sql, type Transaction } from 'kysely';
 import { uuidv7 } from 'uuidv7';
 import { hashPassword } from '../auth/auth.service.js';
@@ -74,8 +74,8 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
         userIds[role] = userId;
         const email = `${role.replace('_', '.')}@demo.wansurvey.test`;
         await run(sql`
-          INSERT INTO users (id, email, name, first_name, status, password_hash)
-          VALUES (${userId}, ${email}, ${`Demo ${role}`}, ${role}, 'active', ${hash})`);
+          INSERT INTO users (id, email, name, first_name, status, password_hash, terms_version, terms_accepted_at)
+          VALUES (${userId}, ${email}, ${`Demo ${role}`}, ${role}, 'active', ${hash}, ${TERMS_VERSION}, SYSDATETIMEOFFSET())`);
         await member(tenantId, userId);
         await membership(tenantId, userId, role);
         if (role === 'project_manager') {
@@ -88,8 +88,8 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
       // A second interviewer who mostly keys paper forms (interviewers also key them).
       const clerkId = uuidv7();
       await run(sql`
-        INSERT INTO users (id, email, name, first_name, status, password_hash)
-        VALUES (${clerkId}, 'data.entry@demo.wansurvey.test', 'Demo clerk', 'clerk', 'active', ${hash})`);
+        INSERT INTO users (id, email, name, first_name, status, password_hash, terms_version, terms_accepted_at)
+        VALUES (${clerkId}, 'data.entry@demo.wansurvey.test', 'Demo clerk', 'clerk', 'active', ${hash}, ${TERMS_VERSION}, SYSDATETIMEOFFSET())`);
       await member(tenantId, clerkId);
       await membership(tenantId, clerkId, 'interviewer');
       console.log(`  ${'clerk'.padEnd(16)} data.entry@demo.wansurvey.test`);

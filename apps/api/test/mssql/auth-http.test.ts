@@ -156,6 +156,40 @@ describe.skipIf(!configured)('SQL Server: sign-in and sessions over HTTP', () =>
     expect((await b.agent.get('/api/v1/auth/me')).status).toBe(401);
   });
 
+  it('asks each person to accept the terms of use once per version, and records it', async () => {
+    const user = await createUser(t.owner, tenant.id, [{ role: 'interviewer' }]);
+    const s = await login(t, user, tenant.slug);
+    const before = await s.agent.get('/api/v1/auth/me');
+    expect(before.body.terms).toMatchObject({ accepted: false, acceptedVersion: null });
+    const current = before.body.terms.version as number;
+    // An old or invented version is refused: the person must read the current text.
+    const stale = await s.agent
+      .post('/api/v1/auth/terms/accept')
+      .set('x-csrf-token', s.csrf)
+      .send({ version: current + 1 });
+    expect(stale.status).toBe(409);
+    expect(stale.body.code).toBe('TERMS_VERSION');
+    const ok = await s.agent
+      .post('/api/v1/auth/terms/accept')
+      .set('x-csrf-token', s.csrf)
+      .send({ version: current });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    const after = await s.agent.get('/api/v1/auth/me');
+    expect(after.body.terms).toEqual({
+      version: current,
+      acceptedVersion: current,
+      accepted: true,
+    });
+    expect(await auditActions(t.owner, tenant.id)).toContain('user.terms_accepted');
+    const [row] = (
+      (await sql`SELECT terms_version, terms_accepted_at FROM users WHERE id = ${user.id}`.execute(
+        t.owner,
+      )) as { rows: Record<string, unknown>[] }
+    ).rows;
+    expect(row!.terms_version).toBe(current);
+    expect(row!.terms_accepted_at).not.toBeNull();
+  });
+
   it('moves a person between their organisations with a new session', async () => {
     const other = await createTenant(t.owner);
     const user = await createUser(t.owner, tenant.id, [{ role: 'interviewer' }]);

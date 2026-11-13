@@ -413,3 +413,175 @@ export function privacyPage(f: Facts, es: boolean): Page {
     ],
   };
 }
+
+/**
+ * The terms of use and confidentiality undertaking every person accepts before working in the
+ * application (the version is `TERMS_VERSION` of the schema package: raise it when this text
+ * changes, and everyone is asked again). It binds the person to the organisation that runs the
+ * installation; the organisation's legal area must agree the wording, the consequences and, in
+ * labour relations, how it fits the contract.
+ */
+export function termsPage(f: Facts, es: boolean): Page {
+  const org = f.organisation ?? (es ? 'su organización' : 'your organisation');
+  return es
+    ? {
+        title: 'Términos de uso y compromiso de confidencialidad',
+        intro: `Para trabajar en WanSurvey, ${org} le pide leer y aceptar lo siguiente. Su aceptación queda registrada con la fecha y la versión del texto.`,
+        sections: [
+          {
+            id: 'who',
+            title: '1. Quién puede usar la aplicación',
+            paragraphs: [
+              'Solo las personas autorizadas por la organización, con la cuenta y el rol que se les asignó. La cuenta es personal.',
+            ],
+          },
+          {
+            id: 'use',
+            title: '2. Uso permitido',
+            items: [
+              'Use la aplicación solo para el trabajo para el que se le dio acceso: diseñar, realizar, revisar o analizar las encuestas de su proyecto.',
+              'Acceda únicamente a los datos que necesita para ese trabajo. Que el sistema le deje ver algo no significa que pueda hacerlo.',
+              'No comparta su contraseña, su segundo factor ni su sesión. Cierre la sesión en equipos que no son suyos.',
+            ],
+          },
+          {
+            id: 'confidentiality',
+            title: '3. Confidencialidad',
+            paragraphs: [
+              'Los datos de las personas encuestadas (sus respuestas, sus datos de contacto y todo lo que permita identificarlas) son confidenciales. Usted se compromete a guardar secreto sobre ellos.',
+            ],
+            items: [
+              'No los copie, descargue, fotografíe ni envíe fuera de los medios autorizados por la organización (por ejemplo a su correo o teléfono personal, a mensajería o a servicios en la nube que no sean los de la organización).',
+              'No los revele a nadie que no esté autorizado, ni dentro ni fuera de la organización.',
+              'No intente identificar a quien respondió una encuesta anónima ni cruzar datos para averiguarlo.',
+              'No use los datos de contacto para nada distinto de la encuesta, ni los guarde para después.',
+            ],
+          },
+          {
+            id: 'prohibited',
+            title: '4. Lo que no está permitido',
+            items: [
+              'Acceder a datos por curiosidad, de conocidos o de personas de su entorno.',
+              'Inventar, alterar o copiar entrevistas, o responder por otra persona.',
+              'Intentar saltarse los controles de acceso, probar contraseñas o usar cuentas ajenas.',
+              'Llamar, escribir o visitar a una persona que pidió no ser contactada.',
+            ],
+          },
+          {
+            id: 'records',
+            title: '5. Lo que se registra',
+            paragraphs: [
+              'La aplicación registra quién hace qué y cuándo (inicios de sesión, consulta de datos personales, exportaciones, cambios). En las entrevistas puede registrarse la posición del dispositivo y, si el proyecto lo activa y la persona lo acepta, el audio. Este registro sirve para proteger a las personas encuestadas, a la organización y a usted. Más detalle en la Política de Privacidad.',
+            ],
+          },
+          {
+            id: 'incidents',
+            title: '6. Si algo sale mal',
+            paragraphs: [
+              'Si pierde un dispositivo con datos, sospecha que alguien usó su cuenta, envió datos a quien no debía o ve datos que no debería ver, avise de inmediato al administrador de su organización. Avisar pronto reduce el daño y protege a todos.',
+            ],
+          },
+          {
+            id: 'consequences',
+            title: '7. Consecuencias',
+            paragraphs: [
+              'El incumplimiento puede llevar a retirar el acceso y a las medidas laborales, civiles o penales que correspondan según la ley y su contrato. La divulgación indebida de datos personales puede ser un delito.',
+            ],
+          },
+          {
+            id: 'duration',
+            title: '8. Cuánto dura',
+            paragraphs: [
+              'Estas obligaciones siguen en vigor cuando termine su trabajo en la organización: el secreto sobre los datos no tiene fecha de fin.',
+            ],
+          },
+          {
+            id: 'version',
+            title: '9. Cambios',
+            paragraphs: [
+              'Si este texto cambia, se le pedirá aceptarlo de nuevo antes de seguir trabajando.',
+            ],
+          },
+        ],
+      }
+    : {
+        title: 'Terms of use and confidentiality undertaking',
+        intro: `To work in WanSurvey, ${org} asks you to read and accept the following. Your acceptance is recorded with its date and the version of the text.`,
+        sections: [
+          {
+            id: 'who',
+            title: '1. Who may use the application',
+            paragraphs: [
+              'Only people authorised by the organisation, with the account and role given to them. The account is personal.',
+            ],
+          },
+          {
+            id: 'use',
+            title: '2. Permitted use',
+            items: [
+              'Use the application only for the work you were given access for: designing, carrying out, reviewing or analysing the surveys of your project.',
+              'Access only the data you need for that work. That the system lets you see something does not mean you may.',
+              'Do not share your password, your second factor or your session. Sign out on devices that are not yours.',
+            ],
+          },
+          {
+            id: 'confidentiality',
+            title: '3. Confidentiality',
+            paragraphs: [
+              'The data of the people surveyed (their answers, their contact details and anything that could identify them) is confidential. You undertake to keep it secret.',
+            ],
+            items: [
+              'Do not copy, download, photograph or send it outside the means authorised by the organisation (for example to your personal e-mail or phone, to messaging apps or to cloud services that are not the organisation’s).',
+              'Do not disclose it to anyone who is not authorised, inside or outside the organisation.',
+              'Do not try to identify who answered an anonymous survey or to cross data to find out.',
+              'Do not use contact details for anything other than the survey, nor keep them for later.',
+            ],
+          },
+          {
+            id: 'prohibited',
+            title: '4. What is not allowed',
+            items: [
+              'Looking at data out of curiosity, about acquaintances or people around you.',
+              'Making up, altering or copying interviews, or answering for someone else.',
+              'Trying to get round access controls, guessing passwords or using someone else’s account.',
+              'Calling, writing to or visiting a person who asked not to be contacted.',
+            ],
+          },
+          {
+            id: 'records',
+            title: '5. What is recorded',
+            paragraphs: [
+              'The application records who does what and when (sign-ins, views of personal data, exports, changes). In interviews the position of the device may be recorded and, if the project turns it on and the person agrees, the audio. This record protects the people surveyed, the organisation and you. More detail in the Privacy Policy.',
+            ],
+          },
+          {
+            id: 'incidents',
+            title: '6. If something goes wrong',
+            paragraphs: [
+              'If you lose a device with data, suspect someone used your account, sent data to someone it should not go to or see data you should not see, tell your organisation’s administrator at once. Telling early reduces the harm and protects everyone.',
+            ],
+          },
+          {
+            id: 'consequences',
+            title: '7. Consequences',
+            paragraphs: [
+              'A breach can lead to losing access and to the labour, civil or criminal measures the law and your contract provide for. Improper disclosure of personal data can be a crime.',
+            ],
+          },
+          {
+            id: 'duration',
+            title: '8. How long it lasts',
+            paragraphs: [
+              'These obligations stay in force when your work for the organisation ends: secrecy about the data has no end date.',
+            ],
+          },
+          {
+            id: 'version',
+            title: '9. Changes',
+            paragraphs: [
+              'If this text changes, you will be asked to accept it again before going on working.',
+            ],
+          },
+        ],
+      };
+}

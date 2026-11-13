@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, switchTenant as openTenant, type Me } from '../api.js';
+import { TermsGate } from './TermsGate.js';
 import { AccountMenu } from './AccountMenu.js';
 import { adminSectionsFor } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
@@ -89,6 +90,10 @@ export function AppLayout() {
 
   if (!me.data) return <main className="p-8 text-slate-500" aria-busy="true" />;
   const waiting = me.data.access.state === 'no_role';
+  // Nobody works before accepting the current terms of use and confidentiality undertaking
+  // (an answer cached by an older version of the app carries no terms: it does not block).
+  if (me.data.terms && !me.data.terms.accepted)
+    return <TermsGate version={me.data.terms.version} onSignOut={() => void logout()} />;
 
   return (
     <div className="min-h-screen min-[900px]:flex">

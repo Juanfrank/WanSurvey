@@ -98,6 +98,18 @@ exported like any item. A project can require it (Settings → Privacy → "Do n
 questionnaire that does not open with the information notice"). **Agree the wording with the
 institution's legal area.**
 
+## Terms of use and confidentiality of staff
+
+Every person who works in the application accepts, before using it, the terms of use and the
+confidentiality undertaking (`/terms`, also readable without signing in): authorised use only, no
+copying of personal data out of the means the organisation authorises, secrecy that outlasts the
+job, what is recorded, how to report an incident, consequences. The acceptance is kept with the
+version of the text and its date, and in the activity log (`user.terms_accepted`). The text is in
+`apps/web/src/about/content.ts` (`termsPage`); when it changes, raise `TERMS_VERSION` in
+`packages/schema/src/constants.ts` and everyone is asked again at their next access. **Agree the
+wording, and how it fits the employment or service contract, with the institution's legal area.**
+It binds only people who use the application's screens: an integration API key is not asked.
+
 ## Sensitive data and minors
 
 Mark a question as **sensitive** in the designer (health, racial or ethnic origin, political
