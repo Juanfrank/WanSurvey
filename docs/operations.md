@@ -62,6 +62,16 @@ A locked account (too many failed passwords or codes) opens by itself after `LOG
 - Redis holds only queues and pub/sub; it can be lost. Scheduled jobs are re-created when the worker starts, and a nightly recompute rebuilds the figures.
 - `ENCRYPTION_KEY` is backed up separately from the database backups.
 
+## Creating the database with least privilege
+
+`infra/sql/` has the provisioning scripts, tested end to end on SQL Server 2022: `01-create-database.sql`
+(the database, its owner login and the application user), `02-migrate.md` (the migrations, run with the
+owner) and `03-create-readonly-user.sql` (a reader of the analysis model). Three principals: the **owner**
+(owns the database, deploys, has no server role, then disable it), the **application** `wansurvey_app`
+(no role, only the grants of the migrations, always under row-level security) and the **reader** (only
+`SELECT` on schema `bi`). The application's objects live in schema `dbo` (plus `rls` and `bi`) and the
+application user is named `wansurvey_app`: both are fixed by the migrations.
+
 ## About and Privacy pages
 
 `/about` and `/privacy` are public pages (no sign-in), linked from the sign-in page, the account
