@@ -1,5 +1,6 @@
 /*
-  WanSurvey, step 1 of 2: the database and its owner.
+  WanSurvey, step 1 of 2: the database and its owner. (Does the database already exist? Use
+  01-existing-database.sql instead: it creates nothing.)
   Run it ONCE, before the first start, as a login that may create databases and logins (sysadmin).
 
   sqlcmd -S <server> -U <admin> -P <password> -b -i 01-create-database.sql ^

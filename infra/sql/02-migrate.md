@@ -1,6 +1,8 @@
 # Step 2: apply the migrations, with the names you choose
 
-With the database and its owner made (step 1), the application makes the **schema**, its tables,
+With the database and its owner made (step 1: `01-create-database.sql` for a new database, or
+`01-existing-database.sql` for one that already exists, which creates nothing and adds the tables
+in their own schema beside whatever is there), the application makes the **schema**, its tables,
 the security policy, the grants, the **application user** and, if you ask for one, a **read-only
 user**, with the owner login. Everything you name is in settings:
 

@@ -152,8 +152,11 @@ export async function runMssqlMigrations(
       e: number;
     }>`SELECT CAST(SERVERPROPERTY('EngineEdition') AS int) AS e`.execute(db);
     if (edition.rows[0]?.e !== 5) {
+      // Only when it is off: an instance whose DBA turned it on needs no server permission here.
       await sql
-        .raw(`EXEC sp_configure 'contained database authentication', 1; RECONFIGURE;`)
+        .raw(
+          `IF (SELECT CAST(value_in_use AS int) FROM sys.configurations WHERE name = 'contained database authentication') = 0 BEGIN EXEC sp_configure 'contained database authentication', 1; RECONFIGURE; END;`,
+        )
         .execute(db);
       await sql
         .raw(
