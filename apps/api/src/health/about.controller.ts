@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import type { AboutFacts, TechnicalFacts } from '@wansurvey/schema';
 import { Public } from '../common/auth-context.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { VERSION } from '../version.js';
+import { AUTHOR, VERSION } from '../version.js';
 
 /**
  * What the public About, Privacy and Terms pages need to say about this installation: the version,
@@ -24,7 +24,7 @@ export class AboutController {
       version: VERSION,
       organisation: c.ORG_NAME || null,
       privacyContact: c.PRIVACY_CONTACT || null,
-      author: c.APP_AUTHOR || null,
+      author: c.APP_AUTHOR || AUTHOR,
       holder: c.APP_HOLDER || null,
       services: {
         geocoder: c.GEOCODER !== 'none',

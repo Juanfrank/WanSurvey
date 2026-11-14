@@ -16,17 +16,17 @@ application publishes them with the same structure. The reference specification 
 
 ## Settings (all optional, the same names in every application)
 
-| Variable          | Feeds                                        | If missing                                                          |
-| ----------------- | -------------------------------------------- | ------------------------------------------------------------------- |
-| `ORG_NAME`        | `organisation` (section `who`)               | "This installation is run by an organisation"                       |
-| `PRIVACY_CONTACT` | `privacyContact` (`contact`, privacy, terms) | "Write to your organisation's administrator"                        |
-| `APP_AUTHOR`      | `author` (`rights`)                          | the section is left out (there is no project constant in WanSurvey) |
-| `APP_HOLDER`      | `holder` (`rights`)                          | the holder is not shown                                             |
-| `APP_BUILD`       | `technical.build` (signed-in people only)    | the version                                                         |
+| Variable          | Feeds                                        | If missing                                                                                                                                                         |
+| ----------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ORG_NAME`        | `organisation` (section `who`)               | "This installation is run by an organisation"                                                                                                                      |
+| `PRIVACY_CONTACT` | `privacyContact` (`contact`, privacy, terms) | "Write to your organisation's administrator"                                                                                                                       |
+| `APP_AUTHOR`      | `author` (`rights`)                          | the project's fixed author (`AUTHOR` in `apps/api/src/version.ts`: Juan Francisco Medina, Gerencia de Ciencia y Analítica de Datos); the variable only replaces it |
+| `APP_HOLDER`      | `holder` (`rights`)                          | the holder is not shown                                                                                                                                            |
+| `APP_BUILD`       | `technical.build` (signed-in people only)    | the version                                                                                                                                                        |
 
 ## About, in order
 
-`what`, `who`, `version`, `rights` (only with an author or a holder), `access` (how people get in and
+`what`, `who`, `version`, `rights` (always, because the author is fixed; the holder is added when `APP_HOLDER` is set), `access` (how people get in and
 which optional services are on: only those that are), `contact`, `documents` (internal links to
 Privacy and Terms), `technical` (build, mode and Node: only with a session, last).
 

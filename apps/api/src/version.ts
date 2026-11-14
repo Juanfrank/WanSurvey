@@ -14,3 +14,9 @@ export const VERSION: string = (() => {
     return 'unknown';
   }
 })();
+
+/**
+ * Who wrote the application: a fixed fact of the project, not a setting of the installation. It is
+ * shown on the About page; `APP_AUTHOR` can replace it (a fork), but nothing needs to set it.
+ */
+export const AUTHOR = 'Juan Francisco Medina, Gerencia de Ciencia y Analítica de Datos';

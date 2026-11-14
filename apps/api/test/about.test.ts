@@ -34,7 +34,8 @@ describe('the public about answer', () => {
     });
     expect(a.organisation).toBeNull();
     expect(a.privacyContact).toBeNull();
-    expect(a.author).toBeNull();
+    // The author is a fixed fact of the project: shown even when nothing is set.
+    expect(a.author).toBe('Juan Francisco Medina, Gerencia de Ciencia y Analítica de Datos');
     expect(a.holder).toBeNull();
     expect(a.services).toEqual({
       geocoder: true,

@@ -145,7 +145,7 @@ const Env = z.object({
    */
   ORG_NAME: z.string().max(200).optional(),
   PRIVACY_CONTACT: z.string().max(200).optional(),
-  /** Who wrote the application, shown on the About page (not the organisation that runs it). */
+  /** Replaces the fixed author of the project (version.ts) on the About page; normally unset. */
   /** The build this installation runs (a commit or pipeline id), shown to signed-in people only. */
   APP_BUILD: z.string().trim().max(100).optional(),
   APP_AUTHOR: z.string().trim().max(200).optional(),

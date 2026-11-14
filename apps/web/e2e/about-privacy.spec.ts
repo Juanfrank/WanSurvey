@@ -32,16 +32,21 @@ test('About follows the common structure: public without build data, keyboard, b
   await page.goto('/about');
   await expect(page.getByRole('heading', { level: 1, name: 'About WanSurvey' })).toBeVisible();
   const h2 = await page.getByRole('heading', { level: 2 }).allTextContents();
-  // What, who, version, access, contact, documents (no rights without author or holder, and no
+  // What, who, version, rights (the author is fixed), access, contact, documents (no
   // technical section without a session).
   expect(h2).toEqual([
     'What it is',
     'Who runs it',
     'Version',
+    'Authorship and ownership',
     'How to access it',
     'Contact',
     'Documents',
   ]);
+  // The author is fixed in the project and shown without any setting.
+  await expect(page.locator('#rights')).toContainText(
+    'Author: Juan Francisco Medina, Gerencia de Ciencia y Analítica de Datos.',
+  );
   await expect(page.getByRole('heading', { name: 'Technical details' })).toHaveCount(0);
   await expect(page.getByLabel('Language')).toBeVisible();
   // The internal documents are links of the application.
