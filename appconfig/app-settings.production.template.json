@@ -90,6 +90,11 @@
     "slotSetting": false
   },
   {
+    "name": "APP_BUILD",
+    "value": "",
+    "slotSetting": false
+  },
+  {
     "name": "APP_AUTHOR",
     "value": "",
     "slotSetting": false

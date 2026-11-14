@@ -14,3 +14,4 @@ export * from './time.js';
 export * from './apikeys.js';
 export * from './theme.js';
 export * from './exit-reasons.js';
+export * from './info-pages.js';

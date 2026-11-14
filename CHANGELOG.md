@@ -19,6 +19,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **About, Privacy and Terms follow the institution's common schema** (`docs/info-pages.md`): shared
+  types in `@wansurvey/schema`; About in a fixed order (`what`, `who`, `version`, `rights` if there is an
+  author or holder, `access`, `contact`, `documents`, and `technical` for people with a session); only
+  the services that are on are claimed; no changelog or accessibility claim in the public text; a
+  language selector and a Back link; inside the application's frame for people who work in it. New
+  `GET /api/v1/system/technical` (session only) and the setting `APP_BUILD`.
 - **Author and holder on the About page**: `APP_AUTHOR` and `APP_HOLDER` (optional) add an
   "Authorship and ownership" section, separate from the organisation that runs the installation.
 - **Installation wizard** (`/setup`): while `DATABASE_URL` is not set the API runs only a wizard instead

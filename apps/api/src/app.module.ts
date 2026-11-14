@@ -106,7 +106,7 @@ import { CONFIG, loadConfig } from './config.js';
 import { Engine } from './db/engine.js';
 import { MssqlOrgRepo, ORG_REPO } from './projects/org-repo.js';
 import { AUTH_REPO, MssqlAuthRepo } from './auth/auth-repo.js';
-import { AboutController } from './health/about.controller.js';
+import { AboutController, SystemController } from './health/about.controller.js';
 import { HealthController } from './health/health.controller.js';
 import {
   ConsoleMailer,
@@ -184,6 +184,7 @@ export class AppModule {
       controllers: [
         HealthController,
         AboutController,
+        SystemController,
         ApiKeysController,
         ExtController,
         WebhooksController,

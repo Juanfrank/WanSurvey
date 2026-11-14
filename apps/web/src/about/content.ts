@@ -5,28 +5,12 @@
  * every installation. The legal basis of each survey is the organisation's to declare (it is a
  * setting of every project); its legal area should read this text before it is published.
  */
-export interface Facts {
-  version: string;
-  organisation: string | null;
-  privacyContact: string | null;
-  /** Who wrote the application and who holds its rights (not the installation's organisation). */
-  author?: string | null;
-  holder?: string | null;
-  services: { geocoder: boolean; sms: boolean; microsoftSignIn: boolean };
-}
+import type { AboutFacts, InfoPage as Page, InfoSection as Section } from '@wansurvey/schema';
 
-export interface Section {
-  id: string;
-  title: string;
-  paragraphs?: string[];
-  items?: string[];
-}
+/** What the server says about this installation (the shared contract, docs/info-pages.md). */
+export type Facts = AboutFacts;
 
-export interface Page {
-  title: string;
-  intro: string;
-  sections: Section[];
-}
+export type { Page, Section };
 
 export const UPDATED = '2026-11-07';
 
@@ -44,6 +28,14 @@ const contactLine = (f: Facts, es: boolean) =>
     : es
       ? 'Escriba al administrador de su organización.'
       : 'Write to your organisation’s administrator.';
+
+const on = (f: Facts, key: string) => f.services[key] === true;
+
+/** "a, b y c" / "a, b or c". */
+const join = (items: string[], es: boolean) =>
+  items.length < 2
+    ? items.join('')
+    : `${items.slice(0, -1).join(', ')} ${es ? 'o' : 'or'} ${items.at(-1)}`;
 
 /** Author and holder of the application, when the installation says them. */
 const rights = (f: Facts, es: boolean): Section[] => {
@@ -72,7 +64,104 @@ const rights = (f: Facts, es: boolean): Section[] => {
   ];
 };
 
+/** How people get in and which optional services are on: only what is on is said. */
+const access = (f: Facts, es: boolean): Section => {
+  const items = [
+    ...(on(f, 'passwordLogin')
+      ? [es ? 'Ingreso con correo y contraseña.' : 'Sign-in with e-mail and password.']
+      : []),
+    ...(on(f, 'microsoftSignIn')
+      ? [
+          es
+            ? 'Ingreso con la cuenta de Microsoft de la organización.'
+            : 'Sign-in with the organisation’s Microsoft account.',
+        ]
+      : []),
+    ...(on(f, 'email')
+      ? [
+          es
+            ? 'Mensajes de correo a las personas de la muestra.'
+            : 'E-mail to the people in the sample.',
+        ]
+      : []),
+    ...(on(f, 'sms')
+      ? [es ? 'Mensajes SMS a las personas de la muestra.' : 'SMS to the people in the sample.']
+      : []),
+    ...(on(f, 'geocoder')
+      ? [es ? 'Búsqueda de direcciones en el mapa.' : 'Address search on the map.']
+      : []),
+  ];
+  return {
+    id: 'access',
+    title: es ? 'Cómo se accede' : 'How to access it',
+    paragraphs: [
+      es
+        ? 'El personal ingresa con su cuenta desde un navegador. Las personas encuestadas contestan por el canal que la organización elija (enlace web, llamada, visita o papel) y no necesitan una cuenta.'
+        : 'Staff sign in with their account from a browser. People who are surveyed answer through the channel the organisation chooses (web link, call, visit or paper) and need no account.',
+    ],
+    ...(items.length ? { items } : {}),
+  };
+};
+
+const documents = (es: boolean): Section => ({
+  id: 'documents',
+  title: es ? 'Documentos' : 'Documents',
+  links: [
+    { label: es ? 'Política de Privacidad' : 'Privacy Policy', to: '/privacy' },
+    { label: es ? 'Términos de uso' : 'Terms of use', to: '/terms' },
+  ],
+});
+
+/** Only with a session: the build, the mode and the runtime. */
+const technical = (f: Facts, es: boolean): Section[] =>
+  f.technical
+    ? [
+        {
+          id: 'technical',
+          title: es ? 'Datos técnicos' : 'Technical details',
+          items: [
+            `${es ? 'Compilación' : 'Build'}: ${f.technical.build}`,
+            `${es ? 'Modo' : 'Mode'}: ${
+              f.technical.environment === 'production'
+                ? es
+                  ? 'producción'
+                  : 'production'
+                : es
+                  ? 'desarrollo'
+                  : 'development'
+            }`,
+            `Node: ${f.technical.node}`,
+          ],
+        },
+      ]
+    : [];
+
+/** About: what / who / version / rights (if any) / access / contact / documents / technical (session). */
 export function aboutPage(f: Facts, es: boolean): Page {
+  const channels = (es: boolean) =>
+    join(
+      [
+        es ? 'llamada (CATI)' : 'phone calls (CATI)',
+        es
+          ? 'visita con tableta, incluso sin conexión (CAPI)'
+          : 'visits with a tablet, even offline (CAPI)',
+        es
+          ? `enlace web${on(f, 'email') ? ' o correo' : ''} (CAWI)`
+          : `web links${on(f, 'email') ? ' or e-mail' : ''} (CAWI)`,
+        ...(on(f, 'sms') ? ['SMS'] : []),
+        es ? 'formulario en papel (PAPI)' : 'paper forms (PAPI)',
+      ],
+      es,
+    );
+  const outreach = (es: boolean) =>
+    join(
+      [
+        es ? 'enlaces' : 'links',
+        ...(on(f, 'email') ? [es ? 'correo' : 'e-mail'] : []),
+        ...(on(f, 'sms') ? ['SMS'] : []),
+      ],
+      es,
+    );
   return es
     ? {
         title: 'Acerca de WanSurvey',
@@ -83,12 +172,12 @@ export function aboutPage(f: Facts, es: boolean): Page {
             id: 'what',
             title: 'Qué es',
             paragraphs: [
-              'Un cuestionario se diseña una vez y se aplica por el canal que convenga: llamada (CATI), visita con tableta, incluso sin conexión (CAPI), enlace web o correo (CAWI), SMS o formulario en papel (PAPI). Las respuestas de todos los canales llegan al mismo lugar, con la misma lógica de saltos y validaciones.',
+              `Un cuestionario se diseña una vez y se aplica por el canal que convenga: ${channels(true)}. Las respuestas de todos los canales llegan al mismo lugar, con la misma lógica de saltos y validaciones.`,
             ],
             items: [
               'Diseño de cuestionarios con lógica, traducciones y versiones, y aprobación antes de publicar.',
               'Muestras y listas de casos, asignación a entrevistadores, metas y seguimiento del trabajo de campo.',
-              'Difusión por correo, SMS o enlaces, con respuestas pre-rellenadas desde la muestra o desde la dirección.',
+              `Difusión por ${outreach(true)}, con respuestas prellenadas desde la muestra o desde la dirección.`,
               'Revisión de calidad de las entrevistas, exportación a Excel, SPSS, Stata y SQL, y un modelo para análisis en BI.',
               'Registro de personas que no desean ser contactadas, respetado por todos los canales.',
             ],
@@ -98,31 +187,17 @@ export function aboutPage(f: Facts, es: boolean): Page {
             title: 'Quién la administra',
             paragraphs: [
               f.organisation
-                ? `Esta instalación la administra ${f.organisation}. Esa organización decide qué encuestas se hacen, a quién se contacta y durante cuánto tiempo se conservan los datos.`
-                : 'La organización que administra esta instalación decide qué encuestas se hacen, a quién se contacta y durante cuánto tiempo se conservan los datos.',
+                ? `Esta instalación la administra ${f.organisation}.`
+                : 'Esta instalación la administra una organización.',
               'Para saber cómo se tratan los datos personales, vea la Política de Privacidad.',
             ],
           },
-          {
-            id: 'version',
-            title: 'Versión',
-            paragraphs: [
-              `Versión ${f.version}. La aplicación está en desarrollo activo: los cambios de cada versión están en el registro de cambios del proyecto.`,
-            ],
-          },
+          { id: 'version', title: 'Versión', paragraphs: [`Versión ${f.version}.`] },
           ...rights(f, true),
-          {
-            id: 'access',
-            title: 'Accesibilidad',
-            paragraphs: [
-              'La aplicación se prueba con herramientas de accesibilidad y con teclado, y las encuestas web se pueden contestar sin ratón y con lector de pantalla. Si encuentra una barrera, avísenos para corregirla.',
-            ],
-          },
-          {
-            id: 'contact',
-            title: 'Contacto',
-            paragraphs: [contactLine(f, true)],
-          },
+          access(f, true),
+          { id: 'contact', title: 'Contacto', paragraphs: [contactLine(f, true)] },
+          documents(true),
+          ...technical(f, true),
         ],
       }
     : {
@@ -134,12 +209,12 @@ export function aboutPage(f: Facts, es: boolean): Page {
             id: 'what',
             title: 'What it is',
             paragraphs: [
-              'A questionnaire is designed once and fielded through whichever channel suits: phone calls (CATI), visits with a tablet, even offline (CAPI), web links or e-mail (CAWI), SMS, or paper forms (PAPI). The answers from every channel arrive in one place, with the same routing and checks.',
+              `A questionnaire is designed once and fielded through whichever channel suits: ${channels(false)}. The answers from every channel arrive in one place, with the same routing and checks.`,
             ],
             items: [
               'Questionnaire design with logic, translations and versions, and approval before publishing.',
               'Samples and case lists, assignment to interviewers, goals and fieldwork follow-up.',
-              'Outreach by e-mail, SMS or links, with answers pre-filled from the sample or from the address.',
+              `Outreach by ${outreach(false)}, with answers pre-filled from the sample or from the address.`,
               'Quality review of interviews, export to Excel, SPSS, Stata and SQL, and a model for BI analysis.',
               'A registry of people who do not want to be contacted, honoured by every channel.',
             ],
@@ -149,27 +224,17 @@ export function aboutPage(f: Facts, es: boolean): Page {
             title: 'Who runs it',
             paragraphs: [
               f.organisation
-                ? `This installation is run by ${f.organisation}. That organisation decides which surveys are made, whom to contact and how long data is kept.`
-                : 'The organisation that runs this installation decides which surveys are made, whom to contact and how long data is kept.',
+                ? `This installation is run by ${f.organisation}.`
+                : 'This installation is run by an organisation.',
               'To know how personal data is handled, see the Privacy Policy.',
             ],
           },
-          {
-            id: 'version',
-            title: 'Version',
-            paragraphs: [
-              `Version ${f.version}. The application is under active development: the changes of each version are in the project’s changelog.`,
-            ],
-          },
+          { id: 'version', title: 'Version', paragraphs: [`Version ${f.version}.`] },
           ...rights(f, false),
-          {
-            id: 'access',
-            title: 'Accessibility',
-            paragraphs: [
-              'The application is tested with accessibility tools and by keyboard, and web surveys can be answered without a mouse and with a screen reader. If you meet a barrier, tell us so it can be fixed.',
-            ],
-          },
+          access(f, false),
           { id: 'contact', title: 'Contact', paragraphs: [contactLine(f, false)] },
+          documents(false),
+          ...technical(f, false),
         ],
       };
 }
@@ -222,7 +287,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
               'Indicadores de calidad de su trabajo (tiempos, patrones de respuesta, coincidencias con otras entrevistas y una puntuación de riesgo) que un revisor usa para decidir qué entrevistas revisar. Ninguna decisión sobre usted se toma de forma automática por este indicador.',
               'Un registro de auditoría, que solo se puede ampliar, de las acciones importantes: quién hizo qué y cuándo (inicios de sesión, cambios de roles, publicaciones, exportaciones, consulta de datos personales).',
             ],
-            f.services.microsoftSignIn,
+            on(f, 'microsoftSignIn'),
             'Si entra con Microsoft, recibimos de Microsoft su nombre y correo para identificarle; no vemos su contraseña de Microsoft.',
           ),
         },
@@ -254,10 +319,10 @@ export function privacyPage(f: Facts, es: boolean): Page {
                 'Los proveedores que alojan la aplicación y envían correos, que tratan los datos por encargo y solo para ese fin.',
                 'Si el personal activa las notificaciones del navegador, el servicio de notificaciones de su navegador (Google, Apple o Mozilla) las entrega; el texto es genérico y no contiene datos personales.',
               ],
-              f.services.sms,
+              on(f, 'sms'),
               'El proveedor de mensajes SMS, que recibe el número de teléfono y el texto del mensaje.',
             ),
-            f.services.geocoder,
+            on(f, 'geocoder'),
             'Un servicio de mapas (OpenStreetMap Nominatim) que recibe las direcciones de la muestra para ubicarlas, sin el nombre de la persona.',
           ),
           paragraphs: [
@@ -356,7 +421,7 @@ export function privacyPage(f: Facts, es: boolean): Page {
             'Quality indicators about your work (timing, answer patterns, matches with other interviews and a risk score) that a reviewer uses to decide which interviews to check. No decision about you is taken automatically from this indicator.',
             'An audit log, which can only be added to, of the important actions: who did what and when (sign-ins, role changes, publications, exports, views of personal data).',
           ],
-          f.services.microsoftSignIn,
+          on(f, 'microsoftSignIn'),
           'If you sign in with Microsoft, we receive your name and e-mail from Microsoft to identify you; we never see your Microsoft password.',
         ),
       },
@@ -388,10 +453,10 @@ export function privacyPage(f: Facts, es: boolean): Page {
               'The providers that host the application and send e-mail, who handle the data on its behalf and only for that purpose.',
               'If staff turn on browser notifications, the notification service of their browser (Google, Apple or Mozilla) delivers them; the text is generic and holds no personal data.',
             ],
-            f.services.sms,
+            on(f, 'sms'),
             'The SMS provider, which receives the phone number and the text of the message.',
           ),
-          f.services.geocoder,
+          on(f, 'geocoder'),
           'A mapping service (OpenStreetMap Nominatim) that receives the sample’s addresses to place them, without the person’s name.',
         ),
         paragraphs: [

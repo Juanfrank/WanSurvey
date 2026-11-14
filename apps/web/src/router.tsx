@@ -96,20 +96,26 @@ const unsubscribeRoute = createRoute({
   component: lazyRouteComponent(() => import('./respondent/RouterPages.js'), 'UnsubscribeRoute'),
 });
 
-// About and Privacy: public, so a person can read them before signing in or answering.
-const aboutRoute = createRoute({
+// About, Privacy and Terms: public, so a person can read them before signing in or answering; inside
+// the application's frame for people who work in it.
+const infoRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: 'info',
+  component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'InfoLayout'),
+});
+const aboutRoute = createRoute({
+  getParentRoute: () => infoRoute,
   path: '/about',
   component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'AboutPage'),
 });
 const privacyRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => infoRoute,
   path: '/privacy',
   component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'PrivacyPage'),
 });
 
 const termsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => infoRoute,
   path: '/terms',
   component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'TermsPage'),
 });
@@ -300,10 +306,8 @@ const routeTree = rootRoute.addChildren([
   feedbackRoute,
   unsubscribeRoute,
   shareRoute,
-  aboutRoute,
   setupRoute,
-  privacyRoute,
-  termsRoute,
+  infoRoute.addChildren([aboutRoute, privacyRoute, termsRoute]),
   appRoute.addChildren([
     homeRoute,
     waitingRoute,

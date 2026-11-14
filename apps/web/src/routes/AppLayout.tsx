@@ -17,9 +17,21 @@ const ME_KEY = 'wansurvey.me';
  * The signed-in person. The last answer is kept on the device so the app still opens with no
  * connection (offline interviewing); the server decides again as soon as it is reachable.
  */
-export function useMe() {
+export function useMe(options: { probe?: boolean } = {}) {
   return useQuery({
     queryKey: ['me'],
+    // A probe only asks whether there is a session (the public pages): once, without retries, and
+    // without asking again each time a component mounts, which after an error (no session) would
+    // make the page unmount and mount in a loop: a refetch with no data is "pending" again.
+    ...(options.probe
+      ? {
+          retry: false,
+          retryOnMount: false,
+          refetchOnMount: false,
+          refetchOnWindowFocus: false,
+          staleTime: 30_000,
+        }
+      : {}),
     queryFn: async () => {
       try {
         const me = await api<Me>('/auth/me');
