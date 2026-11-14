@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { expectAccessible, login, openAccount, pickOrganisation, PM, shot } from './helpers.js';
 
 test('sign in, switch organisation, sign out', async ({ page }) => {

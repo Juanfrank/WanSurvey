@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures.js';
 import { expectAccessible, login, pickOrganisation, resultsSection, shot } from './helpers.js';
 
 async function openProject(page: Page) {

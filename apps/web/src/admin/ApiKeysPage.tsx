@@ -79,7 +79,9 @@ export function ApiKeysPage() {
                 <th className="py-2 pr-4 font-semibold">{t('admin.apiKeysPage.expires')}</th>
                 <th className="py-2 pr-4 font-semibold">{t('admin.apiKeysPage.lastUsed')}</th>
                 <th className="py-2 pr-4 font-semibold">{t('admin.apiKeysPage.status')}</th>
-                <th className="py-2" />
+                <th className="py-2">
+                  <span className="sr-only">{t('admin.apiKeysPage.actions')}</span>
+                </th>
               </tr>
             </thead>
             <tbody>

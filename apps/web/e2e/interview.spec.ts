@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, overlaysSettled, test, type Page } from './fixtures.js';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
@@ -79,7 +79,15 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   // Shortcuts: help, pause.
   await page.keyboard.press('?');
   await expect(page.getByTestId('shortcuts')).toContainText('Ctrl+M');
+  await overlaysSettled(page, 1);
   await page.getByRole('button', { name: 'Close' }).click();
+  // The note dialog too: axe looks at it open, and Escape gives the focus back.
+  await page.keyboard.press('Control+m');
+  const note = page.getByRole('dialog', { name: /^Note on / });
+  await overlaysSettled(page, 2);
+  await expect(note).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(note).toBeHidden();
   await page.keyboard.press('Control+p');
   await expect(page.getByTestId('paused')).toBeVisible();
   await page.getByTestId('paused').getByRole('button', { name: 'Resume' }).click();

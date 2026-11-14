@@ -1,5 +1,5 @@
 import { hash } from '@node-rs/argon2';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures.js';
 import { connectDb } from './db.js';
 import { uuidv7 } from 'uuidv7';
 import {

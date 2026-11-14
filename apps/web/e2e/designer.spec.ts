@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures.js';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const outlineItem = (page: Page, name: string) =>

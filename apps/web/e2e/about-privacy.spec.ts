@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { expectAccessible, login, shot } from './helpers.js';
 
 test('About and Privacy are public, reachable from the sign-in page, and accessible', async ({

@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, overlaysSettled, test, type Browser, type Page } from './fixtures.js';
 import { totp } from '../../api/dist/common/crypto.js';
 import { expectAccessible, login, PASSWORD, shot } from './helpers.js';
 import { sentMail } from './mail.js';
@@ -120,6 +120,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(ines).toHaveAttribute('data-status', 'active');
   await page.getByRole('button', { name: 'Actions for Inés Invitada' }).click();
   await page.getByRole('menuitem', { name: 'Change roles…' }).click();
+  await overlaysSettled(page, 1);
   const dialog = page.getByRole('dialog', { name: 'Roles of Inés Invitada' });
   await dialog.getByLabel('Role 1', { exact: true }).selectOption({ label: 'Supervisor' });
   await dialog.getByLabel('Where 1', { exact: true }).selectOption({ label: 'Whole organisation' });
@@ -193,6 +194,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await nav.getByRole('link', { name: 'Teams', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Teams' })).toBeVisible();
   await page.getByRole('button', { name: 'New team' }).click();
+  await overlaysSettled(page, 2);
   const crew = page.getByRole('dialog', { name: 'New team' });
   await crew.getByLabel('Name').fill('Cuadrilla Norte');
   await crew.getByRole('combobox', { name: 'Leader' }).selectOption({ label: 'Demo supervisor' });

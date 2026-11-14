@@ -19,6 +19,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Accessibility checks for dialogs and side panels**: every dialog that opens in a browser test is
+  checked with axe while open (an automatic fixture), the dialogs no other flow opens and the
+  side panels and menus in each state have tests of their own (`docs/accessibility.md`).
 - **About, Privacy and Terms follow the institution's common schema** (`docs/info-pages.md`): shared
   types in `@wansurvey/schema`; About in a fixed order (`what`, `who`, `version`, `rights` if there is an
   author or holder, `access`, `contact`, `documents`, and `technical` for people with a session); only
@@ -209,6 +212,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- The tables of the API keys and of the webhook deliveries had a column header with no text (the
+  actions column): it now has one for screen readers.
 - A web respondent was shown the questions already answered by the link (`?sede=2`) or filled from
   the sample in the "only bring it into the results" mode, although they were meant to be recorded
   and not shown. They now stay out of the pages; the logic still follows them.

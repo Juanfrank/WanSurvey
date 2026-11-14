@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from './fixtures.js';
 import { PASSWORD, PM, shot } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';

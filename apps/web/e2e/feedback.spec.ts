@@ -1,4 +1,4 @@
-import { devices, expect, test } from '@playwright/test';
+import { devices, expect, test } from './fixtures.js';
 import { PM, expectAccessible, login, pickOrganisation, shot } from './helpers.js';
 
 test('a face link records the answer; slips print; results count every channel', async ({

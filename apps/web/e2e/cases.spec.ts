@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures.js';
 import { sampleTable } from '@wansurvey/fixtures';
 import { writeXlsx } from 'hucre/xlsx';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';

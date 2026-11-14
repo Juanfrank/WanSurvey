@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, overlaysSettled, test, type Page } from './fixtures.js';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
@@ -72,12 +72,14 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   const screen = sup.getByTestId('review-screen');
   await expect(screen.locator('[data-qkey="A2_AGE"] [data-testid="answer"]')).toHaveText('15');
   await screen.getByRole('button', { name: 'Comment A2_AGE' }).click();
+  await overlaysSettled(sup, 1);
   await sup.getByLabel('Comment', { exact: true }).fill('La cédula dice 16 años.');
   await sup.getByRole('button', { name: 'Send' }).click();
   await expect(screen.locator('[data-qkey="A2_AGE"]').getByTestId('comments')).toContainText(
     '16 años',
   );
   await sup.keyboard.press('r');
+  await overlaysSettled(sup, 2);
   await sup.getByLabel('Comment', { exact: true }).fill('Corrija la edad, por favor.');
   await sup.getByRole('button', { name: 'Confirm' }).click();
   await expect(sup.getByTestId('review-status')).toHaveAttribute('data-status', 'returned');

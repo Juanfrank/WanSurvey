@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { connectDb } from './db.js';
 import { expectAccessible, login, shot } from './helpers.js';
 

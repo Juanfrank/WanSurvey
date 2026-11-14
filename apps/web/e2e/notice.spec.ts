@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures.js';
 import { expectAccessible, login, pickOrganisation, shot } from './helpers.js';
 
 const outlineItem = (page: Page, name: string) =>

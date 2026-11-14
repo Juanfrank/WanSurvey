@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures.js';
 import { connectDb, marks } from './db.js';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 

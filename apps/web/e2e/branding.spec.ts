@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { expectAccessible, login, pickOrganisation, shot } from './helpers.js';
 
 /** A 1×1 PNG, scaled up by the page. */

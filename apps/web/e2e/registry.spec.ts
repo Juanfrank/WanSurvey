@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { expectAccessible, login, pickOrganisation, shot } from './helpers.js';
 
 test('the people registry: add to the no-contact list, load a file, look a number up, lift it', async ({

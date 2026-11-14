@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { expectAccessible, login, pickOrganisation, shot } from './helpers.js';
 
 test('a questionnaire is disabled, enabled again, and completed with a continuation', async ({

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { expectAccessible, login, shot } from './helpers.js';
 
 test('the project manager gives someone a role in the project, from the project', async ({

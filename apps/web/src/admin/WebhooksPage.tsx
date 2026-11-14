@@ -287,7 +287,9 @@ function LogDialog({ endpoint, onClose }: { endpoint: Endpoint; onClose(): void 
               <th className="py-2 pr-3">{t('admin.webhooksPage.event')}</th>
               <th className="py-2 pr-3">{t('admin.webhooksPage.state')}</th>
               <th className="py-2 pr-3">{t('admin.webhooksPage.attempts')}</th>
-              <th className="py-2" />
+              <th className="py-2">
+                <span className="sr-only">{t('admin.webhooksPage.actions')}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
