@@ -17,7 +17,7 @@ test('a person accepts the terms of use and confidentiality before working, and 
     await login(page, EMAIL);
     const gate = page.getByTestId('terms-gate');
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Terms of use and confidentiality undertaking' }),
+      page.getByRole('heading', { level: 1, name: 'Terms of use', exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: /Confidentiality/ })).toBeVisible();
     await shot(page, 'terms-gate', { fullPage: true });
@@ -56,7 +56,7 @@ test('a person accepts the terms of use and confidentiality before working, and 
 test('the terms of use can be read by anyone, without signing in', async ({ page }) => {
   await page.goto('/terms');
   await expect(
-    page.getByRole('heading', { level: 1, name: 'Terms of use and confidentiality undertaking' }),
+    page.getByRole('heading', { level: 1, name: 'Terms of use', exact: true }),
   ).toBeVisible();
   await expect(page.getByTestId('terms-gate')).toHaveCount(0);
   await expectAccessible(page);

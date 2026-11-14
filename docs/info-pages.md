@@ -43,6 +43,23 @@ while there is no audit. People with a session who can work see the pages inside
 frame; the others on a page of their own, with a language selector and a Back link (it goes back, or
 to the start if they came straight to the page).
 
+## Writing conventions (§5.1 of the schema)
+
+Section titles: capital on the first word only, not numbered, no final full stop or colon; one form
+per page (Privacy: questions; Terms: nouns; About keeps the reference's mix of `what`/`who` questions
+and nouns). Intros are one or two sentences ending in a full stop; Privacy's closes with "Última
+actualización: {date}." Paragraphs end in a full stop, or a colon when they introduce a list, and the
+phrase that introduces a list agrees with its bullets ("…tenga en cuenta estas reglas:" + "No
+comparta…"). Bullets are full sentences ending in a full stop, or "Label: value" with none. Always
+_usted_ or the impersonal. Inner references by name in «…» (English “…”), never "section 5". Document
+names as in the footer: «Acerca de», «Política de privacidad», «Términos de uso» (English "About",
+"Privacy policy", "Terms of use"). One contact formula ("Escriba a {contact}." / "Escriba al
+administrador de su organización."). English spelling: British (_organisation_, _authorised_) across
+the whole application. No sentence is assembled from translated fragments: optional services are
+said in whole sentences or bullets of the `access` section. `apps/web/test/info-pages.test.ts`
+checks what can be checked automatically (titles, intros, paragraphs, bullets, references by number,
+the closing date).
+
 ## For the legal area before publishing
 
 Ownership or transfer of the rights over the code (author as a person or as an institution); the

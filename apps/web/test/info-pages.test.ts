@@ -111,6 +111,30 @@ describe.each(Object.entries(builders))('%s', (name, build) => {
       }
   });
 
+  // Writing conventions (docs/info-pages.md §5.1): what can be checked automatically.
+  it.each([base, full])('writes titles, intros, paragraphs and bullets by the conventions', (f) => {
+    for (const es of [true, false]) {
+      const page = build(f, es);
+      expect(page.intro, `${name} intro`).toMatch(/[.]$/);
+      for (const s of page.sections) {
+        const at = `${name}/${s.id} (${es ? 'es' : 'en'})`;
+        // Not numbered, no final full stop or colon, capital only on the first word's letter.
+        expect(s.title, `${at} title is numbered`).not.toMatch(/^\d+[.)]/);
+        expect(s.title, `${at} title punctuation`).not.toMatch(/[.:]$/);
+        for (const p of s.paragraphs ?? []) expect(p, `${at} paragraph`).toMatch(/[.:]$/);
+        for (const i of s.items ?? []) {
+          expect(i, `${at} bullet starts in a capital`).toMatch(/^[A-ZÁÉÍÓÚÑ0-9¿«“]/);
+          // A sentence ends in a full stop; "Label: value" (a status) has none.
+          const label = /^[^:.]{1,40}: .*[^.]$/.test(i);
+          expect(label || i.endsWith('.'), `${at} bullet "${i.slice(0, 40)}"`).toBe(true);
+        }
+        // Inner references go by name, never by number.
+        const all = [...(s.paragraphs ?? []), ...(s.items ?? [])].join(' ');
+        expect(all, `${at} refers by number`).not.toMatch(/\b(secci[oó]n|section)\s+\d/i);
+      }
+    }
+  });
+
   it('publishes no licence, changelog, roadmap or operational data', () => {
     const all = text(build(full, true)) + text(build(full, false));
     expect(all).not.toMatch(/changelog|registro de cambios|roadmap|hoja de ruta|licen[cs]e/i);
@@ -118,8 +142,8 @@ describe.each(Object.entries(builders))('%s', (name, build) => {
 });
 
 describe('Privacy', () => {
-  it('carries the date of the update in its introduction', () => {
-    expect(privacyPage(base, true).intro).toMatch(/\d{4}-\d{2}-\d{2}/);
-    expect(privacyPage(base, false).intro).toMatch(/\d{4}-\d{2}-\d{2}/);
+  it('closes its introduction with the date of the update', () => {
+    expect(privacyPage(base, true).intro).toMatch(/Última actualización: \d{4}-\d{2}-\d{2}\.$/);
+    expect(privacyPage(base, false).intro).toMatch(/Last updated: \d{4}-\d{2}-\d{2}\.$/);
   });
 });

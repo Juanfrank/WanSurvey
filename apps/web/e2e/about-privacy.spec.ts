@@ -14,9 +14,9 @@ test('About and Privacy are public, reachable from the sign-in page, and accessi
   await expectAccessible(page);
   await shot(page, 'about', { fullPage: true });
 
-  await page.getByRole('contentinfo').getByRole('link', { name: 'Privacy Policy' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Privacy Policy' })).toBeVisible();
-  for (const h of ['Who answers for your data', 'Your rights', 'How long it is kept'])
+  await page.getByRole('contentinfo').getByRole('link', { name: 'Privacy policy' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Privacy policy' })).toBeVisible();
+  for (const h of ['Who answers for your data', 'What your rights are', 'How long it is kept'])
     await expect(page.getByRole('heading', { level: 2, name: new RegExp(h) })).toBeVisible();
   // This installation has the address service on, so the policy names it (and says nothing of
   // Microsoft or SMS, which are off).
@@ -46,7 +46,7 @@ test('About follows the common structure: public without build data, keyboard, b
   await expect(page.getByLabel('Language')).toBeVisible();
   // The internal documents are links of the application.
   await expect(
-    page.locator('#documents').getByRole('link', { name: 'Privacy Policy' }),
+    page.locator('#documents').getByRole('link', { name: 'Privacy policy' }),
   ).toHaveAttribute('href', '/privacy');
   // Keyboard: the contents link moves to its section.
   await page
@@ -66,6 +66,7 @@ test('About follows the common structure: public without build data, keyboard, b
     .getByRole('link', { name: 'Back to the application' })
     .click();
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await expectAccessible(page);
 });
 
