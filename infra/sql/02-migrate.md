@@ -64,6 +64,35 @@ settings for the migration (the URLs still carry the user names).
    user does not exist or its default schema is not the schema.
 4. `04-check-permissions.sql` to check what was granted.
 
+## One SQL file instead of running the application's migration (`db:script`)
+
+If your DBA wants to read and run a file, generate **one `.sql`** with your names already in it
+(from the repository; nothing connects to a database):
+
+```
+pnpm --filter @wansurvey/api db:script --schema survey --app-user survey_rw \
+    --readonly-user survey_ro --out wansurvey.sql          # users made by the script
+pnpm --filter @wansurvey/api db:script --schema survey --app-user survey_rw \
+    --readonly-user survey_ro --users-by-dba --out wansurvey.sql   # users made by the DBA
+```
+
+The names default to `DATABASE_SCHEMA` and to the users in `DATABASE_URL` and
+`DATABASE_READONLY_URL`; `--users-by-dba` is also `DATABASE_MANAGE_USERS=false`. Then, as the owner of the database:
+
+```
+sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i wansurvey.sql ^
+       -v AppPassword="..." ReaderPassword="..."       # without --users-by-dba; otherwise no -v
+```
+
+It does the same as the migration: the schema, the users (or a check that they exist with the schema
+as default), the tables, the row-level security, the grants and the record in `<schema>.__migrations`.
+The passwords are `sqlcmd` variables, never written in the file. It is **one transaction**: if a
+statement fails nothing is kept, and it refuses to run again over what it made. For an upgrade,
+generate one with `--from <number>` (the first migration the database lacks, for example `--from 0030`): it checks that the database
+is at the one before. Applying it, or running the application's migration, leaves the same database;
+do not mix them on one database unless you know which migrations each applied (both use
+`__migrations`).
+
 ## Scripts to make and check the users by hand
 
 Optional, for a DBA who wants to make the users and verify them (run them as the owner, in the

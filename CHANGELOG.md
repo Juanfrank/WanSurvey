@@ -19,6 +19,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **`db:script`: one `.sql` file with the schema, users, tables, security and grants**, with your names in
+  it, for a DBA who wants to read and run it with `sqlcmd` (`--users-by-dba` for users made beforehand,
+  `--from` for an upgrade). One transaction; passwords are `sqlcmd` variables. See `infra/sql/02-migrate.md`.
 - **`DATABASE_MANAGE_USERS=false`: the DBA makes the SQL users** (contained or from logins) and the
   migrations only make the schema and the tables and grant the permissions to them: no user,
   password, containment or server setting is created or changed. They stop with a clear message if a

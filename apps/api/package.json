@@ -15,6 +15,7 @@
     "db:dev": "tsx src/db/dev-db.ts",
     "vapid": "tsx src/push/vapid.ts",
     "db:migrate": "tsx src/db/mssql/migrate.ts",
+    "db:script": "tsx src/db/mssql/script.ts",
     "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",
     "test:mssql": "vitest run --config vitest.mssql.config.ts",
