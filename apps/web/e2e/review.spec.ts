@@ -113,6 +113,19 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   // Both rounds are there: the first answer (typed as 1, then 15) and the fix.
   await expect(age).toContainText('1 → 15');
   await expect(age).toContainText('15 → 16');
+  // The reject and correct dialogs, looked at by axe while open and cancelled.
+  await sup.getByRole('button', { name: 'Reject', exact: true }).click();
+  await overlaysSettled(sup, 1);
+  const reject = sup.getByRole('dialog', { name: 'Reject the interview' });
+  await expect(reject).toBeVisible();
+  await reject.getByRole('button', { name: 'Cancel' }).click();
+  await expect(reject).toBeHidden();
+  await age.getByRole('button', { name: /^Correct/ }).click();
+  await overlaysSettled(sup, 2);
+  const correct = sup.getByRole('dialog', { name: 'Correct A2_AGE' });
+  await expect(correct).toBeVisible();
+  await sup.keyboard.press('Escape');
+  await expect(correct).toBeHidden();
   await sup.keyboard.press('a');
   await expect(sup.getByTestId('review-status')).toHaveAttribute('data-status', 'approved');
 });
