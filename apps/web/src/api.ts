@@ -55,6 +55,9 @@ export async function apiFull<T = unknown>(
   }
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
+  // The API has no database settings yet: only the installation wizard can be shown.
+  if (res.status === 428 && body?.code === 'SETUP_REQUIRED' && location.pathname !== '/setup')
+    location.assign('/setup');
   if (!res.ok)
     throw new ApiError(res.status, body ?? {}, Number(res.headers.get('retry-after')) || undefined);
   return { status: res.status, headers: res.headers, body: body as T | null };

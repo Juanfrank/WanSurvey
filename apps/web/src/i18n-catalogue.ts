@@ -3,6 +3,7 @@
  * them (H6). `i18n.ts` adds them before any staff page shows.
  */
 import { adminEn, adminEs } from './admin/i18n.js';
+import { setupEn, setupEs } from './setup/i18n.js';
 import { casesEn, casesEs } from './cases/i18n.js';
 import { catiEn, catiEs } from './cati/i18n.js';
 import { cawiEn, cawiEs } from './cawi/i18n.js';
@@ -226,6 +227,7 @@ const en = {
   device: deviceEn,
   team: teamEn,
   admin: adminEn,
+  setup: setupEn,
   password: passwordEn,
   ...messagesEn,
 };
@@ -453,6 +455,7 @@ const es: Catalogue = {
   device: deviceEs,
   team: teamEs,
   admin: adminEs,
+  setup: setupEs,
   password: passwordEs,
   ...messagesEs,
 };

@@ -64,6 +64,23 @@ settings for the migration (the URLs still carry the user names).
    user does not exist or its default schema is not the schema.
 4. `04-check-permissions.sql` to check what was granted.
 
+## The installation wizard (no `DATABASE_URL` yet)
+
+While `DATABASE_URL` is not set, the application does not stop: it runs **only a wizard**, and every
+page of the web app leads to `/setup`. It asks for what is not secret: the SQL Server address and
+port, the database, the schema, and the names of the owner, the read/write user and the read-only
+user (never a password). It answers with:
+
+1. the script that creates the tables (schema, tables, row-level security; one transaction);
+2. the script that creates the users and grants the permissions (or only checks the users, if the
+   DBA makes them), which asks for the passwords as `sqlcmd` variables when you run it;
+3. the settings to put in the environment (`DATABASE_URL` and the others, with `<password>` where the
+   password goes).
+
+Run (1), then (2), set the environment (passwords in a vault) and restart: with `DATABASE_URL` set the
+wizard is gone. It writes nothing and connects to nothing; what it returns is the same as
+`db:script --part tables` and `--part users`, which you can run yourself.
+
 ## One SQL file instead of running the application's migration (`db:script`)
 
 If your DBA wants to read and run a file, generate **one `.sql`** with your names already in it
@@ -74,6 +91,7 @@ pnpm --filter @wansurvey/api db:script --schema survey --app-user survey_rw \
     --readonly-user survey_ro --out wansurvey.sql          # users made by the script
 pnpm --filter @wansurvey/api db:script --schema survey --app-user survey_rw \
     --readonly-user survey_ro --users-by-dba --out wansurvey.sql   # users made by the DBA
+# --part tables / --part users: two files, (1) the tables and (2) the users and permissions
 ```
 
 The names default to `DATABASE_SCHEMA` and to the users in `DATABASE_URL` and

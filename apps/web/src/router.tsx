@@ -114,6 +114,13 @@ const termsRoute = createRoute({
   component: lazyRouteComponent(() => import('./routes/InfoPages.js'), 'TermsPage'),
 });
 
+// The installation wizard: public, because there is no database to sign in to until it is done.
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/setup',
+  component: lazyRouteComponent(() => import('./setup/SetupPage.js'), 'SetupPage'),
+});
+
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: AppLayout });
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: HomePage });
 const waitingRoute = createRoute({
@@ -294,6 +301,7 @@ const routeTree = rootRoute.addChildren([
   unsubscribeRoute,
   shareRoute,
   aboutRoute,
+  setupRoute,
   privacyRoute,
   termsRoute,
   appRoute.addChildren([

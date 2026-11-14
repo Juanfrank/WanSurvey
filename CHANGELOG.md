@@ -19,6 +19,10 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Installation wizard** (`/setup`): while `DATABASE_URL` is not set the API runs only a wizard instead
+  of failing. It asks for the SQL Server address, database, schema and the user names (never a
+  password) and gives two copy-and-paste SQL scripts, (1) the tables and (2) the users and permissions,
+  plus the settings for the environment. `db:script --part tables|users` makes the same two files.
 - **`db:script`: one `.sql` file with the schema, users, tables, security and grants**, with your names in
   it, for a DBA who wants to read and run it with `sqlcmd` (`--users-by-dba` for users made beforehand,
   `--from` for an upgrade). One transaction; passwords are `sqlcmd` variables. See `infra/sql/02-migrate.md`.

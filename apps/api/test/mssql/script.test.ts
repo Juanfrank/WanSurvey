@@ -35,6 +35,19 @@ describe('the one-file SQL script', () => {
     expect(() => buildScript({ from: '9999' })).toThrow(/No migration/);
   });
 
+  it('splits into (1) the tables and (2) the users and every permission', () => {
+    const opts = { schema: 'survey', appUser: 'survey_rw', readonlyUser: 'survey_ro' };
+    const tables = buildScript({ ...opts, part: 'tables' });
+    const users = buildScript({ ...opts, part: 'users' });
+    expect(tables).toContain('CREATE TABLE survey.tenants');
+    expect(tables).not.toContain('CREATE USER');
+    expect(tables).not.toMatch(/^GRANT [A-Z, ]+ ON survey\.\w+ TO survey_rw/m);
+    expect(users).not.toContain('CREATE TABLE survey.tenants');
+    expect(users).toMatch(/^GRANT [A-Z, ]+ ON survey\.\w+ TO survey_rw/m);
+    expect(users).toContain('run (1) first');
+    expect(users).not.toContain('INSERT INTO survey.__migrations');
+  });
+
   it('refuses unsafe names and a reader that is the application user', () => {
     expect(() => buildScript({ schema: 'a]; DROP' })).toThrow();
     expect(() => buildScript({ appUser: 'x', readonlyUser: 'X' })).toThrow();
@@ -108,4 +121,53 @@ describe.skipIf(!configured)('SQL Server: running the generated file', () => {
     expect(Number(m.rows[0]!.n)).toBe(migrationFiles().length);
     await expect(run(script)).rejects.toThrow(/already applied/);
   }, 180_000);
+
+  it('runs in two parts: the tables first, then the users and permissions, which can repeat', async () => {
+    const two = `${name}_b`;
+    await sql.raw(`CREATE DATABASE [${two}] CONTAINMENT = PARTIAL`).execute(master);
+    const opts = { schema: 'survey', appUser: 'svs_rw', readonlyUser: 'svs_ro' } as const;
+    const put = async (text: string) => {
+      const conn = new Connection(parseMssqlUrl(at(two)));
+      await new Promise<void>((ok, fail) => conn.connect((e) => (e ? fail(e) : ok())));
+      try {
+        for (const b of batches(text))
+          await new Promise<void>((ok, fail) =>
+            conn.execSqlBatch(new Request(b, (e) => (e ? fail(e) : ok()))),
+          );
+      } finally {
+        conn.close();
+      }
+    };
+    try {
+      await expect(put(buildScript({ ...opts, part: 'users' }))).rejects.toThrow();
+      await put(buildScript({ ...opts, part: 'tables' }));
+      const other = createMssqlDb<Record<string, never>>(at(two), { max: 1 });
+      try {
+        const count = async () =>
+          Number(
+            (
+              await sql<{
+                n: number;
+              }>`SELECT COUNT(*) AS n FROM sys.database_principals WHERE name IN ('svs_rw', 'svs_ro')`.execute(
+                other,
+              )
+            ).rows[0]!.n,
+          );
+        expect(await count()).toBe(0);
+        await put(buildScript({ ...opts, part: 'users' }));
+        await put(buildScript({ ...opts, part: 'users' }));
+        expect(await count()).toBe(2);
+        const grants = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM sys.database_permissions
+          WHERE USER_NAME(grantee_principal_id) = 'svs_rw' AND class = 1`.execute(other);
+        expect(Number(grants.rows[0]!.n)).toBeGreaterThan(100);
+      } finally {
+        await other.destroy();
+      }
+    } finally {
+      await sql
+        .raw(`ALTER DATABASE [${two}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE`)
+        .execute(master);
+      await sql.raw(`DROP DATABASE [${two}]`).execute(master);
+    }
+  }, 240_000);
 });
