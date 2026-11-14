@@ -28,7 +28,7 @@ export interface AboutFacts {
   organisation: string | null;
   /** PRIVACY_CONTACT */
   privacyContact: string | null;
-  /** APP_AUTHOR */
+  /** Fixed by the project (it is not a setting of the installation). */
   author: string | null;
   /** APP_HOLDER */
   holder: string | null;

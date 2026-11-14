@@ -78,7 +78,7 @@ row-level security) and the **reader** (only `SELECT` on schema `bi`). The names
 menu and the foot of every web survey. They say what the application does with data, and they
 name the organisation that answers for it from two settings: `ORG_NAME` (the controller) and
 `PRIVACY_CONTACT` (an e-mail address or a postal address where people write about their data). The About page also names the
-author and the holder of the rights over the application when `APP_AUTHOR` and `APP_HOLDER` are set (they are not the
+author (fixed in the project) and the holder of the rights over the application when `APP_HOLDER` is set (they are not the
 organisation that runs the installation).
 Without them the pages say the organisation that runs the installation answers, and to write to
 the person who sent the invitation. **Set both before the first real survey.**

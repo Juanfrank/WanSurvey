@@ -16,13 +16,15 @@ application publishes them with the same structure. The reference specification 
 
 ## Settings (all optional, the same names in every application)
 
-| Variable          | Feeds                                        | If missing                                                                                                                                                         |
-| ----------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ORG_NAME`        | `organisation` (section `who`)               | "This installation is run by an organisation"                                                                                                                      |
-| `PRIVACY_CONTACT` | `privacyContact` (`contact`, privacy, terms) | "Write to your organisation's administrator"                                                                                                                       |
-| `APP_AUTHOR`      | `author` (`rights`)                          | the project's fixed author (`AUTHOR` in `apps/api/src/version.ts`: Juan Francisco Medina, Gerencia de Ciencia y Analítica de Datos); the variable only replaces it |
-| `APP_HOLDER`      | `holder` (`rights`)                          | the holder is not shown                                                                                                                                            |
-| `APP_BUILD`       | `technical.build` (signed-in people only)    | the version                                                                                                                                                        |
+The author is not a setting: it is fixed in the project (`AUTHOR` in `apps/api/src/version.ts`: Juan
+Francisco Medina, Gerencia de Ciencia y Analítica de Datos).
+
+| Variable          | Feeds                                        | If missing                                    |
+| ----------------- | -------------------------------------------- | --------------------------------------------- |
+| `ORG_NAME`        | `organisation` (section `who`)               | "This installation is run by an organisation" |
+| `PRIVACY_CONTACT` | `privacyContact` (`contact`, privacy, terms) | "Write to your organisation's administrator"  |
+| `APP_HOLDER`      | `holder` (`rights`)                          | the holder is not shown                       |
+| `APP_BUILD`       | `technical.build` (signed-in people only)    | the version                                   |
 
 ## About, in order
 

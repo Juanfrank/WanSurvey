@@ -13,12 +13,11 @@ describe('the public about answer', () => {
         PRIVACY_CONTACT: 'datos@demo.example',
         GEOCODER: 'none',
         SMS_PROVIDER: 'acs',
-        APP_AUTHOR: 'Ana Autora',
         APP_HOLDER: 'Editorial S.A.',
       }),
     ).toMatchObject({
       organisation: 'Instituto Demo',
-      author: 'Ana Autora',
+      author: 'Juan Francisco Medina, Gerencia de Ciencia y Analítica de Datos',
       holder: 'Editorial S.A.',
       privacyContact: 'datos@demo.example',
       services: { geocoder: false, sms: true, microsoftSignIn: false },

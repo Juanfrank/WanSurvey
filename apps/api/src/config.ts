@@ -145,10 +145,8 @@ const Env = z.object({
    */
   ORG_NAME: z.string().max(200).optional(),
   PRIVACY_CONTACT: z.string().max(200).optional(),
-  /** Replaces the fixed author of the project (version.ts) on the About page; normally unset. */
   /** The build this installation runs (a commit or pipeline id), shown to signed-in people only. */
   APP_BUILD: z.string().trim().max(100).optional(),
-  APP_AUTHOR: z.string().trim().max(200).optional(),
   /** Who holds the rights over the application (titular), shown on the About page. */
   APP_HOLDER: z.string().trim().max(200).optional(),
   /** Microsoft identity platform host; overridable for tests or sovereign clouds. */

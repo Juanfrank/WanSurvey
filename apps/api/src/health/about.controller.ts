@@ -24,7 +24,7 @@ export class AboutController {
       version: VERSION,
       organisation: c.ORG_NAME || null,
       privacyContact: c.PRIVACY_CONTACT || null,
-      author: c.APP_AUTHOR || AUTHOR,
+      author: AUTHOR,
       holder: c.APP_HOLDER || null,
       services: {
         geocoder: c.GEOCODER !== 'none',
