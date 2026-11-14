@@ -22,6 +22,8 @@ export class AboutController {
       version: VERSION,
       organisation: c.ORG_NAME ?? null,
       privacyContact: c.PRIVACY_CONTACT ?? null,
+      author: c.APP_AUTHOR || null,
+      holder: c.APP_HOLDER || null,
       services: {
         geocoder: c.GEOCODER !== 'none',
         sms: c.SMS_PROVIDER === 'acs',

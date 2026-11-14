@@ -145,6 +145,10 @@ const Env = z.object({
    */
   ORG_NAME: z.string().max(200).optional(),
   PRIVACY_CONTACT: z.string().max(200).optional(),
+  /** Who wrote the application, shown on the About page (not the organisation that runs it). */
+  APP_AUTHOR: z.string().trim().max(200).optional(),
+  /** Who holds the rights over the application (titular), shown on the About page. */
+  APP_HOLDER: z.string().trim().max(200).optional(),
   /** Microsoft identity platform host; overridable for tests or sovereign clouds. */
   ENTRA_AUTHORITY_HOST: z.string().url().default('https://login.microsoftonline.com'),
   /**

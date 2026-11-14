@@ -9,6 +9,9 @@ export interface Facts {
   version: string;
   organisation: string | null;
   privacyContact: string | null;
+  /** Who wrote the application and who holds its rights (not the installation's organisation). */
+  author?: string | null;
+  holder?: string | null;
   services: { geocoder: boolean; sms: boolean; microsoftSignIn: boolean };
 }
 
@@ -41,6 +44,33 @@ const contactLine = (f: Facts, es: boolean) =>
     : es
       ? 'Escriba al administrador de su organización.'
       : 'Write to your organisation’s administrator.';
+
+/** Author and holder of the application, when the installation says them. */
+const rights = (f: Facts, es: boolean): Section[] => {
+  if (!f.author && !f.holder) return [];
+  const lines = [
+    ...(f.author ? [es ? `Autor: ${f.author}.` : `Author: ${f.author}.`] : []),
+    ...(f.holder
+      ? [
+          es
+            ? `Titular de los derechos de la aplicación: ${f.holder}.`
+            : `Holder of the rights over the application: ${f.holder}.`,
+        ]
+      : []),
+  ];
+  return [
+    {
+      id: 'rights',
+      title: es ? 'Autoría y titularidad' : 'Authorship and ownership',
+      paragraphs: [
+        ...lines,
+        es
+          ? 'Son quienes hicieron y tienen los derechos de la aplicación; no son, por eso, responsables de los datos de las encuestas, que son los de la organización que la administra.'
+          : 'They made the application and hold its rights; that does not make them responsible for the survey data, which is that of the organisation that runs it.',
+      ],
+    },
+  ];
+};
 
 export function aboutPage(f: Facts, es: boolean): Page {
   return es
@@ -80,6 +110,7 @@ export function aboutPage(f: Facts, es: boolean): Page {
               `Versión ${f.version}. La aplicación está en desarrollo activo: los cambios de cada versión están en el registro de cambios del proyecto.`,
             ],
           },
+          ...rights(f, true),
           {
             id: 'access',
             title: 'Accesibilidad',
@@ -130,6 +161,7 @@ export function aboutPage(f: Facts, es: boolean): Page {
               `Version ${f.version}. The application is under active development: the changes of each version are in the project’s changelog.`,
             ],
           },
+          ...rights(f, false),
           {
             id: 'access',
             title: 'Accessibility',

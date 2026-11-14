@@ -19,6 +19,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Author and holder on the About page**: `APP_AUTHOR` and `APP_HOLDER` (optional) add an
+  "Authorship and ownership" section, separate from the organisation that runs the installation.
 - **Installation wizard** (`/setup`): while `DATABASE_URL` is not set the API runs only a wizard instead
   of failing. It asks for the SQL Server address, database, schema and the user names (never a
   password) and gives two copy-and-paste SQL scripts, (1) the tables and (2) the users and permissions,

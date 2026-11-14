@@ -12,9 +12,13 @@ describe('the public about answer', () => {
         PRIVACY_CONTACT: 'datos@demo.example',
         GEOCODER: 'none',
         SMS_PROVIDER: 'acs',
+        APP_AUTHOR: 'Ana Autora',
+        APP_HOLDER: 'Editorial S.A.',
       }),
     ).toMatchObject({
       organisation: 'Instituto Demo',
+      author: 'Ana Autora',
+      holder: 'Editorial S.A.',
       privacyContact: 'datos@demo.example',
       services: { geocoder: false, sms: true, microsoftSignIn: false },
     });
@@ -24,6 +28,8 @@ describe('the public about answer', () => {
     const a = about({ GEOCODER: 'nominatim', SMS_PROVIDER: 'console', ENTRA_CLIENT_ID: 'x' });
     expect(a.organisation).toBeNull();
     expect(a.privacyContact).toBeNull();
+    expect(a.author).toBeNull();
+    expect(a.holder).toBeNull();
     expect(a.services).toEqual({ geocoder: true, sms: false, microsoftSignIn: true });
     expect(a.version).toMatch(/^\d+\.\d+\.\d+/);
   });
