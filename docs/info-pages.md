@@ -16,8 +16,7 @@ application publishes them with the same structure. The reference specification 
 
 ## Settings (all optional, the same names in every application)
 
-The author is not a setting: it is fixed in the project (`AUTHOR` in `apps/api/src/version.ts`: Juan
-Francisco Medina, Gerencia de Ciencia y Analítica de Datos).
+The author is not a setting: it is fixed in the project (`AUTHOR` in `apps/api/src/version.ts`: Juan Francisco Medina).
 
 | Variable          | Feeds                                        | If missing                                    |
 | ----------------- | -------------------------------------------- | --------------------------------------------- |

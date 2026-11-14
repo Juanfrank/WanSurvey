@@ -44,9 +44,7 @@ test('About follows the common structure: public without build data, keyboard, b
     'Documents',
   ]);
   // The author is fixed in the project and shown without any setting.
-  await expect(page.locator('#rights')).toContainText(
-    'Author: Juan Francisco Medina, Gerencia de Ciencia y Analítica de Datos.',
-  );
+  await expect(page.locator('#rights')).toContainText('Author: Juan Francisco Medina.');
   await expect(page.getByRole('heading', { name: 'Technical details' })).toHaveCount(0);
   await expect(page.getByLabel('Language')).toBeVisible();
   // The internal documents are links of the application.

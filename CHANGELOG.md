@@ -26,8 +26,7 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   language selector and a Back link; inside the application's frame for people who work in it. New
   `GET /api/v1/system/technical` (session only) and the setting `APP_BUILD`.
 - **Author and holder on the About page**: an "Authorship and ownership" section, separate from the
-  organisation that runs the installation. The author (Juan Francisco Medina, Gerencia de Ciencia y
-  Analítica de Datos) is fixed in the project, with no setting; `APP_HOLDER` (optional) adds the holder of the rights.
+  organisation that runs the installation. The author (Juan Francisco Medina) is fixed in the project, with no setting; `APP_HOLDER` (optional) adds the holder of the rights.
 - **Installation wizard** (`/setup`): while `DATABASE_URL` is not set the API runs only a wizard instead
   of failing. It asks for the SQL Server address, database, schema and the user names (never a
   password) and gives two copy-and-paste SQL scripts, (1) the tables and (2) the users and permissions,
