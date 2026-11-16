@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ZodPipe } from '../common/zod.js';
 import { buildScript } from '../db/mssql/script.js';
 import { VERSION } from '../version.js';
+import { setupState } from './state.js';
 
 /** The installation has no database settings yet: the API runs only this wizard. */
 export const setupRequired = (env: NodeJS.ProcessEnv = process.env): boolean =>
@@ -69,7 +70,18 @@ export function setupPlan(r: SetupRequest) {
 export class SetupController {
   @Get('status')
   status() {
-    return { setup: true, version: VERSION };
+    return {
+      setup: true,
+      mode: setupState.mode,
+      version: VERSION,
+      diagnosis: setupState.diagnosis,
+    };
+  }
+
+  /** Looks at the database again (only where there is one to look at). */
+  @Post('check')
+  async check() {
+    return { mode: setupState.mode, diagnosis: await setupState.check() };
   }
 
   /** Stateless: it writes nothing and connects to nothing; the scripts hold no secret. */

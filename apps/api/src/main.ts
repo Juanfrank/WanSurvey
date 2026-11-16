@@ -1,10 +1,20 @@
 import { setupRequired } from './setup/setup.js';
 
-// Without DATABASE_URL there is nothing to run yet: the installation wizard gives the scripts and
-// the settings (it needs no other setting).
+// The installation wizard runs instead of the application while the database is not set up:
+// without DATABASE_URL (it needs no other setting), or with one that does not work yet and nobody
+// to migrate (no DATABASE_ADMIN_URL): it says which step is pending and starts the application by
+// itself when the database is ready.
 if (setupRequired()) {
   const { startSetup } = await import('./setup/setup-app.js');
   await startSetup();
+} else if (!process.env.DATABASE_ADMIN_URL?.trim()) {
+  const { diagnose } = await import('./setup/diagnose.js');
+  const first = await diagnose(process.env.DATABASE_URL!).catch(() => null);
+  if (first?.ready) await start();
+  else {
+    const { startSetup } = await import('./setup/setup-app.js');
+    await startSetup(process.env, start);
+  }
 } else await start();
 
 async function start(): Promise<void> {

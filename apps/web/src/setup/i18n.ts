@@ -4,6 +4,26 @@ export const setupEn = {
   intro:
     'This installation has no database settings yet (DATABASE_URL is not set). Give the names below, never a password: you get two SQL scripts to copy and run, and the settings to put in the environment.',
   alreadyDone: 'This installation is already configured.',
+  notReady:
+    'DATABASE_URL is set, but the database is not ready yet. The steps below show what is missing; this page checks again by itself and, when everything is ready, the application starts without a restart.',
+  progress: 'Where the installation stands',
+  checkAgain: 'Check again',
+  checking: 'Checking…',
+  ready: 'Everything is ready: the application is starting.',
+  steps: {
+    server: 'The SQL Server answers',
+    login: 'The application’s user can sign in (script 2 makes it)',
+    tables: 'The application’s user can read the tables (scripts 1 and 2)',
+  },
+  state: { ok: 'Done', pending: 'Pending', blocked: 'Waiting for the step before' },
+  reasons: {
+    unreachable: 'The server cannot be reached: check the address, the port and the firewall.',
+    login_failed:
+      'The sign-in was refused: the user does not exist yet or the password is not the one in DATABASE_URL.',
+    not_visible:
+      'The tables cannot be seen: they are not made yet (script 1), or the user lacks permissions (script 2).',
+    other: 'The database answered with an error.',
+  },
   signIn: 'Go to sign in',
   form: 'What your database administrator decided',
   server: 'SQL Server address',
@@ -45,6 +65,26 @@ export const setupEs = {
   intro:
     'Esta instalación aún no tiene los ajustes de la base de datos (DATABASE_URL no está definida). Indique los nombres de abajo, nunca una contraseña: recibirá dos scripts SQL para copiar y ejecutar, y los ajustes que debe poner en el entorno.',
   alreadyDone: 'Esta instalación ya está configurada.',
+  notReady:
+    'DATABASE_URL está definida, pero la base de datos aún no está lista. Los pasos de abajo muestran qué falta; esta página vuelve a comprobar sola y, cuando todo esté listo, la aplicación arranca sin reiniciar.',
+  progress: 'En qué punto está la instalación',
+  checkAgain: 'Comprobar de nuevo',
+  checking: 'Comprobando…',
+  ready: 'Todo está listo: la aplicación está arrancando.',
+  steps: {
+    server: 'El servidor SQL responde',
+    login: 'El usuario de la aplicación puede ingresar (el script 2 lo crea)',
+    tables: 'El usuario de la aplicación puede leer las tablas (scripts 1 y 2)',
+  },
+  state: { ok: 'Hecho', pending: 'Pendiente', blocked: 'Espera el paso anterior' },
+  reasons: {
+    unreachable: 'No se puede llegar al servidor: revise la dirección, el puerto y el firewall.',
+    login_failed:
+      'Se rechazó el ingreso: el usuario aún no existe o la contraseña no es la de DATABASE_URL.',
+    not_visible:
+      'No se ven las tablas: aún no están creadas (script 1) o al usuario le faltan permisos (script 2).',
+    other: 'La base de datos respondió con un error.',
+  },
   signIn: 'Ir a ingresar',
   form: 'Lo que decidió su administrador de base de datos',
   server: 'Dirección del servidor SQL',

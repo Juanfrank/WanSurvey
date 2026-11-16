@@ -6,11 +6,18 @@ import { AppModule } from './app.module.js';
 import { loadConfig } from './config.js';
 import { Engine } from './db/engine.js';
 import { initObservability } from './observability.js';
+import { setupRequired } from './setup/setup.js';
 
 /**
  * The background worker (M1): the API's services without HTTP, running the BullMQ jobs
  * (e-mail dispatch, stats, exports) and their schedules. Needs REDIS_URL.
  */
+if (setupRequired()) {
+  // The installation wizard (on the API) comes first: nothing to do until DATABASE_URL is set, and
+  // exiting would only make the host restart this process in a loop.
+  console.log('The worker is waiting for the installation: DATABASE_URL is not set');
+  await new Promise<never>(() => setInterval(() => undefined, 1 << 30));
+}
 const config = loadConfig();
 if (!config.REDIS_URL) {
   console.error('The worker needs REDIS_URL');

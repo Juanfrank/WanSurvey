@@ -77,9 +77,20 @@ user (never a password). It answers with:
 3. the settings to put in the environment (`DATABASE_URL` and the others, with `<password>` where the
    password goes).
 
-Run (1), then (2), set the environment (passwords in a vault) and restart: with `DATABASE_URL` set the
-wizard is gone. It writes nothing and connects to nothing; what it returns is the same as
+Run (1), then (2) and set the environment (passwords in a vault); with `DATABASE_URL` set the wizard
+is gone after a restart. It writes nothing and connects to nothing; what it returns is the same as
 `db:script --part tables` and `--part users`, which you can run yourself.
+
+### The wizard while the database is not ready
+
+The wizard also runs when `DATABASE_URL` **is** set but the database cannot be used yet and nobody
+migrates (no `DATABASE_ADMIN_URL`). It then shows where the installation stands, seen with the
+application's own user: the server answers; the user can sign in (script 2 makes it); the user can
+read the tables (scripts 1 and 2). It asks again every 10 seconds (and with "Check again"), and when
+everything is ready it **starts the application by itself, with no restart**; the page then goes to
+the sign-in. Nothing is written by the check, and it publishes no name, address or user. The worker
+process, with no `DATABASE_URL`, waits instead of failing. With `DATABASE_ADMIN_URL` set the application
+still migrates at start, as before.
 
 ## One SQL file instead of running the application's migration (`db:script`)
 

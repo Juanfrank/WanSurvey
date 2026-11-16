@@ -1,11 +1,26 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { CheckField, Hint } from '../designer/fields.js';
 import { LogoMark, LogoName } from '../routes/Logo.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+
+interface Step {
+  id: 'server' | 'login' | 'tables';
+  state: 'ok' | 'pending' | 'blocked';
+  reason?: 'unreachable' | 'login_failed' | 'not_visible' | 'other';
+}
+interface Diagnosis {
+  ready: boolean;
+  steps: Step[];
+}
+interface Status {
+  setup: boolean;
+  mode: 'missing' | 'not-ready';
+  diagnosis: Diagnosis | null;
+}
 
 interface Plan {
   tables: string;
@@ -67,9 +82,38 @@ export function SetupPage() {
   const { t } = useTranslation();
   const status = useQuery({
     queryKey: ['setup-status'],
-    queryFn: () => api<{ setup: boolean }>('/setup/status'),
+    queryFn: () => api<Status>('/setup/status'),
     retry: false,
+    // With a database set, the wizard checks it by itself: here we only look at what it found.
+    refetchInterval: (q) => (q.state.data?.mode === 'not-ready' ? 8_000 : false),
   });
+  const recheck = useMutation({
+    mutationFn: () => api<{ diagnosis: Diagnosis | null }>('/setup/check', { method: 'POST' }),
+    onSuccess: () => void status.refetch(),
+  });
+  const diagnosis = status.data?.diagnosis ?? null;
+  // Ready: the API closes the wizard and starts the application. Once it answers as the
+  // application (not as the wizard), the sign-in page is next.
+  useEffect(() => {
+    if (!diagnosis?.ready) return;
+    let stop = false;
+    const wait = async () => {
+      for (let i = 0; i < 90 && !stop; i++) {
+        await new Promise((r) => setTimeout(r, 1_000));
+        try {
+          const res = await fetch('/health');
+          const body = (await res.json()) as { status?: string };
+          if (body.status === 'ok') return void location.assign('/login');
+        } catch {
+          // The server is changing over: try again.
+        }
+      }
+    };
+    void wait();
+    return () => {
+      stop = true;
+    };
+  }, [diagnosis?.ready]);
   const [f, setF] = useState({
     server: '',
     port: '1433',
@@ -107,7 +151,49 @@ export function SetupPage() {
           </Card>
         ) : status.data ? (
           <>
-            <p className="max-w-prose text-slate-800">{t('setup.intro')}</p>
+            <p className="max-w-prose text-slate-800">
+              {t(status.data.mode === 'not-ready' ? 'setup.notReady' : 'setup.intro')}
+            </p>
+            {status.data.mode === 'not-ready' ? (
+              <Card>
+                <h2 className="mb-3 text-lg font-semibold">{t('setup.progress')}</h2>
+                {diagnosis?.ready ? (
+                  <p role="status" className="font-medium text-emerald-ink-800">
+                    {t('setup.ready')}
+                  </p>
+                ) : (
+                  <ol className="flex flex-col gap-3" data-testid="setup-steps">
+                    {(diagnosis?.steps ?? []).map((s) => (
+                      <li
+                        key={s.id}
+                        data-step={s.id}
+                        data-state={s.state}
+                        className="flex flex-col"
+                      >
+                        <span className="font-medium">
+                          {t(`setup.steps.${s.id}`)}: {t(`setup.state.${s.state}`)}
+                        </span>
+                        {s.state === 'pending' && s.reason ? (
+                          <span className="text-sm text-slate-700">
+                            {t(`setup.reasons.${s.reason}`)}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <div className="mt-4">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={recheck.isPending}
+                    onClick={() => recheck.mutate()}
+                  >
+                    {recheck.isPending ? t('setup.checking') : t('setup.checkAgain')}
+                  </Button>
+                </div>
+              </Card>
+            ) : null}
             <Card>
               <form
                 className="flex flex-col gap-4"

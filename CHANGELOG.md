@@ -30,6 +30,11 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   `GET /api/v1/system/technical` (session only) and the setting `APP_BUILD`.
 - **Author and holder on the About page**: an "Authorship and ownership" section, separate from the
   organisation that runs the installation. The author (Juan Francisco Medina) is fixed in the project, with no setting; `APP_HOLDER` (optional) adds the holder of the rights.
+- **The installation wizard follows the installation through its steps.** Besides running without
+  `DATABASE_URL`, it now runs when `DATABASE_URL` is set but the database is not ready (and there is no
+  `DATABASE_ADMIN_URL`): it shows which step is pending (server, sign-in of the application's user,
+  tables and permissions), checks again by itself, and starts the application without a restart when
+  everything is ready. The worker waits for the installation instead of failing.
 - **Installation wizard** (`/setup`): while `DATABASE_URL` is not set the API runs only a wizard instead
   of failing. It asks for the SQL Server address, database, schema and the user names (never a
   password) and gives two copy-and-paste SQL scripts, (1) the tables and (2) the users and permissions,

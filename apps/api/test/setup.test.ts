@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { classify } from '../src/setup/diagnose.js';
 import { setupPlan, setupRequired, SetupModule, SetupRequest } from '../src/setup/setup.js';
 
 const body = {
@@ -46,6 +47,18 @@ describe('the installation wizard', () => {
     expect(() => setupPlan(SetupRequest.parse({ ...body, readonlyUser: 'SURVEY_RW' }))).toThrow();
   });
 
+  it('tells what went wrong with the database from the driver’s error', () => {
+    expect(classify({ code: 'ELOGIN', message: 'Login failed for user x' })).toBe('login_failed');
+    expect(classify({ originalError: { number: 18456 } })).toBe('login_failed');
+    expect(classify({ number: 208, message: 'Invalid object name' })).toBe('not_visible');
+    expect(classify({ originalError: { number: 229 } })).toBe('not_visible');
+    expect(classify({ code: 'ESOCKET', message: 'Failed to connect to h:1433' })).toBe(
+      'unreachable',
+    );
+    expect(classify({ code: 'ETIMEOUT' })).toBe('unreachable');
+    expect(classify(new Error('something else'))).toBe('other');
+  });
+
   describe('over HTTP', () => {
     let app: INestApplication;
     beforeAll(async () => {
@@ -57,7 +70,11 @@ describe('the installation wizard', () => {
 
     it('serves the status and the scripts, and rejects a bad request', async () => {
       const http = app.getHttpServer();
-      expect((await request(http).get('/api/v1/setup/status')).body.setup).toBe(true);
+      const status = (await request(http).get('/api/v1/setup/status')).body;
+      expect(status.setup).toBe(true);
+      expect(status.mode).toBe('missing');
+      expect(status.diagnosis).toBeNull();
+      expect((await request(http).post('/api/v1/setup/check')).body.diagnosis).toBeNull();
       expect((await request(http).get('/health')).body.status).toBe('setup');
       const ok = await request(http).post('/api/v1/setup/scripts').send(body);
       expect(ok.status).toBe(201);

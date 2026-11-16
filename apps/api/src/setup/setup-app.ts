@@ -4,14 +4,20 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { compress, isApiPath, serveWeb } from '../common/web.js';
 import { VERSION } from '../version.js';
+import { diagnose } from './diagnose.js';
 import { SetupModule } from './setup.js';
+import { setupState } from './state.js';
 
 /**
  * The API without a database: only the installation wizard. Any other API path answers 428
  * SETUP_REQUIRED, which the web app turns into the wizard. Set DATABASE_URL (and the rest) and
  * restart to leave this mode.
  */
-export async function startSetup(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+export async function startSetup(
+  env: NodeJS.ProcessEnv = process.env,
+  /** Starts the application once the database is ready (the wizard has closed its server). */
+  onReady?: () => Promise<void>,
+): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(SetupModule, {
     logger: ['log', 'warn', 'error'],
   });
@@ -34,8 +40,48 @@ export async function startSetup(env: NodeJS.ProcessEnv = process.env): Promise<
     });
   });
   const port = Number(env.PORT) || 3000;
+  const url = env.DATABASE_URL?.trim();
+  setupState.mode = url ? 'not-ready' : 'missing';
+  setupState.diagnosis = null;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let busy: Promise<Awaited<ReturnType<typeof diagnose>>> | null = null;
+  let leaving = false;
+  if (url && onReady) {
+    const check = async () => {
+      if (leaving) return setupState.diagnosis;
+      busy ??= diagnose(url)
+        .then((d) => {
+          setupState.diagnosis = d;
+          return d;
+        })
+        .finally(() => {
+          busy = null;
+        });
+      const d = await busy;
+      if (d.ready && !leaving) {
+        leaving = true;
+        clearInterval(timer);
+        // After the answer has gone out: the server closes and the application takes its port.
+        setTimeout(() => {
+          void app
+            .close()
+            .then(onReady)
+            .catch((e: unknown) => {
+              console.error('The application could not start:', e);
+              process.exit(1);
+            });
+        }, 1_500);
+      }
+      return d;
+    };
+    setupState.check = check;
+    timer = setInterval(() => void check().catch(() => undefined), 10_000);
+    void check().catch(() => undefined);
+  }
   await app.listen(port);
   console.log(
-    `WanSurvey ${VERSION}: installation wizard on port ${port} (DATABASE_URL is not set)`,
+    url
+      ? `WanSurvey ${VERSION}: the database is not ready; installation wizard on port ${port} (the application starts by itself when it is)`
+      : `WanSurvey ${VERSION}: installation wizard on port ${port} (DATABASE_URL is not set)`,
   );
 }
