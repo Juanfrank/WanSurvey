@@ -3,7 +3,7 @@ import { sql, type RawBuilder } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createOwnerDb } from '../../src/db/mssql/owner-schema.js';
 import { MssqlDatabase } from '../../src/db/mssql/database.js';
-import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
+import { readerStatements, runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import type { Column, Table } from '@wansurvey/exporters';
 import { sqlExport } from '../../src/exports/sql-export.js';
 import { BiStore } from '../../src/stats/bi-store.mssql.js';
@@ -187,12 +187,12 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
         VALUES (${randomUUID()}, ${a.id}, ${i1}, 'd', 2, 'note_added', '2026-11-02T03:06:00Z', '{"text":"hola"}')`.execute(
         db,
       );
-      await sql`EXEC bi.guardar_zonas ${JSON.stringify([{ tz: TZ, desde: '2000-01-01T00:00:00', minutos: -360 }])}`.execute(
+      await sql`EXEC bi_guardar_zonas ${JSON.stringify([{ tz: TZ, desde: '2000-01-01T00:00:00', minutos: -360 }])}`.execute(
         db,
       );
       // The second one was closed early (migration 0023); the first was not.
       await sql`UPDATE interviews SET exit_reason = 'respondent_busy' WHERE id = ${i2}`.execute(db);
-      await sql`EXEC bi.refrescar`.execute(db);
+      await sql`EXEC bi_refrescar`.execute(db);
     });
   });
   afterAll(async () => {
@@ -200,7 +200,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
   });
 
   const key = (...p: string[]) =>
-    rows<{ k: string }>(sql`SELECT bi.clave(${p.join('|')}) AS k`).then((r) => r[0]!.k);
+    rows<{ k: string }>(sql`SELECT dbo.bi_clave(${p.join('|')}) AS k`).then((r) => r[0]!.k);
   const resp = (envio: string) =>
     rows<{
       variable: string;
@@ -215,16 +215,16 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       opcion_id: string | null;
     }>(sql`SELECT variable, ruta, miembro, fila_codigo, posicion, valor, especial, especial_clase,
                   valor_numero, opcion_id
-           FROM bi.fact_respuesta WHERE envio_id = ${envio} ORDER BY variable, ruta, fila_codigo, posicion`);
+           FROM bi_fact_respuesta WHERE envio_id = ${envio} ORDER BY variable, ruta, fila_codigo, posicion`);
 
   it('cleans labels, writes numbers and keys the way the model does', async () => {
     const r = await rows<Record<string, unknown>>(sql`SELECT
-      bi.plano(N'<b>Hola</b>   {{#if x}}mundo{{else}}nada{{/if}} {{nombre}}') AS plano,
-      bi.texto(N'{"en":"Hi","es":"Hola"}', N'es') AS es,
-      bi.texto(N'{"en":"Hi"}', N'fr') AS primero,
-      bi.numero(N' 12.5 ') AS n1, bi.numero(N'abc') AS n2, bi.numero(N'1e3') AS n3,
-      bi.variable_de(N's1.members[2].age[1]') AS variable, bi.ruta_de(N's1.members[2].age[1]') AS ruta,
-      bi.clave(N'a|b') AS clave`);
+      dbo.bi_plano(N'<b>Hola</b>   {{#if x}}mundo{{else}}nada{{/if}} {{nombre}}') AS plano,
+      dbo.bi_texto(N'{"en":"Hi","es":"Hola"}', N'es') AS es,
+      dbo.bi_texto(N'{"en":"Hi"}', N'fr') AS primero,
+      dbo.bi_numero(N' 12.5 ') AS n1, dbo.bi_numero(N'abc') AS n2, dbo.bi_numero(N'1e3') AS n3,
+      dbo.bi_variable_de(N's1.members[2].age[1]') AS variable, dbo.bi_ruta_de(N's1.members[2].age[1]') AS ruta,
+      dbo.bi_clave(N'a|b') AS clave`);
     expect(r[0]).toMatchObject({
       plano: 'Hola mundonada …',
       es: 'Hola',
@@ -248,7 +248,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       cadena: string | null;
       pregunta_id: string;
     }>(sql`SELECT variable, tipo, clase, pregunta, lista, cadena, pregunta_id
-           FROM bi.dim_pregunta WHERE version_id = ${versionId} ORDER BY orden, variable`);
+           FROM bi_dim_pregunta WHERE version_id = ${versionId} ORDER BY orden, variable`);
     expect(r.map((x) => x.variable)).toEqual(['P1', 'P2', 'NOM', 'G', 'L', 'TOT']);
     const by = Object.fromEntries(r.map((x) => [x.variable, x]));
     expect(by.P1).toMatchObject({
@@ -266,8 +266,8 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
     const opts = async (variable: string) =>
       (
         await rows<{ codigo: string; etiqueta: string | null; especial: boolean }>(sql`
-          SELECT o.codigo, o.etiqueta, o.especial FROM bi.dim_opcion o
-          JOIN bi.dim_pregunta p ON p.pregunta_id = o.pregunta_id
+          SELECT o.codigo, o.etiqueta, o.especial FROM bi_dim_opcion o
+          JOIN bi_dim_pregunta p ON p.pregunta_id = o.pregunta_id
           WHERE p.version_id = ${versionId} AND p.variable = ${variable} ORDER BY o.especial, o.orden`)
       ).map((x) => [x.codigo, x.etiqueta, !!x.especial]);
     expect(await opts('P1')).toEqual([
@@ -287,7 +287,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       ['-97', 'No sabe', true],
     ]);
     const filas = await rows<{ fila_codigo: string; fila: string }>(sql`
-      SELECT f.fila_codigo, f.fila FROM bi.dim_fila f JOIN bi.dim_pregunta p ON p.pregunta_id = f.pregunta_id
+      SELECT f.fila_codigo, f.fila FROM bi_dim_fila f JOIN bi_dim_pregunta p ON p.pregunta_id = f.pregunta_id
       WHERE p.version_id = ${versionId}`);
     expect(filas).toEqual([{ fila_codigo: 'r1', fila: 'Fila 1' }]);
   });
@@ -330,7 +330,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       segundos_activos: number;
     }>(sql`SELECT envio_id, CONVERT(varchar(10), fecha, 23) AS fecha, retrocesos, notas, completa, alertas,
                   segundos_activos
-           FROM bi.fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`);
+           FROM bi_fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`);
     expect(r.map((x) => [x.fecha, x.retrocesos, x.notas, x.completa, x.alertas])).toEqual([
       // 03:00Z on the 2nd is still the 1st in Guatemala (UTC-6).
       ['2026-11-01', 1, 1, 1, 'alone speeding'],
@@ -340,11 +340,11 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
     // The early-exit reason of the interview, if it was closed early, is a column of the facts
     // and of the flat table.
     const m = await rows<{ envio_id: string; motivo_salida: string | null }>(
-      sql`SELECT envio_id, motivo_salida FROM bi.fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`,
+      sql`SELECT envio_id, motivo_salida FROM bi_fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`,
     );
     expect(m.map((x) => x.motivo_salida)).toEqual([null, 'respondent_busy']);
     const flat = await rows<{ motivo_salida: string | null }>(
-      sql`SELECT DISTINCT motivo_salida FROM bi.plano_respuestas WHERE envio_id = ${i2}`,
+      sql`SELECT DISTINCT motivo_salida FROM bi_plano_respuestas WHERE envio_id = ${i2}`,
     );
     expect(flat).toEqual([{ motivo_salida: 'respondent_busy' }]);
   });
@@ -357,7 +357,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       segundos: number | null;
       pregunta_id: string | null;
     }>(
-      sql`SELECT tipo, variable, ruta, segundos, pregunta_id FROM bi.fact_paradato WHERE envio_id = ${i1} ORDER BY secuencia`,
+      sql`SELECT tipo, variable, ruta, segundos, pregunta_id FROM bi_fact_paradato WHERE envio_id = ${i1} ORDER BY secuencia`,
     );
     expect(r[0]).toMatchObject({ tipo: 'navigate_back', variable: 'NOM', ruta: '2.1' });
     expect(Number(r[0]!.segundos)).toBe(2.5);
@@ -373,7 +373,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
       anio_mes: string;
       instrumento: string;
     }>(
-      sql`SELECT variable, respuesta, entrevistador, anio_mes, instrumento FROM bi.plano_respuestas
+      sql`SELECT variable, respuesta, entrevistador, anio_mes, instrumento FROM bi_plano_respuestas
           WHERE envio_id = ${i1} AND variable IN ('P1', 'G') ORDER BY variable`,
     );
     expect(r).toEqual([
@@ -400,12 +400,12 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
         const res = await sql<{
           actual: string;
           ultima: string | null;
-        }>`EXEC bi.estado_actual`.execute(tx);
+        }>`EXEC bi_estado_actual`.execute(tx);
         return res.rows[0]!;
       });
     const before = await state();
     await app.db.transaction().execute(async (tx) => {
-      await sql`EXEC bi.marcar_huella ${before.actual}`.execute(tx);
+      await sql`EXEC bi_marcar_huella ${before.actual}`.execute(tx);
     });
     expect((await state()).ultima).toBe(before.actual);
     await owner((db) =>
@@ -417,41 +417,42 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
   });
 
   it('shows an analysis user, who has no organisation context, every row of every table and dimension', async () => {
-    // A read-only user with SELECT on the schema, as docs/bi.md says to make: row-level security
-    // would hide the rows of any view over the organisation's own tables from it.
+    // A read-only user made as docs/bi_md says: SELECT on the model's bi_ objects only (row-level
+    // security would hide the rows of any view over the organisation's own tables from it).
     const user = `bi_reader_${Date.now().toString(36)}`;
     await owner(async (db) => {
       await sql.raw(`CREATE USER [${user}] WITHOUT LOGIN`).execute(db);
-      await sql.raw(`GRANT SELECT ON SCHEMA::bi TO [${user}]`).execute(db);
+      await sql.raw(readerStatements('dbo', user)).execute(db);
     });
     try {
       const objects = await rows(
         sql<{ name: string }>`SELECT o.name FROM sys.objects o
-          WHERE o.schema_id = SCHEMA_ID('bi') AND o.type IN ('U', 'V') AND o.name NOT LIKE 'fuente[_]%'
+          WHERE o.schema_id = SCHEMA_ID('dbo') AND o.type IN ('U', 'V')
+            AND o.name LIKE 'bi[_]%' AND o.name NOT LIKE 'bi[_]fuente[_]%'
           ORDER BY o.name`,
       );
       expect(objects.map((o) => o.name)).toEqual(
         expect.arrayContaining([
-          'dim_organizacion',
-          'dim_proyecto',
-          'dim_instrumento',
-          'dim_version',
-          'dim_caso',
-          'dim_persona',
-          'dim_fecha',
-          'fact_envio',
-          'plano_respuestas',
+          'bi_dim_organizacion',
+          'bi_dim_proyecto',
+          'bi_dim_instrumento',
+          'bi_dim_version',
+          'bi_dim_caso',
+          'bi_dim_persona',
+          'bi_dim_fecha',
+          'bi_fact_envio',
+          'bi_plano_respuestas',
         ]),
       );
       for (const { name } of objects) {
         const [own] = await rows(
-          sql<{ n: number }>`SELECT COUNT(*) AS n FROM ${sql.table(`bi.${name}`)}`,
+          sql<{ n: number }>`SELECT COUNT(*) AS n FROM ${sql.table(`dbo.${name}`)}`,
         );
         const [seen] = await owner(
           async (db) =>
             (
               await sql<{ n: number }>`
-                EXECUTE AS USER = ${user}; SELECT COUNT(*) AS n FROM ${sql.table(`bi.${name}`)}; REVERT;`.execute(
+                EXECUTE AS USER = ${user}; SELECT COUNT(*) AS n FROM ${sql.table(`dbo.${name}`)}; REVERT;`.execute(
                 db,
               )
             ).rows,
@@ -462,7 +463,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
         async (db) =>
           (
             await sql<{ n: number }>`
-              EXECUTE AS USER = ${user}; SELECT COUNT(*) AS n FROM bi.dim_organizacion; REVERT;`.execute(
+              EXECUTE AS USER = ${user}; SELECT COUNT(*) AS n FROM bi_dim_organizacion; REVERT;`.execute(
               db,
             )
           ).rows,
@@ -477,15 +478,15 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
 
   it('lets the application refresh one table at a time but read nothing in bi', async () => {
     await app.db.transaction().execute(async (tx) => {
-      await sql`EXEC bi.refrescar_vista ${'dim_fila'}`.execute(tx);
+      await sql`EXEC bi_refrescar_vista ${'dim_fila'}`.execute(tx);
     });
-    await expect(sql`EXEC bi.refrescar_vista ${'tenants'}`.execute(app.db)).rejects.toThrow(
+    await expect(sql`EXEC bi_refrescar_vista ${'tenants'}`.execute(app.db)).rejects.toThrow(
       /Not a table of the analysis model/,
     );
-    await expect(sql`SELECT TOP 1 * FROM bi.dim_pregunta`.execute(app.db)).rejects.toThrow(
+    await expect(sql`SELECT TOP 1 * FROM bi_dim_pregunta`.execute(app.db)).rejects.toThrow(
       /permission was denied/i,
     );
-    await expect(sql`SELECT TOP 1 * FROM bi.fact_respuesta`.execute(app.db)).rejects.toThrow(
+    await expect(sql`SELECT TOP 1 * FROM bi_fact_respuesta`.execute(app.db)).rejects.toThrow(
       /permission was denied/i,
     );
   });
@@ -500,7 +501,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
     );
     expect(await store.refresh(app)).toBe(true);
     const days = await rows<{ fecha: string }>(
-      sql`SELECT CONVERT(varchar(10), fecha, 23) AS fecha FROM bi.fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`,
+      sql`SELECT CONVERT(varchar(10), fecha, 23) AS fecha FROM bi_fact_envio WHERE version_id = ${versionId} ORDER BY enviado_en`,
     );
     expect(days.map((d) => d.fecha)).toEqual(['2026-11-01', '2026-11-02']);
   });

@@ -31,7 +31,7 @@ const norm = (v: unknown): Cell => {
 };
 
 /**
- * The SQL export rebuilds the Excel export from the analysis model (schema bi): same sheets,
+ * The SQL export rebuilds the Excel export from the analysis model (the bi_ objects): same sheets,
  * columns, order and cells, whatever the options and the questionnaire.
  */
 describe.skipIf(!configured)('SQL Server: SQL export, with the same cells as Excel', () => {

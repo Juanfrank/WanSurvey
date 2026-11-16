@@ -111,9 +111,9 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: teams', () => {
     );
     const rows = await owner(
       async (db) =>
-        (await sql`EXEC bi.refrescar_dimensiones`.execute(db),
+        (await sql`EXEC bi_refrescar_dimensiones`.execute(db),
         await sql<{ persona: string; equipos: string | null }>`
-            SELECT persona, equipos FROM bi.dim_persona WHERE persona_id IN (${ana}, ${luis}, ${eva}, ${outsider})
+            SELECT persona, equipos FROM bi_dim_persona WHERE persona_id IN (${ana}, ${luis}, ${eva}, ${outsider})
             ORDER BY persona`.execute(db)).rows,
     );
     expect(rows).toEqual([

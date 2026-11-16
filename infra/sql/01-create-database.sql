@@ -17,7 +17,7 @@
     APP     (DATABASE_URL)   the application. A contained user (no server login) without any role: it
                              gets table by table what the migrations GRANT it, always under row-level
                              security, and the application's schema as its default.
-    READER  (optional)       reads only the analysis model (schema bi), never the application's tables.
+    READER  (optional)       reads only the analysis model (the bi_ tables and views), never the application's tables.
   The APP and READER users are made by the migrations from the URLs you give them, with the
   password in each: you do not have to make them by hand. 03-users.sql makes or updates them by
   hand, 04-check-permissions.sql checks them and 05-drop-users.sql removes the reader.

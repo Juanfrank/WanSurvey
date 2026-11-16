@@ -146,6 +146,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **Everything is in the one schema** (`DATABASE_SCHEMA`; `dbo` by default). The analysis model is no
+  longer in a schema `bi`: its tables, views, procedures and functions are `<schema>.bi_*` (for example
+  `bi_dim_proyecto`, `bi_plano_respuestas`, `bi_refrescar`), and the row-level security objects are
+  `<schema>.rls_*`. No schema other than the application's is made. **Upgrade:** a database made with
+  an earlier alpha (schemas `bi` and `rls`) must be made again; there is no migration of the old
+  layout. The read-only user now has `SELECT` on each `bi_` table and view (object by object, instead
+  of on a schema), `DENY` on every other table and view, and no write, `EXECUTE` or `ALTER` on the
+  schema. The SQL export names the model's objects with the schema (`[dbo].bi_fact_envio`).
 - The web sendings are called **Difusión** (outreach) in the interface instead of _Campañas_; the
   area's own name for them. Nothing changes in the API (`waves`).
 - `docs/bi.md` describes SQL Server (it still described PostgreSQL): the tables of the model,

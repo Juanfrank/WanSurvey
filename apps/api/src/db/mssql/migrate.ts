@@ -20,9 +20,23 @@ export function sqlName(what: string, name: string): string {
  * A migration batch written for schema `dbo` and user `wansurvey_app`, for the schema and user
  * names chosen. The owner stays `dbo` (the database owner): the security policy lets it through
  * and the owner procedures run as it.
+ *
+ * Everything lives in the one schema chosen: what the migrations name `bi.x` (the analysis model)
+ * and `rls.x` (the row-level security) is `<schema>.bi_x` and `<schema>.rls_x`, and the two extra
+ * schemas are not made (an empty string: nothing to run).
  */
 export function withNames(batch: string, names: { schema: string; appUser: string }): string {
   let out = batch;
+  const code = out
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--.*$/gm, '')
+    .trim();
+  if (/^CREATE\s+SCHEMA\s+(bi|rls)(\s+AUTHORIZATION\s+dbo)?\s*;?$/i.test(code)) return '';
+  // A renamed object of the model keeps the prefix: sp_rename N'bi.a', N'b' makes bi_b.
+  out = out.replace(/(sp_rename\s+N')bi\.(\w+)(',\s*N')(\w+)(')/gi, '$1dbo.bi_$2$3bi_$4$5');
+  out = out
+    .replace(/\bbi\.(?=[A-Za-z_[])/g, 'dbo.bi_')
+    .replace(/\brls\.(?=[A-Za-z_[])/g, 'dbo.rls_');
   if (names.schema !== DEFAULT_SCHEMA)
     out = out.replace(/\bdbo\.(?=[A-Za-z_[])/g, `${names.schema}.`);
   if (names.appUser !== APP_USER) out = out.replace(/\bwansurvey_app\b/g, names.appUser);
@@ -35,8 +49,13 @@ const IDENT = '[A-Za-z_][A-Za-z0-9_]*';
 export function tablesOf(files: { batches: string[] }[]): Set<string> {
   const names = new Set<string>();
   const re = new RegExp(`CREATE\\s+TABLE\\s+(?:dbo\\.)?(${IDENT})(?![\\w.])`, 'gi');
+  // The model's tables (`CREATE TABLE bi.x`) are `bi_x` in the one schema.
+  const model = new RegExp(`CREATE\\s+TABLE\\s+bi\\.(${IDENT})(?![\\w.])`, 'gi');
   for (const f of files)
-    for (const b of f.batches) for (const m of b.matchAll(re)) names.add(m[1]!.toLowerCase());
+    for (const b of f.batches) {
+      for (const m of b.matchAll(re)) names.add(m[1]!.toLowerCase());
+      for (const m of b.matchAll(model)) names.add(`bi_${m[1]!.toLowerCase()}`);
+    }
   return names;
 }
 
@@ -79,6 +98,23 @@ export function qualifyTables(batch: string, tables: Set<string>, schema: string
   return batch.replace(re, (whole, kw: string, space: string, ident: string) =>
     tables.has(ident.toLowerCase()) ? `${kw}${space}${schema}.${ident}` : whole,
   );
+}
+
+/**
+ * What the read-only user may do, all in the one schema: SELECT on the tables and views of the
+ * analysis model (`bi_*`), an explicit refusal of SELECT on every other table and view (so a later
+ * broad grant to a role cannot open them), and no INSERT, UPDATE, DELETE, EXECUTE or ALTER on the
+ * schema. Repeatable; run again after a migration adds tables or views.
+ */
+export function readerStatements(schema: string, reader: string): string {
+  const s = schema.replace(/'/g, "''");
+  const r = reader.replace(/]/g, ']]');
+  return `DECLARE @grants nvarchar(max) = N'';
+SELECT @grants += CASE WHEN o.name LIKE N'bi[_]%' THEN N'GRANT' ELSE N'DENY' END
+    + N' SELECT ON ' + QUOTENAME(SCHEMA_NAME(o.schema_id)) + N'.' + QUOTENAME(o.name) + N' TO [${r}];' + NCHAR(10)
+  FROM sys.objects o WHERE o.schema_id = SCHEMA_ID(N'${s}') AND o.type IN ('U', 'V') AND o.is_ms_shipped = 0;
+SET @grants += N'DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::' + QUOTENAME(N'${s}') + N' TO [${r}];';
+EXEC (@grants);`;
 }
 
 export interface MigrationOptions {
@@ -229,6 +265,7 @@ export async function runMssqlMigrations(
         if (applied.has(file.name)) continue;
         for (const batch of file.batches) {
           const text = withNames(batch, names);
+          if (!text) continue;
           const run = schema === DEFAULT_SCHEMA ? text : qualifyTables(text, tables, schema);
           try {
             await sql.raw(run).execute(tx);
@@ -242,18 +279,11 @@ export async function runMssqlMigrations(
           tx,
         );
       }
-      // The read-only user of the analysis model: it reads schema bi and nothing of the
-      // application's own tables (explicit refusals, so a broad grant to a role cannot open them).
+      // The read-only user of the analysis model (the `bi_` tables and views of the schema): it reads
+      // those and nothing of the application's own tables.
       if (reader) {
         if (manageUsers) await sql.raw(user(reader.userName, reader.password)).execute(tx);
-        const r = `[${reader.userName}]`;
-        await sql
-          .raw(
-            `GRANT SELECT ON SCHEMA::bi TO ${r};
-        DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::bi TO ${r};
-        DENY SELECT, INSERT, UPDATE, DELETE, EXECUTE ON SCHEMA::[${schema}] TO ${r};`,
-          )
-          .execute(tx);
+        await sql.raw(readerStatements(schema, reader.userName)).execute(tx);
       }
     });
   } finally {

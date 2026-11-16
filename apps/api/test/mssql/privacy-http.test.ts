@@ -294,7 +294,7 @@ describe.skipIf(!configured)('SQL Server: personal data over HTTP', () => {
     );
     await t.app.get(BiService).refresh(true);
     const inModel = () =>
-      rows(sql`SELECT 1 AS x FROM bi.fact_respuesta WHERE envio_id = ${iv} AND variable = 'PHONE'`);
+      rows(sql`SELECT 1 AS x FROM bi_fact_respuesta WHERE envio_id = ${iv} AND variable = 'PHONE'`);
     expect(await inModel()).toHaveLength(1);
 
     const erase = await pm.agent
@@ -340,7 +340,7 @@ describe.skipIf(!configured)('SQL Server: personal data over HTTP', () => {
       JOIN sys.objects o ON o.object_id = c.object_id AND o.type IN ('U', 'V')
       JOIN sys.schemas s ON s.schema_id = o.schema_id
       JOIN sys.types ty ON ty.user_type_id = c.user_type_id
-      WHERE ty.name IN ('varchar', 'nvarchar', 'char', 'nchar') AND s.name IN ('dbo', 'bi')
+      WHERE ty.name IN ('varchar', 'nvarchar', 'char', 'nchar') AND s.name IN ('dbo')
         AND c.max_length <> 0`);
     expect(cols.length).toBeGreaterThan(100);
     const leaks: string[] = [];

@@ -15,6 +15,8 @@ export interface SqlExportInput {
   opts: ExportBody;
   main: Table;
   rosters: Table[];
+  /** The schema the application lives in (DATABASE_SCHEMA): the model's objects are `<schema>.bi_*`. */
+  schema?: string;
 }
 
 const lit = (s: string) => `N'${s.replace(/'/g, "''")}'`;
@@ -61,9 +63,15 @@ const PARADATA: Record<string, string> = {
  * analysis model (schema bi, mssql/0009) that gives the same columns, in the same order, with
  * the same cells for the same filters: codes or labels, wide or long rosters, paradata. The
  * columns come from the export's own table (`Column.source`), so both stay in step. The tables
- * hold the data as of their last refresh (`EXEC bi.refrescar;`).
+ * hold the data as of their last refresh (`EXEC bi_refrescar;`).
  */
 export function sqlExport(input: SqlExportInput): string {
+  // The model's tables, views and functions are named with their schema (functions must be).
+  const schema = ident(input.schema ?? 'dbo');
+  return build(input).replace(/\bbi_[a-z_]+/g, (name) => `${schema}.${name}`);
+}
+
+function build(input: SqlExportInput): string {
   const { opts } = input;
   const labels = opts.labels === 'labels';
   const where = [
@@ -80,15 +88,15 @@ export function sqlExport(input: SqlExportInput): string {
   ];
   const envios = `envios as (
   select e.*, ve.version_numero
-  from bi.fact_envio e
-  join bi.dim_version ve on ve.version_id = e.version_id
+  from bi_fact_envio e
+  join bi_dim_version ve on ve.version_id = e.version_id
   where ${where.join('\n    and ')}
 )`;
 
   // The label of a code of a variable, in the export's language.
   const label = (variable: string, x: string) =>
-    `(select bi.plano(bi.texto(o.etiqueta_i18n, ${lit(input.language)})) from bi.dim_opcion o ` +
-    `where o.opcion_id = bi.clave(concat(${id(input.versionId)}, N'|', ${lit(variable)}, N'|', ${x})))`;
+    `(select bi_plano(bi_texto(o.etiqueta_i18n, ${lit(input.language)})) from bi_dim_opcion o ` +
+    `where o.opcion_id = bi_clave(concat(${id(input.versionId)}, N'|', ${lit(variable)}, N'|', ${x})))`;
 
   /** The query of one sheet: its answers pivoted per submission (or per roster row). */
   const sheet = (table: Table, depth: number | null) => {
@@ -112,7 +120,7 @@ export function sqlExport(input: SqlExportInput): string {
     const plainValue = (s: Answer) =>
       agg(max(`${at(s)} and r.fila_codigo is null and r.posicion is null`));
     const coded = (s: Answer, x: string) =>
-      labels ? `coalesce(${label(s.variable, x)}, ${x})` : `bi.numero(${x})`;
+      labels ? `coalesce(${label(s.variable, x)}, ${x})` : `bi_numero(${x})`;
 
     const cell = (c: Column): string => {
       const s = c.source;
@@ -129,7 +137,7 @@ export function sqlExport(input: SqlExportInput): string {
         case 'computed': {
           const x = plainValue(s);
           return s.numeric
-            ? `bi.numero(${x})`
+            ? `bi_numero(${x})`
             : `case when ${x} is null then null else '"' + string_escape(${x}, 'json') + '"' end`;
         }
         case 'other': {
@@ -137,7 +145,7 @@ export function sqlExport(input: SqlExportInput): string {
           return `case when ltrim(rtrim(${x})) <> '' then ${x} end`;
         }
         case 'coded':
-          return `bi.numero(${plainValue(s)})`;
+          return `bi_numero(${plainValue(s)})`;
         case 'rank':
           return coded(
             s,
@@ -167,7 +175,7 @@ export function sqlExport(input: SqlExportInput): string {
           );
           return labels
             ? `case when ${n} = 0 then null when ${sp} is not null then coalesce(${label(s.variable, sp)}, ${sp}) when ${hit} > 0 then N'Sí' else N'No' end`
-            : `case when ${n} = 0 then null when ${sp} is not null then bi.numero(${sp}) when ${hit} > 0 then 1 else 0 end`;
+            : `case when ${n} = 0 then null when ${sp} is not null then bi_numero(${sp}) when ${hit} > 0 then 1 else 0 end`;
         }
       }
     };
@@ -184,7 +192,7 @@ export function sqlExport(input: SqlExportInput): string {
       return `with ${envios},
 respuestas as (
   select r.envio_id${pivot.length ? ',\n' + pivot.join(',\n') : ''}
-  from bi.fact_respuesta r
+  from bi_fact_respuesta r
   join envios e on e.envio_id = r.envio_id
   where r.variable in (${inVars})
   group by r.envio_id
@@ -193,9 +201,9 @@ select
 ${columns.join(',\n')}
 from envios e
 left join respuestas a on a.envio_id = e.envio_id
-left join bi.dim_caso ca on ca.caso_id = e.caso_id
-left join bi.dim_persona pe on pe.persona_id = e.persona_id
-  and pe.organizacion_id = (select pr.organizacion_id from bi.dim_proyecto pr
+left join bi_dim_caso ca on ca.caso_id = e.caso_id
+left join bi_dim_persona pe on pe.persona_id = e.persona_id
+  and pe.organizacion_id = (select pr.organizacion_id from bi_dim_proyecto pr
                             where pr.proyecto_id = e.proyecto_id)
 order by e.enviado_en, e.envio_id;`;
     const levels = Array.from(
@@ -205,7 +213,7 @@ order by e.enviado_en, e.envio_id;`;
     return `with ${envios},
 filas as (
   select r.envio_id, r.ruta${pivot.length ? ',\n' + pivot.join(',\n') : ''}
-  from bi.fact_respuesta r
+  from bi_fact_respuesta r
   join envios e on e.envio_id = r.envio_id
   where r.variable in (${inVars})
     and len(r.ruta) - len(replace(r.ruta, '.', '')) + 1 = ${depth}
@@ -215,7 +223,7 @@ select
 ${columns.join(',\n')}
 from filas a
 join envios e on e.envio_id = a.envio_id
-left join bi.dim_caso ca on ca.caso_id = e.caso_id
+left join bi_dim_caso ca on ca.caso_id = e.caso_id
 order by e.enviado_en, e.envio_id, ${levels.join(', ')};`;
   };
 
@@ -233,7 +241,7 @@ order by e.enviado_en, e.envio_id, ${levels.join(', ')};`;
     `-- Opciones: ${labels ? 'etiquetas' : 'códigos'}, listas ${opts.rosters === 'wide' ? 'en columnas' : 'en tablas aparte'}, ${opts.paradata ? 'con' : 'sin'} paradatos, idioma ${input.language}.`,
     `-- Filtros: ${filters.length ? filters.join(', ') : 'ninguno'}.`,
     `-- Generado el ${new Date().toISOString()}. Las tablas muestran los datos de su último`,
-    `-- refresco (cada 6 horas en el worker por defecto, o: EXEC bi.refrescar;). Ejecutar con un rol que`,
+    `-- refresco (cada 6 horas en el worker por defecto, o: EXEC bi_refrescar;). Ejecutar con un rol que`,
     `-- pueda leer el esquema bi. T-SQL (SQL Server, Azure SQL).`,
   ].join('\n');
   const parts = [`${header}\n\n-- Hoja «data»\n${sheet(input.main, null)}`];

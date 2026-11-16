@@ -6,12 +6,12 @@ in their own schema beside whatever is there), the application makes the **schem
 the security policy, the grants, the **application user** and, if you ask for one, a **read-only
 user**, with the owner login. Everything you name is in settings:
 
-| Setting                 | What it is                                                                                   | Default  |
-| ----------------------- | -------------------------------------------------------------------------------------------- | -------- |
-| `DATABASE_ADMIN_URL`    | the owner of step 1 (used only to migrate and to make the first administrator)               | none     |
-| `DATABASE_URL`          | the application: **its user name and password are the ones the migration creates**           | required |
-| `DATABASE_SCHEMA`       | the schema of the tables, procedures and views (the `rls` and `bi` schemas keep their names) | `dbo`    |
-| `DATABASE_READONLY_URL` | optional: a user that reads schema `bi` only, with the name and password in this URL         | none     |
+| Setting                 | What it is                                                                                                                   | Default  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `DATABASE_ADMIN_URL`    | the owner of step 1 (used only to migrate and to make the first administrator)                                               | none     |
+| `DATABASE_URL`          | the application: **its user name and password are the ones the migration creates**                                           | required |
+| `DATABASE_SCHEMA`       | the schema of everything: tables, views, procedures, functions and the security policy (nothing is made in any other schema) | `dbo`    |
+| `DATABASE_READONLY_URL` | optional: a user that reads only the analysis model (`bi_` tables and views), name and password in this URL                  | none     |
 
 ```
 DATABASE_ADMIN_URL="mssql://survey_owner:<OwnerPassword>@<server>:1433/survey_prod?trustServerCertificate=true"
@@ -33,10 +33,10 @@ What the users may do, checked on SQL Server 2022:
 - **Application** (`DATABASE_URL`): no role; only what the migrations grant, table by table and procedure
   by procedure; under row-level security by organisation (without an organisation in context it sees no
   row); it cannot create or alter anything and cannot change the audit log.
-- **Reader** (`DATABASE_READONLY_URL`): `SELECT` on schema `bi` (the analysis model, filled by the
-  application on a schedule); explicit `DENY` of everything else in `bi` and of everything in the
-  application's schema, so a later broad grant to a role cannot open them. The personal questions are
-  marked in `bi.dim_pregunta.personal` (see `docs/bi.md`).
+- **Reader** (`DATABASE_READONLY_URL`): `SELECT` on the analysis model (the `bi_` tables and views of the
+  schema, filled by the application on a schedule); explicit `DENY` of `SELECT` on every other table and
+  view and of `INSERT`, `UPDATE`, `DELETE`, `EXECUTE` and `ALTER` on the schema, so a later broad grant to a
+  role cannot open them. The personal questions are marked in `bi_dim_pregunta.personal` (see `docs/bi.md`).
 
 ## When the DBA makes the users (`DATABASE_MANAGE_USERS=false`)
 
@@ -136,7 +136,7 @@ are safe to repeat:
   migrations, never from here.
 - `04-check-permissions.sql`: changes nothing; lists the users, roles and permissions and checks the
   least-privilege rules (no role, nothing on schemas, no write on the audit log; the reader sees only
-  `bi`). It fails with a `FAIL` line if a permission was changed outside the migrations.
+  the `bi_` objects). It fails with a `FAIL` line if a permission was changed outside the migrations.
 - `05-drop-users.sql`: removes a user (to retire the reader); refuses the read/write user.
 
 The seed of demonstration data (`pnpm db:seed`, `pnpm db:seed-demo`) and the load-test setup work in

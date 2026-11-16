@@ -101,7 +101,7 @@ describe.skipIf(!configured)('SQL Server: users made by the DBA', () => {
       expect(Number((rows.rows[0] as { n: number }).n)).toBe(0);
       await expect(sql`DROP TABLE tenants`.execute(app)).rejects.toThrow();
       await expect(sql`SELECT COUNT(*) AS n FROM tenants`.execute(ro)).rejects.toThrow();
-      await sql`SELECT TOP 1 * FROM bi.dim_proyecto`.execute(ro);
+      await sql`SELECT TOP 1 * FROM bi_dim_proyecto`.execute(ro);
     } finally {
       await app.destroy();
       await ro.destroy();

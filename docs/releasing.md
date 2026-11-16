@@ -25,7 +25,7 @@ the paths the web app calls are **not** a promise. These are:
 | Integration API `/api/v1/ext/v1/**`                                             | [`integration-api.md`](integration-api.md), OpenAPI               |
 | Outgoing webhooks: event names, body, signature                                 | [`integration-api.md`](integration-api.md)                        |
 | Settings: names and meaning of environment variables and `appconfig/` templates | `apps/api/.env.example`, [`appservice-zip.md`](appservice-zip.md) |
-| Files and tables made for others: export layouts and the `bi` schema            | [`bi.md`](bi.md), [`operations.md`](operations.md)                |
+| Files and tables made for others: export layouts and the `bi_` tables and views | [`bi.md`](bi.md), [`operations.md`](operations.md)                |
 | The questionnaire definition format, and the stored versions that use it        | `packages/schema`, [`logic-language.md`](logic-language.md)       |
 | Upgrading: the migrations and the order of steps                                | this page                                                         |
 

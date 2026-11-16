@@ -22,6 +22,23 @@ describe('the names of the schema and the users in a migration', () => {
     expect(withNames(batch, { schema: 'dbo', appUser: 'wansurvey_app' })).toBe(batch);
   });
 
+  it('puts the analysis model and the row-level security in the one schema, with a prefix', () => {
+    const batch =
+      "CREATE VIEW bi.dim_x AS SELECT rls.tenant_predicate(1) AS a FROM dbo.t JOIN bi.dim_y ON 1 = 1; EXEC sp_rename N'bi.dim_z', N'fuente_dim_z', N'OBJECT'; IF OBJECT_ID(N'bi.plano', N'U') IS NOT NULL DROP TABLE bi.plano;";
+    const names = { schema: 'survey', appUser: 'wansurvey_app' };
+    expect(withNames(batch, names)).toBe(
+      "CREATE VIEW survey.bi_dim_x AS SELECT survey.rls_tenant_predicate(1) AS a FROM survey.t JOIN survey.bi_dim_y ON 1 = 1; EXEC sp_rename N'survey.bi_dim_z', N'bi_fuente_dim_z', N'OBJECT'; IF OBJECT_ID(N'survey.bi_plano', N'U') IS NOT NULL DROP TABLE survey.bi_plano;",
+    );
+    // In dbo too: nothing is left in the schemas bi and rls.
+    expect(withNames('SELECT 1 FROM bi.dim_x', { schema: 'dbo', appUser: 'wansurvey_app' })).toBe(
+      'SELECT 1 FROM dbo.bi_dim_x',
+    );
+    // The two extra schemas are not made.
+    expect(withNames('-- the model\nCREATE SCHEMA bi AUTHORIZATION dbo;', names)).toBe('');
+    expect(withNames('CREATE SCHEMA rls;', names)).toBe('');
+    expect(withNames('CREATE SCHEMA other;', names)).toContain('CREATE SCHEMA other');
+  });
+
   it('accepts only names that are safe to put in SQL', () => {
     expect(sqlName('The schema', 'survey_2')).toBe('survey_2');
     for (const bad of ['', '1abc', 'a-b', 'a b', 'x]; DROP', 'a'.repeat(129)])
@@ -162,11 +179,11 @@ describe.skipIf(!configured)('SQL Server: another schema and other user names', 
       expect(await count(as, 'tenants')).toBe(0);
       await expect(sql.raw('CREATE TABLE x (a int)').execute(as)).rejects.toThrow(/permission/i);
       // The reader sees the analysis model and nothing of the application's tables.
-      expect(await count(reader, 'bi.dim_pregunta')).toBe(0);
+      expect(await count(reader, 'bi_dim_pregunta')).toBe(0);
       await expect(
         sql.raw(`SELECT TOP 1 * FROM ${SCHEMA}.tenants`).execute(reader),
       ).rejects.toThrow(/permission/i);
-      await expect(sql.raw('DELETE FROM bi.dim_pregunta').execute(reader)).rejects.toThrow(
+      await expect(sql.raw('DELETE FROM bi_dim_pregunta').execute(reader)).rejects.toThrow(
         /permission/i,
       );
     } finally {

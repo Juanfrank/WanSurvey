@@ -19,7 +19,7 @@ const DAY = 86_400_000;
 const utc = (d: Date) => d.toISOString().slice(0, 19);
 
 /**
- * Keeps the analysis model (schema bi, mssql/0009) up to date, for `bi.service.ts`: the UTC offsets of the projects' zones first (SQL Server's AT TIME ZONE cannot read
+ * Keeps the analysis model (the `bi_` objects of the schema, mssql/0009) up to date, for `bi.service.ts`: the UTC offsets of the projects' zones first (SQL Server's AT TIME ZONE cannot read
  * IANA names), then each table in its own transaction, so readers wait for one table at most.
  * The application may only run the model's procedures; it can read nothing in bi.
  */
@@ -27,7 +27,7 @@ export class BiStore {
   /** Works out and saves the offsets of every zone the data uses, a margin around its range. */
   async saveZones(db: MssqlDatabase, now = new Date()): Promise<number> {
     const res = await sql<{ tz: string; desde: Date | null; hasta: Date | null }>`
-      EXEC bi.zonas_necesarias`.execute(db.db);
+      EXEC bi_zonas_necesarias`.execute(db.db);
     const zones = res.rows.flatMap((z) => {
       const from = new Date(Math.min(z.desde?.getTime() ?? now.getTime(), now.getTime()) - 2 * DAY);
       const to = new Date(Math.max(z.hasta?.getTime() ?? now.getTime(), now.getTime()) + 2 * DAY);
@@ -42,7 +42,7 @@ export class BiStore {
         return [];
       }
     });
-    await sql`EXEC bi.guardar_zonas ${JSON.stringify(zones)}`.execute(db.db);
+    await sql`EXEC bi_guardar_zonas ${JSON.stringify(zones)}`.execute(db.db);
     return zones.length;
   }
 
@@ -52,18 +52,18 @@ export class BiStore {
    */
   async refresh(db: MssqlDatabase, force = false): Promise<boolean> {
     const state = (
-      await sql<{ actual: string; ultima: string | null }>`EXEC bi.estado_actual`.execute(db.db)
+      await sql<{ actual: string; ultima: string | null }>`EXEC bi_estado_actual`.execute(db.db)
     ).rows[0]!;
     if (!force && state.actual === state.ultima) return false;
     await this.saveZones(db);
     // The dimensions of the hierarchy first (organisations, projects, instruments, versions,
     // cases, people, calendar): the flat table is built from them.
-    await sql`EXEC bi.refrescar_dimensiones`.execute(db.db);
+    await sql`EXEC bi_refrescar_dimensiones`.execute(db.db);
     for (const table of BI_TABLES)
       await db.db.transaction().execute(async (tx) => {
-        await sql`EXEC bi.refrescar_vista ${table}`.execute(tx);
+        await sql`EXEC bi_refrescar_vista ${table}`.execute(tx);
       });
-    await sql`EXEC bi.marcar_huella ${state.actual}`.execute(db.db);
+    await sql`EXEC bi_marcar_huella ${state.actual}`.execute(db.db);
     return true;
   }
 }

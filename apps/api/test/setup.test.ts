@@ -26,7 +26,8 @@ describe('the installation wizard', () => {
     expect(plan.tables).toContain('CREATE SCHEMA [survey]');
     expect(plan.tables).not.toContain('CREATE USER');
     expect(plan.users).toContain("CREATE USER [survey_rw] WITH PASSWORD = '$(AppPassword)'");
-    expect(plan.users).toContain('GRANT SELECT ON SCHEMA::bi TO [survey_ro]');
+    expect(plan.users).toContain("N' TO [survey_ro]");
+    expect(plan.users).toContain('DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::');
     expect(plan.passwordVariables).toEqual(['AppPassword', 'ReaderPassword']);
     const urls = plan.settings.filter((s) => s.secret).map((s) => s.value);
     expect(urls).toHaveLength(3);

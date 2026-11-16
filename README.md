@@ -36,7 +36,7 @@ Background reading:
 - [`docs/sso-entra.md`](docs/sso-entra.md): connecting an organisation's Microsoft Entra ID (Azure AD) for sign-in
 - [`docs/integration-api.md`](docs/integration-api.md): the read-only API for other systems, with keys per organisation
 - [`docs/operations.md`](docs/operations.md): running it in production (processes, configuration, jobs, backups, retention)
-- [`docs/bi.md`](docs/bi.md): the analysis model (schema `bi`) for BI tools and SQL: snowflake and flat table, refreshed by the worker
+- [`docs/bi.md`](docs/bi.md): the analysis model (the `bi_` tables and views) for BI tools and SQL: snowflake and flat table, refreshed by the worker
 - [`docs/azure.md`](docs/azure.md): running on one Azure App Service (Premium v3 P0v3, web, API and worker as sidecars, `infra/azure/main.bicep`) with Azure SQL (or SQL Server) and Azure Cache for Redis
 - [`docs/security.md`](docs/security.md): the OWASP ASVS level 2 checklist and personal data handling
 - [`docs/accessibility.md`](docs/accessibility.md): WCAG 2.2 AA audit results and the keyboard map

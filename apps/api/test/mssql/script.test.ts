@@ -14,7 +14,9 @@ describe('the one-file SQL script', () => {
     expect(text).toContain("PASSWORD = '$(ReaderPassword)'");
     expect(text).not.toMatch(/\bdbo\.(?=[A-Za-z_[])/);
     expect(text).not.toContain('wansurvey_app');
-    expect(text).toContain('GRANT SELECT ON SCHEMA::bi TO [survey_ro]');
+    expect(text).toContain("N' TO [survey_ro]");
+    expect(text).not.toMatch(/\b(bi|rls)\./);
+    expect(text).not.toContain('CREATE SCHEMA [bi]');
     expect(text.match(/INSERT INTO survey\.__migrations/g)).toHaveLength(migrationFiles().length);
     expect(text.indexOf('BEGIN TRANSACTION')).toBeLessThan(text.indexOf('COMMIT TRANSACTION'));
   });

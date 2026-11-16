@@ -4,6 +4,7 @@ import {
   APP_USER,
   DEFAULT_SCHEMA,
   migrationFiles,
+  readerStatements,
   qualifyTables,
   sqlName,
   tablesOf,
@@ -191,14 +192,18 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
     );
     if (part !== 'all' && !body.length) continue;
     out.push(`-- ─── ${file.name} ${'─'.repeat(Math.max(3, 70 - file.name.length))}`, '');
-    for (const b of body) batch(named(b));
+    for (const b of body) {
+      const text = named(b);
+      if (text) batch(text);
+    }
     if (withTables) batch(`INSERT INTO ${migrations} (name) VALUES (N'${lit(file.name)}');`);
   }
   if (reader && withUsers) {
-    out.push('-- ─── The read-only user: the analysis model (schema bi) and nothing else ───', '');
-    batch(`GRANT SELECT ON SCHEMA::bi TO [${reader}];
-DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::bi TO [${reader}];
-DENY SELECT, INSERT, UPDATE, DELETE, EXECUTE ON SCHEMA::[${schema}] TO [${reader}];`);
+    out.push(
+      '-- ─── The read-only user: the analysis model (the bi_ objects) and nothing else ───',
+      '',
+    );
+    batch(readerStatements(schema, reader));
   }
   batch('COMMIT TRANSACTION;');
   out.push(

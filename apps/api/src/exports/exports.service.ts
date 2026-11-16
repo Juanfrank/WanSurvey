@@ -343,6 +343,7 @@ export class ExportsService implements OnModuleInit {
               questionnaireId: src.questionnaireId,
               versionId: src.versionId,
               language: opts.language ?? src.compiled.questionnaire.defaultLanguage,
+              schema: this.config.DATABASE_SCHEMA,
               opts,
               main: { ...layout.main, rows: [] },
               rosters: layout.rosters.map((t) => ({ ...t, rows: [] })),

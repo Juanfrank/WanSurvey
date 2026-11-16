@@ -1,6 +1,6 @@
-# Analysis model (schema `bi`)
+# Analysis model (the `bi_` tables and views)
 
-Migration `0009_bi` (with `0016` and `0022`) adds a schema `bi` in the SQL Server database that turns the coded answers and the paradata into tables that plain SQL, or any tool that reads SQL Server (Power BI, Excel, Tableau, Looker Studio…), can read. No tool-specific output is made: the model is read with a SQL query. It covers every organisation, project, questionnaire (CATI, CAPI, CAWI, PAPI) and feedback point. Table and column names are in Spanish, for the analysts who read them.
+Migration `0009_bi` (with `0016` and `0022`) adds to the application's schema in the SQL Server database (`DATABASE_SCHEMA`, `dbo` by default) a set of tables and views, all named `bi_…`, that turns the coded answers and the paradata into tables that plain SQL, or any tool that reads SQL Server (Power BI, Excel, Tableau, Looker Studio…), can read. No tool-specific output is made: the model is read with a SQL query. It covers every organisation, project, questionnaire (CATI, CAPI, CAWI, PAPI) and feedback point. Table and column names are in Spanish, for the analysts who read them.
 
 ## Two shapes
 
@@ -32,7 +32,7 @@ fact_paradato   → fact_envio, dim_pregunta, dim_evento   (and fact_respuesta o
 
 Texts and labels are plain, as the exports write them: tags dropped and piped values (`{{…}}`, which differ per respondent) shown as `…`, in the questionnaire's default language. Every language is kept in the `*_i18n` columns. Answers to a feedback question since removed from its point keep their variable but have no text.
 
-**Flat.** `bi.plano_respuestas` has one row per atomic answer with everything on it: organisation, project, instrument and version, case, interviewer and teams, channel, dates, status, paradata counts and flags, variable, question, roster path and member, grid row, position, code, **answer label** and numeric value.
+**Flat.** `bi_plano_respuestas` has one row per atomic answer with everything on it: organisation, project, instrument and version, case, interviewer and teams, channel, dates, status, paradata counts and flags, variable, question, roster path and member, grid row, position, code, **answer label** and numeric value.
 
 ### Crossing answers and paradata
 
@@ -41,11 +41,11 @@ Texts and labels are plain, as the exports write them: tags dropped and piped va
 ```sql
 -- Seconds spent on each question, beside its answer.
 select r.variable, r.ruta, o.etiqueta, sum(d.segundos) as segundos
-from bi.fact_paradato d
-join bi.fact_respuesta r
+from bi_fact_paradato d
+join bi_fact_respuesta r
   on r.envio_id = d.envio_id and r.variable = d.variable
  and (r.ruta = d.ruta or (r.ruta is null and d.ruta is null))
-left join bi.dim_opcion o on o.opcion_id = r.opcion_id
+left join bi_dim_opcion o on o.opcion_id = r.opcion_id
 where d.tipo = 'leave_question'
 group by r.variable, r.ruta, o.etiqueta;
 ```
@@ -58,14 +58,14 @@ Exports offer a **SQL query** format: a `.sql` file with one query per sheet of 
 
 SQL Server has no materialised views, so every table of the model is a **table**: the dimensions of the hierarchy (`dim_organizacion`, `dim_proyecto`, `dim_instrumento`, `dim_version`, `dim_caso`, `dim_persona`, `dim_fecha`) and the question, option and row dimensions, the facts and the flat table. Procedures that belong to the database owner empty and fill them; the application runs those and nothing else. A table shows the data as of the last refresh. (`dim_canal` and `dim_evento` are fixed lists and stay views. The `fuente_*` views are the sources of the dimensions: they are read by the refresh and by nobody else.)
 
-The worker refreshes the model on `BI_REFRESH_CRON` (UTC cron, default `40 */6 * * *`, every 6 hours; `off` never), on the heavy queue, and only when something the model reads changed (`bi.estado_actual` gives a fingerprint of the source tables, `bi.marcar_huella` keeps the one of the last refresh). The dimensions of the hierarchy are refilled first, in one transaction, then each other table in its own, one refresh at a time (an application lock). The tables are emptied and refilled, except the flat table, which is rebuilt: on Azure SQL Database, which reads with row versioning, a reader keeps seeing the previous data of a refilled table until its refresh commits, and waits only for the moment the flat table is swapped; on a SQL Server without row versioning, a reader of a table being refreshed waits for it.
+The worker refreshes the model on `BI_REFRESH_CRON` (UTC cron, default `40 */6 * * *`, every 6 hours; `off` never), on the heavy queue, and only when something the model reads changed (`bi_estado_actual` gives a fingerprint of the source tables, `bi_marcar_huella` keeps the one of the last refresh). The dimensions of the hierarchy are refilled first, in one transaction, then each other table in its own, one refresh at a time (an application lock). The tables are emptied and refilled, except the flat table, which is rebuilt: on Azure SQL Database, which reads with row versioning, a reader keeps seeing the previous data of a refilled table until its refresh commits, and waits only for the moment the flat table is swapped; on a SQL Server without row versioning, a reader of a table being refreshed waits for it.
 
-The frequency can also be set in the application (Administration → Organization → Analysis model refresh): every 15 minutes up to once a week, or never. It is one setting for the installation, kept in `dbo.app_settings` (migration `0025`). Once it is set, a job that wakes every ten minutes (`bi.tick`) refreshes the model when the interval has passed since the last check, and the `BI_REFRESH_CRON` schedule stands aside; removing the setting (\"as the deployment sets it\") brings the cron back. A refresh can also be asked for at once there.
+The frequency can also be set in the application (Administration → Organization → Analysis model refresh): every 15 minutes up to once a week, or never. It is one setting for the installation, kept in `dbo.app_settings` (migration `0025`). Once it is set, a job that wakes every ten minutes (`bi_tick`) refreshes the model when the interval has passed since the last check, and the `BI_REFRESH_CRON` schedule stands aside; removing the setting (\"as the deployment sets it\") brings the cron back. A refresh can also be asked for at once there.
 
 To refresh by hand, with a login that can run the procedures (the database owner):
 
 ```sql
-exec bi.refrescar;
+exec bi_refrescar;  -- in the application's schema
 ```
 
 The tables are created empty, except the dimensions of the hierarchy, which migration `0022` fills: the first scheduled run (or the command above) fills the rest.
@@ -78,31 +78,35 @@ The model **spans every organisation** and has no row-level security: the tables
 -- SQL Server: a login at the server, and a user in the database.
 create login wansurvey_bi with password = '…';
 create user wansurvey_bi for login wansurvey_bi;
-grant select on schema::bi to wansurvey_bi;
+-- the bi_ tables and views only (everything lives in one schema, so one grant per object, or run
+-- infra/sql/03-users.sql, which does it for the read-only user):
+grant select on <schema>.bi_plano_respuestas to wansurvey_bi;  -- and the other bi_ tables and views
 
 -- Azure SQL Database: a user of the database, with a password or a Microsoft Entra account.
 create user wansurvey_bi with password = '…';
 -- create user [analyst@institution.org] from external provider;
-grant select on schema::bi to wansurvey_bi;
+-- the bi_ tables and views only (everything lives in one schema, so one grant per object, or run
+-- infra/sql/03-users.sql, which does it for the read-only user):
+grant select on <schema>.bi_plano_respuestas to wansurvey_bi;  -- and the other bi_ tables and views
 ```
 
-Do not grant anything on `dbo`: the model needs none, and the application's tables are under row-level security. For one organisation's own analysts, put views filtered on `organizacion_id` in front of these tables and grant only those. Personal questions (`dim_pregunta.personal`) are in the model; filter them out for users who may not see personal data, as the exports do.
+Do not grant anything on the application's other tables: the model needs none, and they are under row-level security. For one organisation's own analysts, put views filtered on `organizacion_id` in front of these tables and grant only those. Personal questions (`dim_pregunta.personal`) are in the model; filter them out for users who may not see personal data, as the exports do.
 
 ## Examples
 
 ```sql
 -- Share of each answer to A3_SEX per project, complete interviews only.
 select proyecto, respuesta, count(*) * 100.0 / sum(count(*)) over (partition by proyecto) as pct
-from bi.plano_respuestas
+from bi_plano_respuestas
 where variable = 'A3_SEX' and completa = 1
 group by proyecto, respuesta;
 
 -- Mean age, without the special codes; and how many did not know.
 select avg(valor_numero), sum(case when respuesta_especial = 1 then 1 else 0 end)
-from bi.plano_respuestas where variable = 'A2_AGE';
+from bi_plano_respuestas where variable = 'A2_AGE';
 
 -- Faces by month and channel.
 select anio_mes, canal_nombre, respuesta, count(*)
-from bi.plano_respuestas where variable = '_CARA'
+from bi_plano_respuestas where variable = '_CARA'
 group by anio_mes, canal_nombre, respuesta order by anio_mes;
 ```

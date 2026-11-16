@@ -17,9 +17,10 @@
   migrations, not here, and is not widened here: before the first migration it can do nothing, and
   the migration run (also this same script again) leaves its grants alone. It cannot create or alter
   anything, nor change the audit log.
-  READ-ONLY user (RoUser): SELECT on schema bi (the analysis model) and nothing else; explicit DENY
-  of everything in the application's schema and of changes in bi, which a later broad grant to a
-  role cannot override.
+  READ-ONLY user (RoUser): SELECT on the analysis model (the bi_ tables and views of the schema:
+  everything lives in the one schema) and nothing else; explicit DENY of SELECT on every other table
+  and view, and of INSERT, UPDATE, DELETE, EXECUTE and ALTER on the schema, which a later broad grant
+  to a role cannot override. Run it again after a migration adds tables or views.
   Both use the schema as their default, so that the application writes no schema in its queries.
 
   Passwords: 8+ characters from three of four classes, and not the name. Names: letters, digits and
@@ -61,17 +62,19 @@ BEGIN
   SET @i += 1;
 END;
 
--- The reader: the analysis model only.
+-- The reader: the analysis model (the bi_ objects) only.
 IF @ro <> N''
 BEGIN
-  IF SCHEMA_ID(N'bi') IS NULL
-    PRINT N'Note: schema bi does not exist yet (the migrations make it); run this script again after them.';
+  IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE schema_id = SCHEMA_ID(@schema) AND name LIKE N'bi[_]%')
+    PRINT N'Note: the analysis model does not exist yet (the migrations make it); run this script again after them.';
   ELSE
   BEGIN
-    SET @sql = N'GRANT SELECT ON SCHEMA::bi TO ' + QUOTENAME(@ro) + N';'
-      + N' DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::bi TO ' + QUOTENAME(@ro) + N';'
-      + N' DENY SELECT, INSERT, UPDATE, DELETE, EXECUTE ON SCHEMA::' + QUOTENAME(@schema)
-      + N' TO ' + QUOTENAME(@ro) + N';';
+    SET @sql = N'DECLARE @grants nvarchar(max) = N''''; '
+      + N'SELECT @grants += CASE WHEN o.name LIKE N''bi[_]%'' THEN N''GRANT'' ELSE N''DENY'' END '
+      + N'+ N'' SELECT ON '' + QUOTENAME(SCHEMA_NAME(o.schema_id)) + N''.'' + QUOTENAME(o.name) + N'' TO ' + QUOTENAME(@ro) + N';'' + NCHAR(10) '
+      + N'FROM sys.objects o WHERE o.schema_id = SCHEMA_ID(N''' + @schema + N''') AND o.type IN (''U'', ''V'') AND o.is_ms_shipped = 0; '
+      + N'SET @grants += N''DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::' + QUOTENAME(@schema) + N' TO ' + QUOTENAME(@ro) + N';''; '
+      + N'EXEC (@grants);';
     EXEC (@sql);
   END;
 END;

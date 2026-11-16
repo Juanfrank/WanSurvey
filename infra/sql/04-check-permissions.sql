@@ -57,16 +57,20 @@ IF @ro <> N''
 BEGIN
   INSERT @t SELECT N'ro exists, default schema ' + @schema, CASE WHEN EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @ro AND default_schema_name = @schema) THEN 1 ELSE 0 END;
   INSERT @t SELECT N'ro is in no role', CASE WHEN NOT EXISTS (SELECT 1 FROM sys.database_role_members m WHERE m.member_principal_id = DATABASE_PRINCIPAL_ID(@ro)) THEN 1 ELSE 0 END;
+  -- As the reader: how many bi_ objects it can read, how many others, and whether it can write or run anything.
   DECLARE @r nvarchar(max) = N'EXECUTE AS USER = ' + QUOTENAME(@ro, '''') + N';
-    SELECT @rb = HAS_PERMS_BY_NAME(N''bi'', ''SCHEMA'', ''SELECT''),
-           @rw2 = CASE WHEN HAS_PERMS_BY_NAME(N''bi'', ''SCHEMA'', ''INSERT'') = 1 OR HAS_PERMS_BY_NAME(N''bi'', ''SCHEMA'', ''UPDATE'') = 1 OR HAS_PERMS_BY_NAME(N''bi'', ''SCHEMA'', ''DELETE'') = 1 OR HAS_PERMS_BY_NAME(N''bi'', ''SCHEMA'', ''EXECUTE'') = 1 THEN 1 ELSE 0 END,
-           @ra = HAS_PERMS_BY_NAME(@s, ''SCHEMA'', ''SELECT'');
+    SELECT @model = SUM(CASE WHEN o.name LIKE N''bi[_]%'' AND HAS_PERMS_BY_NAME(QUOTENAME(@s) + N''.'' + QUOTENAME(o.name), N''OBJECT'', N''SELECT'') = 1 THEN 1 ELSE 0 END),
+           @modelTotal = SUM(CASE WHEN o.name LIKE N''bi[_]%'' THEN 1 ELSE 0 END),
+           @others = SUM(CASE WHEN o.name NOT LIKE N''bi[_]%'' AND HAS_PERMS_BY_NAME(QUOTENAME(@s) + N''.'' + QUOTENAME(o.name), N''OBJECT'', N''SELECT'') = 1 THEN 1 ELSE 0 END)
+      FROM sys.objects o WITH (NOLOCK)
+      WHERE o.schema_id = SCHEMA_ID(@s) AND o.type IN (''U'', ''V'') AND o.is_ms_shipped = 0;
+    SELECT @writes = CASE WHEN HAS_PERMS_BY_NAME(@s, ''SCHEMA'', ''INSERT'') = 1 OR HAS_PERMS_BY_NAME(@s, ''SCHEMA'', ''UPDATE'') = 1 OR HAS_PERMS_BY_NAME(@s, ''SCHEMA'', ''DELETE'') = 1 OR HAS_PERMS_BY_NAME(@s, ''SCHEMA'', ''EXECUTE'') = 1 OR HAS_PERMS_BY_NAME(@s, ''SCHEMA'', ''ALTER'') = 1 THEN 1 ELSE 0 END;
     REVERT;';
-  DECLARE @rb int, @rw2 int, @ra int;
-  EXEC sp_executesql @r, N'@s sysname, @rb int OUTPUT, @rw2 int OUTPUT, @ra int OUTPUT', @s = @schema, @rb = @rb OUTPUT, @rw2 = @rw2 OUTPUT, @ra = @ra OUTPUT;
-  INSERT @t SELECT N'ro can read schema bi', CASE WHEN @rb = 1 THEN 1 ELSE 0 END;
-  INSERT @t SELECT N'ro cannot write or execute in schema bi', CASE WHEN @rw2 = 0 THEN 1 ELSE 0 END;
-  INSERT @t SELECT N'ro cannot read the application''s schema ' + @schema, CASE WHEN @ra = 0 THEN 1 ELSE 0 END;
+  DECLARE @model int, @modelTotal int, @others int, @writes int;
+  EXEC sp_executesql @r, N'@s sysname, @model int OUTPUT, @modelTotal int OUTPUT, @others int OUTPUT, @writes int OUTPUT', @s = @schema, @model = @model OUTPUT, @modelTotal = @modelTotal OUTPUT, @others = @others OUTPUT, @writes = @writes OUTPUT;
+  INSERT @t SELECT N'ro can read every bi_ table and view of the analysis model', CASE WHEN @modelTotal > 0 AND @model = @modelTotal THEN 1 ELSE 0 END;
+  INSERT @t SELECT N'ro cannot read any other table or view of schema ' + @schema, CASE WHEN ISNULL(@others, 0) = 0 THEN 1 ELSE 0 END;
+  INSERT @t SELECT N'ro cannot write, run or alter anything in schema ' + @schema, CASE WHEN @writes = 0 THEN 1 ELSE 0 END;
 END;
 SELECT CASE ok WHEN 1 THEN 'OK  ' ELSE 'FAIL' END AS result, item FROM @t;
 SELECT @bad = COUNT(*) FROM @t WHERE ok = 0;
