@@ -3,7 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { classify } from '../src/setup/diagnose.js';
+import { classify, ownerFailure } from '../src/setup/diagnose.js';
 import { setupPlan, setupRequired, SetupModule, SetupRequest } from '../src/setup/setup.js';
 
 const body = {
@@ -57,6 +57,27 @@ describe('the installation wizard', () => {
     );
     expect(classify({ code: 'ETIMEOUT' })).toBe('unreachable');
     expect(classify(new Error('something else'))).toBe('other');
+  });
+
+  it('says where the installation stands when the owner’s migrations fail', () => {
+    const steps = (e: unknown) =>
+      ownerFailure(e).steps.map((s) => `${s.id}:${s.state}${s.reason ? `(${s.reason})` : ''}`);
+    expect(steps({ code: 'ESOCKET', message: 'Failed to connect' })).toEqual([
+      'server:pending(unreachable)',
+      'migrations:blocked',
+      'login:blocked',
+      'tables:blocked',
+    ]);
+    expect(steps({ code: 'ELOGIN', message: 'Login failed for user sa' })).toEqual([
+      'server:ok',
+      'migrations:pending(owner_login_failed)',
+      'login:blocked',
+      'tables:blocked',
+    ]);
+    expect(steps(new Error('Incorrect syntax near x'))[1]).toBe(
+      'migrations:pending(migration_failed)',
+    );
+    expect(ownerFailure(new Error('x')).ready).toBe(false);
   });
 
   describe('over HTTP', () => {

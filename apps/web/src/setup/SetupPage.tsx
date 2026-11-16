@@ -8,9 +8,15 @@ import { LogoMark, LogoName } from '../routes/Logo.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
 
 interface Step {
-  id: 'server' | 'login' | 'tables';
+  id: 'server' | 'migrations' | 'login' | 'tables';
   state: 'ok' | 'pending' | 'blocked';
-  reason?: 'unreachable' | 'login_failed' | 'not_visible' | 'other';
+  reason?:
+    | 'unreachable'
+    | 'login_failed'
+    | 'not_visible'
+    | 'other'
+    | 'owner_login_failed'
+    | 'migration_failed';
 }
 interface Diagnosis {
   ready: boolean;

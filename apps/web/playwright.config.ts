@@ -64,8 +64,10 @@ export default defineConfig({
     },
     {
       command: 'node ../api/dist/main.js',
-      // /health needs the database, which global setup creates after the servers start.
-      url: `http://localhost:${API_PORT}/docs/openapi.json`,
+      // The database does not exist yet (global setup makes it after the servers start): the API
+      // runs the installation wizard, which answers /health at once, and starts the application by
+      // itself when the database is ready. Global setup waits for that.
+      url: `http://localhost:${API_PORT}/health`,
       reuseExistingServer: false,
       env: { PORT: String(API_PORT), ...apiEnv() },
     },

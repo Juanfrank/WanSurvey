@@ -2,13 +2,19 @@ import { Connection, Request } from 'tedious';
 import { parseMssqlUrl } from '../db/mssql/connection.js';
 
 /** The steps of an installation that the wizard can see from the application's own user. */
-export type StepId = 'server' | 'login' | 'tables';
+export type StepId = 'server' | 'migrations' | 'login' | 'tables';
 export type StepState = 'ok' | 'pending' | 'blocked';
 export interface Step {
   id: StepId;
   state: StepState;
   /** Why it is pending, in a code the web app words: no secrets, no names. */
-  reason?: 'unreachable' | 'login_failed' | 'not_visible' | 'other';
+  reason?:
+    | 'unreachable'
+    | 'login_failed'
+    | 'not_visible'
+    | 'other'
+    | 'owner_login_failed'
+    | 'migration_failed';
 }
 export interface Diagnosis {
   ready: boolean;
@@ -98,4 +104,47 @@ export async function diagnose(url: string): Promise<Diagnosis> {
   } finally {
     conn.close();
   }
+}
+
+/**
+ * Where the installation stands when the migrations (run with the owner, DATABASE_ADMIN_URL) failed:
+ * the server could not be reached, the owner was refused, or a migration failed (its error is in the
+ * log, not here).
+ */
+export function ownerFailure(e: unknown): Diagnosis {
+  const reason = classify(e);
+  const rest: Step[] = [
+    { id: 'login', state: 'blocked' },
+    { id: 'tables', state: 'blocked' },
+  ];
+  if (reason === 'unreachable')
+    return {
+      ready: false,
+      steps: [
+        { id: 'server', state: 'pending', reason },
+        { id: 'migrations', state: 'blocked' },
+        ...rest,
+      ],
+    };
+  return {
+    ready: false,
+    steps: [
+      { id: 'server', state: 'ok' },
+      {
+        id: 'migrations',
+        state: 'pending',
+        reason: reason === 'login_failed' ? 'owner_login_failed' : 'migration_failed',
+      },
+      ...rest,
+    ],
+  };
+}
+
+/**
+ * Whether the owner (DATABASE_ADMIN_URL) can sign in, with one connection that gives up in a few
+ * seconds: a pool would keep trying a failed sign-in for as long as it may wait. Throws what the
+ * driver threw.
+ */
+export async function checkOwner(url: string): Promise<void> {
+  (await open(url)).close();
 }

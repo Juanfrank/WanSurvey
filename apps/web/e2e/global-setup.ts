@@ -14,6 +14,7 @@ export const WAITING_EMAIL = 'waiting@demo.wansurvey.test';
 export default async function globalSetup() {
   clearMail();
   await createDatabase();
+  await waitForApplication();
   const db = connectDb();
   try {
     const [org] = await db.all(`select id from tenants where slug = 'demo'`);
@@ -57,4 +58,24 @@ async function seedAll(adminUrl: string) {
   await seed(adminUrl, PASSWORD);
   // Completed fieldwork for the dashboards, metrics, results and exports.
   await seedDemoData(adminUrl, PASSWORD, 60);
+}
+
+/**
+ * The API started before the database existed, so it ran the installation wizard; it starts the
+ * application by itself within seconds of the database being ready. Waits for that.
+ */
+async function waitForApplication() {
+  const port = process.env.E2E_API_PORT ?? '3100';
+  const until = Date.now() + 90_000;
+  for (;;) {
+    try {
+      const res = await fetch(`http://localhost:${port}/health`);
+      const body = (await res.json()) as { status?: string };
+      if (body.status === 'ok') return;
+    } catch {
+      // Not answering for a moment (the server is changing over).
+    }
+    if (Date.now() > until) throw new Error('The API did not start after the database was made');
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
 }

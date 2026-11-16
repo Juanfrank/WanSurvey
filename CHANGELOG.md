@@ -34,7 +34,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   `DATABASE_URL`, it now runs when `DATABASE_URL` is set but the database is not ready (and there is no
   `DATABASE_ADMIN_URL`): it shows which step is pending (server, sign-in of the application's user,
   tables and permissions), checks again by itself, and starts the application without a restart when
-  everything is ready. The worker waits for the installation instead of failing.
+  everything is ready. With `DATABASE_ADMIN_URL`, if the migrations fail at start (server unreachable,
+  owner refused, a failed migration) the wizard runs and retries them every 10 seconds instead of the
+  process stopping. The worker waits for the installation instead of failing.
 - **Installation wizard** (`/setup`): while `DATABASE_URL` is not set the API runs only a wizard instead
   of failing. It asks for the SQL Server address, database, schema and the user names (never a
   password) and gives two copy-and-paste SQL scripts, (1) the tables and (2) the users and permissions,

@@ -4,7 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { compress, isApiPath, serveWeb } from '../common/web.js';
 import { VERSION } from '../version.js';
-import { diagnose } from './diagnose.js';
+import type { Diagnosis } from './diagnose.js';
 import { SetupModule } from './setup.js';
 import { setupState } from './state.js';
 
@@ -15,8 +15,12 @@ import { setupState } from './state.js';
  */
 export async function startSetup(
   env: NodeJS.ProcessEnv = process.env,
-  /** Starts the application once the database is ready (the wizard has closed its server). */
-  onReady?: () => Promise<void>,
+  hooks?: {
+    /** Looks at the installation: the diagnosis, after doing what it can (the migrations, with the owner). */
+    probe: () => Promise<Diagnosis>;
+    /** Starts the application once the database is ready (the wizard has closed its server). */
+    onReady: () => Promise<void>;
+  },
 ): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(SetupModule, {
     logger: ['log', 'warn', 'error'],
@@ -44,12 +48,13 @@ export async function startSetup(
   setupState.mode = url ? 'not-ready' : 'missing';
   setupState.diagnosis = null;
   let timer: ReturnType<typeof setInterval> | undefined;
-  let busy: Promise<Awaited<ReturnType<typeof diagnose>>> | null = null;
+  let busy: Promise<Diagnosis> | null = null;
   let leaving = false;
-  if (url && onReady) {
+  if (url && hooks) {
     const check = async () => {
       if (leaving) return setupState.diagnosis;
-      busy ??= diagnose(url)
+      busy ??= hooks
+        .probe()
         .then((d) => {
           setupState.diagnosis = d;
           return d;
@@ -65,7 +70,7 @@ export async function startSetup(
         setTimeout(() => {
           void app
             .close()
-            .then(onReady)
+            .then(hooks.onReady)
             .catch((e: unknown) => {
               console.error('The application could not start:', e);
               process.exit(1);
