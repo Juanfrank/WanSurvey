@@ -31,6 +31,9 @@ interface Status {
 interface Plan {
   tables: string;
   users: string;
+  /** Only when a migration is newer than the structure of the first script. */
+  migrations: string | null;
+  pendingMigrations: string[];
   settings: { name: string; value: string; secret: boolean; onlyToMigrate?: boolean }[];
   passwordVariables: string[];
 }
@@ -317,6 +320,16 @@ export function SetupPage() {
                   </p>
                   <Script id="script-users" text={plan.users} file="2-users.sql" />
                 </Card>
+                {plan.migrations ? (
+                  <Card>
+                    <h3 className="mb-1 text-lg font-semibold">{t('setup.step3')}</h3>
+                    <p className="mb-1 text-sm text-slate-700">{t('setup.step3Help')}</p>
+                    <p className="mb-3 text-sm text-slate-700">
+                      {plan.pendingMigrations.join(', ')}
+                    </p>
+                    <Script id="script-migrations" text={plan.migrations} file="3-migrations.sql" />
+                  </Card>
+                ) : null}
                 <Card>
                   <h3 className="mb-1 text-lg font-semibold">{t('setup.settingsTitle')}</h3>
                   <p className="mb-3 text-sm text-slate-700">{t('setup.settingsHelp')}</p>

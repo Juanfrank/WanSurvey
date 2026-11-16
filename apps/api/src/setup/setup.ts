@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Module, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { ZodPipe } from '../common/zod.js';
-import { buildScript } from '../db/mssql/script.js';
+import { buildScript, pendingMigrations } from '../db/mssql/script.js';
 import { VERSION } from '../version.js';
 import { setupState } from './state.js';
 
@@ -59,6 +59,9 @@ export function setupPlan(r: SetupRequest) {
   return {
     tables: buildScript({ ...names, part: 'tables' }),
     users: buildScript({ ...names, part: 'users' }),
+    // Only when some migration is newer than the structure of the first script.
+    migrations: pendingMigrations().length ? buildScript({ ...names, part: 'migrations' }) : null,
+    pendingMigrations: pendingMigrations(),
     settings,
     passwordVariables: r.usersByDba
       ? []

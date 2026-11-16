@@ -1,9 +1,12 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Connection, Request } from 'tedious';
 import { createMssqlDb, parseMssqlUrl } from '../../src/db/mssql/connection.js';
-import { migrationFiles } from '../../src/db/mssql/migrate.js';
-import { buildScript } from '../../src/db/mssql/script.js';
+import { loadBaseline, migrationFiles } from '../../src/db/mssql/migrate.js';
+import { buildScript, pendingMigrations } from '../../src/db/mssql/script.js';
 import { ADMIN_URL, configured } from './harness.js';
 
 describe('the one-file SQL script', () => {
@@ -17,7 +20,10 @@ describe('the one-file SQL script', () => {
     expect(text).toContain("N' TO [survey_ro]");
     expect(text).not.toMatch(/\b(bi|rls)\./);
     expect(text).not.toContain('CREATE SCHEMA [bi]');
-    expect(text.match(/INSERT INTO survey\.__migrations/g)).toHaveLength(migrationFiles().length);
+    // The baseline, not the history: one record of what it covers, and no ALTER of the migrations.
+    expect(text.match(/INSERT INTO survey\.__migrations/g)).toHaveLength(1);
+    expect(text).toContain('baseline');
+    expect(text).not.toMatch(/^\s*sp_rename|EXEC sp_rename/m);
     expect(text.indexOf('BEGIN TRANSACTION')).toBeLessThan(text.indexOf('COMMIT TRANSACTION'));
   });
 
@@ -48,6 +54,36 @@ describe('the one-file SQL script', () => {
     expect(users).toMatch(/^GRANT [A-Z, ]+ ON survey\.\w+ TO survey_rw/m);
     expect(users).toContain('run (1) first');
     expect(users).not.toContain('INSERT INTO survey.__migrations');
+  });
+
+  it('leaves the migrations out of the installation, and writes them apart when some are newer', () => {
+    // The baseline of this repository covers every migration: there is nothing pending.
+    expect(pendingMigrations()).toEqual([]);
+    const none = buildScript({ schema: 'survey', part: 'migrations' });
+    expect(none).toContain('nothing to do');
+    expect(none).not.toMatch(/ALTER TABLE|CREATE TABLE/);
+    // A baseline that stops one migration short: that one is the third script, with its own permissions.
+    const dir = mkdtempSync(join(tmpdir(), 'baseline-'));
+    try {
+      const real = loadBaseline()!;
+      const short = join(dir, 'baseline.sql');
+      const covers = real.covers.slice(0, -1);
+      writeFileSync(
+        short,
+        `-- covers: ${covers.join(', ')}\n${real.batches.join('\n--> statement-breakpoint\n')}\n`,
+      );
+      const last = migrationFiles().at(-1)!.name;
+      expect(pendingMigrations({ baselineFile: short })).toEqual([last]);
+      const opts = { schema: 'survey', appUser: 'survey_rw', baselineFile: short };
+      const third = buildScript({ ...opts, part: 'migrations' });
+      expect(third).toContain(`-- ─── ${last}`);
+      expect(third).toContain('run (1) first');
+      expect(buildScript({ ...opts, part: 'tables' })).not.toContain(`-- ─── ${last}`);
+      expect(buildScript({ ...opts, part: 'users' })).not.toContain(`-- ─── ${last}`);
+      expect(buildScript({ ...opts })).toContain(`-- ─── ${last}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('refuses unsafe names and a reader that is the application user', () => {

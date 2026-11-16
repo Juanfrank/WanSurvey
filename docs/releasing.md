@@ -122,16 +122,22 @@ Scopes are the modules: `cati`, `capi`, `cawi`, `papi`, `review`, `designer`, `a
 
 1. CI is green on the branch, and `[Unreleased]` says what changed. Check it against
    `git log <last tag>..HEAD`: nothing noticeable missing, nothing internal listed.
-2. Choose the bump with the table above: `pnpm release alpha` (or `beta`, `rc`, `release`,
+2. **Regenerate the baseline** (the structure a new installation takes instead of the migrations):
+   on an empty contained database, `DATABASE_ADMIN_URL='mssql://sa:…@localhost:1433/<empty>?…'
+pnpm --filter @wansurvey/api db:baseline`, and commit `apps/api/mssql/baseline.sql`. Then a new
+   installation needs no migration script; a test (`baseline.test.ts`) checks that a database made
+   from it equals one made by replaying the migrations. Between releases a migration newer than the
+   baseline is the third, optional script of the installation (`db:script --part migrations`).
+3. Choose the bump with the table above: `pnpm release alpha` (or `beta`, `rc`, `release`,
    `minor`, `major`, `patch`, an exact `1.0.0-rc.1`). `pnpm release minor --dry-run` shows the section without writing anything.
    The script moves `[Unreleased]` under the new version with today's date, fixes the link
    references and sets the version in every `package.json`.
-3. Read the diff and fix the words. Commit: `chore(release): vX.Y.Z`.
-4. When CI is green on that commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` and `git push origin vX.Y.Z`.
-5. Publish the release on GitHub from the tag, with the text of
+4. Read the diff and fix the words. Commit: `chore(release): vX.Y.Z`.
+5. When CI is green on that commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` and `git push origin vX.Y.Z`.
+6. Publish the release on GitHub from the tag, with the text of
    `node scripts/release.mjs notes X.Y.Z` as its notes, and deploy the zip that CI built for that
    commit ([`appservice-zip.md`](appservice-zip.md)).
-6. Update [`roadmap.md`](roadmap.md): what shipped leaves it (the CHANGELOG has it now), and
+7. Update [`roadmap.md`](roadmap.md): what shipped leaves it (the CHANGELOG has it now), and
    _Now / Next / Later_ is looked at again.
 
 A release candidate (`X.Y.Z-rc.N`) is made the same way and deployed to staging only; it is a

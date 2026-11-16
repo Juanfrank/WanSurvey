@@ -60,7 +60,7 @@ const PARADATA: Record<string, string> = {
 
 /**
  * The SQL export (format `sql`): a query per sheet over the
- * analysis model (schema bi, mssql/0009) that gives the same columns, in the same order, with
+ * analysis model (the bi_ objects, mssql/0009) that gives the same columns, in the same order, with
  * the same cells for the same filters: codes or labels, wide or long rosters, paradata. The
  * columns come from the export's own table (`Column.source`), so both stay in step. The tables
  * hold the data as of their last refresh (`EXEC bi_refrescar;`).
@@ -236,13 +236,13 @@ order by e.enviado_en, e.envio_id, ${levels.join(', ')};`;
   ].filter(Boolean);
   const header = [
     `-- WanSurvey · ${comment(input.name)}`,
-    `-- La misma tabla que la exportación a Excel, leída del modelo de análisis (esquema bi).`,
+    `-- La misma tabla que la exportación a Excel, leída del modelo de análisis (las tablas y vistas bi_).`,
     `-- Cuestionario ${input.questionnaireId}, variables y etiquetas de la versión ${input.versionId}.`,
     `-- Opciones: ${labels ? 'etiquetas' : 'códigos'}, listas ${opts.rosters === 'wide' ? 'en columnas' : 'en tablas aparte'}, ${opts.paradata ? 'con' : 'sin'} paradatos, idioma ${input.language}.`,
     `-- Filtros: ${filters.length ? filters.join(', ') : 'ninguno'}.`,
     `-- Generado el ${new Date().toISOString()}. Las tablas muestran los datos de su último`,
     `-- refresco (cada 6 horas en el worker por defecto, o: EXEC bi_refrescar;). Ejecutar con un rol que`,
-    `-- pueda leer el esquema bi. T-SQL (SQL Server, Azure SQL).`,
+    `-- pueda leer las tablas bi_. T-SQL (SQL Server, Azure SQL).`,
   ].join('\n');
   const parts = [`${header}\n\n-- Hoja «data»\n${sheet(input.main, null)}`];
   for (const t of input.rosters) {

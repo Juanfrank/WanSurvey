@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import {
   APP_USER,
   DEFAULT_SCHEMA,
+  loadBaseline,
   migrationFiles,
   readerStatements,
   qualifyTables,
@@ -16,21 +17,25 @@ export interface ScriptOptions {
   schema?: string;
   /** The read/write user the application connects as (default `wansurvey_app`). */
   appUser?: string;
-  /** The read-only user of the analysis model (schema `bi`); none by default. */
+  /** The read-only user of the analysis model (the `bi_` tables and views); none by default. */
   readonlyUser?: string;
   /**
    * The SQL users are made by the DBA: the script checks that they exist, with the schema as
    * default, instead of making them (and needs no passwords).
    */
   usersByDba?: boolean;
-  /** Only the migrations from this one on (an upgrade): `0012` or `0012_name.sql`. */
+  /** Only the migrations from this one on (an upgrade): `0012` or `0012_name.sql`. No baseline then. */
   from?: string;
   /**
-   * `tables`: the schema, tables, security policy and record, with no user and no permission (1).
-   * `users`: the users (or a check of them) and every permission (2), after (1). `all` (default):
-   * both, in one file.
+   * `tables`: the schema and the structure (the baseline: plain CREATE statements, no migrations),
+   * with no user and no permission (1). `users`: the users (or a check of them) and the permissions
+   * of that structure (2), after (1). `migrations`: the migrations the baseline does not cover, with
+   * their own permissions, only when there are some (3), after (2). `all` (default): everything, in
+   * one file.
    */
-  part?: 'all' | 'tables' | 'users';
+  part?: 'all' | 'tables' | 'users' | 'migrations';
+  /** A baseline file other than the repository's (tests). */
+  baselineFile?: string;
 }
 
 /** A batch made only of GRANT, DENY and REVOKE: the permissions, which need the users. */
@@ -45,14 +50,26 @@ export function isPermissionBatch(batch: string): boolean {
 
 const lit = (v: string) => v.replace(/'/g, "''");
 
+/** The migrations that the baseline does not cover (none when there is no baseline, or with `from`). */
+export function pendingMigrations(
+  options: { from?: string; baselineFile?: string } = {},
+): string[] {
+  const base = options.from ? null : loadBaseline(options.baselineFile);
+  if (!base) return [];
+  const covered = new Set(base.covers);
+  return migrationFiles()
+    .map((f) => f.name)
+    .filter((n) => !covered.has(n));
+}
+
 /**
- * One T-SQL file, for `sqlcmd`, that does what `runMssqlMigrations` does with the names chosen: the
- * schema, the users (or a check of them), the tables, the security policy, the grants, and the
- * record of what was applied. Read it, then run it as the owner of the database. Passwords are
- * `sqlcmd` variables (`$(AppPassword)`), never written in it. All of it in one transaction, so a
- * failure leaves nothing half done. With `part`, the work is two files: (1) the tables, which a
- * second run refuses to repeat, and (2) the users and permissions, which can be run again (to
- * change a password, or after an upgrade).
+ * One T-SQL file, for `sqlcmd`, that does what `runMssqlMigrations` does with the names chosen. A new
+ * installation takes the **baseline** (the structure the migrations leave, as plain CREATE statements)
+ * and not the history of migrations: (1) the schema and the structure, (2) the users and the
+ * permissions, and (3) only if some migration is newer than the baseline, those migrations. Passwords
+ * are `sqlcmd` variables (`$(AppPassword)`), never written in it. Each file is one transaction, so a
+ * failure leaves nothing half done; (1) and (3) refuse to run twice over what they made, (2) can be
+ * run again (to change a password).
  */
 export function buildScript(options: ScriptOptions = {}): string {
   const schema = sqlName('The schema', options.schema ?? DEFAULT_SCHEMA);
@@ -62,10 +79,8 @@ export function buildScript(options: ScriptOptions = {}): string {
     throw new Error('The read-only user must not be the application user');
   const byDba = !!options.usersByDba;
   const part = options.part ?? 'all';
-  const withTables = part !== 'users';
-  const withUsers = part !== 'tables';
   const all = migrationFiles();
-  const tables = tablesOf(all);
+  const base = options.from ? null : loadBaseline(options.baselineFile);
   let files = all;
   if (options.from) {
     const at = all.findIndex(
@@ -75,12 +90,21 @@ export function buildScript(options: ScriptOptions = {}): string {
     files = all.slice(at);
   }
   if (!files.length) throw new Error('No migrations to write');
-  const first = files[0]!;
-  const last = files.at(-1)!;
-  const previous = files === all ? null : all[all.indexOf(first) - 1]!;
-  const migrations = `${schema}.__migrations`;
+  const covers = base?.covers ?? [];
+  // Without a baseline (or from a given migration) the migrations are the structure.
+  const pendingFiles = base ? files.filter((f) => !covers.includes(f.name)) : [];
+  const withStructure = part === 'all' || part === 'tables';
+  const withUsers = part === 'all' || part === 'users';
+  const withMigrations = part === 'all' || part === 'migrations';
+  const passwords = !byDba && withUsers;
+  const tables = tablesOf(all);
   const names = { schema, appUser };
   const users = [appUser, ...(reader ? [reader] : [])];
+  const migrations = `${schema}.__migrations`;
+  const first = (base ? { name: covers[0]! } : files[0]!).name;
+  const lastStructure = base ? covers.at(-1)! : files.at(-1)!.name;
+  const last = (pendingFiles.at(-1) ?? { name: lastStructure }).name;
+  const previous = !base && files !== all ? all[all.indexOf(files[0]!) - 1]! : null;
   const out: string[] = [];
   const batch = (text: string) => out.push(text.trim(), 'GO', '');
   const named = (b: string) => {
@@ -88,11 +112,12 @@ export function buildScript(options: ScriptOptions = {}): string {
     return schema === DEFAULT_SCHEMA ? text : qualifyTables(text, tables, schema);
   };
   const title = {
-    all: 'the schema, tables, security policy and permissions, in one file',
-    tables: '(1 of 2) the schema, tables and security policy',
-    users: '(2 of 2) the SQL users and the permissions, after (1)',
+    all: 'the schema, structure, security policy and permissions, in one file',
+    tables: '(1 of 2, and 3 if migrations are pending) the schema and the structure',
+    users: '(2) the SQL users and the permissions, after (1)',
+    migrations:
+      '(3) the migrations newer than the structure of (1): only if there are any, after (2)',
   }[part];
-  const passwords = !byDba && withUsers;
   const run = `sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i <this file>${
     passwords ? ` ^\n         -v AppPassword="..."${reader ? ' ReaderPassword="..."' : ''}` : ''
   }`;
@@ -100,16 +125,28 @@ export function buildScript(options: ScriptOptions = {}): string {
     all: `All of it is one transaction: if a statement fails it stops and nothing is kept. It refuses to
   run again over what it already made (the migrations are recorded in ${migrations}).`,
     tables: `One transaction: if a statement fails it stops and nothing is kept. It refuses to run
-  again over what it already made (the migrations are recorded in ${migrations}). Then run (2).`,
+  again over what it already made (recorded in ${migrations}). Then run (2).`,
     users: `One transaction. It needs (1) done, and can be run again (to change a password, or after an
   upgrade): it creates what is missing and grants again what is granted.`,
+    migrations: `One transaction, with its own permissions. It needs (1) and (2) done and refuses to run twice.
+  Only needed when the migrations of this repository are newer than the structure of (1).`,
   }[part];
 
   out.push(
     `/*
   WanSurvey: ${title}.
-  Generated by \`pnpm --filter @wansurvey/api db:script\` from ${all.length} migrations
-  (${first.name} to ${last.name}). Do not edit it: generate it again.
+  Generated by \`pnpm --filter @wansurvey/api db:script\`${
+    base
+      ? `; the structure is the baseline of ${covers.length} migrations
+  (${first} to ${lastStructure}), written as plain CREATE statements${
+    pendingFiles.length
+      ? `; ${pendingFiles.length} newer migration${pendingFiles.length === 1 ? '' : 's'} follow (${pendingFiles[0]!.name}${pendingFiles.length > 1 ? ` to ${last}` : ''})`
+      : '; no migration is newer'
+  }`
+      : ` from ${files.length} migrations
+  (${files[0]!.name} to ${files.at(-1)!.name})`
+  }.
+  Do not edit it: generate it again.
 
   Schema ............ ${schema}
   Read/write user ... ${appUser}${reader ? `\n  Read-only user .... ${reader}` : ''}
@@ -144,14 +181,15 @@ GO`,
   THROW 50001, 'The users made here are contained users: the database must be partially contained (01-existing-database.sql).', 1;`,
     );
   batch('BEGIN TRANSACTION;');
-  if (withTables && schema !== DEFAULT_SCHEMA)
+  if (withStructure && schema !== DEFAULT_SCHEMA)
     batch(`IF SCHEMA_ID('${schema}') IS NULL EXEC('CREATE SCHEMA [${schema}] AUTHORIZATION dbo');`);
-  if (!withTables) {
-    const todo = `The tables are not made yet (or not up to ${last.name}): run (1) first.`;
+  // What must be there before this file, and what must not be.
+  if (part === 'users' || part === 'migrations') {
+    const todo = `The structure is not made yet (or not up to ${lastStructure}): run (1) first.`;
     // Two batches: the second names a table that the first has found to exist.
     batch(`IF OBJECT_ID('${migrations}') IS NULL THROW 50002, '${todo}', 1;`);
     batch(
-      `IF NOT EXISTS (SELECT 1 FROM ${migrations} WHERE name = N'${lit(last.name)}') THROW 50002, '${todo}', 1;`,
+      `IF NOT EXISTS (SELECT 1 FROM ${migrations} WHERE name = N'${lit(lastStructure)}') THROW 50002, '${todo}', 1;`,
     );
   }
   if (withUsers && byDba) {
@@ -169,34 +207,78 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
     batch(make(appUser, 'AppPassword'));
     if (reader) batch(make(reader, 'ReaderPassword'));
   }
-  if (withTables) {
+  const recorded = (names: string[]) =>
+    `INSERT INTO ${migrations} (name) VALUES ${names.map((n) => `(N'${lit(n)}')`).join(', ')};`;
+  if (withStructure) {
     batch(
       `IF OBJECT_ID('${migrations}') IS NULL
   CREATE TABLE ${migrations} (name nvarchar(200) NOT NULL PRIMARY KEY,
     applied_at datetimeoffset(3) NOT NULL DEFAULT SYSDATETIMEOFFSET());`,
     );
-    const wanted = files.map((f) => `N'${lit(f.name)}'`).join(', ');
-    batch(
-      `IF EXISTS (SELECT 1 FROM ${migrations} WHERE name IN (${wanted}))
-  THROW 50002, 'These migrations are already applied: this script is for a first run (generate one with --from for an upgrade).', 1;${
-    previous
-      ? `\nIF NOT EXISTS (SELECT 1 FROM ${migrations} WHERE name = N'${lit(previous.name)}')
-  THROW 50002, 'The database is not at ${previous.name}: this script continues from there.', 1;`
-      : ''
-  }`,
-    );
   }
-  for (const file of files) {
-    const body = file.batches.filter((b) =>
-      part === 'all' ? true : isPermissionBatch(b) === !withTables,
+  const guard = (wanted: string[], extra = '') => {
+    batch(
+      `IF EXISTS (SELECT 1 FROM ${migrations} WHERE name IN (${wanted.map((n) => `N'${lit(n)}'`).join(', ')}))
+  THROW 50002, 'This part is already applied: this script is for a first run${
+    options.from ? ' (generate one with --from for an upgrade)' : ''
+  }.', 1;${extra}`,
     );
-    if (part !== 'all' && !body.length) continue;
-    out.push(`-- ─── ${file.name} ${'─'.repeat(Math.max(3, 70 - file.name.length))}`, '');
-    for (const b of body) {
-      const text = named(b);
-      if (text) batch(text);
+  };
+  if (base) {
+    if (withStructure) {
+      guard(covers);
+      out.push('-- ─── The structure (the baseline) ───', '');
+      for (const b of base.batches) {
+        if (isPermissionBatch(b)) continue;
+        const text = named(b);
+        if (text) batch(text);
+      }
+      batch(recorded(covers));
     }
-    if (withTables) batch(`INSERT INTO ${migrations} (name) VALUES (N'${lit(file.name)}');`);
+    if (withMigrations && pendingFiles.length) {
+      if (part === 'migrations') guard(pendingFiles.map((f) => f.name));
+      for (const file of pendingFiles) {
+        out.push(`-- ─── ${file.name} ${'─'.repeat(Math.max(3, 70 - file.name.length))}`, '');
+        for (const b of file.batches) {
+          const text = named(b);
+          if (text) batch(text);
+        }
+        batch(recorded([file.name]));
+      }
+    } else if (part === 'migrations') {
+      out.push(
+        '-- No migration is newer than the structure of (1): there is nothing to apply.',
+        '',
+      );
+      batch(`PRINT N'No migrations pending: nothing to do.';`);
+    }
+    if (withUsers) {
+      out.push('-- ─── What the application’s user may do ───', '');
+      for (const b of base.batches) if (isPermissionBatch(b)) batch(named(b));
+    }
+  } else {
+    if (withStructure) {
+      const wanted = files.map((f) => f.name);
+      guard(
+        wanted,
+        previous
+          ? `\nIF NOT EXISTS (SELECT 1 FROM ${migrations} WHERE name = N'${lit(previous.name)}')
+  THROW 50002, 'The database is not at ${previous.name}: this script continues from there.', 1;`
+          : '',
+      );
+    }
+    for (const file of files) {
+      const body = file.batches.filter((b) =>
+        part === 'all' || part === 'migrations' ? true : isPermissionBatch(b) === !withStructure,
+      );
+      if (!body.length) continue;
+      out.push(`-- ─── ${file.name} ${'─'.repeat(Math.max(3, 70 - file.name.length))}`, '');
+      for (const b of body) {
+        const text = named(b);
+        if (text) batch(text);
+      }
+      if (withStructure || part === 'migrations') batch(recorded([file.name]));
+    }
   }
   if (reader && withUsers) {
     out.push(
@@ -208,9 +290,13 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
   batch('COMMIT TRANSACTION;');
   out.push(
     `PRINT N'Done: ${
-      withTables
-        ? `${files.length} migration${files.length === 1 ? '' : 's'} applied in schema ${schema}`
-        : `users and permissions of schema ${schema}`
+      part === 'users'
+        ? `users and permissions of schema ${schema}`
+        : part === 'migrations'
+          ? base && !pendingFiles.length
+            ? `no migrations pending in schema ${schema}`
+            : `${pendingFiles.length || files.length} migration${(pendingFiles.length || files.length) === 1 ? '' : 's'} applied in schema ${schema}`
+          : `the structure of schema ${schema}${base ? ` (${covers.length} migrations in a baseline)` : ` (${files.length} migrations)`}`
     }.';`,
     'GO',
     '',
@@ -226,7 +312,7 @@ function arg(name: string): string | undefined {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv.includes('--help')) {
     console.log(`Usage: db:script [--schema survey] [--app-user survey_rw] [--readonly-user survey_ro]
-                 [--users-by-dba] [--from 0012] [--part tables|users] [--out wansurvey.sql]
+                 [--users-by-dba] [--from 0012] [--part tables|users|migrations] [--out wansurvey.sql]
 Names default to DATABASE_SCHEMA, the user of DATABASE_URL and of DATABASE_READONLY_URL.`);
     process.exit(0);
   }
@@ -240,7 +326,7 @@ Names default to DATABASE_SCHEMA, the user of DATABASE_URL and of DATABASE_READO
       usersByDba:
         process.argv.includes('--users-by-dba') || process.env.DATABASE_MANAGE_USERS === 'false',
       from: arg('from'),
-      ...(arg('part') ? { part: arg('part') as 'all' | 'tables' | 'users' } : {}),
+      ...(arg('part') ? { part: arg('part') as 'all' | 'tables' | 'users' | 'migrations' } : {}),
     });
     const out = arg('out');
     if (out) {

@@ -127,6 +127,8 @@ export interface MigrationOptions {
    * made (default: the `DATABASE_MANAGE_USERS` setting, else true).
    */
   manageUsers?: boolean;
+  /** false: apply every migration, even on a new database (how the baseline is made). Default true. */
+  baseline?: boolean;
 }
 
 /** The user name and password of an `mssql://` URL. */
@@ -139,6 +141,26 @@ function credentialsOf(url: string): { userName: string; password: string } {
   return { userName: o.userName ?? '', password: o.password ?? '' };
 }
 const MIGRATIONS = fileURLToPath(new URL('../../../mssql', import.meta.url));
+export const BASELINE_FILE = join(MIGRATIONS, 'baseline.sql');
+
+/**
+ * The baseline (see `baseline.ts`): the structure the migrations up to `covers` leave, as plain
+ * statements, or null when there is none. A new database takes it instead of those migrations.
+ */
+export function loadBaseline(file = BASELINE_FILE): { covers: string[]; batches: string[] } | null {
+  let text: string;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  const covers = /^-- covers: (.+)$/m.exec(text)?.[1]?.split(', ') ?? [];
+  const batches = text
+    .split('--> statement-breakpoint')
+    .map((b) => b.replace(/^(--[^\n]*\n)+/, '').trim())
+    .filter(Boolean);
+  return covers.length ? { covers, batches } : null;
+}
 
 /** The T-SQL files in order, each cut into batches at `--> statement-breakpoint`. */
 export function migrationFiles(dir = MIGRATIONS): { name: string; batches: string[] }[] {
@@ -261,6 +283,26 @@ export async function runMssqlMigrations(
         name: string;
       }>`SELECT name FROM ${sql.raw(schema + '.__migrations')}`.execute(tx);
       const applied = new Set(done.rows.map((r) => r.name));
+      // A new database takes the baseline instead of replaying the migrations it covers.
+      const base = applied.size === 0 && options.baseline !== false ? loadBaseline() : null;
+      if (base) {
+        for (const batch of base.batches) {
+          const text = withNames(batch, names);
+          const run = schema === DEFAULT_SCHEMA ? text : qualifyTables(text, tables, schema);
+          try {
+            await sql.raw(run).execute(tx);
+          } catch (e) {
+            console.error(`The baseline failed on: ${run.slice(0, 300)}`);
+            throw e;
+          }
+        }
+        for (const name of base.covers) {
+          await sql`INSERT INTO ${sql.raw(schema + '.__migrations')} (name) VALUES (${name})`.execute(
+            tx,
+          );
+          applied.add(name);
+        }
+      }
       for (const file of files) {
         if (applied.has(file.name)) continue;
         for (const batch of file.batches) {

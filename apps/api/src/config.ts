@@ -302,7 +302,7 @@ const Env = z.object({
   /** Without Redis: the wait before a failed job's second try (doubled for the third). */
   JOB_RETRY_MS: z.coerce.number().int().min(0).default(2000),
   /**
-   * When the worker refreshes the analysis model (schema bi), as cron in UTC (every 6 hours;
+   * When the worker refreshes the analysis model (the bi_ tables and views), as cron in UTC (every 6 hours;
    * nothing runs when no data changed); 'off' never.
    */
   BI_REFRESH_CRON: z.string().trim().min(1).default('40 */6 * * *'),

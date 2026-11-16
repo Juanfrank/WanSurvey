@@ -19,6 +19,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **The installation scripts no longer carry the migrations.** A new installation takes a **baseline**
+  (`apps/api/mssql/baseline.sql`, regenerated at each release with `db:baseline`): the structure the
+  migrations leave, as plain `CREATE` statements. The wizard and `db:script` give (1) the structure, (2)
+  the users and permissions, and (3) a separate migrations script **only if** some migration is newer than
+  the baseline (none today). The application's own migration also takes the baseline on a new database. A
+  test compares a database made from the baseline with one made by replaying the migrations.
 - **Accessibility checks for dialogs and side panels**: every dialog that opens in a browser test is
   checked with axe while open (an automatic fixture), the dialogs no other flow opens and the
   side panels and menus in each state have tests of their own (`docs/accessibility.md`).

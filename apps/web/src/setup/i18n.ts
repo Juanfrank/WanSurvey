@@ -45,7 +45,7 @@ export const setupEn = {
   results: 'Your scripts',
   step1: '1. Create the tables',
   step1Help:
-    'Run it once as the owner of the database. It makes the schema, the tables and the security policy, in one transaction; it refuses to run twice.',
+    'Run it once as the owner of the database. It makes the schema and the whole structure (tables, views, procedures and the security policy) as plain CREATE statements, with no history of migrations, in one transaction; it refuses to run twice.',
   step2: '2. Create the users and the permissions',
   step2Help:
     'Run it after script 1, as the owner of the database. It can be run again (to change a password).',
@@ -57,7 +57,10 @@ export const setupEn = {
   copy: 'Copy',
   copied: 'Copied',
   download: 'Download',
-  settingsTitle: '3. Settings to put in the environment',
+  step3: '3. Apply the newer migrations',
+  step3Help:
+    'Only because some migrations are newer than the structure of script 1. Run it after script 2, as the owner of the database. It has its own permissions and refuses to run twice. The ones it applies:',
+  settingsTitle: '4. Settings to put in the environment',
   settingsHelp:
     'Replace <password> with the real password, keep the secret ones in a vault (Key Vault), and restart the application. It leaves this wizard when DATABASE_URL is set. DATABASE_ADMIN_URL is only for migrating: leave it out of the running application if you ran the scripts yourself.',
   lines: '{{n}} lines',
@@ -111,7 +114,7 @@ export const setupEs = {
   results: 'Sus scripts',
   step1: '1. Crear las tablas',
   step1Help:
-    'Ejecútelo una vez como propietario de la base. Crea el esquema, las tablas y la política de seguridad, en una transacción; se niega a ejecutarse dos veces.',
+    'Ejecútelo una vez como propietario de la base. Crea el esquema y toda la estructura (tablas, vistas, procedimientos y la política de seguridad) con sentencias CREATE simples, sin el historial de migraciones, en una transacción; se niega a ejecutarse dos veces.',
   step2: '2. Crear los usuarios y los permisos',
   step2Help:
     'Ejecútelo después del script 1, como propietario de la base. Se puede ejecutar de nuevo (para cambiar una contraseña).',
@@ -123,7 +126,10 @@ export const setupEs = {
   copy: 'Copiar',
   copied: 'Copiado',
   download: 'Descargar',
-  settingsTitle: '3. Ajustes para el entorno',
+  step3: '3. Aplicar las migraciones más nuevas',
+  step3Help:
+    'Solo porque hay migraciones más nuevas que la estructura del script 1. Ejecútelo después del script 2, como propietario de la base. Trae sus propios permisos y se niega a ejecutarse dos veces. Las que aplica:',
+  settingsTitle: '4. Ajustes para el entorno',
   settingsHelp:
     'Reemplace <password> por la contraseña real, guarde los secretos en una bóveda (Key Vault) y reinicie la aplicación. Sale de este asistente cuando DATABASE_URL está definida. DATABASE_ADMIN_URL es solo para migrar: no la ponga en la aplicación en ejecución si usted ejecutó los scripts.',
   lines: '{{n}} líneas',

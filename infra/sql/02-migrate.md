@@ -71,10 +71,11 @@ page of the web app leads to `/setup`. It asks for what is not secret: the SQL S
 port, the database, the schema, and the names of the owner, the read/write user and the read-only
 user (never a password). It answers with:
 
-1. the script that creates the tables (schema, tables, row-level security; one transaction);
+1. the script that creates the structure (schema, tables, views, procedures and row-level security, as plain `CREATE` statements, with no history of migrations; one transaction);
 2. the script that creates the users and grants the permissions (or only checks the users, if the
    DBA makes them), which asks for the passwords as `sqlcmd` variables when you run it;
-3. the settings to put in the environment (`DATABASE_URL` and the others, with `<password>` where the
+3. only if some migration is newer than that structure, a script with those migrations;
+4. the settings to put in the environment (`DATABASE_URL` and the others, with `<password>` where the
    password goes).
 
 Run (1), then (2) and set the environment (passwords in a vault); with `DATABASE_URL` set the wizard
@@ -95,35 +96,46 @@ process, with no `DATABASE_URL`, waits instead of failing. With `DATABASE_ADMIN_
 application migrates at start and runs, as before. A wrong configuration (a missing required setting)
 still stops the process with its message: that is not the state of the database.
 
-## One SQL file instead of running the application's migration (`db:script`)
+## SQL files instead of running the application's migration (`db:script`)
 
-If your DBA wants to read and run a file, generate **one `.sql`** with your names already in it
-(from the repository; nothing connects to a database):
-
-```
-pnpm --filter @wansurvey/api db:script --schema survey --app-user survey_rw \
-    --readonly-user survey_ro --out wansurvey.sql          # users made by the script
-pnpm --filter @wansurvey/api db:script --schema survey --app-user survey_rw \
-    --readonly-user survey_ro --users-by-dba --out wansurvey.sql   # users made by the DBA
-# --part tables / --part users: two files, (1) the tables and (2) the users and permissions
-```
-
-The names default to `DATABASE_SCHEMA` and to the users in `DATABASE_URL` and
-`DATABASE_READONLY_URL`; `--users-by-dba` is also `DATABASE_MANAGE_USERS=false`. Then, as the owner of the database:
+If your DBA wants to read and run files, generate them with your names already in (from the
+repository; nothing connects to a database). A new installation does **not** replay the history of
+migrations: it takes the **baseline** (`apps/api/mssql/baseline.sql`), the structure that the
+migrations leave, written as plain `CREATE` statements. Three files, in this order:
 
 ```
-sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i wansurvey.sql ^
-       -v AppPassword="..." ReaderPassword="..."       # without --users-by-dba; otherwise no -v
+pnpm --filter @wansurvey/api db:script --schema survey --app-user survey_rw --readonly-user survey_ro \
+    [--users-by-dba] --part tables  --out 1-tables.sql       # (1) the schema and the whole structure
+pnpm --filter @wansurvey/api db:script ... --part users      --out 2-users.sql        # (2) the users and the permissions
+pnpm --filter @wansurvey/api db:script ... --part migrations --out 3-migrations.sql   # (3) only if some are newer
 ```
 
-It does the same as the migration: the schema, the users (or a check that they exist with the schema
-as default), the tables, the row-level security, the grants and the record in `<schema>.__migrations`.
-The passwords are `sqlcmd` variables, never written in the file. It is **one transaction**: if a
-statement fails nothing is kept, and it refuses to run again over what it made. For an upgrade,
-generate one with `--from <number>` (the first migration the database lacks, for example `--from 0030`): it checks that the database
-is at the one before. Applying it, or running the application's migration, leaves the same database;
-do not mix them on one database unless you know which migrations each applied (both use
-`__migrations`).
+(`--part all` makes one file with all of it.) The names default to `DATABASE_SCHEMA` and to the users in
+`DATABASE_URL` and `DATABASE_READONLY_URL`; `--users-by-dba` is also `DATABASE_MANAGE_USERS=false`. Run each
+as the owner of the database:
+
+```
+sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i 1-tables.sql
+sqlcmd ... -i 2-users.sql -v AppPassword="..." ReaderPassword="..."   # without --users-by-dba; otherwise no -v
+sqlcmd ... -i 3-migrations.sql
+```
+
+- **(1) The structure** is one transaction: if a statement fails nothing is kept, and it refuses to run
+  twice. It records what the baseline covers in `<schema>.__migrations`.
+- **(2) The users and permissions** needs (1), and can be run again (to change a password, or to grant
+  the read-only user the tables a later migration added).
+- **(3) The migrations** are only the ones **newer than the baseline**: when the repository has none,
+  `--part migrations` says there is nothing to do and the wizard does not offer it. It has its own
+  permissions, needs (1) and (2), and refuses to run twice. A database made before the baseline, or by
+  an older release, is brought up to date with `--from <number>` (the first migration it lacks): it
+  checks that the database is at the one before.
+
+The baseline is regenerated at each release (`docs/releasing.md`) with `db:baseline`, and a test checks
+that a database made from it equals one made by replaying the migrations (tables, columns in order,
+constraints, indexes, views, procedures, triggers, security policies, permissions and the data it
+fills). The application, when it runs the migrations itself (`DATABASE_ADMIN_URL`), takes the same
+baseline on a new database. Do not mix files and the application's migration on one database unless
+you know which migrations each applied (both use `__migrations`).
 
 ## Scripts to make and check the users by hand
 

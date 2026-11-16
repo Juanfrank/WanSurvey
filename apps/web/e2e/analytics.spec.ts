@@ -193,6 +193,6 @@ test('exports are built by the worker and download with the expected header', as
     .click();
   const sql = readFileSync(await (await sqlDownload).path(), 'utf8');
   expect(sql).toMatch(/^-- WanSurvey/);
-  expect(sql).toContain('from bi.fact_respuesta r');
+  expect(sql).toContain('from [dbo].bi_fact_respuesta r');
   expect(sql).toContain('as [A3_SEX]');
 });

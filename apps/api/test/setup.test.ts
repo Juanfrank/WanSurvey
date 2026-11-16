@@ -29,6 +29,10 @@ describe('the installation wizard', () => {
     expect(plan.users).toContain("N' TO [survey_ro]");
     expect(plan.users).toContain('DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::');
     expect(plan.passwordVariables).toEqual(['AppPassword', 'ReaderPassword']);
+    // The migrations are left out; none is newer than the baseline, so there is no third script.
+    expect(plan.migrations).toBeNull();
+    expect(plan.pendingMigrations).toEqual([]);
+    expect(plan.tables).toContain('baseline');
     const urls = plan.settings.filter((s) => s.secret).map((s) => s.value);
     expect(urls).toHaveLength(3);
     for (const u of urls) expect(u).toContain(':<password>@sql.example.org:1433/mi_base');
