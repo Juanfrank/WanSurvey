@@ -50,6 +50,41 @@ export function isPermissionBatch(batch: string): boolean {
 
 const lit = (v: string) => v.replace(/'/g, "''");
 
+/**
+ * What a statement of the baseline is, for the comments that divide the file: its kind (a heading
+ * for each kind) and its name (a comment for each object). The statements are already named for the
+ * schema chosen, so the names read as they will be in the database.
+ */
+export function describeStatement(text: string): { group: string; label: string } | null {
+  const name = '(?:\\[?\\w+\\]?\\.)?\\[?(\\w+)\\]?';
+  const m = (re: string) => new RegExp(`^\\s*${re}`, 'i').exec(text);
+  let r: RegExpExecArray | null;
+  if ((r = m(`CREATE\\s+TABLE\\s+${name}`))) return { group: 'Tables', label: `Table ${r[1]}` };
+  if ((r = m(`ALTER\\s+TABLE\\s+${name}\\s+ADD\\s+CONSTRAINT\\s+\\[?(\\w+)\\]?\\s+FOREIGN`)))
+    return { group: 'Foreign keys', label: `${r[1]}: ${r[2]}` };
+  if (
+    (r = m(
+      `CREATE\\s+(?:UNIQUE\\s+)?(?:(?:NON)?CLUSTERED\\s+)?INDEX\\s+\\[?(\\w+)\\]?\\s+ON\\s+${name}`,
+    ))
+  )
+    return { group: 'Indexes', label: `${r[1]} on ${r[2]}` };
+  if ((r = m(`CREATE\\s+FUNCTION\\s+${name}`)))
+    return { group: 'Functions and views', label: `Function ${r[1]}` };
+  if ((r = m(`CREATE\\s+VIEW\\s+${name}`)))
+    return { group: 'Functions and views', label: `View ${r[1]}` };
+  if ((r = m(`CREATE\\s+PROC(?:EDURE)?\\s+${name}`)))
+    return { group: 'Procedures', label: `Procedure ${r[1]}` };
+  if ((r = m(`CREATE\\s+TRIGGER\\s+${name}`)))
+    return { group: 'Triggers', label: `Trigger ${r[1]}` };
+  if ((r = m(`CREATE\\s+SECURITY\\s+POLICY\\s+${name}`)))
+    return { group: 'Row-level security', label: `Policy ${r[1]}` };
+  if (m('EXEC\\s+(?:\\w+\\.)?bi_refrescar_dimensiones'))
+    return { group: 'Initial data', label: 'The dimensions of the analysis model, filled once' };
+  if ((r = m(`(?:GRANT|DENY|REVOKE)\\s+[A-Z, ]+\\s+ON\\s+${name}`)))
+    return { group: 'Permissions of the application user', label: `On ${r[1]}` };
+  return null;
+}
+
 /** The migrations that the baseline does not cover (none when there is no baseline, or with `from`). */
 export function pendingMigrations(
   options: { from?: string; baselineFile?: string } = {},
@@ -207,6 +242,18 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
     batch(make(appUser, 'AppPassword'));
     if (reader) batch(make(reader, 'ReaderPassword'));
   }
+  // A heading when the kind of object changes, and a comment for each object, before its statement.
+  const section = (text: string, current: string): string => {
+    const d = describeStatement(text);
+    if (!d) return current;
+    if (d.group !== current)
+      out.push(
+        `-- ${'═'.repeat(3)} ${d.group} ${'═'.repeat(Math.max(3, 66 - d.group.length))}`,
+        '',
+      );
+    out.push(`-- ─── ${d.label} ${'─'.repeat(Math.max(3, 62 - d.label.length))}`);
+    return d.group;
+  };
   const recorded = (names: string[]) =>
     `INSERT INTO ${migrations} (name) VALUES ${names.map((n) => `(N'${lit(n)}')`).join(', ')};`;
   if (withStructure) {
@@ -228,10 +275,13 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
     if (withStructure) {
       guard(covers);
       out.push('-- ─── The structure (the baseline) ───', '');
+      let group = '';
       for (const b of base.batches) {
         if (isPermissionBatch(b)) continue;
         const text = named(b);
-        if (text) batch(text);
+        if (!text) continue;
+        group = section(text, group);
+        batch(text);
       }
       batch(recorded(covers));
     }
@@ -253,8 +303,13 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
       batch(`PRINT N'No migrations pending: nothing to do.';`);
     }
     if (withUsers) {
-      out.push('-- ─── What the application’s user may do ───', '');
-      for (const b of base.batches) if (isPermissionBatch(b)) batch(named(b));
+      let group = '';
+      for (const b of base.batches)
+        if (isPermissionBatch(b)) {
+          const text = named(b);
+          group = section(text, group);
+          batch(text);
+        }
     }
   } else {
     if (withStructure) {

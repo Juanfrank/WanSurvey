@@ -19,6 +19,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **The generated SQL scripts are divided in commented sections**: a heading for each kind of object
+  (tables, foreign keys, indexes, functions and views, procedures, triggers, row-level security, initial
+  data, permissions) and a comment before each one, so each table's creation can be found and read apart.
 - **The installation scripts no longer carry the migrations.** A new installation takes a **baseline**
   (`apps/api/mssql/baseline.sql`, regenerated at each release with `db:baseline`): the structure the
   migrations leave, as plain `CREATE` statements. The wizard and `db:script` give (1) the structure, (2)

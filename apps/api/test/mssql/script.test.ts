@@ -56,6 +56,34 @@ describe('the one-file SQL script', () => {
     expect(users).not.toContain('INSERT INTO survey.__migrations');
   });
 
+  it('divides the structure in commented sections: a heading per kind, a comment per object', () => {
+    const text = buildScript({ schema: 'survey', part: 'tables' });
+    for (const heading of [
+      'Tables',
+      'Foreign keys',
+      'Indexes',
+      'Functions and views',
+      'Procedures',
+      'Triggers',
+      'Row-level security',
+    ])
+      expect(text).toContain(`-- ═══ ${heading} `);
+    // Every CREATE TABLE has its own comment right before it.
+    // (the record of the migrations is made by the script itself, before the structure)
+    const tables = [...text.matchAll(/CREATE TABLE survey\.(\w+) \(/g)]
+      .map((m) => m[1]!)
+      .filter((t) => t !== '__migrations');
+    expect(tables.length).toBeGreaterThan(70);
+    for (const t of tables)
+      expect(text).toMatch(new RegExp(`-- ─── Table ${t} ─+\\nCREATE TABLE survey\\.${t} \\(`));
+    // A heading is written once, not each time the kind comes up again.
+    expect(text.match(/-- ═══ Tables /g)).toHaveLength(1);
+    expect(text.match(/-- ═══ Functions and views /g)).toHaveLength(1);
+    const users = buildScript({ schema: 'survey', appUser: 'survey_rw', part: 'users' });
+    expect(users).toContain('-- ═══ Permissions of the application user ');
+    expect(users).toMatch(/-- ─── On tenants ─+\nGRANT/);
+  });
+
   it('leaves the migrations out of the installation, and writes them apart when some are newer', () => {
     // The baseline of this repository covers every migration: there is nothing pending.
     expect(pendingMigrations()).toEqual([]);
