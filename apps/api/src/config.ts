@@ -48,6 +48,9 @@ const SECRET_SETTINGS = new Set([
 ]);
 const EXAMPLE_SECRET = /(^|[:/@=])(dev-|change-me|admin1234)|change-me/i;
 
+/** The placeholders of appconfig/*.template.json: `<REQUIRED …>`, `<OPTIONAL …>`, `<CONDITIONAL …>`. */
+const TEMPLATE = /^<(REQUIRED|OPTIONAL|CONDITIONAL)\b[\s\S]*>$/;
+
 export const SSO_CALLBACK_PATH = '/api/auth/entra/callback';
 
 /**
@@ -365,8 +368,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(
       `Invalid configuration:\n  ${former.map((k) => `${k}: removed or renamed, see: ${RENAMED_VARIABLES[k]}`).join('\n  ')}`,
     );
+  // A placeholder of the templates in appconfig/ that nobody replaced: a REQUIRED one stops the start
+  // with the name of the setting; an OPTIONAL or CONDITIONAL one counts as not set (if the condition
+  // holds, the rule of that setting says it is missing).
+  const left = Object.entries(env).filter(
+    ([, v]) => typeof v === 'string' && TEMPLATE.test(v.trim()),
+  );
+  const required = left.filter(([, v]) => v!.trim().startsWith('<REQUIRED'));
+  if (required.length)
+    throw new Error(
+      `Invalid configuration:\n  ${required.map(([k]) => `${k}: still the placeholder of the template (REQUIRED): give it a value`).join('\n  ')}`,
+    );
+  const unreplaced = new Set(left.map(([k]) => k));
   // App Service keeps a setting that was left empty: it counts as not set.
-  const set = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== ''));
+  const set = Object.fromEntries(
+    Object.entries(env).filter(([k, v]) => v !== '' && !unreplaced.has(k)),
+  );
   const parsed = Env.safeParse(set);
   if (parsed.success && parsed.data.GEOCODER === 'nominatim' && !parsed.data.GEOCODER_EMAIL) {
     throw new Error('Invalid configuration:\n  GEOCODER_EMAIL: required when GEOCODER=nominatim');

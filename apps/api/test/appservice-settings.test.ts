@@ -30,6 +30,7 @@ const FILLED: Record<string, string> = {
   MAIL_WEBHOOK_SECRET: '0123456789abcdef0123',
 };
 const placeholder = (v: string) => v.startsWith('<') && v.endsWith('>');
+const TAGGED = /^<(REQUIRED|OPTIONAL|CONDITIONAL) — /;
 
 /**
  * The App Service settings templates in appconfig/ (pasted into "Advanced edit" by hand):
@@ -46,16 +47,46 @@ describe('App Service settings templates', () => {
         expect(typeof s.value).toBe('string');
         expect(s.slotSetting).toBe(false);
       }
-      const blanks = settings.filter((s) => placeholder(s.value)).map((s) => s.name);
-      expect(blanks.filter((n) => !FILLED[n])).toEqual([]);
+      // Every placeholder says if the setting is required, optional or conditional.
+      expect(settings.filter((s) => placeholder(s.value) && !TAGGED.test(s.value))).toEqual([]);
+      const required = settings.filter((s) => s.value.startsWith('<REQUIRED'));
+      expect(required.filter((s) => !FILLED[s.name]).map((s) => s.name)).toEqual([]);
+      // The required ones and the conditional ones the mode needs get a value; the rest are left out.
       const env_ = Object.fromEntries(
-        settings.map((s) => [s.name, placeholder(s.value) ? FILLED[s.name]! : s.value]),
+        settings
+          .filter((s) => !placeholder(s.value) || FILLED[s.name] !== undefined)
+          .map((s) => [s.name, placeholder(s.value) ? FILLED[s.name]! : s.value]),
       ) as NodeJS.ProcessEnv;
       const config = loadConfig(env_);
       expect(config.NODE_ENV).toBe(env);
       expect(config.EXPORT_STORAGE).toBe('blob');
       expect(config.PASSWORD_LOGIN).toBe(env === 'development');
     });
+
+  for (const env of ['development', 'production'] as const) {
+    it(`${env}: a template pasted as it is stops on the required settings, and ignores the optional ones`, () => {
+      const settings = template(env);
+      const asIs = Object.fromEntries(settings.map((s) => [s.name, s.value])) as NodeJS.ProcessEnv;
+      const required = settings.filter((s) => s.value.startsWith('<REQUIRED')).map((s) => s.name);
+      expect(required.length).toBeGreaterThan(2);
+      try {
+        loadConfig(asIs);
+        expect.unreachable();
+      } catch (e) {
+        for (const n of required)
+          expect((e as Error).message).toContain(`${n}: still the placeholder`);
+      }
+      // With the required ones filled, whatever is optional or conditional and left as it was is not set.
+      const filled = { ...asIs };
+      for (const n of required) filled[n] = FILLED[n]!;
+      for (const s of settings.filter((x) => x.value.startsWith('<CONDITIONAL') && FILLED[x.name]))
+        filled[s.name] = FILLED[s.name]!;
+      const config = loadConfig(filled);
+      expect(config.ORG_NAME).toBeUndefined();
+      expect(config.VAPID_PUBLIC_KEY).toBeUndefined();
+      expect(config.APPLICATIONINSIGHTS_CONNECTION_STRING).toBeUndefined();
+    });
+  }
 
   // What the zip needs, and what only the containers (infra/azure/main.bicep) used.
   const ZIP = ['WEB_DIST', 'DATABASE_ADMIN_URL', 'NODE_OPTIONS', 'WEBSITE_RUN_FROM_PACKAGE'];

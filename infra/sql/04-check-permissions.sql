@@ -3,16 +3,19 @@
   Read-only: it changes nothing. Run it as the owner, in the database, after the migrations and
   whenever the permissions are in doubt (after a restore, a deployment or a change by a DBA).
 
-  sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i 04-check-permissions.sql ^
-         -v SchemaName="survey" RwUser="survey_rw" RoUser="survey_ro"
+  Plain T-SQL, for any client: connect to the database as the owner, write the names in the
+  DECLARE lines below and run the whole file.
 
-  RoUser="none" skips the reader. Prints, for each user, its default schema, roles and
-  permissions, then CHECK lines: OK or FAIL (a FAIL ends with an error, exit code 1 with -b).
+  An empty @ro skips the reader. Prints, for each user, its default schema, roles and
+  permissions, then CHECK lines: OK or FAIL (a FAIL ends with an error).
 */
-:on error exit
 SET NOCOUNT ON;
-GO
-DECLARE @schema sysname = N'$(SchemaName)', @rw sysname = N'$(RwUser)', @ro sysname = CASE WHEN N'$(RoUser)' = N'none' THEN N'' ELSE N'$(RoUser)' END;
+
+-- Write the names:
+DECLARE @schema sysname = N'survey';
+DECLARE @rw sysname = N'survey_rw';
+DECLARE @ro sysname = N'survey_ro';            -- empty: no read-only user
+
 IF USER_NAME() <> N'dbo' THROW 50001, 'Run it as the owner of the database (dbo).', 1;
 
 PRINT N'== Users ==';
@@ -76,4 +79,3 @@ SELECT CASE ok WHEN 1 THEN 'OK  ' ELSE 'FAIL' END AS result, item FROM @t;
 SELECT @bad = COUNT(*) FROM @t WHERE ok = 0;
 IF @bad > 0 THROW 50003, 'Some permission checks failed (see the FAIL lines).', 1;
 PRINT N'All permission checks passed.';
-GO

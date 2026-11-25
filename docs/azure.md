@@ -93,7 +93,7 @@ WEBSITE_HEALTHCHECK_MAXPINGFAILURES=5
 | `appconfig/app-settings.production.template.json`  | Production: the same settings `main.bicep` sets (Microsoft only, SMTP, Blob Storage, P0v3 sizes) |
 
 1. Copy the template without `.template` (`app-settings.production.json`): git ignores everything in `appconfig/` but the templates, so the filled copy never reaches the repository.
-2. Replace every `<…>` value. Secrets are best as Key Vault references (`@Microsoft.KeyVault(SecretUri=…)`).
+2. Replace every `<…>` value; the text of each says `REQUIRED`, `OPTIONAL` or `CONDITIONAL` (and when): fill in the required ones, the conditional ones that apply, and delete the entries you do not need (an `OPTIONAL` or `CONDITIONAL` placeholder left as it is counts as not set; a `REQUIRED` one stops the app, naming it). Secrets are best as Key Vault references (`@Microsoft.KeyVault(SecretUri=…)`).
 3. Paste the whole array into Advanced edit and save (the app restarts).
 
 Microsoft sign-in takes all of `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` and `ENTRA_REDIRECT_URI` or none (the API refuses to start otherwise); in development, delete those entries to go without. A test (`apps/api/test/appservice-settings.test.ts`) checks that each template, filled in, starts the app, and that it holds the zip's settings and none of the containers'.

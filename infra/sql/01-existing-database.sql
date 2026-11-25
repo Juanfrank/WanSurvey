@@ -3,8 +3,8 @@
   its contents. Use it instead of 01-create-database.sql. Run it ONCE as a login that may change the
   server settings and the database (sysadmin, or your DBA).
 
-  sqlcmd -S <server> -U <admin> -P <password> -b -i 01-existing-database.sql ^
-         -v DbName="my_database" OwnerLogin="survey_owner" OwnerPassword="..."
+  Plain T-SQL, for any client: connect to `master`, write the three values in the DECLARE lines
+  below and run the whole file.
 
   What it does:
     1. Turns on contained database authentication in the server, and makes the database "partially
@@ -24,43 +24,47 @@
   migrations or by 03-users.sql; nothing existing is altered. The application's user and the
   read-only one are made as described in 02-migrate.md.
 */
-:on error exit
 SET NOCOUNT ON;
-USE master;
-GO
-DECLARE @db sysname = N'$(DbName)', @owner sysname = N'$(OwnerLogin)';
+SET XACT_ABORT ON;
+
+-- Write these three values (OwnerLogin = N'keep' leaves the owner as it is):
+DECLARE @db sysname = N'my_database';
+DECLARE @owner sysname = N'survey_owner';
+DECLARE @ownerPassword nvarchar(128) = N'<<password of the owner>>';
+
+DECLARE @sql nvarchar(max);
+IF DB_NAME() <> N'master' THROW 50001, 'Connect to the master database to run this file.', 1;
 IF DB_ID(@db) IS NULL THROW 50001, 'The database does not exist: this script is for one that does (otherwise use 01-create-database.sql).', 1;
+IF @owner <> N'keep' AND @ownerPassword LIKE N'<<%'
+  THROW 50001, 'Write the owner password in the DECLARE lines at the top of the file (or use N''keep'').', 1;
 IF @owner = N'keep'
 BEGIN
   DECLARE @cur sysname = SUSER_SNAME((SELECT owner_sid FROM sys.databases WHERE name = @db));
   PRINT N'The owner of the database stays: ' + ISNULL(@cur, N'(no login)') + N'. Migrate as that login.';
 END;
-GO
+
 -- Contained users.
 IF (SELECT CAST(value_in_use AS int) FROM sys.configurations WHERE name = 'contained database authentication') = 0
 BEGIN
   EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
   EXEC sp_configure 'contained database authentication', 1; RECONFIGURE;
 END;
-GO
-DECLARE @db sysname = N'$(DbName)', @sql nvarchar(max);
 IF (SELECT containment FROM sys.databases WHERE name = @db) = 0
 BEGIN
   SET @sql = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET CONTAINMENT = PARTIAL';
   EXEC (@sql);
 END;
-GO
+
 -- The owner.
-DECLARE @db sysname = N'$(DbName)', @owner sysname = N'$(OwnerLogin)', @sql nvarchar(max);
 IF @owner <> N'keep'
 BEGIN
   IF SUSER_ID(@owner) IS NULL
   BEGIN
-    SET @sql = N'CREATE LOGIN ' + QUOTENAME(@owner) + N' WITH PASSWORD = N''$(OwnerPassword)'', CHECK_POLICY = ON, DEFAULT_DATABASE = [master]';
+    SET @sql = N'CREATE LOGIN ' + QUOTENAME(@owner) + N' WITH PASSWORD = ' + QUOTENAME(@ownerPassword, '''')
+      + N', CHECK_POLICY = ON, DEFAULT_DATABASE = [master]';
     EXEC (@sql);
   END;
   SET @sql = N'ALTER AUTHORIZATION ON DATABASE::' + QUOTENAME(@db) + N' TO ' + QUOTENAME(@owner);
   EXEC (@sql);
 END;
-GO
 PRINT N'Step 1 done. Now apply the migrations (see 02-migrate.md).';

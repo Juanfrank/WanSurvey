@@ -125,7 +125,6 @@ export function SetupPage() {
   }, [diagnosis?.ready]);
   const [f, setF] = useState({
     server: '',
-    port: '1433',
     database: '',
     schema: 'survey',
     ownerUser: 'survey_owner',
@@ -139,7 +138,7 @@ export function SetupPage() {
     mutationFn: () =>
       api<Plan>('/setup/scripts', {
         method: 'POST',
-        body: { ...f, port: Number(f.port) || 1433 },
+        body: f,
       }),
   });
   const plan = make.data;
@@ -212,26 +211,18 @@ export function SetupPage() {
                 }}
               >
                 <h2 className="text-lg font-semibold">{t('setup.form')}</h2>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="sm:col-span-2">
-                    <Field
-                      id="setup-server"
-                      label={t('setup.server')}
-                      value={f.server}
-                      required
-                      autoComplete="off"
-                      placeholder="sql.example.org"
-                      onChange={set('server')}
-                    />
-                    <Hint>{t('setup.serverHint')}</Hint>
-                  </div>
+                <div className="flex flex-col gap-1">
                   <Field
-                    id="setup-port"
-                    label={t('setup.port')}
-                    value={f.port}
-                    inputMode="numeric"
-                    onChange={set('port')}
+                    id="setup-server"
+                    label={t('setup.server')}
+                    value={f.server}
+                    required
+                    autoComplete="off"
+                    placeholder="sql.example.org"
+                    aria-describedby="setup-server-hint"
+                    onChange={set('server')}
                   />
+                  <Hint id="setup-server-hint">{t('setup.serverHint')}</Hint>
                 </div>
                 <Field
                   id="setup-database"

@@ -30,9 +30,9 @@ export const setupEn = {
   },
   signIn: 'Go to sign in',
   form: 'What your database administrator decided',
-  server: 'SQL Server address',
-  serverHint: 'For example sql.example.org or myserver.database.windows.net',
-  port: 'Port',
+  server: 'SQL Server address (and port, only if it is not the default)',
+  serverHint:
+    'The address alone, for example sql.example.org or myserver.database.windows.net; with a port if it is not the default: sql.example.org:1434 (or sql.example.org,1434).',
   database: 'Database (it must already exist)',
   schema: 'Schema for the tables',
   schemaHint: 'For example survey. Choose it now and keep it: it cannot be changed later.',
@@ -50,7 +50,7 @@ export const setupEn = {
   step2Help:
     'Run it after script 1, as the owner of the database. It can be run again (to change a password).',
   step2Vars:
-    'It asks for the passwords as sqlcmd variables, which you choose when you run it: {{vars}}.',
+    'Before running it, write the passwords you choose in the DECLARE lines at the top of the script: {{vars}}.',
   step2Dba:
     'The users must already exist with the default schema {{schema}}: the script checks it and says what is missing.',
   runWith: 'Run it with',
@@ -98,9 +98,9 @@ export const setupEs = {
   },
   signIn: 'Ir a ingresar',
   form: 'Lo que decidió su administrador de base de datos',
-  server: 'Dirección del servidor SQL',
-  serverHint: 'Por ejemplo sql.ejemplo.org o miservidor.database.windows.net',
-  port: 'Puerto',
+  server: 'Dirección del servidor SQL (y el puerto, solo si no es el predeterminado)',
+  serverHint:
+    'Solo la dirección, por ejemplo sql.ejemplo.org o miservidor.database.windows.net; con puerto si no es el predeterminado: sql.ejemplo.org:1434 (o sql.ejemplo.org,1434).',
   database: 'Base de datos (debe existir ya)',
   schema: 'Esquema de las tablas',
   schemaHint: 'Por ejemplo survey. Elíjalo ahora y no lo cambie: no se puede cambiar después.',
@@ -119,7 +119,7 @@ export const setupEs = {
   step2Help:
     'Ejecútelo después del script 1, como propietario de la base. Se puede ejecutar de nuevo (para cambiar una contraseña).',
   step2Vars:
-    'Pide las contraseñas como variables de sqlcmd, que usted elige al ejecutarlo: {{vars}}.',
+    'Antes de ejecutarlo, escriba las contraseñas que elija en las líneas DECLARE del inicio del script: {{vars}}.',
   step2Dba:
     'Los usuarios deben existir ya con el esquema predeterminado {{schema}}: el script lo verifica y dice qué falta.',
   runWith: 'Ejecútelo con',

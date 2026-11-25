@@ -13,11 +13,15 @@ describe('the one-file SQL script', () => {
   it('names the schema and the users, writes no password, and leaves nothing in dbo', () => {
     const text = buildScript({ schema: 'survey', appUser: 'survey_rw', readonlyUser: 'survey_ro' });
     expect(text).toContain('CREATE SCHEMA [survey]');
-    expect(text).toContain("PASSWORD = '$(AppPassword)'");
-    expect(text).toContain("PASSWORD = '$(ReaderPassword)'");
+    expect(text).toContain('DECLARE @AppPassword nvarchar(128)');
+    expect(text).toContain('DECLARE @ReaderPassword nvarchar(128)');
+    expect(text).toContain('QUOTENAME(@AppPassword');
+    // Plain T-SQL: no sqlcmd directives, no GO, no sqlcmd variables.
+    expect(text).not.toMatch(/^(GO|:on error)/m);
+    expect(text).not.toContain('$(');
     expect(text).not.toMatch(/\bdbo\.(?=[A-Za-z_[])/);
     expect(text).not.toContain('wansurvey_app');
-    expect(text).toContain("N' TO [survey_ro]");
+    expect(text).toContain("N'' TO [survey_ro]");
     expect(text).not.toMatch(/\b(bi|rls)\./);
     expect(text).not.toContain('CREATE SCHEMA [bi]');
     // The baseline, not the history: one record of what it covers, and no ALTER of the migrations.
@@ -30,7 +34,7 @@ describe('the one-file SQL script', () => {
   it('checks the users instead of making them when the DBA makes them', () => {
     const text = buildScript({ schema: 'survey', appUser: 'survey_rw', usersByDba: true });
     expect(text).not.toContain('CREATE USER');
-    expect(text).not.toContain('$(AppPassword)');
+    expect(text).not.toContain('@AppPassword');
     expect(text).toContain('must have the default schema survey');
   });
 
@@ -120,7 +124,7 @@ describe('the one-file SQL script', () => {
   });
 });
 
-/** Runs the file as sqlcmd would: batches split at GO, variables replaced, one connection. */
+/** Runs the file as a T-SQL client would: one batch, the passwords written in the DECLARE lines. */
 describe.skipIf(!configured)('SQL Server: running the generated file', () => {
   const name = `ws_script_${Date.now().toString(36)}`;
   const at = (database: string) => {
@@ -130,33 +134,23 @@ describe.skipIf(!configured)('SQL Server: running the generated file', () => {
   };
   const master = createMssqlDb<Record<string, never>>(at('master'), { max: 1 });
   let db: ReturnType<typeof createMssqlDb<Record<string, never>>>;
-  const batches = (text: string) =>
-    text
-      .replace(/\$\(AppPassword\)/g, 'Rw-Pass-4q9!Lm')
-      .replace(/\$\(ReaderPassword\)/g, 'Ro-Pass-6t2!Xn')
-      .split(/^GO\s*$/m)
-      .map((b) =>
-        b
-          .split('\n')
-          .filter((l) => !l.startsWith(':on error'))
-          .join('\n')
-          .trim(),
-      )
-      .filter(Boolean);
   const run = async (text: string) => {
-    // One connection and plain batches, as sqlcmd does: the transaction spans the batches (Kysely
-    // wraps each statement in a procedure call, where it could not).
+    // One connection and one batch, as a T-SQL client sends it (Kysely wraps each statement in a
+    // procedure call, where the transaction could not span them).
     const conn = new Connection(parseMssqlUrl(at(name)));
     await new Promise<void>((ok, fail) => conn.connect((e) => (e ? fail(e) : ok())));
     try {
-      for (const b of batches(text))
-        await new Promise<void>((ok, fail) =>
-          conn.execSqlBatch(new Request(b, (e) => (e ? fail(e) : ok()))),
-        );
+      await new Promise<void>((ok, fail) =>
+        conn.execSqlBatch(new Request(text, (e) => (e ? fail(e) : ok()))),
+      );
     } finally {
       conn.close();
     }
   };
+  const withPasswords = (text: string) =>
+    text
+      .replace(/N'<<password of svs_rw>>'/, "N'Rw-Pass-4q9!Lm'")
+      .replace(/N'<<password of svs_ro>>'/, "N'Ro-Pass-6t2!Xn'");
   const script = buildScript({ schema: 'survey', appUser: 'svs_rw', readonlyUser: 'svs_ro' });
 
   beforeAll(async () => {
@@ -173,7 +167,7 @@ describe.skipIf(!configured)('SQL Server: running the generated file', () => {
   });
 
   it('makes the tables, the users and the record, and refuses a second run', async () => {
-    await run(script);
+    await run(withPasswords(script));
     const n = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM sys.tables
       WHERE SCHEMA_NAME(schema_id) = 'survey'`.execute(db);
     expect(Number(n.rows[0]!.n)).toBeGreaterThan(40);
@@ -185,7 +179,7 @@ describe.skipIf(!configured)('SQL Server: running the generated file', () => {
     ]);
     const m = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM survey.__migrations`.execute(db);
     expect(Number(m.rows[0]!.n)).toBe(migrationFiles().length);
-    await expect(run(script)).rejects.toThrow(/already applied/);
+    await expect(run(withPasswords(script))).rejects.toThrow(/already applied/);
   }, 180_000);
 
   it('runs in two parts: the tables first, then the users and permissions, which can repeat', async () => {
@@ -196,10 +190,9 @@ describe.skipIf(!configured)('SQL Server: running the generated file', () => {
       const conn = new Connection(parseMssqlUrl(at(two)));
       await new Promise<void>((ok, fail) => conn.connect((e) => (e ? fail(e) : ok())));
       try {
-        for (const b of batches(text))
-          await new Promise<void>((ok, fail) =>
-            conn.execSqlBatch(new Request(b, (e) => (e ? fail(e) : ok()))),
-          );
+        await new Promise<void>((ok, fail) =>
+          conn.execSqlBatch(new Request(withPasswords(text), (e) => (e ? fail(e) : ok()))),
+        );
       } finally {
         conn.close();
       }

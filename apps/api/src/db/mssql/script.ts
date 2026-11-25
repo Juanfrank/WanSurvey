@@ -98,11 +98,11 @@ export function pendingMigrations(
 }
 
 /**
- * One T-SQL file, for `sqlcmd`, that does what `runMssqlMigrations` does with the names chosen. A new
+ * One plain T-SQL batch (any client: no `GO`, no `sqlcmd`), that does what `runMssqlMigrations` does with the names chosen. A new
  * installation takes the **baseline** (the structure the migrations leave, as plain CREATE statements)
  * and not the history of migrations: (1) the schema and the structure, (2) the users and the
  * permissions, and (3) only if some migration is newer than the baseline, those migrations. Passwords
- * are `sqlcmd` variables (`$(AppPassword)`), never written in it. Each file is one transaction, so a
+ * are `DECLARE` lines at the top (placeholders), never written in it. Each file is one transaction, so a
  * failure leaves nothing half done; (1) and (3) refuse to run twice over what they made, (2) can be
  * run again (to change a password).
  */
@@ -141,7 +141,10 @@ export function buildScript(options: ScriptOptions = {}): string {
   const last = (pendingFiles.at(-1) ?? { name: lastStructure }).name;
   const previous = !base && files !== all ? all[all.indexOf(files[0]!) - 1]! : null;
   const out: string[] = [];
-  const batch = (text: string) => out.push(text.trim(), 'GO', '');
+  // One T-SQL batch for the whole file: a statement of the file runs through EXEC (as a string), so
+  // that it is compiled when it is reached (after what comes before it exists), as a GO would do.
+  const batch = (text: string) => out.push(`EXEC(N'${text.trim().replace(/'/g, "''")}');`, '');
+  const raw = (text: string) => out.push(text.trim(), '');
   const named = (b: string) => {
     const text = withNames(b, names);
     return schema === DEFAULT_SCHEMA ? text : qualifyTables(text, tables, schema);
@@ -153,8 +156,12 @@ export function buildScript(options: ScriptOptions = {}): string {
     migrations:
       '(3) the migrations newer than the structure of (1): only if there are any, after (2)',
   }[part];
-  const run = `sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i <this file>${
-    passwords ? ` ^\n         -v AppPassword="..."${reader ? ' ReaderPassword="..."' : ''}` : ''
+  const run = `Connect to the database as its owner with any T-SQL client (SSMS, Azure Data Studio,
+  the query editor of the Azure portal) and run the whole file${
+    passwords
+      ? `.
+  Before that, write the password${reader ? 's' : ''} in the DECLARE line${reader ? 's' : ''} at the top (${appUser}${reader ? `, ${reader}` : ''})`
+      : ''
   }`;
   const rule = {
     all: `All of it is one transaction: if a statement fails it stops and nothing is kept. It refuses to
@@ -193,10 +200,9 @@ export function buildScript(options: ScriptOptions = {}): string {
 
   ${rule}
 */
-:on error exit
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
--- The options of an application connection (sqlcmd has some off): indexed views, filtered indexes
+-- The options of an application connection (some clients have them off): indexed views, filtered indexes
 -- and computed columns need them, and procedures and views keep the ones they are made with.
 SET ANSI_NULLS ON;
 SET ANSI_PADDING ON;
@@ -204,18 +210,34 @@ SET ANSI_WARNINGS ON;
 SET ARITHABORT ON;
 SET CONCAT_NULL_YIELDS_NULL ON;
 SET NUMERIC_ROUNDABORT OFF;
-SET QUOTED_IDENTIFIER ON;
-GO`,
+SET QUOTED_IDENTIFIER ON;${
+      passwords
+        ? `
+
+-- The passwords: write them here, once. They are used only to make the users, never stored.
+DECLARE @AppPassword nvarchar(128) = N'<<password of ${appUser}>>';${
+            reader ? `\nDECLARE @ReaderPassword nvarchar(128) = N'<<password of ${reader}>>';` : ''
+          }
+DECLARE @sql nvarchar(max);`
+        : ''
+    }
+
+BEGIN TRY`,
     '',
   );
-  batch(`IF USER_NAME() <> N'dbo' THROW 50001, 'Run it as the owner of the database (dbo).', 1;`);
-  if (passwords)
+  raw(`IF USER_NAME() <> N'dbo' THROW 50001, 'Run it as the owner of the database (dbo).', 1;`);
+  if (passwords) {
+    raw(
+      `IF @AppPassword LIKE N'<<%'${reader ? " OR @ReaderPassword LIKE N'<<%'" : ''}
+  THROW 50001, 'Write the passwords in the DECLARE lines at the top of the file.', 1;`,
+    );
     batch(
       `IF (SELECT containment FROM sys.databases WHERE name = DB_NAME()) = 0
   AND CAST(SERVERPROPERTY('EngineEdition') AS int) <> 5
   THROW 50001, 'The users made here are contained users: the database must be partially contained (01-existing-database.sql).', 1;`,
     );
-  batch('BEGIN TRANSACTION;');
+  }
+  raw('BEGIN TRANSACTION;');
   if (withStructure && schema !== DEFAULT_SCHEMA)
     batch(`IF SCHEMA_ID('${schema}') IS NULL EXEC('CREATE SCHEMA [${schema}] AUTHORIZATION dbo');`);
   // What must be there before this file, and what must not be.
@@ -238,9 +260,11 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
   } else if (withUsers) {
     // The schema may be named before it exists (the default schema of a user is only a name).
     const make = (u: string, pw: string) =>
-      `IF DATABASE_PRINCIPAL_ID('${u}') IS NULL CREATE USER [${u}] WITH PASSWORD = '$(${pw})', DEFAULT_SCHEMA = [${schema}]; ELSE ALTER USER [${u}] WITH PASSWORD = '$(${pw})', DEFAULT_SCHEMA = [${schema}];`;
-    batch(make(appUser, 'AppPassword'));
-    if (reader) batch(make(reader, 'ReaderPassword'));
+      `SET @sql = CASE WHEN DATABASE_PRINCIPAL_ID(N'${u}') IS NULL THEN N'CREATE USER [${u}] ' ELSE N'ALTER USER [${u}] ' END
+  + N'WITH PASSWORD = ' + QUOTENAME(@${pw}, '''') + N', DEFAULT_SCHEMA = [${schema}]';
+EXEC(@sql);`;
+    raw(make(appUser, 'AppPassword'));
+    if (reader) raw(make(reader, 'ReaderPassword'));
   }
   // A heading when the kind of object changes, and a comment for each object, before its statement.
   const section = (text: string, current: string): string => {
@@ -300,7 +324,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
         '-- No migration is newer than the structure of (1): there is nothing to apply.',
         '',
       );
-      batch(`PRINT N'No migrations pending: nothing to do.';`);
+      raw(`PRINT N'No migrations pending: nothing to do.';`);
     }
     if (withUsers) {
       let group = '';
@@ -342,7 +366,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
     );
     batch(readerStatements(schema, reader));
   }
-  batch('COMMIT TRANSACTION;');
+  raw('COMMIT TRANSACTION;');
   out.push(
     `PRINT N'Done: ${
       part === 'users'
@@ -353,7 +377,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${u}' AND de
             : `${pendingFiles.length || files.length} migration${(pendingFiles.length || files.length) === 1 ? '' : 's'} applied in schema ${schema}`
           : `the structure of schema ${schema}${base ? ` (${covers.length} migrations in a baseline)` : ` (${files.length} migrations)`}`
     }.';`,
-    'GO',
+    '',
+    `END TRY
+BEGIN CATCH
+  IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+  THROW;
+END CATCH`,
     '',
   );
   return out.join('\n');

@@ -11,12 +11,12 @@
   },
   {
     "name": "DATABASE_URL",
-    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-url/) \u2014 mssql://wansurvey_app:...@<server>.database.windows.net:1433/wansurvey>",
+    "value": "<REQUIRED — the read/write user of the application; without it the installation wizard runs instead of the application; @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-url/) — mssql://wansurvey_app:...@<server>.database.windows.net:1433/wansurvey>",
     "slotSetting": false
   },
   {
     "name": "DATABASE_ADMIN_URL",
-    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-admin-url/) \u2014 the owner login, for the migrations applied at start>",
+    "value": "<CONDITIONAL — required when the application applies the migrations itself at start (zip deployment) or makes the first administrator; leave it out when the DBA ran the installation scripts; @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/database-admin-url/) — the owner login, for the migrations applied at start>",
     "slotSetting": false
   },
   {
@@ -56,7 +56,7 @@
   },
   {
     "name": "ENCRYPTION_KEY",
-    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/encryption-key/) \u2014 32 bytes, base64>",
+    "value": "<REQUIRED — encrypts stored secrets; do not change it once there is data; @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/encryption-key/) — 32 bytes, base64>",
     "slotSetting": false
   },
   {
@@ -71,37 +71,37 @@
   },
   {
     "name": "DATABASE_READONLY_URL",
-    "value": "",
+    "value": "<OPTIONAL — mssql://survey_ro:…@<server>:1433/<database>: a user that reads only the analysis model (the bi_ tables and views)>",
     "slotSetting": false
   },
   {
     "name": "PUBLIC_URL",
-    "value": "<https://encuestas.example.org>",
+    "value": "<REQUIRED — the public address of the application (links in e-mails, the Microsoft redirect); https://encuestas.example.org>",
     "slotSetting": false
   },
   {
     "name": "ORG_NAME",
-    "value": "",
+    "value": "<OPTIONAL — recommended: the organisation that runs this installation, shown in About and in the privacy policy>",
     "slotSetting": false
   },
   {
     "name": "PRIVACY_CONTACT",
-    "value": "",
+    "value": "<OPTIONAL — recommended: an e-mail or postal address where people write about their data>",
     "slotSetting": false
   },
   {
     "name": "APP_BUILD",
-    "value": "",
+    "value": "<OPTIONAL — the commit or pipeline run deployed, shown in About to people who signed in>",
     "slotSetting": false
   },
   {
     "name": "APP_HOLDER",
-    "value": "",
+    "value": "<OPTIONAL — who holds the rights over the application, shown in About>",
     "slotSetting": false
   },
   {
     "name": "PUBLIC_SURVEY_URL",
-    "value": "",
+    "value": "<OPTIONAL — only when respondents' survey links use another address than PUBLIC_URL>",
     "slotSetting": false
   },
   {
@@ -116,22 +116,22 @@
   },
   {
     "name": "ENTRA_TENANT_ID",
-    "value": "<directory (tenant) id, a GUID>",
+    "value": "<CONDITIONAL — required when sign-in is Microsoft only (PASSWORD_LOGIN=false) or the deployment has its own directory; ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET and ENTRA_REDIRECT_URI: all four or none; directory (tenant) id, a GUID>",
     "slotSetting": false
   },
   {
     "name": "ENTRA_CLIENT_ID",
-    "value": "<application (client) id, a GUID>",
+    "value": "<CONDITIONAL — one of the four ENTRA settings that come together: all four or none; application (client) id, a GUID>",
     "slotSetting": false
   },
   {
     "name": "ENTRA_CLIENT_SECRET",
-    "value": "<the client secret, or @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/entra-client-secret/)>",
+    "value": "<CONDITIONAL — one of the four ENTRA settings that come together: all four or none; the client secret, or @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/entra-client-secret/)>",
     "slotSetting": false
   },
   {
     "name": "ENTRA_REDIRECT_URI",
-    "value": "<https://encuestas.example.org/api/auth/entra/callback \u2014 the redirect URI registered in Entra>",
+    "value": "<CONDITIONAL — one of the four ENTRA settings that come together: all four or none; https://encuestas.example.org/api/auth/entra/callback — the redirect URI registered in Entra>",
     "slotSetting": false
   },
   {
@@ -141,12 +141,12 @@
   },
   {
     "name": "ENTRA_ALLOWED_DOMAINS",
-    "value": "<example.org>",
+    "value": "<OPTIONAL — comma-separated e-mail domains the directory serves; empty: those of each organisation; example.org>",
     "slotSetting": false
   },
   {
     "name": "INITIAL_ADMIN_USER",
-    "value": "<UPN of the first administrator in Entra ID, e.g. ana@example.org; needed once, on a new installation>",
+    "value": "<CONDITIONAL — required once, on a new installation with no organisation (needs DATABASE_ADMIN_URL and the ENTRA_* settings); remove it afterwards; UPN of the first administrator in Entra ID, e.g. ana@example.org; needed once, on a new installation>",
     "slotSetting": false
   },
   {
@@ -201,7 +201,7 @@
   },
   {
     "name": "GEOCODER_EMAIL",
-    "value": "",
+    "value": "<CONDITIONAL — required when GEOCODER=nominatim: the contact e-mail that Nominatim's usage policy asks for>",
     "slotSetting": false
   },
   {
@@ -216,22 +216,22 @@
   },
   {
     "name": "MAIL_OUTBOX_DIR",
-    "value": "",
+    "value": "<CONDITIONAL — required when MAILER=file: a folder>",
     "slotSetting": false
   },
   {
     "name": "SMTP_URL",
-    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/smtp-url/) \u2014 smtps://user:password@smtp.example.org:465>",
+    "value": "<CONDITIONAL — required when MAILER=smtp; @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/smtp-url/) — smtps://user:password@smtp.example.org:465>",
     "slotSetting": false
   },
   {
     "name": "MAIL_FROM",
-    "value": "<WanSurvey <encuestas@example.org>>",
+    "value": "<CONDITIONAL — set it when MAILER=smtp: the sender of the e-mails (the default points to localhost); WanSurvey <encuestas@example.org>>",
     "slotSetting": false
   },
   {
     "name": "MAIL_WEBHOOK_SECRET",
-    "value": "<@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/mail-webhook-secret/) \u2014 at least 16 characters>",
+    "value": "<OPTIONAL — secret of the e-mail provider's bounce webhook; @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/mail-webhook-secret/) — at least 16 characters>",
     "slotSetting": false
   },
   {
@@ -246,12 +246,12 @@
   },
   {
     "name": "DATA_DIR",
-    "value": "",
+    "value": "<CONDITIONAL — required when EXPORT_STORAGE=local: a folder (never in production)>",
     "slotSetting": false
   },
   {
     "name": "AZURE_STORAGE_ACCOUNT_NAME",
-    "value": "<storage account name>",
+    "value": "<CONDITIONAL — required when EXPORT_STORAGE=blob (always in production) unless AZURE_STORAGE_CONNECTION_STRING is used; storage account name>",
     "slotSetting": false
   },
   {
@@ -261,12 +261,12 @@
   },
   {
     "name": "AZURE_CLIENT_ID",
-    "value": "<client id of the app's user-assigned managed identity>",
+    "value": "<CONDITIONAL — only with a user-assigned managed identity (Key Vault references, Blob Storage); not with a system-assigned one; client id of the app's user-assigned managed identity>",
     "slotSetting": false
   },
   {
     "name": "AZURE_STORAGE_CONNECTION_STRING",
-    "value": "",
+    "value": "<OPTIONAL — Azurite or development storage; in Azure use the managed identity instead, so there is no key to keep>",
     "slotSetting": false
   },
   {
@@ -326,22 +326,22 @@
   },
   {
     "name": "SMS_OUTBOX_DIR",
-    "value": "",
+    "value": "<CONDITIONAL — required when SMS_PROVIDER=file: a folder>",
     "slotSetting": false
   },
   {
     "name": "SMS_CONNECTION_STRING",
-    "value": "",
+    "value": "<CONDITIONAL — required when SMS_PROVIDER=acs: the Azure Communication Services connection string (a secret)>",
     "slotSetting": false
   },
   {
     "name": "SMS_FROM",
-    "value": "",
+    "value": "<CONDITIONAL — required when SMS_PROVIDER=acs: the sender number>",
     "slotSetting": false
   },
   {
     "name": "SMS_WEBHOOK_SECRET",
-    "value": "",
+    "value": "<OPTIONAL — secret the SMS provider sends with replies (STOP), at least 16 characters>",
     "slotSetting": false
   },
   {
@@ -351,17 +351,17 @@
   },
   {
     "name": "VAPID_PUBLIC_KEY",
-    "value": "",
+    "value": "<OPTIONAL — push notifications: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT, all three or none (pnpm --filter @wansurvey/api vapid makes the keys)>",
     "slotSetting": false
   },
   {
     "name": "VAPID_PRIVATE_KEY",
-    "value": "",
+    "value": "<OPTIONAL — push notifications: all three VAPID settings or none; a secret>",
     "slotSetting": false
   },
   {
     "name": "VAPID_SUBJECT",
-    "value": "",
+    "value": "<OPTIONAL — push notifications: all three VAPID settings or none; mailto:you@example.org or an https address>",
     "slotSetting": false
   },
   {
@@ -381,12 +381,12 @@
   },
   {
     "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-    "value": "",
+    "value": "<OPTIONAL — InstrumentationKey=<guid>;IngestionEndpoint=https://<region>.in.applicationinsights.azure.com/: failures of the server are reported to Application Insights, without personal data>",
     "slotSetting": false
   },
   {
     "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "value": "",
+    "value": "<OPTIONAL — not wired yet: leave it out>",
     "slotSetting": false
   },
   {

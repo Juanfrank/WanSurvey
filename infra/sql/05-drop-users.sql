@@ -2,8 +2,8 @@
   WanSurvey, optional: remove a SQL user: to retire the reader, to lock out a user that must not
   connect any more, or to start again with other names. Run as the OWNER, in the database.
 
-  sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i 05-drop-users.sql ^
-         -v User="survey_ro"
+  Plain T-SQL, for any client: connect to the database as the owner, write the user in the
+  DECLARE line below and run the whole file.
 
   It drops the user and its permissions on the database (contained users have no login to remove).
   Nothing else changes: the schema, the tables and the data stay. To change only a password, run
@@ -14,10 +14,11 @@
   is taken for it. To retire it for good, drop it by hand knowing the application stops, and make a
   new database from step 1 if it must come back.
 */
-:on error exit
 SET NOCOUNT ON;
-GO
-DECLARE @u sysname = N'$(User)';
+
+-- The user to drop:
+DECLARE @u sysname = N'survey_ro';
+
 IF USER_NAME() <> N'dbo' THROW 50001, 'Run it as the owner of the database (dbo).', 1;
 IF @u IN (N'dbo', N'guest', N'sys', N'INFORMATION_SCHEMA') OR @u LIKE N'%[^A-Za-z0-9_]%'
   THROW 50001, 'Not a user of the application.', 1;
@@ -31,4 +32,3 @@ BEGIN
   EXEC (@sql);
   PRINT N'User dropped.';
 END;
-GO

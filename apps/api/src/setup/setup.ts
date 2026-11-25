@@ -13,11 +13,18 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 /** What the wizard asks: names and addresses only, never a password. */
 export const SetupRequest = z.object({
+  /** The address of the SQL Server, with its port only when it is not the default: `host`, `host:1434` or `host,1434`. */
   server: z
     .string()
     .trim()
-    .regex(/^[A-Za-z0-9._-]{1,253}$/, 'The address of the SQL Server, for example sql.example.org'),
-  port: z.number().int().min(1).max(65535).default(1433),
+    .regex(
+      /^[A-Za-z0-9._-]{1,253}(?:[:,]\d{1,5})?$/,
+      'The address of the SQL Server, with its port if it is not the default: sql.example.org or sql.example.org:1434',
+    )
+    .refine((s) => {
+      const port = /[:,](\d+)$/.exec(s)?.[1];
+      return port === undefined || (Number(port) >= 1 && Number(port) <= 65535);
+    }, 'The port is a number from 1 to 65535'),
   database: z
     .string()
     .trim()
@@ -46,7 +53,8 @@ export function setupPlan(r: SetupRequest) {
     ...(r.readonlyUser ? { readonlyUser: r.readonlyUser } : {}),
   };
   const url = (user: string) =>
-    `mssql://${user}:<password>@${r.server}:${r.port}/${r.database}?encrypt=true`;
+    // `host,1434` is how SQL Server tools write the port: in a URL it is `host:1434`; no port, no `:`.
+    `mssql://${user}:<password>@${r.server.replace(',', ':')}/${r.database}?encrypt=true`;
   const settings = [
     { name: 'DATABASE_URL', value: url(r.appUser), secret: true },
     ...(r.readonlyUser

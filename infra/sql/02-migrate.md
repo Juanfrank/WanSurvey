@@ -57,7 +57,7 @@ settings for the migration (the URLs still carry the user names).
    The schema need not exist yet; the migrations make it.
 
 2. The login in `DATABASE_ADMIN_URL` must be the **owner of the database** (it is `dbo` in it: see
-   `01-existing-database.sql`, with `OwnerLogin="keep"` to use the current owner). With users made from
+   `01-existing-database.sql`, with `@owner = N'keep'` to use the current owner). With users made from
    logins you need nothing else from step 1: it only turns on contained users, which they do not use.
 3. Migrate with `DATABASE_ADMIN_URL` (the owner), `DATABASE_URL` and `DATABASE_READONLY_URL` (the
    user names), `DATABASE_SCHEMA` and `DATABASE_MANAGE_USERS=false`. It stops with a clear message if a
@@ -67,13 +67,12 @@ settings for the migration (the URLs still carry the user names).
 ## The installation wizard (no `DATABASE_URL` yet)
 
 While `DATABASE_URL` is not set, the application does not stop: it runs **only a wizard**, and every
-page of the web app leads to `/setup`. It asks for what is not secret: the SQL Server address and
-port, the database, the schema, and the names of the owner, the read/write user and the read-only
+page of the web app leads to `/setup`. It asks for what is not secret: the SQL Server address (with the port only if it is not the default: `host` or `host:1434`), the database, the schema, and the names of the owner, the read/write user and the read-only
 user (never a password). It answers with:
 
 1. the script that creates the structure (schema, tables, views, procedures and row-level security, as plain `CREATE` statements, with no history of migrations; one transaction);
 2. the script that creates the users and grants the permissions (or only checks the users, if the
-   DBA makes them), which asks for the passwords as `sqlcmd` variables when you run it;
+   DBA makes them), which asks for the passwords in `DECLARE` lines at its top, that you fill in before running it;
 3. only if some migration is newer than that structure, a script with those migrations;
 4. the settings to put in the environment (`DATABASE_URL` and the others, with `<password>` where the
    password goes).
@@ -112,13 +111,12 @@ pnpm --filter @wansurvey/api db:script ... --part migrations --out 3-migrations.
 
 (`--part all` makes one file with all of it.) The names default to `DATABASE_SCHEMA` and to the users in
 `DATABASE_URL` and `DATABASE_READONLY_URL`; `--users-by-dba` is also `DATABASE_MANAGE_USERS=false`. Run each
-as the owner of the database:
-
-```
-sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i 1-tables.sql
-sqlcmd ... -i 2-users.sql -v AppPassword="..." ReaderPassword="..."   # without --users-by-dba; otherwise no -v
-sqlcmd ... -i 3-migrations.sql
-```
+as the owner of the database, with any T-SQL client (SSMS, Azure Data Studio, the query editor of
+the Azure portal, `sqlcmd -i` as well): each file is **plain T-SQL**, one batch with no `GO` and no
+`sqlcmd` variables, so it runs the same everywhere. In `2-users.sql` (unless `--users-by-dba`) write the
+passwords in the `DECLARE @AppPassword` / `@ReaderPassword` lines at the top before running it; the
+file refuses to run while a placeholder is still there. The `01-…` and `03-…` to `05-…` scripts of this
+folder work the same way: the values to write are in the `DECLARE` lines at their top.
 
 - **(1) The structure** is one transaction: if a statement fails nothing is kept, and it refuses to run
   twice. It records what the baseline covers in `<schema>.__migrations`.

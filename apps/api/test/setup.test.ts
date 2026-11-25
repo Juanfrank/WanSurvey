@@ -25,8 +25,10 @@ describe('the installation wizard', () => {
     const plan = setupPlan(SetupRequest.parse(body));
     expect(plan.tables).toContain('CREATE SCHEMA [survey]');
     expect(plan.tables).not.toContain('CREATE USER');
-    expect(plan.users).toContain("CREATE USER [survey_rw] WITH PASSWORD = '$(AppPassword)'");
-    expect(plan.users).toContain("N' TO [survey_ro]");
+    expect(plan.users).toContain('DECLARE @AppPassword nvarchar(128)');
+    expect(plan.users).toContain("N'CREATE USER [survey_rw] '");
+    expect(plan.users).not.toMatch(/^GO\s*$/m);
+    expect(plan.users).toContain("N'' TO [survey_ro]");
     expect(plan.users).toContain('DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER ON SCHEMA::');
     expect(plan.passwordVariables).toEqual(['AppPassword', 'ReaderPassword']);
     // The migrations are left out; none is newer than the baseline, so there is no third script.
@@ -35,8 +37,33 @@ describe('the installation wizard', () => {
     expect(plan.tables).toContain('baseline');
     const urls = plan.settings.filter((s) => s.secret).map((s) => s.value);
     expect(urls).toHaveLength(3);
-    for (const u of urls) expect(u).toContain(':<password>@sql.example.org:1433/mi_base');
+    for (const u of urls) expect(u).toContain(':<password>@sql.example.org/mi_base');
     expect(plan.settings.find((s) => s.name === 'DATABASE_SCHEMA')!.value).toBe('survey');
+  });
+
+  it('takes the port with the address, and only when it is not the default', () => {
+    const url = (server: string) =>
+      setupPlan(SetupRequest.parse({ ...body, server })).settings.find(
+        (s) => s.name === 'DATABASE_URL',
+      )!.value;
+    expect(url('sql.example.org')).toBe(
+      'mssql://survey_rw:<password>@sql.example.org/mi_base?encrypt=true',
+    );
+    expect(url('sql.example.org:1434')).toBe(
+      'mssql://survey_rw:<password>@sql.example.org:1434/mi_base?encrypt=true',
+    );
+    // The way SQL Server tools write it.
+    expect(url('sql.example.org,1434')).toBe(
+      'mssql://survey_rw:<password>@sql.example.org:1434/mi_base?encrypt=true',
+    );
+    for (const bad of [
+      'sql.example.org:0',
+      'sql.example.org:70000',
+      'sql.example.org:',
+      'x y',
+      'a:1:2',
+    ])
+      expect(SetupRequest.safeParse({ ...body, server: bad }).success, bad).toBe(false);
   });
 
   it('checks the users instead of making them when the DBA makes them', () => {

@@ -19,6 +19,10 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **The environment-variable templates say what is required**: each `<…>` placeholder starts with
+  `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
+  as it is counts as not set when it is optional or conditional, and stops the application, naming it, when
+  it is required.
 - **Error reporting to Azure Application Insights** (`APPLICATIONINSIGHTS_CONNECTION_STRING`, replacing
   the `SENTRY_DSN` that never did anything): an error nobody handled, a request that ended in 5xx and a job
   that failed for good are sent to Application Insights, with e-mail addresses, numbers, passwords,
@@ -161,6 +165,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **The generated SQL scripts, and the ones in `infra/sql/`, are plain T-SQL**: one batch with no `GO`, no
+  `:on error exit` and no `sqlcmd` variables, so they run in SSMS, Azure Data Studio or the portal as in
+  `sqlcmd`. Passwords and names are written in `DECLARE` lines at the top (the file refuses to run with a
+  placeholder left); each object goes through `EXEC`, inside `TRY/CATCH` with one transaction.
+- **The installation wizard asks for the server and the port in one field** (`host` or `host:1434`):
+  leave the port out when it is the default.
 - **Everything is in the one schema** (`DATABASE_SCHEMA`; `dbo` by default). The analysis model is no
   longer in a schema `bi`: its tables, views, procedures and functions are `<schema>.bi_*` (for example
   `bi_dim_proyecto`, `bi_plano_respuestas`, `bi_refrescar`), and the row-level security objects are

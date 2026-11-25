@@ -5,11 +5,10 @@
   change a password or the reader. It can be run as many times as you like: it creates what is
   missing and sets the rest to what it says here. Run it as the OWNER of step 1, in the database.
 
-  sqlcmd -S <server> -U <owner> -P <password> -d <database> -b -i 03-users.sql ^
-         -v SchemaName="survey" RwUser="survey_rw" RwPassword="..." ^
-            RoUser="survey_ro" RoPassword="..."
+  Plain T-SQL, for any client: connect to the database as the owner, write the values in the
+  DECLARE lines below and run the whole file.
 
-  Pass RoUser="none" (and RoPassword="none": sqlcmd wants every variable) for no read-only user: the reader that exists is then left as it is (to
+  Leave @RoUser empty for no read-only user: the reader that exists is then left as it is (to
   remove it, use 05-drop-users.sql).
 
   READ/WRITE user (RwUser): a contained user, no role, no server login. What it may do on the tables
@@ -26,17 +25,25 @@
   Passwords: 8+ characters from three of four classes, and not the name. Names: letters, digits and
   underscores. Choose the schema and the user names before the first migration and keep them.
 */
-:on error exit
 SET NOCOUNT ON;
-GO
-DECLARE @schema sysname = N'$(SchemaName)', @rw sysname = N'$(RwUser)', @ro sysname = CASE WHEN N'$(RoUser)' = N'none' THEN N'' ELSE N'$(RoUser)' END;
+SET XACT_ABORT ON;
+
+-- Write these values:
+DECLARE @schema sysname = N'survey';
+DECLARE @rw sysname = N'survey_rw';
+DECLARE @rwPassword nvarchar(128) = N'<<password of the read/write user>>';
+DECLARE @ro sysname = N'survey_ro';            -- empty: no read-only user
+DECLARE @roPassword nvarchar(128) = N'<<password of the read-only user>>';
+
 IF @schema = N'' OR @rw = N'' OR @schema LIKE N'%[^A-Za-z0-9_]%' OR @rw LIKE N'%[^A-Za-z0-9_]%'
    OR @ro LIKE N'%[^A-Za-z0-9_]%' OR @schema LIKE N'[0-9]%' OR @rw LIKE N'[0-9]%' OR @ro LIKE N'[0-9]%'
-  THROW 50001, 'SchemaName, RwUser and RoUser: letters, digits and underscores, not starting with a digit.', 1;
+  THROW 50001, '@schema, @rw and @ro: letters, digits and underscores, not starting with a digit.', 1;
 IF @ro <> N'' AND @ro = @rw THROW 50001, 'The read-only user must not be the read/write user.', 1;
 IF (SELECT containment FROM sys.databases WHERE name = DB_NAME()) = 0
   THROW 50001, 'The database is not contained (step 1 turns it on: SET CONTAINMENT = PARTIAL).', 1;
 IF USER_NAME() <> N'dbo' THROW 50001, 'Run it as the owner of the database (dbo).', 1;
+IF @rwPassword LIKE N'<<%' OR (@ro <> N'' AND @roPassword LIKE N'<<%')
+  THROW 50001, 'Write the passwords in the DECLARE lines at the top of the file.', 1;
 
 DECLARE @sql nvarchar(max);
 -- The schema (dbo already exists), owned by dbo.
@@ -51,7 +58,7 @@ DECLARE @u sysname, @pw nvarchar(128), @i int = 1;
 WHILE @i <= 2
 BEGIN
   SELECT @u = CASE @i WHEN 1 THEN @rw ELSE @ro END,
-         @pw = CASE @i WHEN 1 THEN N'$(RwPassword)' ELSE N'$(RoPassword)' END;
+         @pw = CASE @i WHEN 1 THEN @rwPassword ELSE @roPassword END;
   IF @u <> N''
   BEGIN
     SET @sql = CASE WHEN DATABASE_PRINCIPAL_ID(@u) IS NULL THEN N'CREATE USER ' ELSE N'ALTER USER ' END
@@ -79,4 +86,3 @@ BEGIN
   END;
 END;
 PRINT N'Users ready. Check them with 04-check-permissions.sql.';
-GO
