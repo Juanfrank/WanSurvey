@@ -84,6 +84,13 @@ const access = (f: Facts, es: boolean): Section => {
     ...(on(f, 'geocoder')
       ? [es ? 'Búsqueda de direcciones en el mapa.' : 'Address search on the map.']
       : []),
+    ...(on(f, 'errorReporting')
+      ? [
+          es
+            ? 'Informes técnicos de errores a Azure Application Insights, sin datos personales.'
+            : 'Technical error reports to Azure Application Insights, without personal data.',
+        ]
+      : []),
   ];
   return {
     id: 'access',
@@ -289,13 +296,17 @@ export function privacyPage(f: Facts, es: boolean): Page {
           title: 'Quién recibe los datos',
           items: outside(
             outside(
-              [
-                'Las personas de la organización que necesitan los datos para su trabajo, según su rol. Los datos personales aparecen ocultos salvo para quien tiene permiso expreso, y cada consulta queda registrada.',
-                'Los proveedores que alojan la aplicación y envían correos, que tratan los datos por encargo y solo para ese fin.',
-                'El servicio de notificaciones de su navegador (Google, Apple o Mozilla), si el personal activa las notificaciones del navegador; el texto es genérico y no contiene datos personales.',
-              ],
-              on(f, 'sms'),
-              'El proveedor de mensajes SMS, que recibe el número de teléfono y el texto del mensaje.',
+              outside(
+                [
+                  'Las personas de la organización que necesitan los datos para su trabajo, según su rol. Los datos personales aparecen ocultos salvo para quien tiene permiso expreso, y cada consulta queda registrada.',
+                  'Los proveedores que alojan la aplicación y envían correos, que tratan los datos por encargo y solo para ese fin.',
+                  'El servicio de notificaciones de su navegador (Google, Apple o Mozilla), si el personal activa las notificaciones del navegador; el texto es genérico y no contiene datos personales.',
+                ],
+                on(f, 'sms'),
+                'El proveedor de mensajes SMS, que recibe el número de teléfono y el texto del mensaje.',
+              ),
+              on(f, 'errorReporting'),
+              'Azure Application Insights (Microsoft), que recibe informes técnicos de los errores del servidor: sin nombres, correos, números, contraseñas ni respuestas, que se eliminan antes de enviarlos.',
             ),
             on(f, 'geocoder'),
             'Un servicio de mapas (OpenStreetMap Nominatim) que recibe las direcciones de la muestra para ubicarlas, sin el nombre de la persona.',
@@ -423,13 +434,17 @@ export function privacyPage(f: Facts, es: boolean): Page {
         title: 'Who receives the data',
         items: outside(
           outside(
-            [
-              'People in the organisation who need the data for their work, by role. Personal data is hidden except for those with explicit permission, and every view is logged.',
-              'The providers that host the application and send e-mail, who handle the data on its behalf and only for that purpose.',
-              'The notification service of their browser (Google, Apple or Mozilla), if staff turn on browser notifications; the text is generic and holds no personal data.',
-            ],
-            on(f, 'sms'),
-            'The SMS provider, which receives the phone number and the text of the message.',
+            outside(
+              [
+                'People in the organisation who need the data for their work, by role. Personal data is hidden except for those with explicit permission, and every view is logged.',
+                'The providers that host the application and send e-mail, who handle the data on its behalf and only for that purpose.',
+                'The notification service of their browser (Google, Apple or Mozilla), if staff turn on browser notifications; the text is generic and holds no personal data.',
+              ],
+              on(f, 'sms'),
+              'The SMS provider, which receives the phone number and the text of the message.',
+            ),
+            on(f, 'errorReporting'),
+            'Azure Application Insights (Microsoft), which receives technical reports of the server’s errors: names, e-mail addresses, numbers, passwords and answers are removed before they are sent.',
           ),
           on(f, 'geocoder'),
           'A mapping service (OpenStreetMap Nominatim) that receives the sample’s addresses to place them, without the person’s name.',

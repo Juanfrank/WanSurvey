@@ -1,3 +1,4 @@
+import { telemetry } from '../observability/app-insights.js';
 import {
   Inject,
   Injectable,
@@ -190,6 +191,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
       return await handler(data);
     } catch (e) {
       this.logger.error(`Job ${name} failed: ${(e as Error).message}`);
+      telemetry.trackException(e, { job: name });
       if (this.queue) throw e;
       return undefined;
     }
@@ -208,6 +210,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
       } catch (e) {
         if (attempt >= ATTEMPTS) {
           this.logger.error(`Job ${name} failed for good: ${(e as Error).message}`);
+          telemetry.trackException(e, { job: name, failedForGood: 'true' });
           return undefined;
         }
         this.logger.warn(`Job ${name} will be tried again: ${(e as Error).message}`);

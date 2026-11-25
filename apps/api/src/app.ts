@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import type { Server } from 'node:http';
 import type { INestApplication } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
@@ -13,6 +13,8 @@ import { loadShedding } from './common/load-shed.js';
 import { compress, isApiPath, serveWeb } from './common/web.js';
 import { plainBodiesOnly } from './common/plain-body.js';
 import { loadConfig } from './config.js';
+import { telemetry } from './observability/app-insights.js';
+import { ReportingFilter } from './observability/reporting-filter.js';
 import { VERSION } from './version.js';
 
 export async function createApp(opts: AppModuleOptions = {}): Promise<INestApplication> {
@@ -29,6 +31,22 @@ export async function createApp(opts: AppModuleOptions = {}): Promise<INestAppli
   const config = loadConfig();
   app.set('trust proxy', config.TRUST_PROXY_HOPS);
   app.use(healthAccess(config.HEALTH_ALLOWED_IPS));
+  // Failures on the server's side go to the error reporting (Application Insights), when it is on.
+  app.useGlobalFilters(new ReportingFilter(app.get(HttpAdapterHost).httpAdapter));
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!telemetry.enabled) return next();
+    const began = Date.now();
+    res.on('finish', () => {
+      if (res.statusCode >= 500)
+        telemetry.trackRequest({
+          method: req.method,
+          route: (req.route as { path?: string } | undefined)?.path ?? 'unmatched',
+          status: res.statusCode,
+          durationMs: Date.now() - began,
+        });
+    });
+    next();
+  });
   // Keep-alive longer than the load balancer's idle timeout (and headers a little longer
   // still), so the balancer never sends a request down a connection the API just closed.
   const server = app.getHttpServer() as Server;

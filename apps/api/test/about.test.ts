@@ -42,6 +42,7 @@ describe('the public about answer', () => {
       email: false,
       microsoftSignIn: true,
       passwordLogin: true,
+      errorReporting: false,
     });
     expect(a.version).toMatch(/^\d+\.\d+\.\d+/);
   });

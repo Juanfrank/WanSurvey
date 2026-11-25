@@ -380,7 +380,7 @@
     "slotSetting": false
   },
   {
-    "name": "SENTRY_DSN",
+    "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
     "value": "",
     "slotSetting": false
   },

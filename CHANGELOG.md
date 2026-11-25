@@ -19,6 +19,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Error reporting to Azure Application Insights** (`APPLICATIONINSIGHTS_CONNECTION_STRING`, replacing
+  the `SENTRY_DSN` that never did anything): an error nobody handled, a request that ended in 5xx and a job
+  that failed for good are sent to Application Insights, with e-mail addresses, numbers, passwords,
+  tokens, query strings and database-quoted values removed first, and no bodies, headers, cookies or
+  client addresses. At most 30 exceptions a minute; off when the setting is empty. The privacy policy and
+  About say so when it is on. See `docs/operations.md`.
 - **The generated SQL scripts are divided in commented sections**: a heading for each kind of object
   (tables, foreign keys, indexes, functions and views, procedures, triggers, row-level security, initial
   data, permissions) and a comment before each one, so each table's creation can be found and read apart.

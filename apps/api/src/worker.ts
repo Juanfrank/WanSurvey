@@ -23,7 +23,7 @@ if (!config.REDIS_URL) {
   console.error('The worker needs REDIS_URL');
   process.exit(1);
 }
-initObservability(config);
+initObservability(config, 'worker');
 const app = await NestFactory.createApplicationContext(AppModule.register({ role: 'worker' }), {
   bufferLogs: true,
 });

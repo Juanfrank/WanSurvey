@@ -44,6 +44,7 @@ const SECRET_SETTINGS = new Set([
   'DATABASE_URL',
   'DATABASE_ADMIN_URL',
   'DATABASE_READONLY_URL',
+  'APPLICATIONINSIGHTS_CONNECTION_STRING',
 ]);
 const EXAMPLE_SECRET = /(^|[:/@=])(dev-|change-me|admin1234)|change-me/i;
 
@@ -340,8 +341,13 @@ const Env = z.object({
   /** How often the e-mail dispatcher runs (ms); 0 turns it off. */
   DISPATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-  /** Optional: OpenTelemetry/Sentry are wired only when configured. */
-  SENTRY_DSN: z.string().optional(),
+  /**
+   * Azure Application Insights, App Service's own name for it: the failures on the server's side (an
+   * error nobody handled, a request that ended in 5xx, a job that failed for good) are reported,
+   * without personal data. Off when empty.
+   */
+  APPLICATIONINSIGHTS_CONNECTION_STRING: optionalText(1000),
+  /** Optional: OpenTelemetry is wired only when configured. */
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
 });
 /** Every setting the app reads, for the checks that the templates and examples list them all. */

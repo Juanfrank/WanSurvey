@@ -21,7 +21,14 @@ const full: Facts = {
   privacyContact: 'datos@demo.example',
   author: 'Ana Autora',
   holder: 'Editorial S.A.',
-  services: { geocoder: true, sms: true, email: true, microsoftSignIn: true, passwordLogin: true },
+  services: {
+    geocoder: true,
+    sms: true,
+    email: true,
+    microsoftSignIn: true,
+    passwordLogin: true,
+    errorReporting: true,
+  },
   technical: { build: 'abc123', environment: 'production', node: '22.1.0' },
 };
 const builders = { about: aboutPage, privacy: privacyPage, terms: termsPage };
@@ -75,6 +82,23 @@ describe('About', () => {
     expect(on).toMatch(/SMS/);
     expect(on).toMatch(/Microsoft/);
     expect(on).not.toMatch(/abc123|production|22\.1\.0/);
+  });
+
+  it('says that errors are reported to Application Insights only when they are', () => {
+    const off =
+      text(aboutPage({ ...base, services: {} }, false)) +
+      text(privacyPage({ ...base, services: {} }, false));
+    expect(off).not.toMatch(/Application Insights/);
+    const on = { ...base, services: { errorReporting: true } };
+    expect(text(aboutPage(on, false))).toContain(
+      'Technical error reports to Azure Application Insights, without personal data.',
+    );
+    expect(text(privacyPage(on, true))).toMatch(
+      /Azure Application Insights \(Microsoft\), que recibe informes técnicos/,
+    );
+    expect(text(privacyPage(on, false))).toMatch(
+      /Azure Application Insights \(Microsoft\), which receives technical reports/,
+    );
   });
 
   it('says who runs it, or that an organisation does, and the contact or the fallback', () => {

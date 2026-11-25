@@ -32,6 +32,7 @@ export class AboutController {
         email: c.MAILER === 'smtp',
         microsoftSignIn: !!c.ENTRA_CLIENT_ID,
         passwordLogin: c.PASSWORD_LOGIN,
+        errorReporting: !!c.APPLICATIONINSIGHTS_CONNECTION_STRING,
       },
     };
   }
