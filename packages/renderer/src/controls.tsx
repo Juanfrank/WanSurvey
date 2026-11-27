@@ -22,6 +22,12 @@ export interface ControlProps {
   showCodes: boolean;
   /** Respondent mode on touch devices: larger targets. */
   touch: boolean;
+  /**
+   * The respondent answers on their own device (CAWI): an e-mail or phone question lets the
+   * browser fill in theirs (WCAG 1.3.5). Off on an interviewer's device, where it would offer
+   * the interviewer's or a previous respondent's.
+   */
+  ownDevice?: boolean;
   displayAs?: string;
   lang: string;
   /**
@@ -399,6 +405,9 @@ export function NumericInput(p: ControlProps & { onInvalid(msg: string | null): 
   );
 }
 
+/** The `autocomplete` token of each text format, for the respondent's own device. */
+const AUTOFILL: Record<NonNullable<Question['format']>, string> = { email: 'email', phone: 'tel' };
+
 export function TextInput(p: ControlProps) {
   const id = useId();
   const value = typeof p.value === 'string' ? p.value : '';
@@ -426,7 +435,7 @@ export function TextInput(p: ControlProps) {
           {...common}
           type={format === 'email' ? 'email' : format === 'phone' ? 'tel' : 'text'}
           inputMode={format === 'email' ? 'email' : format === 'phone' ? 'tel' : undefined}
-          autoComplete="off"
+          autoComplete={(p.ownDevice && format && AUTOFILL[format]) || 'off'}
           onChange={(e) => p.onChange(e.target.value)}
         />
       )}

@@ -395,7 +395,12 @@ export function Shell({
   const logoAt = branding?.logo ? branding.theme.logo : 'hidden';
   const logo =
     branding?.logo && logoAt !== 'hidden' ? (
-      <img src={branding.logo} alt="" className="h-10 w-auto max-w-[10rem] object-contain" />
+      // Named when the project gives a description (who is asking); decorative otherwise.
+      <img
+        src={branding.logo}
+        alt={branding.theme.logoAlt ?? ''}
+        className="h-10 w-auto max-w-[10rem] object-contain"
+      />
     ) : null;
   return (
     <div

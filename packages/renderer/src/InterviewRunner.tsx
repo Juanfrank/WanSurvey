@@ -289,11 +289,32 @@ function Runner(p: InterviewRunnerProps) {
     [session, refresh],
   );
 
-  // Focus the first control whenever the screen changes.
+  // Focus the first control whenever the screen changes; a page that opens with a text (an
+  // introduction, an information notice) starts there instead, so a screen reader reads it
+  // before the questions under it rather than skipping to the first answer.
+  // Only on arriving at the page: a refused Next on it goes to the question it stopped at.
+  const introKey = useRef<string | null>(null);
+  introKey.current =
+    layout === 'page' && entries.length > 1 && entries[0]!.kind === 'static'
+      ? entries[0]!.key
+      : null;
+  const introShown = useRef<string | null>(null);
   useEffect(() => {
-    const el = containerRef.current?.querySelector<HTMLElement>(
-      '[data-qbody] input:not([type=hidden]):not([disabled]), [data-qbody] select, [data-qbody] textarea, [data-qbody] button, [data-focus-first]',
-    );
+    const root = containerRef.current;
+    const intro = introKey.current;
+    const arrived = intro !== introShown.current;
+    introShown.current = intro;
+    if (intro && arrived) {
+      const el = root?.querySelector<HTMLElement>(`[data-qkey="${CSS.escape(intro)}"]`);
+      if (el) return el.focus();
+    }
+    const controls =
+      '[data-qbody] input:not([type=hidden]):not([disabled]), [data-qbody] select, [data-qbody] textarea, [data-qbody] button, [data-focus-first]';
+    const at =
+      intro && currentKey
+        ? root?.querySelector<HTMLElement>(`[data-qkey="${CSS.escape(currentKey)}"]`)
+        : null;
+    const el = (at ?? root)?.querySelector<HTMLElement>(controls);
     // Static texts have no control: focus the item itself so keys still reach the runner.
     (el ?? containerRef.current?.querySelector<HTMLElement>('[data-qkey]'))?.focus();
   }, [currentKey, status.state]);
@@ -440,6 +461,8 @@ function Runner(p: InterviewRunnerProps) {
   const pendingRosters = openRostersBefore(session, currentKey);
   const finished = status.state !== 'in_progress';
   const percent = Math.round(status.progress * 100);
+  // The phone layout has no room for the shortcut hints, and a phone has no keyboard for them.
+  const hintCls = narrow ? 'hidden' : '';
 
   return (
     <div
@@ -544,7 +567,7 @@ function Runner(p: InterviewRunnerProps) {
       ) : null}
 
       {!finished ? (
-        <div className="flex justify-between gap-3 border-t border-slate-200 pt-4">
+        <div className="flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-4">
           <button
             type="button"
             className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 disabled:opacity-40"
@@ -553,8 +576,11 @@ function Runner(p: InterviewRunnerProps) {
             aria-keyshortcuts="Shift+Enter"
           >
             {t('nav.back')}
-            {/* Shortcut hints help with a keyboard; on a touch screen they are noise. */}
-            <span aria-hidden className="ml-2 text-xs text-slate-500 pointer-coarse:hidden">
+            {/* Shortcut hints help with a keyboard; on a phone or a touch screen they are noise. */}
+            <span
+              aria-hidden
+              className={`ml-2 text-xs text-slate-500 pointer-coarse:hidden ${hintCls}`}
+            >
               {t('nav.backKey')}
             </span>
           </button>
@@ -565,7 +591,10 @@ function Runner(p: InterviewRunnerProps) {
             aria-keyshortcuts={textOnScreen ? 'Control+Enter' : 'Enter'}
           >
             {t('nav.next')}
-            <span aria-hidden className="ml-2 text-xs text-on-fill/80 pointer-coarse:hidden">
+            <span
+              aria-hidden
+              className={`ml-2 text-xs text-on-fill/80 pointer-coarse:hidden ${hintCls}`}
+            >
               {textOnScreen ? t('nav.nextKeyText') : t('nav.nextKey')}
             </span>
           </button>

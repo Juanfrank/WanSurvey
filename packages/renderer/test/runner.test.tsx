@@ -193,6 +193,40 @@ describe('InterviewRunner (respondent mode)', () => {
     expect(document.querySelectorAll('[data-qkey]')).toHaveLength(1);
   });
 
+  it('starts a page that opens with a text at the text, not at the first answer', () => {
+    setup('CAWI');
+    const intro = document.querySelector<HTMLElement>('[data-qkey="A0_CONSENT_TEXT"]')!;
+    expect(document.activeElement).toBe(intro);
+    // Focused for screen readers only: it is not a control and shows no focus ring.
+    expect(intro.className).not.toMatch(/ring/);
+  });
+
+  it('after a refused Next on that page, goes to the question it stopped at, not the text', async () => {
+    const { user, session } = setup('CAWI');
+    await user.click(
+      within(document.querySelector('[data-qkey="A1_CONSENT"]') as HTMLElement).getByLabelText(
+        'Yes',
+      ),
+    );
+    await user.click(screen.getByRole('button', { name: /Next/ }));
+    expect(session.currentKey()).toBe('A2_AGE');
+    expect(document.activeElement?.closest('[data-qkey]')?.getAttribute('data-qkey')).toBe(
+      'A2_AGE',
+    );
+  });
+
+  it('shows the keyboard shortcut hints on wide screens only', () => {
+    const hints = () =>
+      [...screen.getByRole('button', { name: /Next/ }).querySelectorAll('[aria-hidden]')].map((e) =>
+        e.classList.contains('hidden'),
+      );
+    setup('CAWI');
+    expect(hints()).toEqual([false]);
+    cleanup();
+    setup('CAWI', { narrow: true });
+    expect(hints()).toEqual([true]);
+  });
+
   it('has no axe violations', async () => {
     const { container } = setup('CAWI');
     await expectNoAxeViolations(container);
