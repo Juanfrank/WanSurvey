@@ -18,6 +18,8 @@ import { CheckField, Hint, inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
 import type { RolesView } from './permissions.js';
+import { useFacts } from '../routes/InfoPages.js';
+import { Link } from '@tanstack/react-router';
 
 interface Tenant {
   id: string;
@@ -84,6 +86,7 @@ export function OrganisationPage() {
         {tenant.data ? <Appearance tenant={tenant.data} /> : null}
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
         {tenant.data ? <TwoFactorPolicy tenant={tenant.data} /> : null}
+        <DataProtection />
       </div>
       {/* Settings of the whole installation, apart from this organisation's own. */}
       <section
@@ -101,6 +104,34 @@ export function OrganisationPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Who answers for the personal data and where it is kept, as the privacy policy says it. Both
+ * names come from the installation's settings (ORG_NAME, PRIVACY_CONTACT): read here, not edited.
+ */
+function DataProtection() {
+  const { t } = useTranslation();
+  const facts = useFacts();
+  const f = facts.data;
+  return (
+    <Card className="flex flex-col gap-3">
+      <h2 className="text-lg font-semibold">{t('admin.org.dp.title')}</h2>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dt className="font-medium text-slate-700">{t('admin.org.dp.controller')}</dt>
+        <dd>{f?.organisation ?? t('admin.org.dp.notSet')}</dd>
+        <dt className="font-medium text-slate-700">{t('admin.org.dp.contact')}</dt>
+        <dd>{f?.privacyContact ?? t('admin.org.dp.notSet')}</dd>
+      </dl>
+      <p className="text-sm text-slate-600">{t('admin.org.dp.where')}</p>
+      <p className="text-sm text-slate-600">
+        {t('admin.org.dp.how')}{' '}
+        <Link to="/privacy" className="font-medium text-indigo-ink-700 hover:underline">
+          {t('admin.org.dp.policy')}
+        </Link>
+      </p>
+    </Card>
   );
 }
 

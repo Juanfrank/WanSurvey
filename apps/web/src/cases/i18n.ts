@@ -37,6 +37,21 @@ export const casesEn = {
     anonymised: 'Personal data removed on {{date}}.',
     retentionTitle: 'Personal data retention',
     retentionDays: 'Remove personal data this many days after a case is finished (empty: keep)',
+    retentionSuggested: 'Common periods:',
+    retentionChoice_one: '{{count}} day',
+    retentionChoice_other: '{{count}} days',
+    retentionPreview_one:
+      'Saved like this, tonight {{count}} finished or withdrawn case older than {{days}} days loses its personal data.',
+    retentionPreview_other:
+      'Saved like this, tonight {{count}} finished or withdrawn cases older than {{days}} days lose their personal data.',
+    retentionPreviewMore_one:
+      'Saved like this, tonight {{count}} finished or withdrawn case older than {{days}} days loses its personal data, and more on the following nights.',
+    retentionPreviewMore_other:
+      'Saved like this, tonight {{count}} finished or withdrawn cases older than {{days}} days lose their personal data, and more on the following nights.',
+    retentionPreviewNone_one:
+      'No finished case is older than {{count}} day yet: nothing would be removed tonight.',
+    retentionPreviewNone_other:
+      'No finished case is older than {{count}} days yet: nothing would be removed tonight.',
     basisTitle: 'Lawful basis for calling and visiting',
     basisHelp:
       'Nothing is called or downloaded to a device until the basis for that channel is declared (e-mail and SMS have theirs in the web settings). Choose with your legal area; it is recorded in the audit log.',
@@ -218,6 +233,8 @@ export const casesEn = {
     elsewhereCases_one: '{{name}} ({{count}} case)',
     elsewhereCases_other: '{{name}} ({{count}} cases)',
     autoShown: 'Shown because you hold this case. Your first view was recorded.',
+    confidential:
+      'Confidential data: your view is recorded. Do not copy or photograph it; use it only for this survey.',
     claim: 'Take this case',
     claimed: 'The case is yours now.',
     release: 'Give the case back',
@@ -532,7 +549,7 @@ export const casesEn = {
     },
     reveal: 'Show interviewers the personal data of their cases automatically',
     revealHelp:
-      'Interviewers with access to personal data see names and contacts of the cases they hold without asking. The first view of each case is recorded. When off, they reveal it case by case.',
+      'Interviewers with access to personal data see names and contacts of the cases they hold without asking; only the first view of each case is recorded. This is also what goes to the tablets for working offline and what the telephone console shows. When off, all of that arrives masked (less in sight on a lost tablet) and interviewers show it case by case from the case list, each view recorded: turn it off only if they can work that way.',
     mode: 'How interviewers get cases',
     assigned: 'Assigned by a supervisor or by assignment rules',
     pool: 'Open pool: interviewers take free cases themselves; the first to take a case holds it',
@@ -604,6 +621,21 @@ export const casesEs: CasesCatalogue = {
     retentionTitle: 'Conservación de datos personales',
     retentionDays:
       'Eliminar los datos personales estos días después de terminar un caso (vacío: conservar)',
+    retentionSuggested: 'Plazos habituales:',
+    retentionChoice_one: '{{count}} día',
+    retentionChoice_other: '{{count}} días',
+    retentionPreview_one:
+      'Si lo guarda así, esta noche {{count}} caso terminado o retirado de más de {{days}} días pierde sus datos personales.',
+    retentionPreview_other:
+      'Si lo guarda así, esta noche {{count}} casos terminados o retirados de más de {{days}} días pierden sus datos personales.',
+    retentionPreviewMore_one:
+      'Si lo guarda así, esta noche {{count}} caso terminado o retirado de más de {{days}} días pierde sus datos personales, y más en las noches siguientes.',
+    retentionPreviewMore_other:
+      'Si lo guarda así, esta noche {{count}} casos terminados o retirados de más de {{days}} días pierden sus datos personales, y más en las noches siguientes.',
+    retentionPreviewNone_one:
+      'Aún no hay casos terminados de más de {{count}} día: esta noche no se eliminaría nada.',
+    retentionPreviewNone_other:
+      'Aún no hay casos terminados de más de {{count}} días: esta noche no se eliminaría nada.',
     basisTitle: 'Base legal para llamar y visitar',
     basisHelp:
       'No se llama ni se descarga nada a un dispositivo hasta declarar la base de ese canal (correo y SMS tienen la suya en los ajustes web). Elíjala con su área jurídica; queda en la bitácora.',
@@ -788,6 +820,8 @@ export const casesEs: CasesCatalogue = {
     elsewhereCases_one: '{{name}} ({{count}} caso)',
     elsewhereCases_other: '{{name}} ({{count}} casos)',
     autoShown: 'Se muestran porque usted tiene este caso. Su primera consulta quedó registrada.',
+    confidential:
+      'Datos confidenciales: su consulta queda registrada. No los copie ni fotografíe; úselos solo para esta encuesta.',
     claim: 'Tomar este caso',
     claimed: 'El caso ahora es suyo.',
     release: 'Devolver el caso',
@@ -1104,7 +1138,7 @@ export const casesEs: CasesCatalogue = {
     },
     reveal: 'Mostrar automáticamente a los entrevistadores los datos personales de sus casos',
     revealHelp:
-      'Los entrevistadores con acceso a datos personales ven los nombres y contactos de sus casos sin pedirlo. La primera consulta de cada caso queda registrada. Si está desactivado, los muestran caso por caso.',
+      'Los entrevistadores con acceso a datos personales ven los nombres y contactos de sus casos sin pedirlo; solo la primera consulta de cada caso queda registrada. Es también lo que se descarga a las tabletas para trabajar sin conexión y lo que muestra la consola telefónica. Si está desactivado, todo eso llega enmascarado (menos a la vista con una tableta perdida) y los entrevistadores los muestran caso por caso desde la lista de casos, cada consulta registrada: desactívelo solo si pueden trabajar así.',
     mode: 'Cómo reciben casos los entrevistadores',
     assigned: 'Asignados por un supervisor o por reglas de asignación',
     pool: 'Bolsa abierta: los entrevistadores toman casos libres; quien toma primero un caso lo conserva',

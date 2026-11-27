@@ -142,6 +142,10 @@ export const teamEn = {
     invite: 'Invite a new user',
     saved: '{{name}} is now {{role}} in this project.',
     removed: '{{name}} left the project.',
+    externalWarning:
+      'This person belongs to the client organisation (read only). With this role they will be able to:',
+    reason: 'Why do they need it? (kept in the activity log)',
+    reasonRequired: 'Say why this person needs that access.',
   },
 };
 
@@ -289,6 +293,10 @@ export const teamEs: typeof teamEn = {
     invite: 'Invitar a un usuario nuevo',
     saved: '{{name}} ahora es {{role}} en este proyecto.',
     removed: '{{name}} salió del proyecto.',
+    externalWarning:
+      'Esta persona pertenece a la organización cliente (solo lectura). Con este rol podrá:',
+    reason: '¿Por qué lo necesita? (queda en la bitácora)',
+    reasonRequired: 'Indique por qué esta persona necesita ese acceso.',
   },
 };
 

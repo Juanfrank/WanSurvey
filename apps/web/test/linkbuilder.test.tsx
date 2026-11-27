@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LinkBuilder } from '../src/cawi/LinkBuilder.js';
 import {
   buildQuery,
+  maskLink,
   paramQuestions,
   segmentLinks,
   valueProblem,
@@ -288,5 +289,16 @@ describe('the link builder', () => {
     expect(seen.at(-1)).toBe('sede=<sede>');
     expect(screen.getByTestId('pending-note')).toBeTruthy();
     expect(buildQuery([{ param: 'codigo', value: '', pending: true }])).toBe('codigo=<codigo>');
+  });
+});
+
+describe('personal links on screen', () => {
+  it('cuts the token short and keeps the parameters', () => {
+    expect(maskLink('http://x.test/s/xMkVz96nPIzaqZyFcWgtPX-4M_KJ6yPt?sede=2')).toBe(
+      'http://x.test/s/xMkV…?sede=2',
+    );
+    expect(maskLink('http://x.test/s/ab12cd34')).toBe('http://x.test/s/ab12…');
+    // Nothing that is not a personal link changes.
+    expect(maskLink('http://x.test/o/open-slug')).toBe('http://x.test/o/open-slug');
   });
 });

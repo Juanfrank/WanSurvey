@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FUNCTION_KEYS,
   LAWFUL_BASES,
@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
-import { controlCls } from '../designer/fields.js';
+import { controlCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { SubTabBar } from '../routes/tabs.js';
@@ -23,6 +23,42 @@ import { CawiProjectSettings } from '../cawi/CawiTab.js';
 import { BrandingSettings } from './BrandingSettings.js';
 import { useCan } from '../designer/hooks.js';
 import { GoalsSection } from '../analysis/GoalsSection.js';
+
+/** Retention periods offered with one click (days). */
+const RETENTION_CHOICES = [90, 180, 365] as const;
+
+/**
+ * What the period would do at the next nightly run: how many finished or withdrawn cases would
+ * lose their personal data. Asked a moment after typing stops, before anything is saved.
+ */
+function RetentionPreview({ projectId, days }: { projectId: string; days: number }) {
+  const { t } = useTranslation();
+  const [settled, setSettled] = useState(days);
+  useEffect(() => {
+    const id = setTimeout(() => setSettled(days), 400);
+    return () => clearTimeout(id);
+  }, [days]);
+  const preview = useQuery({
+    queryKey: ['retention-preview', projectId, settled],
+    queryFn: () =>
+      api<{ due: number; more: boolean }>(
+        `/projects/${projectId}/privacy/retention-preview?days=${settled}`,
+      ),
+  });
+  if (!preview.data) return null;
+  return (
+    <p className="max-w-prose text-slate-700" data-testid="retention-preview" aria-live="polite">
+      {preview.data.due === 0
+        ? t('cases.privacy.retentionPreviewNone', { count: settled })
+        : t(
+            preview.data.more
+              ? 'cases.privacy.retentionPreviewMore'
+              : 'cases.privacy.retentionPreview',
+            { count: preview.data.due, days: settled },
+          )}
+    </p>
+  );
+}
 
 /** Per-project switches: automatic personal data for interviewers, and the assignment mode. */
 export function SettingsTab({ project }: { project: Project }) {
@@ -658,12 +694,35 @@ export function SettingsTab({ project }: { project: Project }) {
                   />
                   {t('cases.privacy.retentionDays')}
                 </label>
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label={t('cases.privacy.retentionSuggested')}
+                >
+                  <span className="text-slate-600">{t('cases.privacy.retentionSuggested')}</span>
+                  {RETENTION_CHOICES.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={smallBtn}
+                      aria-pressed={form.retention.anonymiseAfterDays === d}
+                      onClick={() => setForm({ ...form, retention: { anonymiseAfterDays: d } })}
+                    >
+                      {t('cases.privacy.retentionChoice', { count: d })}
+                    </button>
+                  ))}
+                </div>
                 <p className="max-w-prose text-slate-600">{t('cases.privacy.retentionHelp')}</p>
                 {form.retention.anonymiseAfterDays === null ? (
                   <p role="alert" className="max-w-prose font-medium text-amber-ink-900">
                     {t('cases.privacy.retentionNone')}
                   </p>
-                ) : null}
+                ) : (
+                  <RetentionPreview
+                    projectId={project.id}
+                    days={form.retention.anonymiseAfterDays}
+                  />
+                )}
               </fieldset>
               <fieldset className="flex flex-col gap-2" data-testid="notice-settings">
                 <legend className="mb-1 font-medium">{t('cases.privacy.noticeTitle')}</legend>

@@ -85,7 +85,7 @@ import { AppSettingsController } from './settings/app-settings.controller.js';
 import { AppSettingsService } from './settings/app-settings.service.js';
 import { SweeperService } from './jobs/sweeper.service.js';
 import { StatsService } from './stats/stats.service.js';
-import { PrivacyController } from './privacy/privacy.controller.js';
+import { PrivacyController, RetentionController } from './privacy/privacy.controller.js';
 import { ExpiryService } from './cases/expiry.service.js';
 import { PrivacyService } from './privacy/privacy.service.js';
 import { ReviewController } from './review/review.controller.js';
@@ -220,6 +220,7 @@ export class AppModule {
         ProjectPeopleController,
         PublicShareController,
         PrivacyController,
+        RetentionController,
         CasesController,
         AssignmentRulesController,
         ImportsController,

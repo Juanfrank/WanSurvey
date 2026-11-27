@@ -104,6 +104,15 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   project title, "My device" is a plain link with a separate indicator ("Online · 0 to send · 3 cases on
   this device"). Signing out says what stays on the device: unsent interviews are kept (never removed),
   and downloaded cases can be given back and removed.
+- **Privacy of project people, web links and retention**: giving someone of the client organisation a
+  project role that opens interviews, recordings or personal data shows what they will see and asks why
+  (the project people endpoint requires `reason`, kept in the activity log); personal web links are cut
+  short on screen, shown or copied one at a time, and opening the list and downloading it are logged
+  (`cawi.links_viewed`, `cawi.links_downloaded`); the retention setting offers 90/180/365 days and says how
+  many cases the next nightly run would anonymise; the help of "show interviewers personal data" says what
+  turning it off masks (tablets, telephone console); a confidentiality reminder next to shown case data and
+  the calling console's sample; the Organisation page says who answers for the data and where it is kept; the
+  respondent's "Privacy policy" footer follows the survey's language.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

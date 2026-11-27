@@ -110,7 +110,14 @@ test('a links-only wave makes a personal link per case, ready to download', asyn
   await page.getByRole('button', { name: 'Make the links of Enlaces región 3' }).click();
   await expect(page.getByTestId('waves-message')).toContainText(/\d+ personal links? made/);
   const links = page.getByTestId('wave-links');
-  await expect(links.locator('[data-link]').first()).toContainText(/\/s\/[A-Za-z0-9_-]+/);
+  // Like passwords: the token is cut short on screen until it is shown, one link at a time.
+  const first = links.locator('[data-link]').first();
+  await expect(first).toContainText(/\/s\/[A-Za-z0-9_-]{4}…/);
+  await expect(links.getByRole('note')).toContainText('Treat these links like passwords');
+  await first.getByRole('button', { name: /^Show the link of / }).click();
+  await expect(first).toContainText(/\/s\/[A-Za-z0-9_-]{20,}/);
+  await first.getByRole('button', { name: /^Hide the link of / }).click();
+  await expect(first).toContainText(/\/s\/[A-Za-z0-9_-]{4}…/);
   // The link builder is there; the household questionnaire has no question that takes a parameter.
   await expect(links.getByTestId('link-builder')).toBeVisible();
   await expect(links.getByTestId('builder-none')).toContainText('Link parameter');

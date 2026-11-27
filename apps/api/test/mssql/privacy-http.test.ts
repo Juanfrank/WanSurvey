@@ -380,4 +380,22 @@ describe.skipIf(!configured)('SQL Server: personal data over HTTP', () => {
     expect(a!.actor_user_id).toBeNull();
     expect(JSON.parse(a!.details as string)).toMatchObject({ reason: 'retention' });
   });
+  it('previews how many cases a retention period would anonymise, before it is saved', async () => {
+    const id = await newCase({ first_name: 'Prev', region: 'Norte' }, 'finalised');
+    await sql`UPDATE cases SET updated_at = DATEADD(day, -100, SYSDATETIMEOFFSET()) WHERE id = ${id}`.execute(
+      t.owner,
+    );
+    const at = (days: number, s = pm) =>
+      s.agent.get(`${base()}/privacy/retention-preview?days=${days}`);
+    const short = await at(90);
+    expect(short.status, JSON.stringify(short.body)).toBe(200);
+    expect(short.body).toMatchObject({ days: 90, more: false });
+    expect(short.body.due).toBeGreaterThanOrEqual(1);
+    expect((await at(180)).body.due).toBeLessThan(short.body.due);
+    // Only who configures the project asks; nothing is removed by asking.
+    expect((await at(90, me)).status).toBe(403);
+    expect((await at(0)).status).toBe(400);
+    const [c] = await rows(sql`SELECT anonymised_at FROM cases WHERE id = ${id}`);
+    expect(c!.anonymised_at).toBeNull();
+  });
 });

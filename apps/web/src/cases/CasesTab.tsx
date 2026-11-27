@@ -845,7 +845,13 @@ function CaseDrawer({
                 ) : null}
               </span>
             ) : c.pii.auto ? (
-              <span className="ml-auto text-slate-600">{t('cases.detail.autoShown')}</span>
+              <span className="ml-auto text-slate-600" data-testid="pii-confidential">
+                {t('cases.detail.autoShown')} {t('cases.detail.confidential')}
+              </span>
+            ) : reveal ? (
+              <span className="ml-auto text-slate-600" data-testid="pii-confidential">
+                {t('cases.detail.confidential')}
+              </span>
             ) : null}
           </div>
           {c.checkedOutAt ? (

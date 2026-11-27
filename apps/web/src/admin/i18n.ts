@@ -301,6 +301,16 @@ export const adminEn = {
   },
   org: {
     intro: 'The name of the organisation, the defaults of new projects and how people sign in.',
+    dp: {
+      title: 'Data protection',
+      controller: 'Responsible for the data',
+      contact: 'Where people write about their data',
+      notSet: 'Not set: the policy says “your organisation’s administrator”',
+      where:
+        'Answers, samples, recordings and the activity log are kept in this installation’s SQL Server database, in the region of the hosting provider chosen when it was installed; personal sample data is encrypted there.',
+      how: 'Both names are settings of the installation (ORG_NAME and PRIVACY_CONTACT), set by whoever deploys it, and are shown in the',
+      policy: 'privacy policy',
+    },
     general: 'General',
     name: 'Name of the organisation',
     defaultLanguage: 'Language of new projects',
@@ -420,6 +430,7 @@ export const adminEn = {
       interview: 'Interviews',
       entry: 'Paper entry',
       data: 'Data',
+      cawi: 'Web survey',
       share_link: 'Shared links',
       library_item: 'Library',
       sample_field: 'Sample fields',
@@ -736,6 +747,16 @@ export const adminEs: typeof adminEn = {
   org: {
     intro:
       'El nombre de la organización, los valores por defecto de los proyectos nuevos y cómo inician sesión las personas.',
+    dp: {
+      title: 'Protección de datos',
+      controller: 'Responsable de los datos',
+      contact: 'Dónde escribir sobre sus datos',
+      notSet: 'Sin definir: la política remite al «administrador de su organización»',
+      where:
+        'Las respuestas, las muestras, las grabaciones y la bitácora se guardan en la base SQL Server de esta instalación, en la región del proveedor de alojamiento elegida al instalarla; allí los datos personales de la muestra van cifrados.',
+      how: 'Ambos datos son ajustes de la instalación (ORG_NAME y PRIVACY_CONTACT), que fija quien la despliega, y se muestran en la',
+      policy: 'política de privacidad',
+    },
     general: 'General',
     name: 'Nombre de la organización',
     defaultLanguage: 'Idioma de los proyectos nuevos',
@@ -856,6 +877,7 @@ export const adminEs: typeof adminEn = {
       interview: 'Entrevistas',
       entry: 'Digitación en papel',
       data: 'Datos',
+      cawi: 'Encuesta web',
       share_link: 'Enlaces compartidos',
       library_item: 'Biblioteca',
       sample_field: 'Campos de la muestra',

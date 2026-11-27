@@ -1,4 +1,4 @@
-import { lazy, StrictMode, Suspense, useCallback, useState } from 'react';
+import { lazy, StrictMode, Suspense, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { matchPublic, parseFeedbackSearch, searchOf, type PublicRoute } from './public-routes.js';
 import { respondentLang, respondentText } from './text.js';
@@ -17,6 +17,27 @@ const FeedbackPage = lazy(() =>
 );
 
 /**
+ * The language the page speaks: the browser's until a page sets the survey's own (on <html lang>),
+ * so the footer reads like the survey above it and not like the device.
+ */
+function usePageLanguage() {
+  const [lang, setLang] = useState(() => respondentLang(navigator.language));
+  useEffect(() => {
+    const html = document.documentElement;
+    const follow = () => {
+      if (html.lang) setLang(respondentLang(html.lang));
+    };
+    // A page may have set it already, in an effect that ran before this one ('es' is only the
+    // default of index.html until a page says otherwise).
+    if (html.lang !== 'es') follow();
+    const watch = new MutationObserver(follow);
+    watch.observe(html, { attributes: true, attributeFilter: ['lang'] });
+    return () => watch.disconnect();
+  }, []);
+  return lang;
+}
+
+/**
  * The public pages on their own, with no router and no query library: an open link moves on to
  * its survey by replacing the address, as the router did.
  */
@@ -26,6 +47,7 @@ function PublicApp() {
     window.history.replaceState(null, '', href);
     setRoute(matchPublic(new URL(href, window.location.origin).pathname));
   }, []);
+  const lang = usePageLanguage();
   let page;
   switch (route?.page) {
     case 's':
@@ -58,7 +80,7 @@ function PublicApp() {
       {/* Anyone answering can read how their data is handled; a plain link, no extra code. */}
       {route?.page === 'f' ? null : (
         <footer style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
-          <a href="/privacy">{respondentText(respondentLang(navigator.language)).privacy}</a>
+          <a href="/privacy">{respondentText(lang).privacy}</a>
         </footer>
       )}
     </>

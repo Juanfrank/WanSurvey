@@ -21,6 +21,15 @@ test('the project manager gives someone a role in the project, from the project'
     .getByRole('combobox', { name: 'User' })
     .selectOption({ label: 'Demo client_viewer · client.viewer@demo.wansurvey.test' });
   await dialog.getByRole('radio', { name: /^Reviewer/ }).check();
+  // A client given access to interviews and recordings: the dialog says so and asks why.
+  const warning = dialog.getByTestId('external-warning');
+  await expect(warning).toContainText('See all interviews');
+  await expect(warning).toContainText('Listen to interview recordings');
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await dialog
+    .getByRole('textbox', { name: /Why do they need it/ })
+    .fill('Audits the fieldwork for the client');
+  await shot(page, 'project-people-external');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Demo client_viewer is now Reviewer in this project.')).toBeVisible();
   const row = page.locator('tr[data-person="client.viewer@demo.wansurvey.test"]');

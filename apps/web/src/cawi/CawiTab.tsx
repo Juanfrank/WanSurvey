@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
-import { controlCls, inputCls } from '../designer/fields.js';
+import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { LinkBuilder } from './LinkBuilder.js';
+import { maskLink } from './linkParams.js';
 import { Button } from '../routes/ui.js';
 
 interface TemplateRow {
@@ -594,28 +595,44 @@ function WavesSection({
   );
 }
 
+type WaveLink = { externalId: string; url: string; status: string };
+
 /**
  * The personal links of a "links only" wave: one per case, to hand out by any channel. Link
- * parameters can be added to all of them (e.g. ?sede=2 for a branch).
+ * parameters can be added to all of them (e.g. ?sede=2 for a branch). Each link opens a person's
+ * survey, so they are handled like passwords: cut short on screen, shown or copied one by one,
+ * and every listing and download is logged.
  */
 function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
   const { t } = useTranslation();
   const [extra, setExtra] = useState('');
+  const [shown, setShown] = useState<ReadonlySet<string>>(new Set());
+  const [copied, setCopied] = useState<string | null>(null);
+  const [problem, setProblem] = useState('');
   const links = useQuery({
     queryKey: ['wave-links', wave.id],
-    queryFn: () =>
-      api<{ externalId: string; url: string; status: string }[]>(
-        `/projects/${projectId}/waves/${wave.id}/links`,
-      ),
+    queryFn: () => api<WaveLink[]>(`/projects/${projectId}/waves/${wave.id}/links`),
+    // Each listing is logged: fetched when opened, not again on every focus of the window.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
   const [built, setBuilt] = useState('');
   // The parameters of the builder, then any typed by hand, go on every link.
   const params = [built, extra.trim().replace(/^[?&]+/, '')].filter(Boolean).join('&');
   const withParams = (url: string) => (params ? `${url}?${params}` : url);
-  const csv = () => {
+  const csv = async () => {
+    setProblem('');
+    // Fetched again for the file, so the log says it was downloaded.
+    let all: WaveLink[];
+    try {
+      all = await api<WaveLink[]>(`/projects/${projectId}/waves/${wave.id}/links?for=download`);
+    } catch (e) {
+      setProblem(localiseError(t, e));
+      return;
+    }
     const rows = [
       ['case', 'url', 'status'],
-      ...(links.data ?? []).map((l) => [l.externalId, withParams(l.url), l.status]),
+      ...all.map((l) => [l.externalId, withParams(l.url), l.status]),
     ];
     const text = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a');
@@ -627,9 +644,24 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
+  const copy = async (l: WaveLink) => {
+    setProblem('');
+    try {
+      // Missing on pages not served over HTTPS: say so rather than pretend.
+      if (!navigator.clipboard) throw new Error('no clipboard');
+      await navigator.clipboard.writeText(withParams(l.url));
+      setCopied(l.externalId);
+    } catch {
+      setCopied(null);
+      setProblem(t('cawi.links.copyFailed'));
+    }
+  };
   return (
     <div className="mb-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3" data-testid="wave-links">
       <p className="text-sm text-slate-600">{t('cawi.links.help')}</p>
+      <p className="text-sm font-medium text-amber-ink-900" role="note">
+        {t('cawi.links.secret')}
+      </p>
       <LinkBuilder
         projectId={projectId}
         questionnaireId={wave.questionnaireId}
@@ -647,9 +679,12 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
             onChange={(e) => setExtra(e.target.value)}
           />
         </label>
-        <Button type="button" size="sm" onClick={csv}>
+        <Button type="button" size="sm" onClick={() => void csv()}>
           {t('cawi.links.download')}
         </Button>
+        <p role="alert" className="text-sm text-red-ink-700 empty:hidden">
+          {problem}
+        </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -660,14 +695,46 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
               </th>
               <th scope="col">{t('cawi.links.url')}</th>
               <th scope="col">{t('cawi.links.status')}</th>
+              <th scope="col">
+                <span className="sr-only">{t('cawi.links.actions')}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {(links.data ?? []).slice(0, 200).map((l) => (
               <tr key={l.externalId} data-link={l.externalId}>
                 <td className="pr-4 font-mono">{l.externalId}</td>
-                <td className="break-all font-mono text-xs">{withParams(l.url)}</td>
+                <td className="break-all font-mono text-xs">
+                  {shown.has(l.externalId) ? withParams(l.url) : maskLink(withParams(l.url))}
+                </td>
                 <td>{t(`cawi.links.statuses.${l.status}`)}</td>
+                <td className="whitespace-nowrap py-0.5 text-right">
+                  <button
+                    type="button"
+                    className={smallBtn}
+                    aria-label={t(
+                      shown.has(l.externalId) ? 'cawi.links.hideOne' : 'cawi.links.showOne',
+                      { id: l.externalId },
+                    )}
+                    onClick={() =>
+                      setShown((s) => {
+                        const next = new Set(s);
+                        if (!next.delete(l.externalId)) next.add(l.externalId);
+                        return next;
+                      })
+                    }
+                  >
+                    {t(shown.has(l.externalId) ? 'cawi.links.hide' : 'cawi.links.reveal')}
+                  </button>{' '}
+                  <button
+                    type="button"
+                    className={smallBtn}
+                    aria-label={t('cawi.links.copyOne', { id: l.externalId })}
+                    onClick={() => void copy(l)}
+                  >
+                    {copied === l.externalId ? t('cawi.links.copied') : t('cawi.links.copy')}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

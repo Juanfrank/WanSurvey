@@ -8,6 +8,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
@@ -62,5 +63,30 @@ export class PrivacyController {
     );
     await this.privacy.refreshAnalysis();
     return out;
+  }
+}
+
+const RetentionQuery = z.object({ days: z.coerce.number().int().min(1).max(3650) });
+
+/** How a retention period would act on a project, before it is saved (H3). */
+@ApiTags('privacy')
+@Controller('projects/:projectId/privacy')
+export class RetentionController {
+  constructor(
+    @Inject(PRIVACY_REPO) private readonly repo: PrivacyRepo,
+    private readonly privacy: PrivacyService,
+  ) {}
+
+  /** Finished or withdrawn cases the next nightly run would anonymise with `days`. */
+  @Get('retention-preview')
+  @RequirePermission('projects.update', PERM)
+  preview(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(new ZodPipe(RetentionQuery)) query: z.infer<typeof RetentionQuery>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.privacy.retentionPreview(t, projectId, query.days),
+    );
   }
 }
