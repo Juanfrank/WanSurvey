@@ -137,6 +137,15 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   warnings, notes, comments or changes. "Returned to me" lists the commented questions, the interview
   offers "Go to" each one, and interviewers see their own quality signals (approved, returned, rejected,
   flags, median length beside the team's; `GET /projects/:id/review/mine`).
+- **The case list's figures match the dashboard and explain themselves**: one card per state (New,
+  Assigned, In progress, Finalised, Withdrawn) with a one-line definition, adding up to the total shown
+  beside them; a click filters the list. Interviewers instead see their own work (to do, callbacks and
+  appointments due, returned to them, finalised) and their list is ordered by what to do first, with a
+  Start or Continue button per row, the final result of finalised cases and their callback time.
+  "Time since assignment" is no longer shown for closed cases, hidden personal values show a padlock and the word
+  "hidden", sample variables can be given readable names, the case detail separates its sections and
+  shows the withdraw and misidentified actions in red, and interviewers are no longer offered draft
+  questionnaires.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

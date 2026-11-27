@@ -18,6 +18,10 @@ export interface CaseRow {
   updatedAt: string;
   assignedAt?: string | null;
   questionnaireId?: string | null;
+  /** When a callback or appointment is due, if one is. */
+  nextContactAt?: string | null;
+  /** An interview of the case was sent back for corrections. */
+  returned?: boolean;
 }
 
 export interface CaseList {
@@ -29,6 +33,10 @@ export interface CaseList {
   completed?: number;
   /** Held by someone, whatever their state. */
   held?: number;
+  /** Open cases with an interview sent back for corrections. */
+  returned?: number;
+  /** Open cases with a callback or appointment due within a day. */
+  due?: number;
   fields: SampleField[];
   assignmentMode: 'assigned' | 'pool';
   /** Days a case may stay assigned before it expires; null: no deadline. */

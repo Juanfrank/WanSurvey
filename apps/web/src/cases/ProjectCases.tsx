@@ -38,15 +38,18 @@ export function ProjectCases({
   const list = useQuery({
     queryKey: ['questionnaires', projectId],
     queryFn: () =>
-      api<{ id: string; name: string; createdAt: string }[]>(
+      api<{ id: string; name: string; createdAt: string; publishedVersions?: number }[]>(
         `/projects/${projectId}/questionnaires`,
       ),
     enabled: canQuestionnaires,
   });
   // Oldest first, as the API takes the project's first questionnaire by default.
-  const qs = [...(list.data ?? [])].sort(
+  const all = [...(list.data ?? [])].sort(
     (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
   );
+  // Interviewers only work on published questionnaires: drafts are not offered to them.
+  const published = all.filter((q) => (q.publishedVersions ?? 1) > 0);
+  const qs = canAll ? all : published;
   // Without the questionnaire list (interviewers), every case of theirs is shown.
   const current = qs.find((q) => q.id === search.q)?.id ?? qs[0]?.id;
   const pick = (q: string) =>
@@ -110,13 +113,13 @@ export function ProjectCases({
               <SamplingTab key={current} projectId={projectId} />
             </Tabs.Content>
             <Tabs.Content value="list">
-              <CasesTab key={current} projectId={projectId} />
+              <CasesTab key={current} projectId={projectId} scoped={qs.length > 1} />
             </Tabs.Content>
           </Tabs.Root>
         ) : active === 'sampling' ? (
           <SamplingTab key={current} projectId={projectId} />
         ) : (
-          <CasesTab key={current} projectId={projectId} />
+          <CasesTab key={current} projectId={projectId} scoped={qs.length > 1} />
         )}
       </div>
     </QuestionnaireScope.Provider>

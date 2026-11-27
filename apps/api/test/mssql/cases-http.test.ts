@@ -246,6 +246,33 @@ describe.skipIf(!configured)('SQL Server: cases over HTTP', () => {
     expect(back.body).toMatchObject({ status: 'fresh', assignedTo: null });
   });
 
+  it("orders an interviewer's cases by what to do first and counts what is due", async () => {
+    const mine = (await interviewerS.agent.get(`${base}/cases`)).body.rows as {
+      id: string;
+      externalId: string;
+    }[];
+    expect(mine.length).toBeGreaterThanOrEqual(3);
+    const [done, started, due] = [mine[0]!, mine[1]!, mine.at(-1)!];
+    await sql`UPDATE cases SET status = 'finalised', disposition = 'COMPLETE'
+      WHERE id = ${done.id}`.execute(t.owner);
+    await sql`UPDATE cases SET status = 'in_progress' WHERE id = ${started.id}`.execute(t.owner);
+    await sql`UPDATE cases SET next_contact_at = DATEADD(hour, 1, SYSDATETIMEOFFSET())
+      WHERE id = ${due.id}`.execute(t.owner);
+    try {
+      const todo = await interviewerS.agent.get(`${base}/cases`).query({ sort: 'todo' });
+      expect(todo.status).toBe(200);
+      const order = todo.body.rows.map((r: { externalId: string }) => r.externalId);
+      expect(order[0]).toBe(due.externalId);
+      expect(order[1]).toBe(started.externalId);
+      expect(order.at(-1)).toBe(done.externalId);
+      expect(todo.body.rows[0].nextContactAt).toBeTruthy();
+      expect(todo.body).toMatchObject({ due: 1, returned: 0, completed: 1 });
+    } finally {
+      await sql`UPDATE cases SET status = 'assigned', disposition = NULL, next_contact_at = NULL
+        WHERE id IN (${done.id}, ${started.id}, ${due.id})`.execute(t.owner);
+    }
+  });
+
   it('assignment rules pick up matching unassigned cases, respecting quotas', async () => {
     const rule = await post(pm, `${base}/assignments`, {
       userId: interviewer2.id,
