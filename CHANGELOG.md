@@ -44,6 +44,13 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 - **Moving someone's cases** (when they fall ill or leave): the workload in the assignment rules moves
   every case a person holds and has not started to another person in one step
   (`POST /projects/:id/cases/assign` with `fromUserId`); interviews already started stay with them.
+- **Calls workspace (CATI) clearer and quicker**: outcomes grouped (reached, not reached, call again,
+  closes the case) with 0 as the key of the tenth, "Do not contact again"; the callback time confirmed
+  in words ("Thursday 26 November, 20:24, respondent's time (in 1 hour)"); unset calling hours read as
+  "no restriction" instead of "00:00–00:00"; a separate 44 px "Call" button beside each number, with
+  common labels translated; case data above the outcomes, with the sample fields' labels; the save
+  button says what is missing; and, with no case open, the caller's day so far (calls, contacts,
+  completes, time on the phone; `GET /projects/:id/cati/shift`).
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

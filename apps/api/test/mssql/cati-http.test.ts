@@ -139,6 +139,21 @@ describe.skipIf(!configured)('SQL Server: telephone interviewing over HTTP', () 
     ).toBe(200);
     const c = await post(me!, `/projects/${project}/cati/next`);
     expect(c.body.case.id).toBe(low);
+    // The shift so far: one recorded call (the release and the open call do not count).
+    const since = new Date(Date.now() - 3_600_000).toISOString();
+    const shift = await get(
+      me!,
+      `/projects/${project}/cati/shift?since=${encodeURIComponent(since)}`,
+    );
+    expect(shift.status, JSON.stringify(shift.body)).toBe(200);
+    expect(shift.body).toMatchObject({ calls: 1, contacts: 0, completes: 0 });
+    expect(shift.body.talkMs).toBeGreaterThanOrEqual(0);
+    const other = await get(
+      sessions[1]!,
+      `/projects/${project}/cati/shift?since=${encodeURIComponent(since)}`,
+    );
+    expect(other.body.calls).toBe(0);
+    expect((await get(me!, `/projects/${project}/cati/shift?since=yesterday`)).status).toBe(400);
   });
 
   it('schedules retries, finalises after the last attempt, and books callbacks in hours', async () => {

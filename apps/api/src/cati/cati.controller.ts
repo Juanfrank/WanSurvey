@@ -9,6 +9,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Res,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
@@ -21,6 +22,7 @@ import { CatiService, NextBody, OutcomeBody } from './cati.service.js';
 
 const PERM = { projectParam: 'projectId' } as const;
 const CONDUCT = 'interviews.conduct';
+const ShiftQuery = z.object({ since: z.iso.datetime({ offset: true }) });
 
 /** Telephone interviewing: the call queue, call outcomes and callbacks. */
 @ApiTags('cati')
@@ -89,6 +91,19 @@ export class CatiController {
   @RequirePermission(CONDUCT, { anyProject: true })
   release(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.repo.inTenant(ctx.tenantId, (t) => this.cati.release(t, ctx, id));
+  }
+
+  /** The caller's shift so far: calls, contacts, completes and time on the phone since `since`. */
+  @Get('projects/:projectId/cati/shift')
+  @RequirePermission(CONDUCT, PERM)
+  shift(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(new ZodPipe(ShiftQuery)) q: z.infer<typeof ShiftQuery>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.cati.shift(t, ctx, projectId, new Date(q.since)),
+    );
   }
 
   /** The caller's callbacks and appointments, soonest first. */

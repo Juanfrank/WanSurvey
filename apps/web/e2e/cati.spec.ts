@@ -56,6 +56,11 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     const caseId = (await form.getAttribute('data-case'))!;
     await expect(form.getByTestId('script')).toContainText('Buenos días');
     await expect(form.getByTestId('call-timer')).toBeVisible();
+    // The save button says why it waits; 0 chooses the tenth outcome.
+    await expect(form.locator('#save-why')).toHaveText('Choose what happened.');
+    await page.keyboard.press('0');
+    await expect(form.getByRole('radio', { name: /Do not contact again/ })).toBeChecked();
+    await expect(form.locator('#save-why')).toHaveText('');
     await page.keyboard.press('Alt+1');
     await expect(form.getByRole('radio', { checked: true }).first()).toBeVisible();
     await shot(page, 'cati-workspace');
@@ -68,12 +73,14 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     const picker = form.getByTestId('callback-picker');
     await picker.getByRole('button', { name: 'In 1 hour' }).click();
     await expect(picker.getByRole('radio', { name: 'Me' })).toBeChecked();
-    await expect(picker).toContainText('Calling hours: 00:00–00:00');
-    // The chosen moment written out, whatever format the browser's own picker uses.
-    await expect(picker).toContainText(/Call back on \w+day, \w+ \d+, \d{4}/);
+    // Hours open all day read as no restriction; the time is confirmed in words.
+    await expect(picker).toContainText('No calling-hour restriction.');
+    await expect(picker.getByTestId('callback-when')).toContainText('in 1 hour');
     await shot(page, 'cati-callback');
     await page.keyboard.press('Control+Enter');
     await expect(page.getByTestId('calls-message')).toContainText('Saved: Call back later');
+    // With no case open, the caller's day so far.
+    await expect(page.getByTestId('shift-summary')).toContainText('Calls');
     const mine = page.getByTestId('callbacks').locator('li').filter({ hasText: caseId });
     await expect(mine).toContainText('For me');
     await expect(mine).toContainText('Booked by');

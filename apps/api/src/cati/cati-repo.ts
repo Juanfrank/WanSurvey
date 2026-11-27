@@ -117,6 +117,12 @@ export interface CatiTx extends InterviewsTx {
   >;
   contactOf(caseId: string, contactId: string): Promise<{ id: string; value: string } | null>;
   names(userId: string): Promise<{ name: string; firstName: string | null } | null>;
+  /** The caller's recorded calls in the project since a moment (their shift so far). */
+  shift(
+    projectId: string,
+    userId: string,
+    since: Date,
+  ): Promise<{ calls: number; contacts: number; completes: number; talkMs: number }>;
   breakOff(interviewId: string, disposition: string, now: Date): Promise<void>;
   /** Ends the call of the interview with its disposition and frees the case. */
   closeCallOfInterview(interview: InterviewRow, disposition: string): Promise<void>;
@@ -146,6 +152,8 @@ export interface CatiRepo {
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
 
 const low = (s: string) => s.toLowerCase();
+/** Outcomes on which someone answered the phone (a contact, in AAPOR terms). */
+const CONTACT_OUTCOMES = ['answered', 'refusal', 'callback', 'appointment', 'do_not_contact'];
 const lowOrNull = (s: string | null) => (s === null ? null : s.toLowerCase());
 
 function toAttempt(r: Record<string, unknown>): AttemptRow {
@@ -413,6 +421,30 @@ export class MssqlCatiTx extends MssqlInterviewsTx implements CatiTx {
       .where('id', '=', userId)
       .executeTakeFirst();
     return u ? { name: u.name, firstName: u.first_name } : null;
+  }
+
+  async shift(projectId: string, userId: string, since: Date) {
+    const from = instant(since);
+    // Calls and contacts by when they started; completes by when the interview closed the call;
+    // time on the phone from the start of each call to its end (the interview included).
+    const [r] = (
+      await ksql<{ calls: number; contacts: number; completes: number; talk_ms: number | null }>`
+      SELECT
+        SUM(CASE WHEN started_at >= ${from} THEN 1 ELSE 0 END) AS calls,
+        SUM(CASE WHEN started_at >= ${from} AND outcome IN (${ksql.join(CONTACT_OUTCOMES.map((o) => ksql`${o}`))}) THEN 1 ELSE 0 END) AS contacts,
+        SUM(CASE WHEN disposition = 'COMPLETE' AND ended_at >= ${from} THEN 1 ELSE 0 END) AS completes,
+        SUM(CASE WHEN started_at >= ${from} AND ended_at IS NOT NULL
+          THEN DATEDIFF_BIG(millisecond, started_at, ended_at) ELSE 0 END) AS talk_ms
+      FROM call_attempts
+      WHERE project_id = ${projectId} AND interviewer_id = ${userId} AND outcome IS NOT NULL
+        AND (started_at >= ${from} OR ended_at >= ${from})`.execute(this.mtx)
+    ).rows;
+    return {
+      calls: Number(r?.calls ?? 0),
+      contacts: Number(r?.contacts ?? 0),
+      completes: Number(r?.completes ?? 0),
+      talkMs: Number(r?.talk_ms ?? 0),
+    };
   }
 
   async breakOff(interviewId: string, disposition: string, now: Date) {

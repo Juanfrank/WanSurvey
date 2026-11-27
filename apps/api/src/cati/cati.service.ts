@@ -269,6 +269,10 @@ export class CatiService implements OnModuleInit {
       'detail',
     );
     const history = await this.history(t, c.id);
+    // The sample fields' labels, so the caller reads "Nombre" rather than `first_name`.
+    const fieldLabels = Object.fromEntries(
+      (await t.fields(projectId)).filter((f) => f.label).map((f) => [f.name, f.label!]),
+    );
     const qs = await this.usable(t, projectId);
     // A case belongs to one questionnaire; the one asked for only counts for cases without.
     const qid =
@@ -295,6 +299,7 @@ export class CatiService implements OnModuleInit {
         nextContactAt: c.nextContactAt,
         timezone: tz,
         sample: (context as { case: Record<string, unknown> }).case,
+        fieldLabels,
       },
       phones,
       history,
@@ -607,6 +612,15 @@ export class CatiService implements OnModuleInit {
     } else if (c.queuePinUserId !== ctx.userId) return { pinned: false };
     await t.patchCase(c.id, { queuePinUserId: on ? ctx.userId : null, updatedAt: c.updatedAt });
     return { pinned: on };
+  }
+
+  /**
+   * The caller's shift so far in the project: calls recorded, contacts, completed interviews
+   * and time on the phone since `since` (the start of their day; at most two days back).
+   */
+  async shift(t: CatiTx, ctx: AuthContext, projectId: string, since: Date) {
+    const floor = Date.now() - 2 * 86_400_000;
+    return t.shift(projectId, ctx.userId, new Date(Math.max(since.getTime(), floor)));
   }
 
   async callbacks(t: CatiTx, ctx: AuthContext, projectId: string) {
