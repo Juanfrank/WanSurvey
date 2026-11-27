@@ -48,7 +48,7 @@ test('the app is served with a strict Content-Security-Policy and breaks none of
 
   await openProject(page);
   await shot(page, 'project-home');
-  for (const tab of ['Cases', 'Results', 'Exports', 'Settings']) {
+  for (const tab of ['Cases', 'Results', 'Exports', 'Project settings']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     await page.waitForLoadState('networkidle');
   }
@@ -162,7 +162,7 @@ test('the dark theme: chosen in the account menu, remembered, and readable on ev
   await expect(html).toHaveAttribute('data-theme', 'dark');
   await page.keyboard.press('Escape');
   // Every main page passes the accessibility checks (colour contrast included) in the dark.
-  const tabs = ['Questionnaires', 'Cases', 'Results', 'Settings'];
+  const tabs = ['Questionnaires', 'Cases', 'Results', 'Project settings'];
   for (const tab of tabs) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     await expect(page.getByRole('tabpanel').first()).toBeVisible();

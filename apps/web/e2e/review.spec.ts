@@ -63,7 +63,7 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   // The supervisor finds it in the queue, opens it and returns it with a comment.
   const sup = await (await browser.newContext({ storageState: './e2e/english-ui.json' })).newPage();
   await openProject(sup, SUPERVISOR);
-  await sup.getByRole('tab', { name: 'Review' }).click();
+  await sup.getByRole('tab', { name: 'Supervision', exact: true }).click();
   const queued = sup.getByTestId('review-queue').locator(`tr[data-case="${caseId}"]`);
   await expect(queued).toBeVisible();
   await shot(sup, 'review-queue');

@@ -68,7 +68,7 @@ export const analysisEn = {
   goals: {
     title: 'Goals',
     help: 'Completes to reach between two dates, once for the period or each day, business day, week or month; for one person or the whole team. Complete interviews submitted count (rejected ones do not); the pace says how many were due by today.',
-    progressHelp: 'Progress of the goals; they are set in Settings → Fieldwork.',
+    progressHelp: 'Progress of the goals; they are set in Project settings → Goals.',
     person: 'For',
     team: 'Whole team',
     period: 'Dates',
@@ -316,7 +316,7 @@ export const analysisEs: typeof analysisEn = {
   goals: {
     title: 'Metas',
     help: 'Encuestas completas a lograr entre dos fechas, una vez para todo el período o cada día, día hábil, semana o mes; para una persona o para todo el equipo. Cuentan las entrevistas completas enviadas (no las rechazadas); el ritmo indica cuántas correspondían a hoy.',
-    progressHelp: 'Avance de las metas; se fijan en Configuración → Trabajo de campo.',
+    progressHelp: 'Avance de las metas; se fijan en Ajustes del proyecto → Metas.',
     person: 'Para',
     team: 'Todo el equipo',
     period: 'Fechas',

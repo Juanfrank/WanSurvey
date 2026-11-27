@@ -17,7 +17,7 @@ test('the information notice is part of the questionnaire: added from the design
   await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
 
   // The project asks every questionnaire to open with the notice.
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Privacy', exact: true }).click();
   await page
     .getByLabel('Do not publish a questionnaire that does not open with the information notice')
@@ -65,7 +65,7 @@ test('the information notice is part of the questionnaire: added from the design
 
   // Back as it was for the other tests.
   await page.getByRole('link', { name: 'Household Survey 2026' }).first().click();
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Privacy', exact: true }).click();
   await page
     .getByLabel('Do not publish a questionnaire that does not open with the information notice')

@@ -2,6 +2,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import axe from 'axe-core';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
+import type { ReactNode } from 'react';
 import { ProjectSettings } from '@wansurvey/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CasesTab } from '../src/cases/CasesTab.js';
@@ -40,6 +47,17 @@ function mockFetch() {
       let body: unknown = {};
       if (path === '/auth/me') body = me;
       else if (path.startsWith('/projects/p/cases/assign')) body = { changed: 2, skipped: 0 };
+      else if (path === '/projects/p/cases/c2')
+        body = {
+          ...rows[2],
+          contacts: [],
+          history: [],
+          pii: { masked: true, canReveal: false, auto: false },
+          anonymisedAt: null,
+          canClaim: false,
+          canRelease: false,
+        };
+      else if (/\/projects\/p\/cases\/c2\//.test(path)) body = [];
       else if (path.startsWith('/projects/p/cases'))
         body = {
           total: 5,
@@ -65,15 +83,25 @@ function mockFetch() {
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** A page in a router of its own, as the case list keeps the open case in the address. */
+function inRouter(ui: ReactNode) {
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => ui }),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
+  return { router, ui: <RouterProvider router={router} /> };
+}
+
 describe('cases grid', () => {
   it('shows masked personal fields, selects ranges with Shift and assigns', async () => {
     const calls = mockFetch();
     const user = userEvent.setup();
+    const page = inRouter(<CasesTab projectId="p" />);
     const { container } = render(
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <CasesTab projectId="p" />
+        {page.ui}
       </QueryClientProvider>,
     );
     const table = await screen.findByTestId('cases-table');
@@ -102,6 +130,12 @@ describe('cases grid', () => {
       rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
     });
     expect(result.violations.map((v) => v.id)).toEqual([]);
+
+    // A case opens with its own address, and closing it takes it out.
+    await user.click(screen.getByRole('button', { name: 'Open case HH2' }));
+    await waitFor(() => expect(page.router.state.location.search).toEqual({ case: 'c2' }));
+    await user.click(await screen.findByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(page.router.state.location.search).toEqual({}));
   });
 });
 

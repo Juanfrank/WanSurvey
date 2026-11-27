@@ -2,6 +2,7 @@ import './sampling-i18n.js';
 import { BulkWithdraw } from './BulkWithdraw.js';
 import { Misidentified } from './Misidentified.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -59,7 +60,19 @@ export function CasesTab({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lastClicked, setLastClicked] = useState<number | null>(null);
   const [cols, setCols] = useState<string[] | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  // The open case is in the address (?case=), so a link to it can be shared. Replaced like the
+  // project's tabs, which are not read back from the address on Back.
+  const navigate = useNavigate();
+  const open = (useSearch({ strict: false }) as { case?: string }).case ?? null;
+  const setOpen = useCallback(
+    (id: string | null) =>
+      void navigate({
+        to: '.',
+        search: (s: Record<string, unknown>) => ({ ...s, case: id ?? undefined }),
+        replace: true,
+      }),
+    [navigate],
+  );
   const [assignee, setAssignee] = useState('');
   const [message, setMessage] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
@@ -67,7 +80,7 @@ export function CasesTab({ projectId }: { projectId: string }) {
   const [distributing, setDistributing] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const questionnaire = useQuestionnaireScope();
-  const openCase = useCallback((id: string) => setOpen(id), []);
+  const openCase = setOpen;
   const limit = 25;
 
   useEffect(() => {

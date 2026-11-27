@@ -97,9 +97,29 @@ export async function questionnaireAction(
   await page.getByRole('menuitem', { name: action }).click();
 }
 
-/** Opens a part of the Results tab (summary, dashboard, metrics). */
+/** Opens a clerk's or interviewer's paper forms: their own tab, without the questionnaires. */
+export async function paperTab(page: Page) {
+  await page
+    .getByRole('tablist', { name: 'Project sections' })
+    .getByRole('tab', { name: 'Paper forms', exact: true })
+    .click();
+}
+
+/**
+ * Opens the summary (Results tab), the live dashboard (the project's Overview) or the metrics
+ * (in Supervision beside the review queue, or a tab of their own).
+ */
 export async function resultsSection(page: Page, section: 'Summary' | 'Dashboard' | 'Metrics') {
-  await page.getByRole('tab', { name: 'Results', exact: true }).click();
-  const sub = page.getByRole('tablist', { name: 'Result sections' });
-  if (await sub.isVisible()) await sub.getByRole('tab', { name: section, exact: true }).click();
+  const tabs = page.getByRole('tablist', { name: 'Project sections' });
+  if (section === 'Summary') return tabs.getByRole('tab', { name: 'Results', exact: true }).click();
+  if (section === 'Dashboard')
+    return tabs.getByRole('tab', { name: 'Overview', exact: true }).click();
+  const supervision = tabs.getByRole('tab', { name: 'Supervision', exact: true });
+  if (await supervision.count()) {
+    await supervision.click();
+    await page
+      .getByRole('tablist', { name: 'Supervision sections' })
+      .getByRole('tab', { name: 'Metrics', exact: true })
+      .click();
+  } else await tabs.getByRole('tab', { name: 'Metrics', exact: true }).click();
 }

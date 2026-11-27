@@ -38,21 +38,24 @@ export function ProjectCases({
   const list = useQuery({
     queryKey: ['questionnaires', projectId],
     queryFn: () =>
-      api<{ id: string; name: string; createdAt: string }[]>(
+      api<{ id: string; name: string; createdAt: string; publishedVersions: number }[]>(
         `/projects/${projectId}/questionnaires`,
       ),
     enabled: canQuestionnaires,
   });
+  // Who neither designs nor loads samples works only with questionnaires already out.
+  const canDrafts = useCan('questionnaires.edit', projectId) || canImport;
   // Oldest first, as the API takes the project's first questionnaire by default.
-  const qs = [...(list.data ?? [])].sort(
-    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-  );
+  const qs = (list.data ?? [])
+    .filter((q) => canDrafts || q.publishedVersions > 0)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   // Without the questionnaire list (interviewers), every case of theirs is shown.
   const current = qs.find((q) => q.id === search.q)?.id ?? qs[0]?.id;
   const pick = (q: string) =>
     void navigate({
       to: '.',
-      search: (s: Record<string, unknown>) => ({ ...s, q }),
+      // An open case belongs to the questionnaire left behind.
+      search: (s: Record<string, unknown>) => ({ ...s, q, case: undefined }),
       replace: true,
     });
 
@@ -64,7 +67,8 @@ export function ProjectCases({
   const active = subs.includes(sub) ? sub : (subs.at(-1) ?? 'list');
   // Wait for the questionnaires, so the views do not start over when they arrive.
   if (canQuestionnaires && list.isPending) return <p aria-busy="true">…</p>;
-  if (canQuestionnaires && list.isSuccess && !qs.length)
+  // Who cannot create one sees their cases (none yet) rather than being told to.
+  if (canQuestionnaires && canDrafts && list.isSuccess && !qs.length)
     return <p className="text-sm text-slate-600">{t('cases.tabs.noQuestionnaire')}</p>;
 
   return (

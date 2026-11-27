@@ -19,6 +19,15 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Project navigation** (expert panel): an **Overview** tab (live progress, quotas and goals) where a
+  manager lands once a questionnaire is out; a **Distribution** tab with the web surveys and paper forms
+  of every questionnaire, out of the questionnaire editor (`?tab=web|paper&q=` land there); the review
+  queue and the interviewers' metrics together under **Supervision** (Results keeps the summary);
+  **Project settings** with its topics in groups down the side (Operation, Modes, Brand and privacy),
+  "Fieldwork" renamed **Goals** and the questionnaire's tab called "Ajustes del cuestionario" in Spanish;
+  an open case in the address (`?case=`); a three-level breadcrumb on the project and device pages;
+  "My device" first beside the tabs. Interviewers and clerks no longer get the Questionnaires tab (paper
+  forms are their own tab) and their case filter lists only published questionnaires.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when
