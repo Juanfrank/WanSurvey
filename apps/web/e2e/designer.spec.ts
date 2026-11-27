@@ -286,10 +286,23 @@ test('the outline collapses to a rail whose pane opens over the editor, and pins
   await expect(tree).toBeHidden();
   await expect(editor.locator(':focus')).toHaveCount(1);
 
-  // Pointing at the rail opens it; moving away closes it.
+  // Resting the pointer on the rail opens it; a moment away from it does not close it, a
+  // while away does (and Escape at once).
   await rail.hover();
   await expect(tree).toBeVisible();
   await page.mouse.move(900, 600);
+  await page.waitForTimeout(400);
+  await expect(tree).toBeVisible();
+  await expect(tree).toBeHidden();
+  await rail.hover();
+  await expect(tree).toBeVisible();
+  await page.mouse.move(900, 600);
+  await page.keyboard.press('Escape');
+  await expect(tree).toBeHidden();
+  // Only passing over it does not.
+  await rail.hover();
+  await page.mouse.move(900, 600);
+  await page.waitForTimeout(500);
   await expect(tree).toBeHidden();
   // A click keeps it open until Escape.
   await rail.click();

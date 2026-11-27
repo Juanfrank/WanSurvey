@@ -12,7 +12,7 @@ import { Dialog } from '../designer/Dialog.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { caseVariables } from '../designer/vars.js';
-import { Button } from '../routes/ui.js';
+import { Badge, Button, type Tone } from '../routes/ui.js';
 import { CaseMap } from './CaseMap.js';
 import { PersonalData } from './PersonalData.js';
 import { ReturnedToMe } from '../review/ReturnedToMe.js';
@@ -601,20 +601,17 @@ export function CasesTab({ projectId }: { projectId: string }) {
   );
 }
 
+const statusTone: Record<string, Tone> = {
+  fresh: 'neutral',
+  assigned: 'info',
+  in_progress: 'warning',
+  finalised: 'success',
+  withdrawn: 'danger',
+};
+
 export function StatusBadge({ status }: { status: string }) {
   const { t } = useTranslation();
-  const cls: Record<string, string> = {
-    fresh: 'bg-slate-100 text-slate-800',
-    assigned: 'bg-indigo-100 text-indigo-ink-900',
-    in_progress: 'bg-amber-100 text-amber-ink-900',
-    finalised: 'bg-emerald-100 text-emerald-ink-900',
-    withdrawn: 'bg-red-100 text-red-ink-900',
-  };
-  return (
-    <span className={`rounded px-1.5 py-0.5 text-xs ${cls[status] ?? ''}`}>
-      {t(`cases.status.${status}`)}
-    </span>
-  );
+  return <Badge tone={statusTone[status] ?? 'neutral'}>{t(`cases.status.${status}`)}</Badge>;
 }
 
 function formatValue(v: unknown): string {

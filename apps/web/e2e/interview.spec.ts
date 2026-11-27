@@ -67,6 +67,18 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await onQuestion(page, 'A3');
   await expect(page.getByTestId('answers-so-far')).toContainText('40');
 
+  // In the dark theme the header and the action bar keep their contrast too.
+  await page.evaluate(() => localStorage.setItem('ws.theme', 'dark'));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await onQuestion(page, 'A3');
+  await expectAccessible(page);
+  await shot(page, 'dark-interview', { fullPage: false });
+  await page.evaluate(() => localStorage.setItem('ws.theme', 'light'));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await onQuestion(page, 'A3');
+
   // Offline: the answer stays on the device, then reaches the server.
   await context.setOffline(true);
   await question(page, 'A3').getByRole('radio').first().check();
