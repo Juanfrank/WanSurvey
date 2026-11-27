@@ -1,3 +1,5 @@
+import { auditLogEn, auditLogEs } from './audit-i18n.js';
+
 /** Administration: people, teams, the organisation's settings and the activity log (key `admin`). */
 export const adminEn = {
   title: 'Administration',
@@ -323,6 +325,7 @@ export const adminEn = {
       'The Microsoft directory, application and secret are set in the deployment (ENTRA_* settings), not here. Here you turn sign-in on, list your e-mail domains and choose whether to require it.',
   },
   log: {
+    ...auditLogEn,
     intro:
       'Who did what and when: sign-ins, changes of people and roles, projects, questionnaires, cases and exports.',
     action: 'Action',
@@ -340,9 +343,9 @@ export const adminEn = {
     more: 'Show more',
     export: 'Download as CSV',
     exportHint:
-      'Everything in the dates chosen above (up to a year); the download is recorded in the log.',
-    shown_one: 'The latest {{count}} entry.',
-    shown_other: 'The latest {{count}} entries.',
+      'Every entry that matches the filters above, in the dates chosen (up to a year; without dates, the last 30 days), with no row limit; the download is recorded in the log.',
+    shown_one: 'Showing the latest {{count}} entry.',
+    shown_other: 'Showing the latest {{count}} entries.',
     areas: {
       auth: 'Sign-in',
       user: 'People',
@@ -364,6 +367,9 @@ export const adminEn = {
       apikey: 'API keys',
       webhook: 'Webhooks',
       audio: 'Recordings',
+      registry: 'People registry',
+      app: 'Application',
+      papi: 'Paper forms',
     },
   },
 };
@@ -694,6 +700,7 @@ export const adminEs: typeof adminEn = {
       'El directorio, la aplicación y el secreto de Microsoft se configuran en el despliegue (ajustes ENTRA_*), no aquí. Aquí se activa el ingreso, se listan los dominios de correo y se elige si se exige.',
   },
   log: {
+    ...auditLogEs,
     intro:
       'Quién hizo qué y cuándo: inicios de sesión, cambios de personas y roles, proyectos, cuestionarios, casos y exportaciones.',
     action: 'Acción',
@@ -711,9 +718,9 @@ export const adminEs: typeof adminEn = {
     more: 'Ver más',
     export: 'Descargar como CSV',
     exportHint:
-      'Todo lo que cae en las fechas elegidas arriba (hasta un año); la descarga queda registrada en la bitácora.',
-    shown_one: 'La última {{count}} entrada.',
-    shown_other: 'Las últimas {{count}} entradas.',
+      'Todas las entradas que cumplen los filtros de arriba, en las fechas elegidas (hasta un año; sin fechas, los últimos 30 días), sin límite de filas; la descarga queda registrada en la bitácora.',
+    shown_one: 'Se muestra {{count}} entrada, la más reciente.',
+    shown_other: 'Se muestran las últimas {{count}} entradas.',
     areas: {
       auth: 'Inicio de sesión',
       user: 'Personas',
@@ -735,6 +742,9 @@ export const adminEs: typeof adminEn = {
       apikey: 'Claves de API',
       webhook: 'Webhooks',
       audio: 'Grabaciones',
+      registry: 'Registro de personas',
+      app: 'Aplicación',
+      papi: 'Formularios en papel',
     },
   },
 };

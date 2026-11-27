@@ -11,8 +11,15 @@ import {
 } from './harness.js';
 
 const DAY = 86_400_000;
+const NEWID = '8c3b2e4a-7d9f-4a01-9c2d-3e4f5a6b7c8d';
 
-/** Audit-log export: permission, content, formula safety, range cap, its own trail, isolation. */
+const PROJECT = '6a1f0c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b';
+const CASE = '7b2a1d3f-6c8e-4f90-8b1c-2d3e4f5a6b7c';
+
+/**
+ * Audit log: the screen's filters (presets, project, case) and paging, and the export:
+ * permission, content, formula safety, range cap, its own trail, isolation.
+ */
 describe.skipIf(!configured)('SQL Server: audit log export', () => {
   let t: MssqlTestApp;
   let tenant: { id: string; slug: string };
@@ -49,9 +56,79 @@ describe.skipIf(!configured)('SQL Server: audit log export', () => {
               VALUES (NEWID(), ${tenant.id}, 'project.created', 'project', '=HYPERLINK("x")', '{}')`.execute(
       t.owner,
     );
+    // Entries about one project and one of its cases, as the API records them.
+    const plant = (action: string, targetType: string, targetId: string, details: object) =>
+      sql`INSERT INTO audit_log (id, tenant_id, action, target_type, target_id, details)
+          VALUES (NEWID(), ${tenant.id}, ${action}, ${targetType}, ${targetId},
+                  ${JSON.stringify(details)})`.execute(t.owner);
+    await plant('project.updated', 'project', PROJECT, {});
+    await plant('interview.corrected', 'interview', NEWID, {
+      variable: 'A2_AGE',
+      projectId: PROJECT,
+      caseId: CASE,
+      externalId: 'HH0004',
+    });
+    await plant('case.pii_viewed', 'case', CASE, { projectId: PROJECT, externalId: 'HH0004' });
+    await plant('data.downloaded', 'export', NEWID, { projectId: PROJECT });
   });
   afterAll(async () => {
     await t?.close();
+  });
+
+  const list = async (query: Record<string, string | number>) => {
+    const res = await owner.agent.get('/api/v1/audit-log').query(query);
+    expect(res.status).toBe(200);
+    return res.body as { id: string; action: string; at: string }[];
+  };
+
+  it('filters by a set of actions, a project and a case', async () => {
+    const presets = await list({ actions: 'interview.corrected,data.downloaded' });
+    expect(presets.map((r) => r.action).sort()).toEqual(['data.downloaded', 'interview.corrected']);
+    const project = await list({ projectId: PROJECT });
+    expect(project.map((r) => r.action).sort()).toEqual([
+      'case.pii_viewed',
+      'data.downloaded',
+      'interview.corrected',
+      'project.updated',
+    ]);
+    // By the case's code or its id, as target or in the details.
+    for (const caseRef of ['hh0004', CASE.toUpperCase()])
+      expect((await list({ caseRef })).map((r) => r.action).sort()).toEqual([
+        'case.pii_viewed',
+        'interview.corrected',
+      ]);
+    expect(
+      (await list({ caseRef: 'HH0004', actions: 'interview.corrected' })).map((r) => r.action),
+    ).toEqual(['interview.corrected']);
+  });
+
+  it('pages newest first with no gaps or repeats', async () => {
+    const all = await list({ limit: 500 });
+    expect(all.length).toBeGreaterThan(4);
+    const seen: string[] = [];
+    let before: { at: string; id: string } | null = null;
+    for (;;) {
+      const page = await list({
+        limit: 2,
+        ...(before ? { beforeAt: before.at, beforeId: before.id } : {}),
+      });
+      seen.push(...page.map((r) => r.id));
+      if (page.length < 2) break;
+      before = { at: page[1]!.at, id: page[1]!.id };
+    }
+    expect(seen).toEqual(all.map((r) => r.id));
+    expect(
+      (await owner.agent.get('/api/v1/audit-log').query({ beforeAt: all[0]!.at })).status,
+    ).toBe(400);
+  });
+
+  it('exports only what the filters select', async () => {
+    const res = await get(owner, { ...range, format: 'jsonl', caseRef: 'HH0004' });
+    const lines = (res.body as string)
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l) as { action: string });
+    expect(lines.map((l) => l.action).sort()).toEqual(['case.pii_viewed', 'interview.corrected']);
   });
 
   it('is for owners only by default', async () => {

@@ -120,17 +120,7 @@ export class AuditService {
     return { ...entry, actorUserId: ctx.userId, ip: ctx.ip, userAgent: ctx.userAgent };
   }
 
-  async list(
-    ctx: AuthContext,
-    filter: {
-      action?: string;
-      actorUserId?: string;
-      targetId?: string;
-      from?: Date;
-      to?: Date;
-      limit: number;
-    },
-  ) {
+  async list(ctx: AuthContext, filter: AuditFilter) {
     return this.engine.sql.withTenant(ctx.tenantId, (tx) => this.store.list(tx, filter));
   }
 
