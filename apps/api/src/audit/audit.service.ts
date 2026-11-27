@@ -78,6 +78,8 @@ export type AuditAction =
   | 'interview.corrected'
   | 'data.exported'
   | 'data.downloaded'
+  | 'cawi.links_viewed'
+  | 'cawi.links_downloaded'
   | 'share_link.created'
   | 'share_link.revoked'
   | 'library_item.created'

@@ -47,17 +47,27 @@ describe.skipIf(!configured)('SQL Server: project people', () => {
   const rows = async (q: ReturnType<typeof sql>) =>
     ((await q.execute(t.owner)) as { rows: Record<string, unknown>[] }).rows;
 
-  const put = (s: Session, project: string, userId: string, role: string | null) =>
+  const put = (s: Session, project: string, userId: string, role: string | null, reason?: string) =>
     s.agent
       .put(`/api/v1/projects/${project}/people/${userId}`)
       .set('x-csrf-token', s.csrf)
-      .send({ role });
+      .send({ role, ...(reason ? { reason } : {}) });
 
   it('an administrator gives a role in one project; organisation roles stay', async () => {
-    const res = await put(admin, a, ana.id, 'reviewer');
+    // Ana is of the client organisation: a role that opens interviews needs a reason.
+    const bare = await put(admin, a, ana.id, 'reviewer');
+    expect(bare.status, JSON.stringify(bare.body)).toBe(400);
+    expect(bare.body.code).toBe('REASON_REQUIRED');
+    const res = await put(admin, a, ana.id, 'reviewer', 'Audits the fieldwork for the client');
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const view = await admin.agent.get(`/api/v1/projects/${a}/people`).expect(200);
     expect(view.body.canManage).toBe(true);
+    expect(view.body.sensitive.reviewer).toEqual(['interviews.read_all', 'audio.listen']);
+    expect(view.body.sensitive.client_viewer).toEqual([]);
+    const cand = (id: string) =>
+      view.body.candidates.find((c: { id: string; external: boolean }) => c.id === id);
+    expect(cand(ana.id).external).toBe(true);
+    expect(cand(boss.id).external).toBe(false);
     expect(view.body.members.find((m: { userId: string }) => m.userId === ana.id)).toMatchObject({
       role: 'reviewer',
       orgRole: 'client_viewer',
@@ -68,20 +78,23 @@ describe.skipIf(!configured)('SQL Server: project people', () => {
     expect(JSON.parse(audit.at(-1)!.details as string)).toMatchObject({
       projectId: a,
       after: 'reviewer',
+      external: true,
+      opens: ['interviews.read_all', 'audio.listen'],
+      reason: 'Audits the fieldwork for the client',
     });
   });
 
   it("the project's manager gives roles from supervisor down, only in their project", async () => {
     const view = await manager.agent.get(`/api/v1/projects/${a}/people`).expect(200);
     expect(view.body.grantable).toEqual(['supervisor', 'reviewer', 'interviewer', 'client_viewer']);
-    expect((await put(manager, a, ana.id, 'interviewer')).status).toBe(200);
+    expect((await put(manager, a, ana.id, 'interviewer', 'Pilot interviews')).status).toBe(200);
     expect((await put(manager, a, ana.id, 'project_manager')).status).toBe(403);
     // Not in another project, not on someone above supervisor, not on themselves.
-    expect((await put(manager, b, ana.id, 'interviewer')).status).toBe(403);
+    expect((await put(manager, b, ana.id, 'interviewer', 'Pilot')).status).toBe(403);
     expect((await put(manager, a, boss.id, 'interviewer')).status).toBe(403);
     expect((await put(manager, a, managerUser.id, 'supervisor')).status).toBe(403);
     // Removing touches only this project's roles.
-    await put(admin, b, ana.id, 'interviewer').expect(200);
+    await put(admin, b, ana.id, 'interviewer', 'Pilot interviews').expect(200);
     expect((await put(manager, a, ana.id, null)).status).toBe(200);
     const left = await rows(
       sql`SELECT role, project_id FROM memberships WHERE user_id = ${ana.id} ORDER BY role`,

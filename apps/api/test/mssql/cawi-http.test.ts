@@ -439,6 +439,13 @@ describe.skipIf(!configured)('SQL Server: web surveys by e-mail over HTTP', () =
     );
     expect(mine).toHaveLength(3);
     expect(mine[0]!.url).toMatch(/^http:\/\/survey\.test\/s\/[A-Za-z0-9_-]+$/);
+    // The links open people's surveys: showing and downloading them is logged.
+    await get(pm, `/projects/${project}/waves/${w.body.id}/links?for=download`);
+    const logged = await rows(
+      sql`SELECT action, details FROM audit_log WHERE target_id = ${w.body.id} AND action LIKE 'cawi.links_%' ORDER BY at, id`,
+    );
+    expect(logged.map((r) => r.action)).toEqual(['cawi.links_viewed', 'cawi.links_downloaded']);
+    expect(JSON.parse(logged[1]!.details as string)).toMatchObject({ projectId: project });
     // The link opens the survey for its own case.
     const token = mine[2]!.url.split('/s/')[1]!;
     const s = await api().get(`/api/v1/public/s/${token}?device=link-browser-1`);

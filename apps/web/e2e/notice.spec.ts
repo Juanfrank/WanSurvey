@@ -19,6 +19,13 @@ test('the information notice is part of the questionnaire: added from the design
   // The project asks every questionnaire to open with the notice.
   await page.getByRole('tab', { name: 'Settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Privacy', exact: true }).click();
+  // A usual retention period in one click, with what it would do tonight; left as it was.
+  const retention = page.getByTestId('retention-settings');
+  await retention.getByRole('button', { name: '365 days', exact: true }).click();
+  await expect(retention.getByRole('spinbutton')).toHaveValue('365');
+  await expect(retention.getByTestId('retention-preview')).toContainText('tonight');
+  await retention.getByRole('spinbutton').fill('');
+  await expect(retention.getByRole('alert')).toContainText('No period is set');
   await page
     .getByLabel('Do not publish a questionnaire that does not open with the information notice')
     .check();

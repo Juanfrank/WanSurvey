@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
+import { permKey } from '../admin/permissions.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText } from '../routes/ui.js';
 import { RoleGuide } from './RoleGuide.js';
@@ -19,8 +20,10 @@ interface People {
     role: Role;
     orgRole: Role | null;
   }[];
-  candidates: { id: string; name: string; email: string }[];
+  candidates: { id: string; name: string; email: string; external?: boolean }[];
   grantable: Role[];
+  /** For each role that can be given, what it opens to interviews, recordings or personal data. */
+  sensitive?: Partial<Record<Role, string[]>>;
   canManage: boolean;
 }
 
@@ -40,8 +43,11 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
   // Kept as keys, so the message follows a change of language.
   const [notice, setNotice] = useState<{ key: string; name: string; role?: Role } | null>(null);
   const save = useMutation({
-    mutationFn: (v: { userId: string; role: Role | null }) =>
-      api(`/projects/${projectId}/people/${v.userId}`, { method: 'PUT', body: { role: v.role } }),
+    mutationFn: (v: { userId: string; role: Role | null; reason?: string }) =>
+      api(`/projects/${projectId}/people/${v.userId}`, {
+        method: 'PUT',
+        body: { role: v.role, ...(v.reason ? { reason: v.reason } : {}) },
+      }),
     onSuccess: async (_r, v) => {
       const name =
         people.data?.candidates.find((c) => c.id === v.userId)?.name ??
@@ -62,7 +68,9 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
   const errorText = (e: unknown) =>
     e instanceof ApiError && e.status === 403
       ? t('team.errors.FORBIDDEN')
-      : t('team.errors.generic');
+      : e instanceof ApiError && e.code === 'REASON_REQUIRED'
+        ? t('team.projectPeople.reasonRequired')
+        : t('team.errors.generic');
 
   return (
     <div className="flex flex-col gap-4">
@@ -180,7 +188,7 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
             save.reset();
             setEditing(null);
           }}
-          onSave={(userId, role) => save.mutate({ userId, role })}
+          onSave={(userId, role, reason) => save.mutate({ userId, role, reason })}
         />
       ) : null}
     </div>
@@ -202,7 +210,7 @@ function PersonDialog({
   pending: boolean;
   error: string | null;
   onClose(): void;
-  onSave(userId: string, role: Role): void;
+  onSave(userId: string, role: Role, reason?: string): void;
 }) {
   const { t } = useTranslation();
   const [userId, setUserId] = useState(initial.userId ?? '');
@@ -211,8 +219,14 @@ function PersonDialog({
       (people.grantable.includes('interviewer') ? 'interviewer' : people.grantable[0]!),
   );
   const [query, setQuery] = useState('');
+  const [reason, setReason] = useState('');
   const editing = !!initial.userId;
   const person = people.members.find((m) => m.userId === userId);
+  // Someone of the client organisation given access to interviews, recordings or personal
+  // data: the dialog says what they will see and asks why (kept in the activity log).
+  const external = !!people.candidates.find((c) => c.id === userId)?.external;
+  const opens = external ? (people.sensitive?.[role] ?? []) : [];
+  const needsReason = opens.length > 0;
   const choices = useMemo(() => {
     const inProject = new Set(people.members.map((m) => m.userId));
     const q = query.trim().toLowerCase();
@@ -236,7 +250,8 @@ function PersonDialog({
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (userId) onSave(userId, role);
+          if (userId && (!needsReason || reason.trim().length >= 3))
+            onSave(userId, role, needsReason ? reason.trim() : undefined);
         }}
       >
         {editing ? null : (
@@ -291,13 +306,41 @@ function PersonDialog({
             </label>
           ))}
         </fieldset>
+        {needsReason ? (
+          <div
+            role="alert"
+            className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-ink-900"
+            data-testid="external-warning"
+          >
+            <p className="font-medium">{t('team.projectPeople.externalWarning')}</p>
+            <ul className="ml-5 list-disc">
+              {opens.map((p) => (
+                <li key={p}>{t(permKey(p))}</li>
+              ))}
+            </ul>
+            <label className="flex flex-col gap-1 font-medium text-slate-800">
+              {t('team.projectPeople.reason')}
+              <textarea
+                className={`${inputCls} min-h-[3rem] font-normal`}
+                required
+                minLength={3}
+                maxLength={500}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
         <RoleGuide roles={people.grantable} />
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             {t('team.projectPeople.cancel')}
           </Button>
-          <Button type="submit" disabled={!userId || pending}>
+          <Button
+            type="submit"
+            disabled={!userId || pending || (needsReason && reason.trim().length < 3)}
+          >
             {t('team.projectPeople.save')}
           </Button>
         </div>

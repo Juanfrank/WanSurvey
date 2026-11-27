@@ -707,6 +707,7 @@ export function CallsTab({
                 <h4 id="calls-sample" className="mb-1 font-semibold">
                   {t('cati.sample')}
                 </h4>
+                <p className="mb-1 text-xs text-slate-600">{t('cases.detail.confidential')}</p>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
                   {Object.entries(served.case.sample).map(([k, v]) => (
                     <div key={k} className="contents">

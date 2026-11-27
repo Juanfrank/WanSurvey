@@ -8,9 +8,11 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
+import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CAWI_REPO, type CawiRepo } from './cawi-repo.js';
@@ -25,6 +27,9 @@ import {
 const PERM = { projectParam: 'projectId' } as const;
 const TEMPLATES = ['email.templates', 'cawi.waves'] as const;
 
+/** Why the links are fetched: shown on screen or downloaded as a file (both logged). */
+const LinksQuery = z.object({ for: z.enum(['view', 'download']).default('view') });
+
 const SendBody = z.object({ confirm: z.boolean().default(false) }).default({ confirm: false });
 
 /** Web surveys for project staff: e-mail wording, waves and their funnel, the open link. */
@@ -34,6 +39,7 @@ export class CawiController {
   constructor(
     @Inject(CAWI_REPO) private readonly repo: CawiRepo,
     private readonly cawi: CawiService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get('email-templates')
@@ -96,15 +102,31 @@ export class CawiController {
     return this.repo.inTenant(ctx.tenantId, (t) => this.cawi.previewSmsWave(t, projectId, waveId));
   }
 
-  /** The personal links of a "links only" wave (W7). */
+  /**
+   * The personal links of a "links only" wave (W7). Each link opens a person's survey, with
+   * their data: like a password, every time they are shown or downloaded is logged.
+   */
   @Get('waves/:waveId/links')
   @RequirePermission('cawi.waves', PERM)
   links(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('waveId', ParseUUIDPipe) waveId: string,
+    @Query(new ZodPipe(LinksQuery)) query: z.infer<typeof LinksQuery>,
   ) {
-    return this.repo.inTenant(ctx.tenantId, (t) => this.cawi.waveLinks(t, projectId, waveId));
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const links = await this.cawi.waveLinks(t, projectId, waveId);
+      if (links.length)
+        await t.audit(
+          this.audit.fromContext(ctx, {
+            action: query.for === 'download' ? 'cawi.links_downloaded' : 'cawi.links_viewed',
+            targetType: 'wave',
+            targetId: waveId,
+            details: { projectId, links: links.length },
+          }),
+        );
+      return links;
+    });
   }
 
   @Get('suppressions')

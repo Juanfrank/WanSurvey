@@ -143,3 +143,11 @@ export function segmentLinks(
     url: withQuery(base, buildQuery([...fixed, { param: segment.param, value }])),
   }));
 }
+
+/**
+ * A personal link with its token cut short: enough to tell links apart, not enough to open one.
+ * The token is what opens the person's survey, with their data.
+ */
+export function maskLink(url: string): string {
+  return url.replace(/\/s\/([A-Za-z0-9_-]{4})[A-Za-z0-9_-]+/, '/s/$1…');
+}

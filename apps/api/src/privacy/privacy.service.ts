@@ -18,6 +18,9 @@ import { PRIVACY_REPO, type PrivacyRepo, type PrivacyTx } from './privacy-repo.j
 import { ImportMapping, type ImportReport } from '../cases/sample-mapping.js';
 import { JobsService, PROCESS_ROLE, type ProcessRole } from '../jobs/jobs.service.js';
 
+/** Cases of one project the nightly retention anonymises per run; the rest wait for the next. */
+const RETENTION_BATCH = 5000;
+
 /** Removes the given keys at any depth (top-level answers and roster rows). */
 export function stripKeys(value: unknown, names: Set<string>): unknown {
   if (Array.isArray(value)) return value.map((v) => stripKeys(v, names));
@@ -116,6 +119,24 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
     return n;
   }
 
+  /**
+   * How many cases a retention of `days` would anonymise at the next nightly run (at most one
+   * batch; `more` when others wait for the nights after), so the period is chosen knowing it.
+   */
+  async retentionPreview(t: PrivacyTx, projectId: string, days: number, now = new Date()) {
+    await this.cases.settings(t, projectId);
+    const due = await t.dueForRetention(
+      projectId,
+      new Date(now.getTime() - days * 86_400_000),
+      RETENTION_BATCH + 1,
+    );
+    return {
+      days,
+      due: Math.min(due.length, RETENTION_BATCH),
+      more: due.length > RETENTION_BATCH,
+    };
+  }
+
   /** Nightly: cases finished longer ago than their project keeps personal data. */
   async retentionAll(now = new Date()): Promise<number> {
     let n = 0;
@@ -129,7 +150,7 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
             const due = await t.dueForRetention(
               projectId,
               new Date(now.getTime() - days * 86_400_000),
-              5000,
+              RETENTION_BATCH,
             );
             for (const id of due) await this.anonymise(t, null, projectId, id, 'retention');
             m += due.length;

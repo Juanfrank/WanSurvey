@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -10,7 +11,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { ROLE_RANK, ROLES, Role } from '@wansurvey/schema';
+import { ROLE_RANK, ROLES, Role, roleMatrix, type Permission } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import {
@@ -24,8 +25,37 @@ import { ZodPipe } from '../common/zod.js';
 import { USERS_REPO, type UsersRepo } from '../users/users-repo.js';
 import { ORG_REPO, type OrgRepo } from './org-repo.js';
 
-/** A person has at most one role per project; null takes them out of it. */
-const PeopleBody = z.object({ role: Role.nullable() });
+/**
+ * A person has at most one role per project; null takes them out of it. `reason` is asked when
+ * an external client is given a role that opens interviews, recordings or personal data.
+ */
+const PeopleBody = z.object({
+  role: Role.nullable(),
+  reason: z.string().trim().min(3).max(500).optional(),
+});
+
+/** What makes a project role sensitive for someone from outside the organisation. */
+export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
+  'interviews.read_all',
+  'interviews.read_own',
+  'audio.listen',
+  'pii.view',
+  'cases.read_all',
+  'cases.read_assigned',
+  'exports.run',
+];
+
+/** Of the client organisation: client is all they hold for the whole organisation. */
+function isExternal(grants: { role: string; projectId: string | null }[]): boolean {
+  const org = grants.filter((g) => g.projectId === null);
+  return org.length > 0 && org.every((g) => g.role === 'client_viewer');
+}
+
+/** The sensitive permissions a role holds in this organisation's matrix. */
+export function sensitiveOf(role: Role, overrides?: unknown): Permission[] {
+  const held = roleMatrix(overrides)[role];
+  return SENSITIVE_PERMISSIONS.filter((p) => held.includes(p));
+}
 
 /**
  * The people of one project and their roles in it. Administrators (`users.manage`) change any
@@ -73,10 +103,18 @@ export class ProjectPeopleController {
         })
         .filter((m) => m.role);
       const grantable = this.grantable(ctx, projectId);
+      const overrides = (await this.org.inTenant(ctx.tenantId, (o) => o.tenant()))?.rolePermissions;
       return {
         members,
-        candidates: people.map(({ id, name, email }) => ({ id, name, email })),
+        candidates: people.map(({ id, name, email }) => ({
+          id,
+          name,
+          email,
+          external: isExternal(grants.filter((g) => g.userId === id)),
+        })),
         grantable,
+        // What each role opens: the page warns before giving it to an external client.
+        sensitive: Object.fromEntries(grantable.map((r) => [r, sensitiveOf(r, overrides)])),
         canManage: grantable.length > 0,
       };
     });
@@ -114,13 +152,32 @@ export class ProjectPeopleController {
       // Nor take away a role in the project they could not have given.
       if (before && !grantable.includes(before))
         throw new ForbiddenException('You cannot manage this user');
+      // Someone of the client organisation (nothing above client in the organisation) who is
+      // given access to interviews, recordings or personal data: knowingly, and with a reason.
+      const external = isExternal(held);
+      const opens = role
+        ? sensitiveOf(
+            role,
+            (await this.org.inTenant(ctx.tenantId, (o) => o.tenant()))?.rolePermissions,
+          )
+        : [];
+      if (external && opens.length && !body.reason)
+        throw new BadRequestException({
+          code: 'REASON_REQUIRED',
+          message: 'Say why an external client gets access to interviews or personal data',
+        });
       await t.setProjectRole(userId, projectId, role);
       await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.role_changed',
           targetType: 'user',
           targetId: userId,
-          details: { projectId, before, after: role },
+          details: {
+            projectId,
+            before,
+            after: role,
+            ...(external && opens.length ? { external: true, opens, reason: body.reason } : {}),
+          },
         }),
       );
       return { userId, projectId, role };
