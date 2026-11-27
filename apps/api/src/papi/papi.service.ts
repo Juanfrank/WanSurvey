@@ -6,7 +6,7 @@ import {
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
-import { stableStringify, type CompiledQuestionnaire } from '@wansurvey/logic';
+import { createInterview, stableStringify, type CompiledQuestionnaire } from '@wansurvey/logic';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { compileRule, maskSample, ruleError } from '../cases/case-logic.js';
@@ -36,7 +36,26 @@ export const FormsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
-export const ResolveBody = z.strictObject({ choice: z.enum(['first', 'second']) });
+/** A value typed by the supervisor when both entries are wrong: what a question can hold. */
+const TypedValue = z.union([
+  z.string().max(10_000),
+  z.number(),
+  z.boolean(),
+  z.array(z.union([z.string().max(1000), z.number()])).max(500),
+]);
+
+export const ResolveBody = z
+  .strictObject({
+    choice: z.enum(['first', 'second', 'other']),
+    /** With `other`: the value read on the paper form. */
+    value: TypedValue.optional(),
+    /** Why, kept in the audit log. */
+    note: z.string().trim().max(500).optional(),
+  })
+  .refine((b) => (b.choice === 'other') === (b.value !== undefined), {
+    message: 'value is given with choice "other", and only then',
+    path: ['value'],
+  });
 
 /** The device id under which supervisors' resolutions are numbered. */
 const REVIEW_DEVICE = 'review';
@@ -203,6 +222,10 @@ export class PapiService implements OnModuleInit {
     return tx.mismatches(projectId, status);
   }
 
+  agreement(tx: PapiTx, projectId: string) {
+    return tx.entryAgreement(projectId);
+  }
+
   /**
    * A supervisor chooses the right value: it is written to the first entry (the record kept)
    * as a reviewer's change; when no difference remains, the case is finished.
@@ -212,23 +235,51 @@ export class PapiService implements OnModuleInit {
     ctx: AuthContext,
     projectId: string,
     id: string,
-    choice: 'first' | 'second',
+    choice: 'first' | 'second' | 'other',
+    typed?: { value?: unknown; note?: string },
   ) {
     const m = await tx.lockMismatch(projectId, id);
     if (!m) throw new NotFoundException('Difference not found');
     if (m.status !== 'open')
       throw new ConflictException({ code: 'RESOLVED', message: 'Already resolved' });
-    const value = choice === 'first' ? m.firstValue : m.secondValue;
+    const value =
+      choice === 'first' ? m.firstValue : choice === 'second' ? m.secondValue : typed?.value;
+    // The answer kept now: review may have changed the first entry since it was compared.
+    let current = m.firstValue;
+    if (choice === 'other') {
+      // A typed value goes through the engine like a reviewer's correction: type, range, codes.
+      const row = await tx.interview(m.firstInterviewId);
+      if (!row) throw new NotFoundException('Entry not found');
+      current = ((row.answers ?? {}) as Record<string, unknown>)[m.variable] ?? null;
+      const compiled = await this.runtime.compiledOf(tx, row.questionnaireVersionId);
+      const s = createInterview(compiled, {
+        ...this.runtime.engineOptions(row),
+        state: row.state as never,
+      });
+      const r = s.setAnswer(m.variable, value as never, 'reviewer');
+      if (!r.ok) throw new BadRequestException({ code: 'BAD_VALUE', message: r.error });
+      const errors = s.validate(m.variable).errors;
+      if (errors.length)
+        throw new BadRequestException({
+          code: 'INVALID_ANSWER',
+          message: errors.map((e) => e.message).join(' '),
+          errors,
+        });
+    }
     const now = new Date();
     await tx.resolveMismatch(m.id, { value, by: ctx.userId, at: now });
-    if (choice === 'second') {
+    if (
+      choice === 'other' ||
+      (choice === 'second' &&
+        stableStringify(value ?? null) !== stableStringify(m.firstValue ?? null))
+    ) {
       await tx.overwriteAnswer(m.firstInterviewId, m.variable, value, now);
       const next = await tx.nextEventSeq(m.firstInterviewId, REVIEW_DEVICE);
       await tx.insertAnswerEvents(m.firstInterviewId, REVIEW_DEVICE, [
         {
           seq: next,
           variable: m.variable,
-          oldValue: m.firstValue,
+          oldValue: current,
           newValue: value,
           at: now,
           byUserId: ctx.userId,
@@ -242,7 +293,12 @@ export class PapiService implements OnModuleInit {
         action: 'entry.resolved',
         targetType: 'case',
         targetId: m.caseId,
-        details: { variable: m.variable, choice },
+        details: {
+          variable: m.variable,
+          choice,
+          ...(choice === 'other' ? { value } : {}),
+          ...(typed?.note ? { note: typed.note } : {}),
+        },
       }),
     );
     let finished = false;

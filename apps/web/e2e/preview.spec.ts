@@ -114,7 +114,7 @@ test('respondents on a phone get one question per page; PAPI prints routing as i
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByTestId('mode').selectOption('PAPI');
   await expect(page.getByText('If Q4 is not “Casado/a” (1) → go to Q6')).toBeVisible();
-  await expect(page.getByText('If Q1 is “No” (2) → end the interview (REFUSAL)')).toBeVisible();
+  await expect(page.getByText('If Q1 is “No” (2) → end the interview (refusal)')).toBeVisible();
   await shot(page, 'preview-papi');
 });
 

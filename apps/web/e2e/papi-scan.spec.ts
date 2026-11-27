@@ -79,6 +79,10 @@ test('scanned forms: a PDF with two forms is split and read, and the clerk finis
     const panel = clerk.getByTestId('scan-panel');
     await expect(panel).toBeVisible();
     await expect(panel.locator('img').first()).toBeVisible();
+    // Where the clerk is among the questions left for this round.
+    await expect(panel.getByTestId('scan-progress')).toHaveText(
+      /^Question 1 of \d+ left for this round$/,
+    );
     await shot(clerk, 'papi-scan-second-round');
     await expectAccessible(clerk);
   } finally {

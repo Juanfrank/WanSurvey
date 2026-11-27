@@ -64,6 +64,12 @@ export class PapiController {
     return this.repo.inTenant(ctx.tenantId, (t) => this.papi.mismatches(t, projectId, q.status));
   }
 
+  @Get('agreement')
+  @RequirePermission('interviews.review', PERM)
+  agreement(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
+    return this.repo.inTenant(ctx.tenantId, (t) => this.papi.agreement(t, projectId));
+  }
+
   @Post('mismatches/:id/resolve')
   @HttpCode(200)
   @RequirePermission('interviews.review', PERM)
@@ -75,7 +81,7 @@ export class PapiController {
     @Body(new ZodPipe(ResolveBody)) body: z.infer<typeof ResolveBody>,
   ) {
     return this.repo.inTenant(ctx.tenantId, (t) =>
-      this.papi.resolve(t, ctx, projectId, id, body.choice),
+      this.papi.resolve(t, ctx, projectId, id, body.choice, body),
     );
   }
 }

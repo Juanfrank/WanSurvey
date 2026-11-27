@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
+import i18next from 'i18next';
 import { userEvent } from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
@@ -175,7 +176,7 @@ describe('PaperForm (PAPI)', () => {
     const q = (n: string) =>
       within(container.querySelector(`[data-paper-q="${n}"]`) as HTMLElement);
     expect(q('Q1').getByText('¿Acepta participar?')).toBeTruthy();
-    expect(q('Q1').getByText('If Q1 is “No” (2) → end the interview (REFUSAL)')).toBeTruthy();
+    expect(q('Q1').getByText('If Q1 is “No” (2) → end the interview (refusal)')).toBeTruthy();
     expect(q('Q4').getByText('If Q4 is not “Casado/a” (1) → go to Q6')).toBeTruthy();
     expect(q('Q5').getByText('¿Cómo se llama [su esposa / su esposo]?')).toBeTruthy();
     expect(q('Q2').getByText('-8')).toBeTruthy(); // DK code printed
@@ -190,6 +191,15 @@ describe('PaperForm (PAPI)', () => {
     expect(within(annex).getByText(/Table 1/)).toBeTruthy();
     expect(container.querySelector('[data-annex-ref="1"]')?.textContent).toMatch(/table 1/);
     await expectNoAxeViolations(container);
+  });
+
+  it('prints outcomes by name and "pase al final" in Spanish', async () => {
+    await act(() => i18next.changeLanguage('es'));
+    const { container } = render(<PaperForm compiled={compile(household)} lang="es" />);
+    const text = container.textContent ?? '';
+    expect(text).toContain('→ termine la entrevista (rechazo)');
+    expect(text).toContain('→ pase al final');
+    expect(text).not.toMatch(/REFUSAL|SCREENED_OUT|a el final/);
   });
 
   it('prints dates in day, month and year boxes, with 00 allowed when approximate', () => {

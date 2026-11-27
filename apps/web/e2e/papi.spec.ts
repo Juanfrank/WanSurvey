@@ -135,6 +135,13 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     await box.fill('HH0005');
     await box.press('Enter');
     await expect(c2.getByTestId('paper-meta')).toContainText('Second entry');
+    // A duration nobody could take is pointed out, not kept.
+    const minutes = c2.getByTestId('paper-meta').getByLabel('Duration on the form (minutes)');
+    await minutes.fill('900');
+    await minutes.press('Tab');
+    await expect(c2.getByTestId('paper-meta').getByRole('alert')).toContainText(
+      'whole number of minutes from 1 to 600',
+    );
     await c2.getByRole('button', { name: 'Suspend and leave' }).click();
     await keyForm(c2, 'HH0005', '16');
 
@@ -146,6 +153,10 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     const row = sup.locator('tr[data-mismatch="HH0005:A2_AGE"]');
     await expect(row).toContainText('15');
     await expect(row).toContainText('16');
+    // Who keyed each value, a third value when both are wrong, and how often entries agree.
+    await expect(row.getByText(/^by /)).toHaveCount(2);
+    await expect(row.getByRole('button', { name: /Other value/ })).toBeVisible();
+    await expect(sup.getByTestId('entry-agreement')).toContainText(/keyed twice/);
     await shot(sup, 'double-entry-mismatches');
     await expectAccessible(sup);
     await row.getByRole('button', { name: /Use second/ }).click();
