@@ -17,6 +17,7 @@ export {
   parseTemplate,
   renderTemplate,
   templateExpressions,
+  templateBlankableFields,
   TemplateError,
   PIPE_FILTERS,
   type Segment,
@@ -41,6 +42,7 @@ export {
 } from './compile.js';
 export * from './engine.js';
 export { sha256, stableStringify, seededRandom } from './hash.js';
+export { orderItems } from './order.js';
 export {
   runScenario,
   interviewOutcome,

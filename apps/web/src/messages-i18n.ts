@@ -72,6 +72,24 @@ export const messagesEn = {
     reserved_name: '{{name}} is a reserved word',
     duplicate_variable: 'Variable {{name}} is defined twice',
     duplicate_id: 'Id {{name}} is used twice',
+    pipe_may_be_empty:
+      'The text shows {{pipe}}, which may be blank for some cases; add a fallback text with | default:"…"',
+    random_ordinal: '{{name}} shuffles the points of an ordered scale',
+    dk_on_consent: '{{name}} offers "Don\'t know", which is not a meaningful answer to a consent',
+    dk_on_contact:
+      '{{name}} offers "Don\'t know", which is not a meaningful answer to a contact detail',
+    forced_response:
+      '{{name}} is sensitive and required, and web respondents cannot decline to answer',
+    grid_too_long:
+      'Grid {{name}} has {{rows}} rows; more than {{max}} is hard to answer on a phone',
+    other_without_specify:
+      'Option {{codes}} of {{name}} looks like "Other" but does not ask to specify',
+    double_barreled: '{{name}} may ask two things at once (it joins them with "and" or "or")',
+    unknown_order_item: '{{name}} keeps {{item}} in place, but {{item}} is not one of its items',
+    order_nothing_to_move: '{{name}} changes the order of its items, but fewer than two can move',
+    order_dependency:
+      '{{name}} uses {{ref}}, which may be asked after it because {{container}} changes the order of its items',
+    order_skip: 'The skip to {{target}} lands inside {{container}}, whose items change order',
   },
   scenarioCheck: {
     add_row: 'Step {{n}}: add a row to {{name}}',
@@ -237,6 +255,25 @@ export const messagesEs: MessagesCatalogue = {
     reserved_name: '{{name}} es una palabra reservada',
     duplicate_variable: 'La variable {{name}} está definida dos veces',
     duplicate_id: 'El id {{name}} se usa dos veces',
+    pipe_may_be_empty:
+      'El texto muestra {{pipe}}, que puede venir vacío en algunos casos; añada un texto alternativo con | default:"…"',
+    random_ordinal: '{{name}} desordena los puntos de una escala ordenada',
+    dk_on_consent: '{{name}} ofrece «No sabe», que no es una respuesta válida a un consentimiento',
+    dk_on_contact:
+      '{{name}} ofrece «No sabe», que no es una respuesta válida a un dato de contacto',
+    forced_response:
+      '{{name}} es sensible y obligatoria, y en la web el encuestado no puede dejar de responder',
+    grid_too_long:
+      'La matriz {{name}} tiene {{rows}} filas; más de {{max}} cuesta responderlas en un teléfono',
+    other_without_specify:
+      'La opción {{codes}} de {{name}} parece «Otro», pero no pide especificar',
+    double_barreled: '{{name}} puede preguntar dos cosas a la vez (las une con «y» u «o»)',
+    unknown_order_item: '{{name}} deja fijo {{item}}, pero {{item}} no es uno de sus ítems',
+    order_nothing_to_move:
+      '{{name}} cambia el orden de sus ítems, pero menos de dos pueden moverse',
+    order_dependency:
+      '{{name}} usa {{ref}}, que puede preguntarse después porque {{container}} cambia el orden de sus ítems',
+    order_skip: 'El salto a {{target}} cae dentro de {{container}}, cuyos ítems cambian de orden',
   },
   scenarioCheck: {
     add_row: 'Paso {{n}}: agregar una fila a {{name}}',

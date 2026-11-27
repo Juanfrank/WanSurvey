@@ -116,6 +116,44 @@ const interviews: ExportInterview[] = [
 ];
 
 describe('export dataset', () => {
+  it('the order a block showed its items in is a text column', () => {
+    const ordered = compile(
+      Questionnaire.parse({
+        id: 'ORD',
+        title: es('Orden'),
+        defaultLanguage: 'es',
+        languages: ['es'],
+        sections: [
+          {
+            id: 'S',
+            title: es('S'),
+            items: [
+              {
+                kind: 'block',
+                id: 'ROT',
+                itemOrder: { type: 'rotate', variable: 'ROT_ORDER' },
+                items: [
+                  { kind: 'question', id: 'A', name: 'A', type: 'text', text: es('A') },
+                  { kind: 'question', id: 'B', name: 'B', type: 'text', text: es('B') },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const { main } = buildTables(
+      ordered,
+      [{ ...base, id: 'i1', caseId: null, mode: 'CAPI', answers: { ROT_ORDER: 'B,A', A: 'x' } }],
+      { rosters: 'wide', paradata: false },
+    );
+    const at = main.columns.findIndex((c) => c.name === 'ROT_ORDER');
+    expect(at).toBeGreaterThan(-1);
+    expect(main.columns[at]).toMatchObject({ type: 'string' });
+    expect(at).toBeLessThan(main.columns.findIndex((c) => c.name === 'A'));
+    expect(main.rows[0]![at]).toBe('B,A');
+  });
+
   it('one column per variable in order, the same for every mode; rosters wide', () => {
     const { main, rosters } = buildTables(compiled, interviews, {
       rosters: 'wide',

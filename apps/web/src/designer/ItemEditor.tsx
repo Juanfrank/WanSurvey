@@ -326,6 +326,7 @@ function SectionEditor(props: EditorProps & { node: Section; patch: Patch }) {
         }}
       />
       <ShowIf {...props} value={props.node.showIf} />
+      <ItemOrderFields node={props.node} patch={props.patch} />
       <ScriptsEditor
         draft={props.draft}
         change={props.change}
@@ -351,7 +352,43 @@ function BlockEditor(props: EditorProps & { node: Block; patch: Patch }) {
         onChange={(title) => props.patch<Block>({ title }, 'title')}
       />
       <ShowIf {...props} value={props.node.showIf} />
+      <ItemOrderFields node={props.node} patch={props.patch} />
     </div>
+  );
+}
+
+/** Rotation or randomisation of a section's or block's items, and where the order is kept. */
+function ItemOrderFields({ node, patch }: { node: Section | Block; patch: Patch }) {
+  const { t } = useTranslation();
+  const order = node.itemOrder;
+  const set = (next: Section['itemOrder']) => patch<Section | Block>({ itemOrder: next });
+  return (
+    <>
+      <SelectField
+        label={t('designer.itemOrder')}
+        hint={t('designer.itemOrderHelp')}
+        value={order?.type ?? 'none'}
+        options={[
+          { value: 'none', label: t('designer.itemOrderNone') },
+          { value: 'random', label: t('designer.itemOrderRandom') },
+          { value: 'rotate', label: t('designer.itemOrderRotate') },
+        ]}
+        onChange={(type) => set(type === 'none' ? undefined : { ...order, type })}
+      />
+      {order ? (
+        <TextField
+          label={t('designer.itemOrderVariable')}
+          hint={t('designer.itemOrderVariableHelp')}
+          mono
+          value={order.variable ?? ''}
+          onCommit={(v) => {
+            const variable = v.trim();
+            if (variable && !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(variable)) return;
+            set({ ...order, variable: variable || undefined });
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

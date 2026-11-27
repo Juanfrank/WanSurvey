@@ -1,10 +1,12 @@
 import {
   MODES,
+  type Block,
   type LocalizedText,
   type Question,
   type Questionnaire,
   type Roster,
   type Script,
+  type Section,
 } from '@wansurvey/schema';
 import { SKIP_END, SKIP_END_ROW } from '@wansurvey/schema/constants';
 import type { Node, Span } from './ast.js';
@@ -23,6 +25,7 @@ import {
   TemplateError,
   templateExpressions,
   templateFilterProblems,
+  templateBlankableFields,
   hasPipes,
 } from './piping.js';
 import { typecheck, type MessageRef, type StaticType } from './typecheck.js';
@@ -66,7 +69,10 @@ export function analyze(questionnaire: Questionnaire): AnalysisResult {
   for (const node of model.nodes) {
     checkExpressions(model, node, specialCodes, add);
     checkSkips(model, node, add);
-    if (node.kind === 'question') checkQuestion(model, node, specialCodes, add);
+    if (node.kind === 'question') {
+      checkQuestion(model, node, specialCodes, add);
+      checkMethod(model, node, add);
+    }
     if (node.kind === 'roster') checkRoster(node, add);
     checkVariants(node, questionnaire.modes, add);
     checkTexts(model, node, specialCodes, add);
@@ -76,6 +82,7 @@ export function analyze(questionnaire: Questionnaire): AnalysisResult {
   checkComputedCycles(model, add);
   checkQuotas(model, specialCodes, add);
   checkScripts(model, specialCodes, add);
+  checkItemOrders(model, add);
 
   return { model, diagnostics, canPublish: !diagnostics.some((d) => d.severity === 'error') };
 }
@@ -405,6 +412,126 @@ function checkQuestion(
   }
 }
 
+// --- methodological quality (warnings only) ----------------------------------
+
+/** Grid rows beyond which a grid tires respondents, and scrolls sideways on a phone. */
+export const MAX_GRID_ROWS = 7;
+
+const CONSENT_NAME = /consent|recontact|recontacto|autoriza/i;
+const OTHER_LABEL = /^\s*(otro|otra|otros|otras|other|others)\b|especifi|specify/i;
+/** Words that join two questions in one (per language), checked in Yes/No questions. */
+const JOINERS: Record<string, RegExp> = {
+  es: /\s(y|e|o|u)\s/i,
+  en: /\s(and|or)\s/i,
+  pt: /\s(e|ou)\s/i,
+  fr: /\s(et|ou)\s/i,
+};
+
+/**
+ * Warnings about the method rather than the logic: an order effect, an answer that cannot be
+ * true, a forced answer, a grid too long for a phone, an "Other" with nowhere to write, a
+ * double question.
+ */
+function checkMethod(model: Model, node: CompiledNode, add: (d: Diagnostic) => void) {
+  const q = node.def as Question;
+  const questionnaire = model.questionnaire;
+  const warn = (
+    code: string,
+    message: string,
+    field?: string,
+    params: Record<string, string | number> = {},
+  ) =>
+    add({
+      severity: 'warning',
+      code,
+      message,
+      msg: { id: code, params: { name: q.name, ...params } },
+      itemId: node.id,
+      ...(field ? { field } : {}),
+    });
+  const modes = questionnaire.modes;
+  const { specialCodes, cawiShowSpecialCodes } = questionnaire.settings;
+  const offered = (kind: 'DK' | 'RF') =>
+    modes.some(
+      (m) => specialCodes[kind].offeredIn.includes(m) || (m === 'CAWI' && cawiShowSpecialCodes),
+    );
+
+  const webOffers = (kind: 'DK' | 'RF') =>
+    specialCodes[kind].offeredIn.includes('CAWI') || cawiShowSpecialCodes;
+
+  // The columns of a grid and the points of a scale are ordered: shuffling them breaks the scale.
+  if (q.randomizeOptions && (q.type === 'grid' || q.type === 'scale' || q.scale))
+    warn('random_ordinal', `${q.name} shuffles the points of an ordered scale`, 'randomizeOptions');
+
+  // "Don't know" makes no sense for a consent, a phone number or an e-mail address.
+  const consent =
+    (q.endIf ?? []).some((e) => e.disposition === 'REFUSAL') ||
+    ((q.type === 'yesno' || q.type === 'single') && CONSENT_NAME.test(q.name));
+  if (q.allowDK !== false && offered('DK') && (consent || q.format))
+    add({
+      severity: 'warning',
+      code: 'dk_not_meaningful',
+      message: `${q.name} offers "Don't know", which is not a meaningful answer to ${consent ? 'a consent' : 'a contact detail'}`,
+      msg: { id: consent ? 'dk_on_consent' : 'dk_on_contact', params: { name: q.name } },
+      itemId: node.id,
+      field: 'allowDK',
+    });
+
+  // A required sensitive question with no way out in a web survey forces an answer.
+  if (
+    q.sensitive &&
+    q.required !== false &&
+    modes.includes('CAWI') &&
+    !((q.allowDK !== false && webOffers('DK')) || (q.allowRefused !== false && webOffers('RF')))
+  )
+    warn(
+      'forced_response',
+      `${q.name} is sensitive and required, and web respondents cannot decline to answer`,
+      'required',
+    );
+
+  // Long grids tire respondents and do not fit a phone.
+  if (
+    q.type === 'grid' &&
+    (q.rows?.length ?? 0) > MAX_GRID_ROWS &&
+    modes.some((m) => m === 'CAWI' || m === 'CAPI')
+  )
+    warn(
+      'grid_too_long',
+      `Grid ${q.name} has ${q.rows!.length} rows; more than ${MAX_GRID_ROWS} is hard to answer on a phone`,
+      'rows',
+      { rows: q.rows!.length, max: MAX_GRID_ROWS },
+    );
+
+  // An "Other" option should ask what the other thing is.
+  if (!q.answerSetId) {
+    const other = (q.options ?? []).filter(
+      (o) => !o.otherSpecify && Object.values(o.label ?? {}).some((l) => OTHER_LABEL.test(l)),
+    );
+    if (other.length)
+      warn(
+        'other_without_specify',
+        `Option ${other.map((o) => String(o.code)).join(', ')} of ${q.name} looks like "Other" but does not ask to specify`,
+        'options',
+        { codes: other.map((o) => String(o.code)).join(', ') },
+      );
+  }
+
+  // "Do you own a car and a house?": one Yes or No cannot answer two questions.
+  if (q.type === 'yesno') {
+    const double = Object.entries(q.text).some(([lang, text]) => {
+      const joiner = JOINERS[lang.slice(0, 2)];
+      return !!joiner && joiner.test(text.replace(/\{\{[^}]*\}\}/g, ' '));
+    });
+    if (double)
+      warn(
+        'double_barreled',
+        `${q.name} may ask two things at once (it joins them with "and" or "or")`,
+        'text',
+      );
+  }
+}
+
 function checkRoster(node: CompiledNode, add: (d: Diagnostic) => void) {
   const r = node.def as Roster;
   if (r.items.length === 0)
@@ -508,12 +635,14 @@ function checkTemplate(
   specialCodes: (string | number)[],
   add: (d: Diagnostic) => void,
 ) {
+  const blankable = new Set<string>();
   for (const [lang, src] of Object.entries(text)) {
     if (!hasPipes(src)) continue;
     let exprs: { src: string; node: Node }[];
     try {
       const segments = parseTemplate(src);
       exprs = templateExpressions(segments);
+      for (const f of templateBlankableFields(segments)) blankable.add(f);
       for (const problem of templateFilterProblems(segments))
         add({
           severity: 'error',
@@ -556,6 +685,16 @@ function checkTemplate(
       checkForwardRefs(model, node, field, [...refs], allowSelf, add, 'missing_pipe');
     }
   }
+  // A case or respondent field can come blank ("una encuesta en ."): suggest a fallback text.
+  for (const pipe of blankable)
+    add({
+      severity: 'warning',
+      code: 'pipe_may_be_empty',
+      message: `{{${pipe}}} may be blank for some cases; add a fallback text, e.g. {{${pipe} | default:"…"}}`,
+      msg: { id: 'pipe_may_be_empty', params: { pipe } },
+      itemId: node.id,
+      field,
+    });
 }
 
 function collectExprRefs(node: Node, out: Set<string>) {
@@ -672,6 +811,107 @@ function scriptAnchorIndex(model: Model, script: Script): number | null {
       return own(model.byId, script.anchor.sectionId) ?? null;
     case 'item':
       return own(model.byId, script.anchor.itemId) ?? null;
+  }
+}
+
+// --- item order (rotation and randomisation) ----------------------------------
+
+/** Variables a node reads, in its expressions and in its texts' insertions. */
+function nodeReads(model: Model, node: CompiledNode): string[] {
+  const refs = new Set<string>();
+  for (const { expr } of nodeExpressions(node)) for (const r of expr.refs) refs.add(r);
+  for (const { text } of nodeTexts(model, node))
+    for (const src of Object.values(text)) {
+      if (!hasPipes(src)) continue;
+      try {
+        for (const e of templateExpressions(parseTemplate(src))) collectExprRefs(e.node, refs);
+      } catch {
+        // a malformed insertion is reported as pipe_syntax
+      }
+    }
+  return [...refs];
+}
+
+/**
+ * Items of a section or block whose order changes per interview cannot depend on each other:
+ * one may read an answer, or jump into a sibling, that has not been asked yet.
+ */
+function checkItemOrders(model: Model, add: (d: Diagnostic) => void) {
+  for (const c of model.nodes) {
+    if (c.kind !== 'section' && c.kind !== 'block') continue;
+    const order = (c.def as Section | Block).itemOrder;
+    if (!order) continue;
+    const childIds = c.children.map((i) => model.nodes[i]!.id);
+    const fixed = new Set(order.fixed ?? []);
+    for (const id of fixed)
+      if (!childIds.includes(id))
+        add({
+          severity: 'error',
+          code: 'unknown_order_item',
+          message: `${c.id} keeps ${id} in place, but ${id} is not one of its items`,
+          msg: { id: 'unknown_order_item', params: { name: c.id, item: id } },
+          itemId: c.id,
+          field: 'itemOrder',
+        });
+    if (childIds.filter((id) => !fixed.has(id)).length < 2)
+      add({
+        severity: 'warning',
+        code: 'order_nothing_to_move',
+        message: `${c.id} changes the order of its items, but fewer than two can move`,
+        msg: { id: 'order_nothing_to_move', params: { name: c.id } },
+        itemId: c.id,
+        field: 'itemOrder',
+      });
+    /** The child of the container that holds node `i`, if any. */
+    const childOf = (i: number) =>
+      c.children.find((k) => i >= k && i <= model.nodes[k]!.end) ?? null;
+    const isFixed = (k: number) => fixed.has(model.nodes[k]!.id);
+    /** Fixed children with only fixed children before them: shown first, in every order. */
+    const leading = new Set<number>();
+    for (const k of c.children) {
+      if (!isFixed(k)) break;
+      leading.add(k);
+    }
+    /** Fixed children keep their place: `a` always comes before `b`. */
+    const keptBefore = (a: number, b: number) =>
+      a < b && isFixed(a) && (isFixed(b) || leading.has(a));
+    for (let i = c.index + 1; i <= c.end; i++) {
+      const node = model.nodes[i]!;
+      const from = childOf(i)!;
+      for (const ref of nodeReads(model, node)) {
+        const v = own(model.vars, ref);
+        if (!v || v.node <= c.index || v.node > c.end) continue;
+        const other = childOf(v.node);
+        if (other === null || other === from || keptBefore(other, from)) continue;
+        add({
+          severity: 'error',
+          code: 'order_dependency',
+          message: `${node.id} reads ${ref}, which may be asked after it because ${c.id} changes the order of its items`,
+          msg: { id: 'order_dependency', params: { name: node.id, ref, container: c.id } },
+          itemId: node.id,
+        });
+      }
+    }
+    // A skip may leave a moving item (what follows in the order shown is skipped), but not
+    // land on or inside another one: what it passes over would depend on the order.
+    for (const node of model.nodes) {
+      node.skips.forEach((skip, k) => {
+        if (typeof skip.target !== 'number') return;
+        const to = childOf(skip.target);
+        const from = childOf(node.index);
+        if (to === null || to === from) return;
+        // What comes before a leading fixed item is the same in every order.
+        if (leading.has(to) && (from === null || leading.has(from))) return;
+        add({
+          severity: 'error',
+          code: 'order_skip',
+          message: `Skip to ${skip.to} lands inside ${c.id}, whose items change order`,
+          msg: { id: 'order_skip', params: { target: skip.to, container: c.id } },
+          itemId: node.id,
+          field: `skips[${k}]`,
+        });
+      });
+    }
   }
 }
 

@@ -292,6 +292,15 @@ export const designerEn = {
   ownOptions: 'Own options',
   options: 'Options',
   randomize: 'Randomise the order',
+  itemOrder: 'Order of the items',
+  itemOrderHelp:
+    'Rotate or shuffle the items for each interview, to control order effects. The order is the same on every device.',
+  itemOrderNone: 'As designed',
+  itemOrderRandom: 'Random',
+  itemOrderRotate: 'Rotated',
+  itemOrderVariable: 'Variable that records the order',
+  itemOrderVariableHelp:
+    'Optional: the ids of the items in the order shown, exported with the data.',
   minSelections: 'Select at least',
   maxSelections: 'Select at most',
   gridRows: 'Grid rows',
@@ -1133,6 +1142,15 @@ export const designerEs: DesignerCatalogue = {
   ownOptions: 'Opciones propias',
   options: 'Opciones',
   randomize: 'Orden aleatorio',
+  itemOrder: 'Orden de los ítems',
+  itemOrderHelp:
+    'Rota o baraja los ítems en cada entrevista, para controlar efectos de orden. El orden es el mismo en todos los dispositivos.',
+  itemOrderNone: 'Como está diseñado',
+  itemOrderRandom: 'Aleatorio',
+  itemOrderRotate: 'Rotado',
+  itemOrderVariable: 'Variable que registra el orden',
+  itemOrderVariableHelp:
+    'Opcional: los ids de los ítems en el orden mostrado, se exporta con los datos.',
   minSelections: 'Seleccionar al menos',
   maxSelections: 'Seleccionar como máximo',
   gridRows: 'Filas de la matriz',

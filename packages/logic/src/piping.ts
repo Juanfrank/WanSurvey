@@ -224,6 +224,49 @@ export function templateExpressions(segments: Segment[]): { src: string; node: N
   return out;
 }
 
+/** Namespaces filled from the case or the respondent: a field there can come blank. */
+const OPTIONAL_NAMESPACES = new Set(['case', 'respondent']);
+
+function contextField(node: Node): string | null {
+  if (node.type !== 'member' || node.object.type !== 'var') return null;
+  return OPTIONAL_NAMESPACES.has(node.object.name) ? `${node.object.name}.${node.property}` : null;
+}
+
+/** Fields a condition shows to be present: `case.city`, `case.city != ""`, joined by `and`. */
+function presentIn(cond: Node): string[] {
+  const field = contextField(cond);
+  if (field) return [field];
+  if (cond.type !== 'binary') return [];
+  if (cond.op === 'and') return [...presentIn(cond.left), ...presentIn(cond.right)];
+  if (cond.op !== '!=') return [];
+  const blank = (n: Node) => n.type === 'null' || (n.type === 'str' && n.value === '');
+  const f = contextField(cond.left) ?? contextField(cond.right);
+  return f && (blank(cond.left) || blank(cond.right)) ? [f] : [];
+}
+
+/**
+ * Insertions of a case or respondent field (`{{case.city}}`) with no `| default:"…"` and not
+ * in the first branch of an `{{#if}}` that tests that field: when the field is blank, the text reads with a gap.
+ */
+export function templateBlankableFields(segments: Segment[]): string[] {
+  const out = new Set<string>();
+  const visit = (segs: Segment[], guarded: Set<string>) => {
+    for (const s of segs) {
+      if (s.type === 'expr') {
+        const field = contextField(s.expr);
+        if (field && !guarded.has(field) && !s.filters.some((f) => f.name === 'default'))
+          out.add(field);
+      } else if (s.type === 'if') {
+        const inner = new Set([...guarded, ...presentIn(s.cond)]);
+        visit(s.then, inner);
+        visit(s.else, guarded);
+      }
+    }
+  };
+  visit(segments, new Set());
+  return [...out];
+}
+
 export interface RenderOptions {
   lang: string;
   /** Text for an unresolved pipe. Default: `[expr]`, visible so designers notice it. */

@@ -278,11 +278,26 @@ export type PageBreak = z.infer<typeof PageBreak>;
 
 export type LeafItem = Question | StaticText | Computed | PageBreak;
 
+/**
+ * Order of the items of a section or block, to control order effects. `random` shuffles them;
+ * `rotate` keeps the sequence but starts it at a different item. The order is seeded by the
+ * interview (the same on every device and on the server) and can be recorded in a variable.
+ */
+export const ItemOrder = z.strictObject({
+  type: z.enum(['random', 'rotate']),
+  /** Ids of items that keep their place (an introduction, a closing question). */
+  fixed: z.array(ItemId).optional(),
+  /** Variable that records the order shown, as the item ids separated by commas. */
+  variable: VariableName.optional(),
+});
+export type ItemOrder = z.infer<typeof ItemOrder>;
+
 export interface Block {
   kind: 'block';
   id: string;
   title?: LocalizedText;
   showIf?: string;
+  itemOrder?: ItemOrder;
   items: ContainerItem[];
 }
 
@@ -326,6 +341,7 @@ export const BlockSchema: z.ZodType<Block> = z.lazy(() =>
     id: ItemId,
     title: LocalizedText.optional(),
     showIf: Expression.optional(),
+    itemOrder: ItemOrder.optional(),
     items: z.array(ContainerItemSchema),
   }),
 );
@@ -355,6 +371,7 @@ export const Section = z.strictObject({
     .regex(/^[A-Za-z][A-Za-z0-9_]{0,15}$/)
     .optional(),
   showIf: Expression.optional(),
+  itemOrder: ItemOrder.optional(),
   items: z.array(ContainerItemSchema),
 });
 export type Section = z.infer<typeof Section>;

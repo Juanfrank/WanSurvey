@@ -19,6 +19,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Rotation and randomisation of a section's or block's items**: in the editor, "Order of the
+  items" shuffles or rotates them per interview (seeded by the interview, so every device and the
+  server see the same order); items can be kept in place in the definition (`itemOrder.fixed`), and an optional
+  variable records the order shown and is exported with the data. "Check the logic" reports items
+  that read, or skip into, a sibling whose place changes.
+- **Method warnings in "Check the logic"**: a case or respondent insertion with no fallback text
+  (`| default:"…"`), a shuffled ordered scale, "Don't know" offered for a consent or a contact
+  detail, a sensitive required question web respondents cannot decline, a grid of more than 7
+  rows, an "Other" option that does not ask to specify, and a Yes/No question that asks two things.
+
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

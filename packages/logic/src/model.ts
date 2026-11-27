@@ -304,6 +304,14 @@ export function buildModel(questionnaire: Questionnaire): Model {
       if (r.rowLabel) node.rowLabel = mk(r.rowLabel);
     }
 
+    // The order shown of a section's or block's items, recorded as a text variable.
+    const orderVar = (def as Section | Block).itemOrder?.variable;
+    if ((kind === 'section' || kind === 'block') && orderVar)
+      addVar(
+        { name: orderVar, node: index, kind: 'computed', type: 'string', rosterChain: chain },
+        def.id,
+      );
+
     const childChain = kind === 'roster' ? [...chain, (def as Roster).name] : chain;
     if (kind === 'section' || kind === 'block' || kind === 'roster') {
       for (const child of (def as Section | Block | Roster).items) {

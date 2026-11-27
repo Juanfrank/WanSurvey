@@ -4,8 +4,10 @@ import type {
   AnswerValue,
   LocalizedText,
   Mode,
+  Block,
   Question,
   Roster,
+  Section,
   SpecialKind,
   StaticText,
 } from '@wansurvey/schema';
@@ -16,6 +18,7 @@ import { evaluate, type Scope } from './evaluator.js';
 import { seededRandom } from './hash.js';
 import { formatKey, framesKey, parseKey, type Frame } from './keys.js';
 import { questionOptions, type CompiledExpr, type CompiledNode } from './model.js';
+import { orderItems } from './order.js';
 import { renderTemplate } from './piping.js';
 import {
   own,
@@ -1039,7 +1042,8 @@ export class InterviewSession {
       case 'section':
       case 'block': {
         this.entry(node, frames, 'active', shownWhy(node), depth);
-        for (const c of node.children) this.visit(this.compiled.nodes[c]!, frames, skip, depth + 1);
+        for (const c of this.childOrder(node, frames))
+          this.visit(this.compiled.nodes[c]!, frames, skip, depth + 1);
         return;
       }
       case 'roster':
@@ -1080,6 +1084,37 @@ export class InterviewSession {
         this.entry(node, frames, 'active', shownWhy(node), depth);
         return;
     }
+  }
+
+  /**
+   * The children of a section or block in the order shown in this interview (rotated or
+   * shuffled when it has an item order), recording that order in its variable.
+   */
+  private childOrder(node: CompiledNode, frames: Frame[]): number[] {
+    const order = (node.def as Section | Block).itemOrder;
+    if (!order) return node.children;
+    const byId = new Map(node.children.map((c) => [this.compiled.nodes[c]!.id, c]));
+    const ids = orderItems(
+      [...byId.keys()],
+      order,
+      `${this.seed}:order:${formatKey(frames, node.id)}`,
+    );
+    if (order.variable) {
+      const shown = ids.join(',');
+      const old =
+        (this.container(frames, false)?.[order.variable] as AnswerValue | undefined) ?? null;
+      if (old !== shown) {
+        this.write(frames, order.variable, shown);
+        this.events.push({
+          key: formatKey(frames, order.variable),
+          oldValue: old,
+          newValue: shown,
+          source: 'system',
+          reason: 'computed',
+        });
+      }
+    }
+    return ids.map((id) => byId.get(id)!);
   }
 
   private visitRoster(node: CompiledNode, frames: Frame[], depth: number) {
@@ -1342,10 +1377,24 @@ export class InterviewSession {
         clear(node.name!);
         return;
       case 'section':
-      case 'block':
+      case 'block': {
+        // The order is recorded only while the items are shown.
+        const orderVar = (node.def as Section | Block).itemOrder?.variable;
+        const shown = orderVar ? own(this.container(frames, false), orderVar) : undefined;
+        if (orderVar && shown !== undefined && shown !== null) {
+          this.write(frames, orderVar, null);
+          this.events.push({
+            key: formatKey(frames, orderVar),
+            oldValue: shown,
+            newValue: null,
+            source: 'system',
+            reason: 'path_change',
+          });
+        }
         for (const c of node.children)
           this.off(this.compiled.nodes[c]!, frames, status, reason, depth + 1);
         return;
+      }
       default:
         return;
     }

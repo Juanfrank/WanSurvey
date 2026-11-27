@@ -92,6 +92,24 @@ function fieldsOf(compiled: CompiledQuestionnaire, lang: string, personal: boole
   const missing = [...specialLabels.keys()];
   const fields: Field[] = [];
   for (const node of compiled.nodes) {
+    // The order a section or block showed its items in (rotation, randomisation): a text.
+    const orderVar = (node.def as { itemOrder?: { variable?: string } }).itemOrder?.variable;
+    if ((node.kind === 'section' || node.kind === 'block') && orderVar) {
+      fields.push({
+        source: orderVar,
+        chain: compiled.vars[orderVar]?.rosterChain ?? [],
+        columns: [
+          {
+            name: orderVar,
+            label: orderVar,
+            type: 'string',
+            source: answer(orderVar, 'other'),
+          },
+        ],
+        cells: (v) => [typeof v === 'string' && v.trim() ? v : null],
+      });
+      continue;
+    }
     if (node.kind !== 'question' && node.kind !== 'computed') continue;
     const name = (node.def as { name?: string }).name;
     if (!name) continue;
