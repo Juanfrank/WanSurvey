@@ -11,7 +11,10 @@ import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { api } from '../api.js';
 import type { ReviewComment } from '../review/ReviewPage.js';
+import { ago, AnswersSoFar, Contacts, SampleData } from './side.js';
 import { useInterview, type SaveState } from './useInterview.js';
+
+export { shown } from './side.js';
 
 const MASK = '•••';
 
@@ -21,16 +24,6 @@ function clock(ms: number) {
   const m = Math.floor((s % 3600) / 60);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${h ? `${h}:` : ''}${pad(m)}:${pad(s % 60)}`;
-}
-
-export function shown(v: unknown, session: InterviewSession, name: string): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'object' && v && '$special' in v)
-    return session.specialLabel((v as { $special: 'DK' }).$special);
-  if (typeof v === 'number' || typeof v === 'string') return session.labelOf(name, v) ?? String(v);
-  if (Array.isArray(v) && v.every((x) => typeof x !== 'object'))
-    return v.map((x) => session.labelOf(name, x as string) ?? String(x)).join(', ');
-  return JSON.stringify(v);
 }
 
 interface SectionInfo {
@@ -48,13 +41,15 @@ export function sectionsOf(session: InterviewSession, lang: string): SectionInfo
   const out: SectionInfo[] = [];
   let sec: SectionInfo | null = null;
   let questions: string[] = [];
+  /** Questions and texts: a section is current on its opening text too. */
+  let items: string[] = [];
   const close = () => {
     if (!sec) return;
     const answered = questions.every((k) => {
       const a = session.getAnswer(k);
       return a !== null && a !== undefined;
     });
-    if (questions.includes(current ?? '')) sec.status = 'current';
+    if (items.includes(current ?? '')) sec.status = 'current';
     else if (questions.length && answered && questions.every((k) => visited.has(k)))
       sec.status = 'done';
     else if (questions.some((k) => visited.has(k))) sec.status = 'visited';
@@ -68,8 +63,10 @@ export function sectionsOf(session: InterviewSession, lang: string): SectionInfo
       };
       sec = { id: e.id, title: def.title?.[lang] || e.id, first: null, status: 'locked' };
       questions = [];
+      items = [];
     } else if (sec && e.status === 'active' && (e.kind === 'question' || e.kind === 'static')) {
       sec.first ??= e.key;
+      items.push(e.key);
       if (e.kind === 'question') questions.push(e.key);
     }
   }
@@ -87,10 +84,14 @@ export function InterviewPage() {
     projectId: string;
     interviewId: string;
   };
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const iv = useInterview(interviewId);
-  const [side, setSide] = useState(true);
+  // On a tablet or phone the question comes first; the case details open on demand.
+  const [side, setSide] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia?.('(max-width: 1023px)').matches,
+  );
+  const [resumeSeen, setResumeSeen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [help, setHelp] = useState(false);
@@ -119,6 +120,7 @@ export function InterviewPage() {
     .filter((e) => e.kind === 'question')
     .map((e) => ({ key: e.key, value: session.getAnswer(e.key) }))
     .filter((a) => a.value !== null && a.value !== undefined);
+  const visited = new Set(session.state().visited);
   const caseData = payload.context.case ?? {};
   const name = ['first_name', 'last_name', 'nombre', 'apellido', 'name']
     .map((k) => caseData[k])
@@ -333,53 +335,11 @@ export function InterviewPage() {
                 })}
               </ol>
             </section>
-            <section aria-labelledby="iv-sample">
-              <h2 id="iv-sample" className="mb-1 font-semibold">
-                {t('interview.sample')}
-              </h2>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                {Object.entries(caseData).map(([k, v]) => (
-                  <div key={k} className="contents">
-                    <dt className="font-mono text-slate-600">{k}</dt>
-                    <dd>{v === null || v === undefined ? '—' : String(v)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
+            <SampleData session={session} data={caseData} headingId="iv-sample" />
             {payload.context.contacts?.length ? (
-              <section aria-labelledby="iv-contacts">
-                <h2 id="iv-contacts" className="mb-1 font-semibold">
-                  {t('interview.contacts')}
-                </h2>
-                <ul>
-                  {payload.context.contacts.map((c, i) => (
-                    <li key={i}>
-                      <span className="text-slate-600">{c.label ?? c.type}:</span> {c.value}
-                    </li>
-                  ))}
-                </ul>
-              </section>
+              <Contacts contacts={payload.context.contacts} headingId="iv-contacts" />
             ) : null}
-            <section aria-labelledby="iv-answers">
-              <h2 id="iv-answers" className="mb-1 font-semibold">
-                {t('interview.answers')}
-              </h2>
-              {answered.length ? (
-                <dl
-                  className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5"
-                  data-testid="answers-so-far"
-                >
-                  {answered.map((a) => (
-                    <div key={a.key} className="contents">
-                      <dt className="font-mono text-slate-600">{a.key}</dt>
-                      <dd>{shown(a.value, session, a.key.split('[', 1)[0]!.split('.').pop()!)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="text-slate-600">{t('interview.noAnswers')}</p>
-              )}
-            </section>
+            <AnswersSoFar session={session} headingId="iv-answers" />
           </aside>
         ) : null}
 
@@ -387,35 +347,90 @@ export function InterviewPage() {
           aria-label={t('interview.title', { id: payload.context.externalId ?? '' })}
           className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
         >
+          {iv.resumed && !resumeSeen && !paused && !finished ? (
+            <ResumeCard
+              where={(() => {
+                const key = session.currentKey();
+                const sec = sections.find((x) => x.status === 'current');
+                const text = key ? (session.text(key) ?? key) : '';
+                return sec
+                  ? t('interview.resumed.at', { section: sec.title, question: text })
+                  : t('interview.resumed.atQuestion', { question: text });
+              })()}
+              when={
+                iv.resumed.updatedAt
+                  ? ago(i18n.language, iv.resumed.updatedAt, Date.parse(iv.resumed.serverTime))
+                  : null
+              }
+              count={answered.filter((a) => visited.has(a.key)).length}
+              lastAnswered={(() => {
+                const current = session.currentKey();
+                const before = answered.filter((a) => visited.has(a.key) && a.key !== current);
+                const last = before[before.length - 1]?.key;
+                return last && session.canJumpTo(last) ? last : null;
+              })()}
+              onJump={(key) => {
+                session.jumpTo(key);
+                iv.onChange();
+                setResumeSeen(true);
+              }}
+              onDismiss={() => setResumeSeen(true)}
+            />
+          ) : null}
           {paused ? (
             <div className="flex flex-col items-start gap-3" data-testid="paused">
               <p role="status">{t('interview.paused')}</p>
-              <Button type="button" onClick={iv.resume}>
-                {t('interview.resume')}
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button type="button" onClick={iv.resume}>
+                  {t('interview.resume')}
+                </Button>
+                {finished ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={submitting}
+                    onClick={() => void submit()}
+                  >
+                    {t('interview.submit')}
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ) : (
             <InterviewRunner
               session={session}
               mode={payload.interview.mode}
               lang={lang}
-              onChange={iv.onChange}
+              onChange={() => {
+                // Once the interviewer goes on, where it stopped is no longer news.
+                setResumeSeen(true);
+                iv.onChange();
+              }}
               specialKeys={{ DK: keys.dontKnow, RF: keys.refused }}
+              done={{
+                details: (
+                  <EndSummary
+                    session={session}
+                    duration={clock(iv.clock?.activeMs() ?? 0)}
+                    answered={answered.length}
+                  />
+                ),
+                action: (
+                  <Button type="button" disabled={submitting} onClick={() => void submit()}>
+                    {t('interview.submit')}
+                  </Button>
+                ),
+              }}
             />
           )}
-          {finished ? (
-            <div className="mt-4 flex flex-col items-start gap-2 border-t border-slate-200 pt-4">
-              <ScriptBox scripts={session.scriptsFor({ at: 'end' })} />
-              <p>{t('interview.ready')}</p>
-              <Button type="button" disabled={submitting} onClick={() => void submit()}>
-                {t('interview.submit')}
-              </Button>
-            </div>
-          ) : null}
         </section>
       </div>
 
-      <footer className="flex flex-wrap items-center gap-2">
+      {/* On a tablet or phone the bar stays at the bottom of the screen, under the thumb. */}
+      <footer
+        className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50/95 px-1 py-2 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 [&_button]:pointer-coarse:min-h-11"
+        data-testid="interview-actions"
+      >
         <button type="button" className={smallBtn} onClick={() => setSide((s) => !s)}>
           {side ? t('interview.hideSide') : t('interview.showSide')}
         </button>
@@ -445,9 +460,10 @@ export function InterviewPage() {
         >
           {t('interview.suspend')}
         </button>
+        {/* Keyboard shortcuts mean nothing on a touch screen. */}
         <button
           type="button"
-          className={smallBtn}
+          className={`${smallBtn} pointer-coarse:hidden`}
           onClick={() => setHelp(true)}
           aria-keyshortcuts="?"
         >
@@ -619,5 +635,80 @@ function ReturnedComments({ interviewId }: { interviewId: string }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+/** Shown when an interview is taken up again: where it stopped, and how long ago (176). */
+function ResumeCard({
+  where,
+  when,
+  count,
+  lastAnswered,
+  onJump,
+  onDismiss,
+}: {
+  where: string;
+  when: string | null;
+  count: number;
+  lastAnswered: string | null;
+  onJump(key: string): void;
+  onDismiss(): void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section
+      aria-label={t('interview.resumed.title')}
+      className="mb-4 flex flex-col gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-ink-900"
+      data-testid="resume-card"
+    >
+      <h2 className="font-semibold">{t('interview.resumed.title')}</h2>
+      <p>
+        {where} {when ? t('interview.resumed.ago', { when }) : null}{' '}
+        {t('interview.resumed.answered', { count })}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {lastAnswered ? (
+          <button type="button" className={smallBtn} onClick={() => onJump(lastAnswered)}>
+            {t('interview.resumed.lastAnswer')}
+          </button>
+        ) : null}
+        <button type="button" className={smallBtn} onClick={onDismiss}>
+          {t('interview.resumed.dismiss')}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** What the interview came to, above the submit button in the end card (175). */
+function EndSummary({
+  session,
+  duration,
+  answered,
+}: {
+  session: InterviewSession;
+  duration: string;
+  answered: number;
+}) {
+  const { t } = useTranslation();
+  const questions = session.path().filter((e) => e.kind === 'question');
+  const values = questions.map((e) => session.getAnswer(e.key));
+  const unanswered = values.filter((v) => v === null || v === undefined).length;
+  const special = values.filter((v) => !!v && typeof v === 'object' && '$special' in v).length;
+  return (
+    <div className="flex flex-col gap-2 text-sm" data-testid="end-summary">
+      <ScriptBox scripts={session.scriptsFor({ at: 'end' })} />
+      <p>
+        {[
+          t('interview.end.summary', { duration }),
+          t('interview.end.answered', { count: answered }),
+          unanswered ? t('interview.end.unanswered', { count: unanswered }) : null,
+          special ? t('interview.end.special', { count: special }) : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </p>
+      <p className="text-slate-600">{t('interview.end.hint')}</p>
+    </div>
   );
 }

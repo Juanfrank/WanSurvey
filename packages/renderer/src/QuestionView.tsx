@@ -236,7 +236,16 @@ export function QuestionView(p: QuestionViewProps) {
         </label>
       ) : null}
       {special.length ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Don't know and refused are coded when said, never offered aloud. */}
+          {p.mode === 'CATI' || p.mode === 'CAPI' ? (
+            <span
+              className="text-xs font-semibold uppercase tracking-wide text-slate-600"
+              data-testid="do-not-read"
+            >
+              {t('question.doNotRead')}
+            </span>
+          ) : null}
           {special.map((kind) => {
             const pressed = isSpecial(value) && value.$special === kind;
             return (

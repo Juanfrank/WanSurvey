@@ -66,6 +66,26 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await page.reload();
   await onQuestion(page, 'A3');
   await expect(page.getByTestId('answers-so-far')).toContainText('40');
+  // Taken up again: where it stopped; the region from the sample is still to be confirmed.
+  await expect(page.getByTestId('resume-card')).toContainText('You stopped at');
+  await expect(page.getByTestId('prefilled-answers')).toContainText('E5_REGION');
+  await shot(page, 'interview-resumed');
+  // The same screen on a phone and a tablet: the question first, the actions at the bottom.
+  for (const [name, size] of [
+    ['interview-phone', { width: 390, height: 844 }],
+    ['interview-tablet', { width: 820, height: 1180 }],
+  ] as const) {
+    const small = await context.newPage();
+    await small.setViewportSize(size);
+    await small.goto(page.url());
+    await expect(small.getByTestId('runner')).toBeVisible();
+    await expect(small.getByRole('complementary', { name: 'Case details' })).toBeHidden();
+    await expect(small.getByTestId('interview-actions')).toBeInViewport();
+    await shot(small, name, { fullPage: false });
+    await small.close();
+  }
+  await page.getByTestId('resume-card').getByRole('button', { name: 'Continue here' }).click();
+  await expect(page.getByTestId('resume-card')).toBeHidden();
 
   // In the dark theme the header and the action bar keep their contrast too.
   await page.evaluate(() => localStorage.setItem('ws.theme', 'dark'));
@@ -112,6 +132,10 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await page.keyboard.type('2');
   await expect(page.getByText(/removed \d+ later answers/)).toBeVisible();
   await page.keyboard.press('Enter');
+  // One end card: a summary, submit, and going back to review.
+  await expect(page.getByTestId('end-summary')).toContainText('Duration');
+  await expect(page.getByRole('button', { name: 'Go back to the last question' })).toBeVisible();
+  await shot(page, 'interview-end');
   await page.getByRole('button', { name: 'Submit interview' }).click();
   await expect(page.getByRole('tablist', { name: 'Project sections' })).toBeVisible();
   await page.getByRole('tab', { name: 'My cases' }).click();

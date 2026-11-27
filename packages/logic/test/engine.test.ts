@@ -346,7 +346,7 @@ describe('presentation', () => {
       'Hola Rosa, estamos realizando una encuesta en Quito.',
     );
     expect(start().text('A3_SEX', 'interviewerInstruction')).toBe(
-      'REGISTRE SIN PREGUNTAR SI ES OBVIO',
+      'PREGUNTE SIEMPRE; NO REGISTRE POR OBSERVACIÓN',
     );
     expect(cati.text('A3_SEX', 'interviewerInstruction')).toBeNull();
   });

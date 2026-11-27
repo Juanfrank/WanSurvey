@@ -122,6 +122,13 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   overflowing. `docs/accessibility.md` has a manual plan for
   NVDA, VoiceOver and 200 % zoom.
 
+- **Interviewer screen easier to read and to take up again**: sample data and answers show readable
+  names with the code in small print (a coded sample column shows its question's label, e.g. "South (2)");
+  prefilled answers not yet asked are listed apart as sample data to confirm; the section is marked current
+  on its opening text too; don't know and refused carry "Do not read"; one end card with a summary, submit
+  and going back; a card on resuming says where the interview stopped and how long ago. On tablets and
+  phones the case details start hidden and the actions stay at the bottom of the screen. The demo household
+  survey no longer tells the interviewer to record sex without asking.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

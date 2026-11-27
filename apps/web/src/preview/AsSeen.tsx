@@ -3,7 +3,8 @@ import { InterviewRunner, pick } from '@wansurvey/renderer';
 import type { Mode } from '@wansurvey/schema';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { sectionsOf, shown } from '../interview/InterviewPage.js';
+import { sectionsOf } from '../interview/InterviewPage.js';
+import { AnswersSoFar, SampleData } from '../interview/side.js';
 import { Shell } from '../respondent/RespondentPage.js';
 
 const chrome =
@@ -86,11 +87,6 @@ export function AsSeenFrame({
   }
 
   const sections = sectionsOf(session, lang);
-  const answered = session
-    .path()
-    .filter((e) => e.kind === 'question')
-    .map((e) => ({ key: e.key, value: session.getAnswer(e.key) }))
-    .filter((a) => a.value !== null && a.value !== undefined);
   const caseData = context.case ?? {};
   const screen = (
     <div
@@ -135,34 +131,8 @@ export function AsSeenFrame({
               ))}
             </ol>
           </section>
-          <section>
-            <h3 className="mb-1 font-semibold">{t('interview.sample')}</h3>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-              {Object.entries(caseData).map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="font-mono text-slate-600">{k}</dt>
-                  <dd>{v === null || v === undefined ? '—' : String(v)}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-          <section>
-            <h3 className="mb-1 font-semibold">{t('interview.answers')}</h3>
-            {answered.length ? (
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                {answered.map((a) => (
-                  <div key={a.key} className="contents">
-                    <dt className="font-mono text-slate-600">{a.key}</dt>
-                    <dd className="min-w-0 break-words">
-                      {shown(a.value, session, a.key.split('[', 1)[0]!.split('.').pop()!)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : (
-              <p className="text-slate-600">{t('interview.noAnswers')}</p>
-            )}
-          </section>
+          <SampleData session={session} data={caseData} as="h3" />
+          <AnswersSoFar session={session} as="h3" />
         </aside>
         <section className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <InterviewRunner
