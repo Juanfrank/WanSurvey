@@ -77,6 +77,14 @@ describe.skipIf(!configured)('SQL Server: integration API keys', () => {
     );
     const row = list.body.find((k: { id: string }) => k.id === res.body.id);
     expect(row).toMatchObject({ name: 'Power BI', revokedAt: null, lastUsedAt: null });
+    // An administrator sees the keys (read only) but cannot revoke them.
+    const seen = await admin.agent.get('/api/v1/api-keys');
+    expect(seen.status).toBe(200);
+    expect(seen.body.map((k: { id: string }) => k.id)).toContain(res.body.id);
+    expect(
+      (await admin.agent.delete(`/api/v1/api-keys/${res.body.id}`).set('x-csrf-token', admin.csrf))
+        .status,
+    ).toBe(403);
     const [stored] = (
       (await sql`SELECT secret_hash FROM api_keys WHERE id = ${res.body.id}`.execute(t.owner)) as {
         rows: { secret_hash: string }[];

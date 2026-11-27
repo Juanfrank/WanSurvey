@@ -62,6 +62,18 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   option labels are shown read-only beside each field. The library refuses an item with errors or
   unlabelled options. A new questionnaire starts with no mode ticked (unless the project has one), and
   ticking several warns that it is a mixed-mode design.
+- **Administration: an overview, blocks and a two-step policy.** `/admin` now opens on an overview of
+  what needs attention (people waiting for a role, invitations not accepted, people who must use two-step
+  verification and have not, API keys ending within 15 days) and the sections in three blocks (People and
+  access, Organisation, Security and integrations), as the side menu now lists them. Organisation gains
+  **Sign-in security**: besides owners and administrators, which roles must turn on two-step
+  verification (asked at their next sign-in). The analysis-model refresh moves under a **Whole
+  installation** heading. Project managers and supervisors no longer see Users and Teams in the menu
+  (the pages stay open to them, read only). Roles and permissions marks sensitive permissions, counts
+  unsaved changes and confirms what is given and taken away, and to how many people, before saving; the
+  matrix cells are bigger targets. Administrators see the API keys read only; revoking one asks in a
+  dialog. The installation wizard has short labels with help underneath and says plainly that the schema
+  is final.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

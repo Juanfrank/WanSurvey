@@ -21,8 +21,9 @@ import { ApiKeysService } from './api-keys.service.js';
 export class ApiKeysController {
   constructor(private readonly keys: ApiKeysService) {}
 
+  /** Whoever reads the activity log sees the keys too (read only), to spot stale or expiring ones. */
   @Get()
-  @RequirePermission('apikeys.manage')
+  @RequirePermission(['apikeys.manage', 'audit.read'])
   list(@Auth() ctx: AuthContext) {
     return this.keys.list(ctx);
   }

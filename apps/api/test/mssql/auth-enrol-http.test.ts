@@ -108,6 +108,43 @@ describe.skipIf(!configured)('SQL Server: enrolment and public endpoints', () =>
     );
   });
 
+  it('an organisation can require two-step verification of more roles', async () => {
+    const org = await createTenant(t.owner);
+    const owner = await createUser(t.owner, org.id, [{ role: 'owner' }]);
+    const agent = request.agent(t.app.getHttpServer());
+    const csrf = (
+      await agent.post('/api/v1/auth/login').send({ email: owner.email, password: PASSWORD })
+    ).body.csrfToken as string;
+    await agent
+      .post('/api/v1/auth/2fa/verify')
+      .set('x-csrf-token', csrf)
+      .send({ code: totp(owner.totpSecret!) })
+      .expect(204);
+    // Owners and administrators always must: the policy cannot list them, nor unknown roles.
+    for (const bad of [['admin'], ['owner'], ['nobody']])
+      await agent
+        .patch('/api/v1/tenant')
+        .set('x-csrf-token', csrf)
+        .send({ settings: { twoFactorRoles: bad } })
+        .expect(400);
+    await agent
+      .patch('/api/v1/tenant')
+      .set('x-csrf-token', csrf)
+      .send({ settings: { twoFactorRoles: ['supervisor'] } })
+      .expect(200);
+    expect((await agent.get('/api/v1/tenant')).body.settings.twoFactorRoles).toEqual([
+      'supervisor',
+    ]);
+
+    const signIn = async (role: 'supervisor' | 'reviewer') => {
+      const u = await createUser(t.owner, org.id, [{ role }], { totp: false });
+      return (await http().post('/api/v1/auth/login').send({ email: u.email, password: PASSWORD }))
+        .body.mfaState as string;
+    };
+    expect(await signIn('supervisor')).toBe('enroll');
+    expect(await signIn('reviewer')).toBe('ok');
+  });
+
   it('a forged tenant id in the cookie finds no session', async () => {
     const other = await createTenant(t.owner);
     const user = await createUser(t.owner, tenant.id, [{ role: 'interviewer' }]);

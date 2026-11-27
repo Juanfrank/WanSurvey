@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, switchTenant as openTenant, type Me } from '../api.js';
 import { TermsGate } from './TermsGate.js';
 import { AccountMenu } from './AccountMenu.js';
-import { adminSectionsFor } from '../admin/sections.js';
+import { adminMenuGroups } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
 import { LogoMark, LogoName } from './Logo.js';
 import { setOrgTheme } from '../org-theme.js';
@@ -151,7 +151,7 @@ const COMPACT_UP_TO = '(max-width: 1180px)';
 function SidePanel({ waiting }: { waiting: boolean }) {
   const { t } = useTranslation();
   const me = useMe();
-  const admin = adminSectionsFor(me.data?.permissions);
+  const admin = adminMenuGroups(me.data?.permissions);
   const { pathname } = useLocation();
   const projects = useQuery({
     queryKey: ['projects', me.data?.tenantId],
@@ -284,18 +284,32 @@ function SidePanel({ waiting }: { waiting: boolean }) {
             ) : null}
             {admin.length ? link('/admin', t('app.admin'), <CogIcon />) : null}
             {nested && admin.length ? (
-              <ul
+              <div
+                role="group"
                 aria-label={t('app.admin')}
-                className="ml-[1.375rem] flex flex-col gap-0.5 border-l border-on-fill/15 pl-3"
+                className="ml-[1.375rem] flex flex-col gap-2 border-l border-on-fill/15 pl-3"
               >
-                {admin.map((a) => (
-                  <li key={a.to}>
-                    <Link to={a.to} className={subCls}>
-                      {t(`admin.${a.key}`)}
-                    </Link>
-                  </li>
+                {/* The pages in blocks, each under a small heading. */}
+                {admin.map(({ group, sections }) => (
+                  <div key={group} className="flex flex-col gap-0.5">
+                    <p
+                      id={`admin-group-${group}`}
+                      className="px-2.5 pt-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-sidebar"
+                    >
+                      {t(`admin.groups.${group}`)}
+                    </p>
+                    <ul aria-labelledby={`admin-group-${group}`} className="flex flex-col gap-0.5">
+                      {sections.map((a) => (
+                        <li key={a.to}>
+                          <Link to={a.to} className={subCls}>
+                            {t(`admin.${a.key}`)}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             ) : null}
           </nav>
         ) : null}

@@ -3,8 +3,12 @@ import {
   ACCENTS,
   THEME_DEFAULTS,
   accentTokens,
+  OPTIONAL_2FA_ROLES,
   orgTheme,
+  rolesRequiring2fa,
+  ROLES_REQUIRING_2FA,
   type Accent,
+  type Role,
   type ThemeDefault,
 } from '@wansurvey/schema';
 import { useEffect, useMemo, useState } from 'react';
@@ -13,11 +17,12 @@ import { api } from '../api.js';
 import { CheckField, Hint, inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import type { RolesView } from './permissions.js';
 
 interface Tenant {
   id: string;
   name: string;
-  settings: { defaultLanguage?: string; defaultTimezone?: string };
+  settings: { defaultLanguage?: string; defaultTimezone?: string; twoFactorRoles?: string[] };
   branding?: unknown;
 }
 
@@ -78,8 +83,23 @@ export function OrganisationPage() {
         {tenant.data ? <General tenant={tenant.data} /> : <div aria-busy="true" />}
         {tenant.data ? <Appearance tenant={tenant.data} /> : null}
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
-        <BiFrequency />
+        {tenant.data ? <TwoFactorPolicy tenant={tenant.data} /> : null}
       </div>
+      {/* Settings of the whole installation, apart from this organisation's own. */}
+      <section
+        aria-labelledby="org-installation"
+        className="flex flex-col gap-4 border-t border-slate-200 pt-6"
+      >
+        <div>
+          <h2 id="org-installation" className="text-xl font-semibold">
+            {t('admin.org.installation.title')}
+          </h2>
+          <p className="max-w-3xl text-slate-600">{t('admin.org.installation.intro')}</p>
+        </div>
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <BiFrequency />
+        </div>
+      </section>
     </div>
   );
 }
@@ -330,6 +350,93 @@ function SsoEditor({ sso }: { sso: Sso }) {
             disabled={save.isPending || (!managed && (!directory.trim() || !clientId.trim()))}
           >
             {t('admin.org.saveSso')}
+          </Button>
+          <Saved text={saved} />
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * Which roles must use two-step verification. Owners and administrators always do; the
+ * organisation adds others, and each role says whether it sees personal data or exports data,
+ * the usual reasons to require it.
+ */
+function TwoFactorPolicy({ tenant }: { tenant: Tenant }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const me = useMe();
+  const roles = useQuery({
+    queryKey: ['tenant-roles', me.data?.tenantId],
+    queryFn: () => api<RolesView>('/tenant/roles'),
+    enabled: !!me.data,
+  });
+  const [chosen, setChosen] = useState<Role[]>(() =>
+    rolesRequiring2fa(tenant.settings).filter((r) => !ROLES_REQUIRING_2FA.includes(r)),
+  );
+  const [saved, setSaved] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () =>
+      api('/tenant', { method: 'PATCH', body: { settings: { twoFactorRoles: chosen } } }),
+    onSuccess: async () => {
+      setSaved('admin.org.security.saved');
+      await qc.invalidateQueries({ queryKey: ['tenant'] });
+    },
+  });
+  const roleName = (r: string) => t(`team.roleNames.${r}`);
+  const notes = (r: Role) => {
+    const perms = roles.data?.roles.find((x) => x.role === r)?.permissions ?? [];
+    return [
+      perms.includes('pii.view') ? t('admin.org.security.personalData') : null,
+      perms.includes('exports.run') ? t('admin.org.security.exports') : null,
+    ].filter(Boolean);
+  };
+  return (
+    <Card>
+      <form
+        className="flex flex-col gap-4"
+        data-testid="org-2fa"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(null);
+          save.mutate();
+        }}
+      >
+        <h2 className="text-lg font-semibold">{t('admin.org.security.title')}</h2>
+        <p className="-mt-2 text-sm text-slate-600">{t('admin.org.security.intro')}</p>
+        <ul className="flex flex-col gap-1 text-sm text-slate-700">
+          {ROLES_REQUIRING_2FA.map((r) => (
+            <li key={r}>
+              <CheckField
+                label={`${roleName(r)} (${t('admin.org.security.always')})`}
+                checked
+                disabled
+                onChange={() => undefined}
+              />
+            </li>
+          ))}
+          {OPTIONAL_2FA_ROLES.map((r) => {
+            const extra = notes(r);
+            return (
+              <li key={r}>
+                <CheckField
+                  label={roleName(r)}
+                  hint={extra.length ? extra.join(', ') : undefined}
+                  checked={chosen.includes(r)}
+                  onChange={(on) => {
+                    setSaved(null);
+                    setChosen((c) => (on ? [...c, r] : c.filter((x) => x !== r)));
+                  }}
+                />
+              </li>
+            );
+          })}
+        </ul>
+        {save.isError ? <ErrorText>{t('admin.org.error')}</ErrorText> : null}
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={save.isPending}>
+            {t('admin.org.security.save')}
           </Button>
           <Saved text={saved} />
         </div>

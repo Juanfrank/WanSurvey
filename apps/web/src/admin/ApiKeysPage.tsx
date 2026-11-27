@@ -22,11 +22,15 @@ interface Key {
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Keys of the integration API: created once, shown once, revoked at will. */
+/**
+ * Keys of the integration API: created once, shown once, revoked at will. Whoever reads the
+ * activity log without managing the keys sees them read only.
+ */
 export function ApiKeysPage() {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const me = useMe();
+  const canManage = !!me.data?.permissions.includes('apikeys.manage');
   const keys = useQuery({
     queryKey: ['api-keys', me.data?.tenantId],
     queryFn: () => api<Key[]>('/api-keys'),
@@ -39,10 +43,14 @@ export function ApiKeysPage() {
   });
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<Key | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ['api-keys'] });
   const revoke = useMutation({
     mutationFn: (k: Key) => api(`/api-keys/${k.id}`, { method: 'DELETE' }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      setRevoking(null);
+      await refresh();
+    },
   });
   const when = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' });
   const state = (k: Key) =>
@@ -58,10 +66,14 @@ export function ApiKeysPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <h1 className="text-2xl font-bold">{t('admin.apiKeys')}</h1>
-        <Button onClick={() => setCreating(true)}>{t('admin.apiKeysPage.add')}</Button>
+        {canManage ? (
+          <Button onClick={() => setCreating(true)}>{t('admin.apiKeysPage.add')}</Button>
+        ) : null}
       </div>
       <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.apiKeysPage.intro')}</p>
-      {revoke.isError ? <ErrorText>{t('admin.apiKeysPage.error')}</ErrorText> : null}
+      {canManage ? null : (
+        <p className="-mt-3 text-sm text-slate-600">{t('admin.apiKeysPage.readOnly')}</p>
+      )}
       <QueryState query={keys}>{null}</QueryState>
       {keys.data && keys.data.length === 0 ? (
         <Card>
@@ -79,9 +91,11 @@ export function ApiKeysPage() {
                 <th className="py-2 pr-4 font-semibold">{t('admin.apiKeysPage.expires')}</th>
                 <th className="py-2 pr-4 font-semibold">{t('admin.apiKeysPage.lastUsed')}</th>
                 <th className="py-2 pr-4 font-semibold">{t('admin.apiKeysPage.status')}</th>
-                <th className="py-2">
-                  <span className="sr-only">{t('admin.apiKeysPage.actions')}</span>
-                </th>
+                {canManage ? (
+                  <th className="py-2">
+                    <span className="sr-only">{t('admin.apiKeysPage.actions')}</span>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -104,23 +118,23 @@ export function ApiKeysPage() {
                       : t('admin.apiKeysPage.never')}
                   </td>
                   <td className="py-2 pr-4">{state(k)}</td>
-                  <td className="py-2">
-                    {k.revokedAt ? null : (
-                      <button
-                        type="button"
-                        className={smallBtn}
-                        aria-label={t('admin.apiKeysPage.revokeName', { name: k.name })}
-                        onClick={() => {
-                          if (
-                            window.confirm(t('admin.apiKeysPage.confirmRevoke', { name: k.name }))
-                          )
-                            revoke.mutate(k);
-                        }}
-                      >
-                        {t('admin.apiKeysPage.revoke')}
-                      </button>
-                    )}
-                  </td>
+                  {canManage ? (
+                    <td className="py-2">
+                      {k.revokedAt ? null : (
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          aria-label={t('admin.apiKeysPage.revokeName', { name: k.name })}
+                          onClick={() => {
+                            revoke.reset();
+                            setRevoking(k);
+                          }}
+                        >
+                          {t('admin.apiKeysPage.revoke')}
+                        </button>
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -137,6 +151,25 @@ export function ApiKeysPage() {
             await refresh();
           }}
         />
+      ) : null}
+      {revoking ? (
+        <Dialog
+          title={t('admin.apiKeysPage.revokeTitle', { name: revoking.name })}
+          onClose={() => setRevoking(null)}
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-slate-700">{t('admin.apiKeysPage.revokeBody')}</p>
+            {revoke.isError ? <ErrorText>{t('admin.apiKeysPage.error')}</ErrorText> : null}
+            <div className="flex gap-3">
+              <Button disabled={revoke.isPending} onClick={() => revoke.mutate(revoking)}>
+                {t('admin.apiKeysPage.revokeConfirm')}
+              </Button>
+              <Button variant="secondary" onClick={() => setRevoking(null)}>
+                {t('admin.apiKeysPage.cancel')}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
       ) : null}
       {created ? (
         <Dialog title={t('admin.apiKeysPage.add')} onClose={() => setCreated(null)}>

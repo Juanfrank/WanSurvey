@@ -149,7 +149,7 @@ const ENDPOINTS: Endpoint[] = [
   },
   {
     name: 'GET /api-keys',
-    permission: 'apikeys.manage',
+    permission: ['apikeys.manage', 'audit.read'],
     call: (s) => s.agent.get('/api/v1/api-keys'),
   },
   {

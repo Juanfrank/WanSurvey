@@ -46,6 +46,16 @@ test('the API keys and webhooks dialogs are accessible and return the focus', as
   await overlaysSettled(page, 3);
   await page.getByRole('button', { name: 'Done' }).click();
 
+  // Revoking asks in a dialog of its own, which says what stops working.
+  const revoke = page.getByRole('button', { name: 'Revoke Power BI' });
+  await revoke.click();
+  await overlaysSettled(page, 4);
+  const ask = page.getByRole('dialog', { name: 'Revoke the key “Power BI”?' });
+  await closesWithEscape(page, ask, revoke);
+  await revoke.click();
+  await ask.getByRole('button', { name: 'Revoke the key' }).click();
+  await expect(page.locator('tr[data-key="Power BI"]').first()).toContainText('Revoked');
+
   await page.goto('/admin/webhooks');
   const hook = page.getByRole('button', { name: 'New webhook' });
   await hook.click();
