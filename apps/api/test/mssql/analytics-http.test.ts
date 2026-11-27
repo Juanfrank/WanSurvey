@@ -239,6 +239,9 @@ describe.skipIf(!configured)(
       const top = await get(client, `/projects/${project}/topline`);
       expect(top.status, JSON.stringify(top.body)).toBe(200);
       expect(top.body.n).toBe(3);
+      // How many of those are approved, for the "not reviewed yet" warning.
+      expect(top.body.approved).toBeGreaterThanOrEqual(0);
+      expect(top.body.approved).toBeLessThanOrEqual(3);
       const work = top.body.items.find((i: { name: string }) => i.name === 'WORK');
       expect(work.rows.map((r: { label: string; count: number }) => [r.label, r.count])).toEqual([
         ['Sí', 2],
@@ -309,6 +312,23 @@ describe.skipIf(!configured)(
       const actions = audit.map((r) => r.action);
       expect(actions).toContain('data.exported');
       expect(actions).toContain('data.downloaded');
+
+      // The list says until when each file stays and who downloaded it.
+      const after = await get(pm, `/projects/${project}/exports`);
+      const csvRow = after.body.find((e: { id: string }) => e.id === csv.body.id);
+      expect(csvRow.availableUntil).toBeTruthy();
+      expect(csvRow.downloads).toMatchObject({ count: 1, last: { by: expect.any(String) } });
+      expect(csvRow.options).toMatchObject({ format: 'csv', labels: 'codes', approvedOnly: false });
+      // Personal answers can be left out on request.
+      const lean = await post(pm, `/projects/${project}/exports`, {
+        format: 'csv',
+        personalData: 'exclude',
+      });
+      expect(lean.status, JSON.stringify(lean.body)).toBe(201);
+      const leanRow = (await get(pm, `/projects/${project}/exports`)).body.find(
+        (e: { id: string }) => e.id === lean.body.id,
+      );
+      expect(leanRow).toMatchObject({ personal: false, downloads: { count: 0, last: null } });
     });
 
     it('shares a read-only summary by link until it is revoked', async () => {
@@ -324,6 +344,7 @@ describe.skipIf(!configured)(
       expect(s.status, JSON.stringify(s.body)).toBe(200);
       expect(s.body.kpis).toMatchObject({ completes: 3, byMode: { CAPI: 3 } });
       expect(s.body.target).toBe(50);
+      expect(s.body.field.quotas).toEqual([{ id: 'Q_WORK', name: 'Trabajan', max: 10, count: 2 }]);
       expect(JSON.stringify(s.body)).not.toContain(iUser.email);
       expect((await anon.get(`/api/v1/public/share/${'x'.repeat(32)}`)).status).toBe(404);
       const listed = await get(pm, `/projects/${project}/share-links`);
@@ -332,6 +353,24 @@ describe.skipIf(!configured)(
         (await post(pm, `/projects/${project}/share-links/${link.body.id}/revoke`)).status,
       ).toBe(204);
       expect((await anon.get(`/api/v1/public/share/${token}`)).status).toBe(404);
+
+      // A link fixed to approved interviews, with the fieldwork progress and no names.
+      const approved = await post(pm, `/projects/${project}/share-links`, {
+        days: 7,
+        approvedOnly: true,
+      });
+      expect(approved.body.approvedOnly).toBe(true);
+      const a = await anon.get(
+        `/api/v1/public/share/${(approved.body.url as string).split('/share/')[1]!}`,
+      );
+      expect(a.status, JSON.stringify(a.body)).toBe(200);
+      expect(a.body.filters.approvedOnly).toBe(true);
+      expect(a.body.kpis.completes).toBe(a.body.kpis.approved);
+      // Counts of completes that would include unreviewed interviews stay out.
+      expect(a.body.field).toMatchObject({ quotas: [], byDay: [], cases: expect.any(Number) });
+      expect(a.body.field.active).toBeUndefined();
+      expect(JSON.stringify(a.body)).not.toContain(iUser.email);
+      expect((await get(pm, `/projects/${project}/share-links`)).body[0].approvedOnly).toBe(true);
     });
   },
 );

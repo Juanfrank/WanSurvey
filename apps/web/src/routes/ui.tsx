@@ -1,5 +1,7 @@
 import {
+  useEffect,
   useId,
+  useRef,
   useState,
   type ButtonHTMLAttributes,
   type ChangeEvent,
@@ -190,6 +192,70 @@ export function FileInput({
         </label>
         <span className="min-w-0 truncate text-slate-600">{name ?? t('app.noFile')}</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A wide table's horizontal scroller (WCAG 2.1.1, 1.3.1): a named region that takes the
+ * keyboard focus while it has hidden columns, so arrow keys scroll it in every browser, and
+ * shades the edge that has more to show. `label` names the region for screen readers.
+ */
+export function TableScroll({
+  label,
+  children,
+  className = '',
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const left = el.scrollLeft > 1;
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+      setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+    };
+    measure();
+    el.addEventListener('scroll', measure, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener('scroll', measure);
+      ro?.disconnect();
+    };
+  }, []);
+  const scrolls = edges.left || edges.right;
+  return (
+    <div className={`relative ${className}`}>
+      <div
+        ref={ref}
+        role="region"
+        aria-label={label}
+        tabIndex={scrolls ? 0 : undefined}
+        data-scrolls={scrolls || undefined}
+        className="overflow-x-auto rounded-[inherit]"
+      >
+        {children}
+      </div>
+      {edges.left ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 w-3 bg-linear-to-r from-slate-900/10 to-transparent"
+        />
+      ) : null}
+      {edges.right ? (
+        <div
+          aria-hidden="true"
+          data-testid="scroll-more"
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-[inherit] bg-linear-to-l from-slate-900/20 to-transparent"
+        />
+      ) : null}
     </div>
   );
 }

@@ -3,18 +3,33 @@ import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { controlCls } from '../designer/fields.js';
+import { controlCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
-import { Button, Card, ErrorText } from '../routes/ui.js';
+import { Button, Card, ErrorText, TableScroll } from '../routes/ui.js';
 import { FilterBar, type DataFilters } from './ResultsTab.js';
 import { fileSize } from '../format.js';
 import { useCan } from '../designer/hooks.js';
 
 const FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
 
+/** What an export was asked for: kept with it, shown in the list and used to repeat it. */
+interface ExportOptions {
+  format: (typeof FORMATS)[number];
+  labels?: 'codes' | 'labels';
+  rosters?: 'wide' | 'long';
+  paradata?: boolean;
+  approvedOnly?: boolean;
+  personalData?: 'include' | 'exclude';
+  questionnaireId?: string;
+  mode?: string;
+  from?: string;
+  to?: string;
+  language?: string;
+}
+
 interface ExportRow {
   id: string;
-  options: { format: (typeof FORMATS)[number] };
+  options: ExportOptions;
   /** Holds personal answers: downloaded only with `pii.view`. */
   personal: boolean;
   status: 'queued' | 'running' | 'done' | 'failed' | 'expired';
@@ -23,6 +38,9 @@ interface ExportRow {
   rows: number | null;
   error: string | null;
   createdAt: string;
+  /** When the file is deleted (null: kept, or not built). */
+  availableUntil?: string | null;
+  downloads?: { count: number; last: { at: string; by: string | null } | null };
 }
 
 const kb = (n: number | null) => (n === null ? '–' : fileSize(n));
@@ -36,6 +54,8 @@ export function ExportsTab({ projectId }: { projectId: string }) {
   const [labels, setLabels] = useState<'codes' | 'labels'>('codes');
   const [rosters, setRosters] = useState<'wide' | 'long'>('wide');
   const [paradata, setParadata] = useState(false);
+  // Personal answers stay out of the file unless chosen (data minimisation).
+  const [personalData, setPersonalData] = useState<'include' | 'exclude'>('exclude');
   const [filters, setFilters] = useState<DataFilters>({});
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -46,22 +66,16 @@ export function ExportsTab({ projectId }: { projectId: string }) {
     refetchInterval: (q) =>
       q.state.data?.some((e) => e.status === 'queued' || e.status === 'running') ? 1500 : false,
   });
+  const versions = useQuery({
+    queryKey: ['data-questionnaires', projectId],
+    queryFn: () =>
+      api<{ id: string; name: string; version: number }[]>(
+        `/projects/${projectId}/data/questionnaires`,
+      ),
+  });
   const request = useMutation({
-    mutationFn: () =>
-      api(`/projects/${projectId}/exports`, {
-        method: 'POST',
-        body: {
-          format,
-          labels,
-          rosters,
-          paradata,
-          approvedOnly: !!filters.approvedOnly,
-          ...(filters.questionnaireId ? { questionnaireId: filters.questionnaireId } : {}),
-          ...(filters.mode ? { mode: filters.mode } : {}),
-          ...(filters.from ? { from: filters.from } : {}),
-          ...(filters.to ? { to: filters.to } : {}),
-        },
-      }),
+    mutationFn: (body: ExportOptions) =>
+      api(`/projects/${projectId}/exports`, { method: 'POST', body }),
     onSuccess: async () => {
       setError(null);
       setMessage(t('analysis.exports.requested'));
@@ -69,6 +83,36 @@ export function ExportsTab({ projectId }: { projectId: string }) {
     },
     onError: (e) => setError(localiseError(t, e)),
   });
+  const when = (iso: string) =>
+    new Date(iso).toLocaleString(i18n.language, { dateStyle: 'short', timeStyle: 'short' });
+  /** The options of an export in words: enough to tell two files apart and to reproduce one. */
+  const params = (o: ExportOptions) => {
+    const v = versions.data?.find((q) => q.id === o.questionnaireId);
+    const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language);
+    return [
+      v ? v.name : null,
+      o.format === 'csv' || o.format === 'xlsx' || o.format === 'sql'
+        ? t(`analysis.exports.labelOptions.${o.labels ?? 'codes'}`)
+        : null,
+      o.rosters === 'long' ? t('analysis.exports.rosterOptions.long') : null,
+      o.paradata ? t('analysis.exports.withParadata') : null,
+      o.approvedOnly ? t('analysis.exports.onlyApproved') : t('analysis.exports.allCompletes'),
+      o.mode ? t(`analysis.modes.${o.mode}`, { defaultValue: o.mode }) : null,
+      o.from || o.to
+        ? t('analysis.exports.dates', {
+            from: o.from ? day(o.from) : '…',
+            to: o.to ? day(o.to) : '…',
+          })
+        : null,
+      o.language ? o.language : null,
+      o.personalData === 'exclude' ? t('analysis.exports.noPersonal') : null,
+      o.format === 'xlsx' || o.format === 'sav' || o.format === 'dta'
+        ? t('analysis.exports.withCodebook')
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  };
   const radio = <T extends string>(
     name: string,
     value: T,
@@ -100,6 +144,7 @@ export function ExportsTab({ projectId }: { projectId: string }) {
               ...(filters.mode ? { mode: filters.mode } : {}),
               ...(filters.from ? { from: filters.from } : {}),
               ...(filters.to ? { to: filters.to } : {}),
+              ...(filters.approvedOnly ? { approvedOnly: true } : {}),
             }}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium hover:bg-slate-50"
           >
@@ -110,7 +155,18 @@ export function ExportsTab({ projectId }: { projectId: string }) {
           className="flex flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            request.mutate();
+            request.mutate({
+              format,
+              labels,
+              rosters,
+              paradata,
+              personalData: pii ? personalData : 'exclude',
+              approvedOnly: !!filters.approvedOnly,
+              ...(filters.questionnaireId ? { questionnaireId: filters.questionnaireId } : {}),
+              ...(filters.mode ? { mode: filters.mode } : {}),
+              ...(filters.from ? { from: filters.from } : {}),
+              ...(filters.to ? { to: filters.to } : {}),
+            });
           }}
         >
           <label className="flex flex-col gap-1">
@@ -152,6 +208,20 @@ export function ExportsTab({ projectId }: { projectId: string }) {
             />
             {t('analysis.exports.paradata')}
           </label>
+          {pii ? (
+            <fieldset className="flex flex-col gap-1">
+              <legend className="mb-1">{t('analysis.exports.personalData')}</legend>
+              {radio(
+                'personalData',
+                personalData,
+                setPersonalData,
+                ['exclude', 'include'] as const,
+                (v) => t(`analysis.exports.personalOptions.${v}`),
+              )}
+            </fieldset>
+          ) : (
+            <p className="text-slate-600">{t('analysis.exports.personalLeftOut')}</p>
+          )}
           <FilterBar projectId={projectId} value={filters} onChange={setFilters} />
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={request.isPending}>
@@ -168,7 +238,10 @@ export function ExportsTab({ projectId }: { projectId: string }) {
       <section className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">{t('analysis.exports.list')}</h2>
         {list.data?.length ? (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <TableScroll
+            label={t('analysis.exports.list')}
+            className="rounded-lg border border-slate-200 bg-white"
+          >
             <table className="min-w-full text-sm" data-testid="exports-list">
               <thead className="bg-slate-50 text-left">
                 <tr>
@@ -177,6 +250,9 @@ export function ExportsTab({ projectId }: { projectId: string }) {
                   </th>
                   <th scope="col" className="px-3 py-2">
                     {t('analysis.exports.format')}
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    {t('analysis.exports.params')}
                   </th>
                   <th scope="col" className="px-3 py-2">
                     {t('analysis.exports.status')}
@@ -204,6 +280,9 @@ export function ExportsTab({ projectId }: { projectId: string }) {
                     <td className="px-3 py-2">
                       {t(`analysis.exports.formats.${e.options.format}`)}
                     </td>
+                    <td className="min-w-56 px-3 py-2 text-slate-700" data-testid="export-params">
+                      {params(e.options)}
+                    </td>
                     <td className="px-3 py-2">
                       {t(`analysis.exports.statuses.${e.status}`)}
                       {e.error ? <span className="block text-red-ink-700">{e.error}</span> : null}
@@ -227,12 +306,43 @@ export function ExportsTab({ projectId }: { projectId: string }) {
                           {t('analysis.exports.personal')}
                         </span>
                       ) : null}
+                      {e.availableUntil ? (
+                        <span className="block text-slate-600">
+                          {t('analysis.exports.until', { date: when(e.availableUntil) })}
+                        </span>
+                      ) : null}
+                      {e.downloads?.last ? (
+                        <span className="block text-slate-600" data-testid="export-downloads">
+                          {t('analysis.exports.downloaded', {
+                            count: e.downloads.count,
+                            by: e.downloads.last.by ?? '–',
+                            date: when(e.downloads.last.at),
+                          })}
+                        </span>
+                      ) : null}
+                      {e.status === 'done' || e.status === 'failed' || e.status === 'expired' ? (
+                        <button
+                          type="button"
+                          className={`${smallBtn} mt-1`}
+                          disabled={request.isPending}
+                          onClick={() =>
+                            request.mutate({
+                              ...e.options,
+                              // Older exports did not say: keep what the file had.
+                              personalData:
+                                e.options.personalData ?? (e.personal ? 'include' : 'exclude'),
+                            })
+                          }
+                        >
+                          {t('analysis.exports.repeat')}
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         ) : (
           <p className="text-slate-600">{list.isLoading ? '…' : t('analysis.exports.none')}</p>
         )}

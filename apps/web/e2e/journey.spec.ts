@@ -302,7 +302,7 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   );
   await expect(page.getByRole('row', { name: /^Centro 33/ })).toBeVisible();
   await expect(topline.locator('[data-variable="A_SATIS"]')).toContainText('Media: 3,7');
-  await expect(page.getByTestId('latest-A_MEJORA')).toContainText('Más rapidez en la atención');
+  await expect(page.getByTestId('answers-A_MEJORA')).toContainText('Más rapidez en la atención');
   await expect(topline).not.toContainText('«');
   await shot(page, 'journey-results');
 

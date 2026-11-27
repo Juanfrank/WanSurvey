@@ -19,6 +19,20 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Analysis, metrics and exports reviewed**:
+  - Results and the summary warn when the figures include interviews not approved yet, with a button
+    to keep approved interviews only. A client link can be fixed to approved interviews (migration
+    `0030`), and the summary adds a fieldwork progress section (cases, final outcomes, quotas, days).
+  - The topline groups open answers written alike, marks computed variables and counts don't know /
+    refused and missing values for numbers.
+  - The crosstab offers column, row or total percentages, its base, flags bases under 30, adds a
+    chi-square test and downloads as CSV.
+  - Wide tables scroll from the keyboard and show a shade while columns are hidden (`TableScroll`).
+    Metric outliers say in words what they mean and whether they call for a review.
+  - The list of exports shows each export's options, how long its file stays available and who
+    downloaded it, with an "Export again" button. Personal answers can be left out, and the app leaves
+    them out by default.
+
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

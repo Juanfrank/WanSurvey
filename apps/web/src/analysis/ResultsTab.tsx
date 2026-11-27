@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { localiseError } from '../i18n-messages.js';
-import { Button, Card, ErrorText } from '../routes/ui.js';
-import { fmtPct } from './charts.js';
+import { Button, Card, ErrorText, TableScroll } from '../routes/ui.js';
+import { fmtNum, fmtPct } from './charts.js';
 import { ToplineItems, type ToplineItem } from './Topline.js';
 
 export interface DataFilters {
@@ -29,6 +29,8 @@ export const filterQuery = (f: DataFilters) =>
 interface Topline {
   questionnaire: { id: string; name: string };
   n: number;
+  /** Of those, approved in review. */
+  approved: number;
   items: ToplineItem[];
   variables: { name: string; label: string }[];
 }
@@ -41,6 +43,53 @@ interface Crosstab {
   rowTotals: number[];
   total: number;
   colPercents: (number | null)[][];
+  rowPercents: (number | null)[][];
+  totalPercents: (number | null)[][];
+  chi2: { statistic: number; df: number; p: number; sparse: boolean } | null;
+}
+
+/** Bases under this many interviews are flagged (the same threshold as the API's LOW_BASE). */
+const LOW_BASE = 30;
+const PCT_KINDS = ['col', 'row', 'total'] as const;
+type PctKind = (typeof PCT_KINDS)[number];
+
+/**
+ * How many of the interviews counted are not approved yet: a warning while the figures include
+ * them, with a button to keep approved ones only. Nothing when all are approved.
+ */
+export function UnreviewedNotice({
+  n,
+  approved,
+  onApprovedOnly,
+}: {
+  n: number;
+  approved: number;
+  onApprovedOnly?: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const pending = n - approved;
+  if (pending <= 0) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-ink-950"
+      data-testid="unreviewed"
+    >
+      <p>
+        <strong>
+          {t('analysis.results.unreviewed', {
+            count: pending,
+            pct: fmtPct(i18n.language, pending / n),
+          })}
+        </strong>{' '}
+        {t('analysis.results.unreviewedHelp')}
+      </p>
+      {onApprovedOnly ? (
+        <button type="button" className={`${smallBtn} print:hidden`} onClick={onApprovedOnly}>
+          {t('analysis.results.showApproved')}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 /** Filters shared by the results, the summary and exports. */
@@ -199,25 +248,33 @@ export function ResultsTab({ projectId }: { projectId: string }) {
         <>
           <p className="font-medium" aria-live="polite" data-testid="n">
             {t('analysis.results.n', { count: top.data.n })}
+            {filters.approvedOnly ? ` · ${t('analysis.results.onlyApproved')}` : ''}
           </p>
+          {!filters.approvedOnly ? (
+            <UnreviewedNotice
+              n={top.data.n}
+              approved={top.data.approved}
+              onApprovedOnly={() => setFilters({ ...filters, approvedOnly: true })}
+            />
+          ) : null}
           {top.data.n ? (
-            <div className="grid gap-6 xl:grid-cols-2">
-              <Card>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <Card className="min-w-0">
                 <ToplineItems items={top.data.items} />
               </Card>
-              <Card className="flex flex-col gap-3 self-start">
+              <Card className="flex min-w-0 flex-col gap-3 self-start xl:sticky xl:top-4">
                 <h3 className="font-medium">{t('analysis.results.crosstab')}</h3>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-col gap-3">
                   {(
                     [
                       ['rows', row, setRow],
                       ['cols', col, setCol],
                     ] as const
                   ).map(([k, v, set]) => (
-                    <label key={k} className="flex flex-col gap-1">
+                    <label key={k} className="flex min-w-0 flex-col gap-1">
                       {t(`analysis.results.${k}`)}
                       <select
-                        className={controlCls}
+                        className={`${controlCls} w-full max-w-full min-w-0`}
                         value={v}
                         onChange={(e) => set(e.target.value)}
                       >
@@ -244,55 +301,143 @@ export function ResultsTab({ projectId }: { projectId: string }) {
   );
 }
 
+/** A crosstab with the percentages chosen, its bases, small bases flagged and a chi-square test. */
 export function CrosstabTable({ x, lang }: { x: Crosstab; lang: string }) {
   const { t } = useTranslation();
+  const [kind, setKind] = useState<PctKind>('col');
+  const group = useId();
+  const pcts = kind === 'col' ? x.colPercents : kind === 'row' ? x.rowPercents : x.totalPercents;
+  const low = (n: number) => n > 0 && n < LOW_BASE;
+  const baseOf = (i: number, j: number) =>
+    kind === 'col' ? x.colTotals[j]! : kind === 'row' ? x.rowTotals[i]! : x.total;
+  const anyLow = (kind === 'col' ? x.colTotals : kind === 'row' ? x.rowTotals : [x.total]).some(
+    low,
+  );
+  const star = (n: number) => (low(n) ? <span aria-hidden="true">*</span> : null);
+  const download = () => {
+    // Quoted, and a leading = + - @ neutralised so a spreadsheet does not run it as a formula.
+    const cell = (v: string) => `"${(/^[=+\-@]/.test(v) ? `'${v}` : v).replace(/"/g, '""')}"`;
+    const cols = x.col.categories.map((c) => c.label);
+    const lines: string[][] = [
+      [`${x.row.name} / ${x.col.name}`, ...cols, t('analysis.results.total')],
+      ...x.row.categories.map((r, i) => [
+        r.label,
+        ...x.counts[i]!.map(String),
+        String(x.rowTotals[i]),
+      ]),
+      [t('analysis.results.baseRow'), ...x.colTotals.map(String), String(x.total)],
+      [],
+      [`% ${t(`analysis.results.pctKinds.${kind}`)}`, ...cols],
+      ...x.row.categories.map((r, i) => [
+        r.label,
+        ...pcts[i]!.map((v) => (v === null ? '' : v.toFixed(1))),
+      ]),
+    ];
+    const csv = '﻿' + lines.map((l) => l.map(cell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `crosstab_${x.row.name}_${x.col.name}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoked once the browser has started the download.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm" data-testid="crosstab">
-        <caption className="mb-1 text-left text-slate-600">
-          {x.row.name} × {x.col.name}. {t('analysis.results.colPct')}
-        </caption>
-        <thead>
-          <tr className="border-b border-slate-200">
-            <td />
-            {x.col.categories.map((c) => (
-              <th key={c.code} scope="col" className="px-2 py-1 text-right font-medium">
-                {c.label}
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <fieldset className="flex flex-wrap items-center gap-3">
+          <legend className="float-left mr-1">{t('analysis.results.pctKind')}</legend>
+          {PCT_KINDS.map((k) => (
+            <label key={k} className="flex items-center gap-1.5">
+              <input type="radio" name={group} checked={kind === k} onChange={() => setKind(k)} />
+              {t(`analysis.results.pctKinds.${k}`)}
+            </label>
+          ))}
+        </fieldset>
+        <button type="button" className={smallBtn} onClick={download}>
+          {t('analysis.results.downloadCsv')}
+        </button>
+      </div>
+      <TableScroll label={`${x.row.name} × ${x.col.name}`}>
+        <table className="min-w-full text-sm" data-testid="crosstab">
+          <caption className="mb-1 text-left text-slate-600">
+            {x.row.name} × {x.col.name}. {t(`analysis.results.pctNote.${kind}`)}
+          </caption>
+          <thead>
+            <tr className="border-b border-slate-200">
+              <td />
+              {x.col.categories.map((c) => (
+                <th key={c.code} scope="col" className="px-2 py-1 text-right font-medium">
+                  {c.label}
+                </th>
+              ))}
+              <th scope="col" className="px-2 py-1 text-right font-medium">
+                {t('analysis.results.total')}
               </th>
+            </tr>
+          </thead>
+          <tbody>
+            {x.row.categories.map((r, i) => (
+              <tr key={r.code} className="border-b border-slate-100">
+                <th scope="row" className="py-1 pr-2 text-left font-normal">
+                  {r.label}
+                </th>
+                {x.col.categories.map((c, j) => {
+                  const v = pcts[i]![j] ?? null;
+                  return (
+                    <td
+                      key={c.code}
+                      className={`px-2 py-1 text-right tabular-nums ${low(baseOf(i, j)) ? 'text-slate-500' : ''}`}
+                    >
+                      {fmtPct(lang, v === null ? null : v / 100)}
+                      {star(baseOf(i, j))}{' '}
+                      <span className="text-slate-500">[{x.counts[i]![j]}]</span>
+                    </td>
+                  );
+                })}
+                <td className="px-2 py-1 text-right tabular-nums">
+                  {x.rowTotals[i]}
+                  {kind === 'row' ? star(x.rowTotals[i]!) : null}
+                </td>
+              </tr>
             ))}
-            <th scope="col" className="px-2 py-1 text-right font-medium">
-              {t('analysis.results.total')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {x.row.categories.map((r, i) => (
-            <tr key={r.code} className="border-b border-slate-100">
-              <th scope="row" className="py-1 pr-2 text-left font-normal">
-                {r.label}
+            <tr>
+              <th scope="row" className="py-1 pr-2 text-left font-medium">
+                {t('analysis.results.baseRow')}
               </th>
-              {x.col.categories.map((c, j) => (
-                <td key={c.code} className="px-2 py-1 text-right tabular-nums">
-                  {fmtPct(lang, x.colPercents[i]![j] === null ? null : x.colPercents[i]![j]! / 100)}{' '}
-                  <span className="text-slate-500">[{x.counts[i]![j]}]</span>
+              {x.colTotals.map((n, j) => (
+                <td key={j} className="px-2 py-1 text-right font-medium tabular-nums">
+                  {n}
+                  {kind === 'col' ? star(n) : null}
                 </td>
               ))}
-              <td className="px-2 py-1 text-right tabular-nums">{x.rowTotals[i]}</td>
+              <td className="px-2 py-1 text-right font-medium tabular-nums">{x.total}</td>
             </tr>
-          ))}
-          <tr>
-            <th scope="row" className="py-1 pr-2 text-left font-medium">
-              {t('analysis.results.total')}
-            </th>
-            {x.colTotals.map((n, j) => (
-              <td key={j} className="px-2 py-1 text-right font-medium tabular-nums">
-                {n}
-              </td>
-            ))}
-            <td className="px-2 py-1 text-right font-medium tabular-nums">{x.total}</td>
-          </tr>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </TableScroll>
+      {anyLow ? (
+        <p className="text-slate-600" data-testid="low-base">
+          {t('analysis.results.lowBase', { n: LOW_BASE })}
+        </p>
+      ) : null}
+      {x.chi2 ? (
+        <p className="text-slate-700" data-testid="chi2">
+          {t('analysis.results.chi2', {
+            stat: fmtNum(lang, x.chi2.statistic, 2),
+            df: x.chi2.df,
+            p: x.chi2.p < 0.001 ? `< ${fmtNum(lang, 0.001, 3)}` : fmtNum(lang, x.chi2.p, 3),
+          })}{' '}
+          <strong>
+            {x.chi2.p < 0.05
+              ? t('analysis.results.significant')
+              : t('analysis.results.notSignificant')}
+          </strong>
+          {x.chi2.sparse ? ` ${t('analysis.results.chi2Sparse')}` : null}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -302,6 +447,8 @@ interface ShareLink {
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
+  /** The client sees approved interviews only. */
+  approvedOnly?: boolean;
   url: string | null;
 }
 
@@ -309,6 +456,8 @@ function ShareLinks({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const [days, setDays] = useState('30');
+  // A client gets reviewed figures unless the manager chooses otherwise.
+  const [approvedOnly, setApprovedOnly] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const links = useQuery({
@@ -320,7 +469,7 @@ function ShareLinks({ projectId }: { projectId: string }) {
     mutationFn: () =>
       api(`/projects/${projectId}/share-links`, {
         method: 'POST',
-        body: { days: Math.min(90, Math.max(1, Number(days) || 30)) },
+        body: { days: Math.min(90, Math.max(1, Number(days) || 30)), approvedOnly },
       }),
     onSuccess: refresh,
     onError: (e) => setError(localiseError(t, e)),
@@ -346,6 +495,14 @@ function ShareLinks({ projectId }: { projectId: string }) {
             value={days}
             onChange={(e) => setDays(e.target.value)}
           />
+        </label>
+        <label className="flex items-center gap-2 pb-2">
+          <input
+            type="checkbox"
+            checked={approvedOnly}
+            onChange={(e) => setApprovedOnly(e.target.checked)}
+          />
+          {t('analysis.results.share.approvedOnly')}
         </label>
         <Button type="button" onClick={() => create.mutate()} disabled={create.isPending}>
           {t('analysis.results.share.create')}
@@ -377,6 +534,10 @@ function ShareLinks({ projectId }: { projectId: string }) {
                       : t('analysis.results.share.copy')}
                   </button>
                   <span className="text-slate-600">
+                    {l.approvedOnly
+                      ? t('analysis.results.share.onlyApproved')
+                      : t('analysis.results.share.all')}
+                    {' · '}
                     {l.expiresAt
                       ? t('analysis.results.share.expires', { date: date(l.expiresAt) })
                       : t('analysis.results.share.forever')}

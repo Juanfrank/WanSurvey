@@ -551,6 +551,7 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: analysis model (bi)', () => {
           rosters: 'wide',
           paradata: true,
           approvedOnly: false,
+          personalData: 'include',
         },
         main,
         rosters: [roster],

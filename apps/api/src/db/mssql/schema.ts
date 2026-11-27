@@ -792,5 +792,6 @@ export interface MssqlSchema {
     created_at: Instant;
     expires_at: InstantOrNull;
     revoked_at: InstantOrNull;
+    approved_only: Generated<boolean>;
   };
 }

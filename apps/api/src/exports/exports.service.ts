@@ -51,6 +51,11 @@ export const ExportBody = DataFilter.extend({
   rosters: z.enum(['wide', 'long']).default('wide'),
   paradata: z.boolean().default(false),
   approvedOnly: z.boolean().default(false),
+  /**
+   * Answers marked personal: in the file (for people allowed to see personal data), or left out.
+   * The app asks to leave them out unless chosen; the API keeps including them by default.
+   */
+  personalData: z.enum(['include', 'exclude']).default('include'),
   language: z
     .string()
     .regex(/^[a-z]{2,3}(-[A-Za-z]{2,4})?$/)
@@ -199,7 +204,7 @@ export class ExportsService implements OnModuleInit {
       options: {
         ...body,
         questionnaireId: qid,
-        personal: can(ctx.memberships, 'pii.view', projectId),
+        personal: body.personalData === 'include' && can(ctx.memberships, 'pii.view', projectId),
       },
     });
     await t.audit(
@@ -219,10 +224,24 @@ export class ExportsService implements OnModuleInit {
     return this.jobs.offer('exports.build', { tenantId, exportId });
   }
 
-  /** Exports holding personal answers are marked, so the list can say who may download them. */
+  /**
+   * Exports holding personal answers are marked, so the list can say who may download them;
+   * each says until when its file stays (EXPORT_RETENTION_DAYS after it was built) and who
+   * downloaded it, from the audit log.
+   */
   async list(t: ExportsTx, projectId: string) {
     const rows = await t.listExports(projectId);
-    return rows.map((r) => ({ ...r, personal: isPersonal(r.options) }));
+    const downloads = await t.exportDownloads(rows.map((r) => r.id));
+    const days = this.config.EXPORT_RETENTION_DAYS;
+    return rows.map((r) => ({
+      ...r,
+      personal: isPersonal(r.options),
+      availableUntil:
+        r.status === 'done' && days && r.finishedAt
+          ? new Date(new Date(r.finishedAt).getTime() + days * 86_400_000)
+          : null,
+      downloads: downloads.get(r.id) ?? { count: 0, last: null },
+    }));
   }
 
   async file(t: ExportsTx, ctx: AuthContext, projectId: string, id: string) {

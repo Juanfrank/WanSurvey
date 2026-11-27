@@ -9,6 +9,8 @@ import type { AnalysisTx } from './analysis-repo.js';
 export const ShareBody = z.object({
   /** Days the link works: at most 90, and always an end (a link that never ends stays open for good). */
   days: z.number().int().min(1).max(90).default(30),
+  /** The client sees approved interviews only (the address cannot widen it). */
+  approvedOnly: z.boolean().default(false),
 });
 
 /**
@@ -33,6 +35,7 @@ export class ShareService {
       createdAt: r.createdAt,
       expiresAt: r.expiresAt,
       revokedAt: r.revokedAt,
+      approvedOnly: r.approvedOnly,
       url: r.revokedAt ? null : this.url(decryptField(r.tokenEnc, this.config.ENCRYPTION_KEY)),
     }));
   }
@@ -51,16 +54,17 @@ export class ShareService {
       tokenEnc: encryptField(token, this.config.ENCRYPTION_KEY),
       createdBy: ctx.userId,
       expiresAt,
+      approvedOnly: body.approvedOnly,
     });
     await t.audit(
       this.audit.fromContext(ctx, {
         action: 'share_link.created',
         targetType: 'share_link',
         targetId: id,
-        details: { projectId, expiresAt },
+        details: { projectId, expiresAt, approvedOnly: body.approvedOnly },
       }),
     );
-    return { id, url: this.url(token), expiresAt };
+    return { id, url: this.url(token), expiresAt, approvedOnly: body.approvedOnly };
   }
 
   async revoke(t: AnalysisTx, ctx: AuthContext, projectId: string, id: string) {
@@ -75,10 +79,10 @@ export class ShareService {
     );
   }
 
-  /** The project a live link opens (inside the link's organisation). */
-  async projectOf(t: AnalysisTx, id: string): Promise<string> {
-    const projectId = await t.shareLinkProject(id);
-    if (!projectId) throw new NotFoundException('Link not found');
-    return projectId;
+  /** The project a live link opens (inside the link's organisation), and what it shows. */
+  async linkOf(t: AnalysisTx, id: string) {
+    const link = await t.shareLinkInfo(id);
+    if (!link) throw new NotFoundException('Link not found');
+    return link;
   }
 }
