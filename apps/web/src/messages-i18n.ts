@@ -98,6 +98,7 @@ export const messagesEn = {
   },
   apiError: {
     BUSY: 'The server is busy right now. Please try again in a moment.',
+    FIELDWORK_DATES: 'Fieldwork ends before it starts: check the dates.',
     CALL_OPEN: 'Finish the call in progress first.',
     NO_OFFLINE_STORAGE: 'This browser cannot store data offline.',
     STORAGE_FULL: 'This device has no space left for offline interviews. Sync and free some space.',
@@ -263,6 +264,7 @@ export const messagesEs: MessagesCatalogue = {
   },
   apiError: {
     BUSY: 'El servidor está ocupado en este momento. Inténtelo de nuevo en unos segundos.',
+    FIELDWORK_DATES: 'El trabajo de campo termina antes de empezar: revise las fechas.',
     CALL_OPEN: 'Termine primero la llamada en curso.',
     NO_OFFLINE_STORAGE: 'Este navegador no puede guardar datos sin conexión.',
     STORAGE_FULL:

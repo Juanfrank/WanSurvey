@@ -370,7 +370,7 @@ export function SettingsEditor({
                 );
               return (
                 <div key={i} className="flex flex-col gap-3 rounded-md border border-slate-200 p-3">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <TextField
                       label={t('designer.settings.quotaName', { n: i + 1 })}
                       value={q.name}
@@ -381,6 +381,12 @@ export function SettingsEditor({
                       integer
                       value={q.max}
                       onChange={(max) => update({ max: max ?? 0 })}
+                    />
+                    <NumberField
+                      label={t('designer.settings.quotaTarget', { n: i + 1 })}
+                      integer
+                      value={q.target ?? undefined}
+                      onChange={(target) => update({ target: target ?? null })}
                     />
                     <SelectField
                       label={t('designer.settings.quotaDisposition', { n: i + 1 })}

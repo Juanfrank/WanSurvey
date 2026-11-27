@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Selectable } from 'kysely';
+import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
 
@@ -27,6 +27,22 @@ const toProject = (r: Selectable<MssqlSchema['projects']>): ProjectRow => ({
   languages: JSON.parse(r.languages) as string[],
   settings: JSON.parse(r.settings) as Record<string, unknown>,
 });
+
+/** What is still open in a project (see `ProjectsStore.closeout`). */
+export interface Closeout {
+  /** Cases not yet finalised or withdrawn. */
+  openCases: number;
+  /** Interviews started and not submitted, or returned to be fixed. */
+  openInterviews: number;
+  /** Submitted interviews nobody has approved, returned or rejected yet. */
+  pendingReview: number;
+  exportsDone: number;
+  lastExportAt: Date | null;
+  /** Client links not revoked nor expired. */
+  activeShareLinks: number;
+  /** People with a role in this project only (organisation-wide roles are not counted). */
+  projectMembers: number;
+}
 
 export class ProjectsStore {
   // ─── The organisation in context ──────────────────────────────────────────────────
@@ -162,6 +178,28 @@ export class ProjectsStore {
       .where('id', '=', id)
       .execute();
     return this.get(tx, id);
+  }
+
+  /** What is still open in a project, for the checklist before closing or archiving it. */
+  async closeout(tx: MssqlTx, projectId: string): Promise<Closeout> {
+    const r = await sql<Closeout & { lastExportAt: Date | null }>`
+      SELECT
+        (SELECT COUNT(*) FROM cases WHERE project_id = ${projectId}
+          AND status IN ('fresh', 'assigned', 'in_progress')) AS openCases,
+        (SELECT COUNT(*) FROM interviews WHERE project_id = ${projectId}
+          AND status IN ('in_progress', 'returned')) AS openInterviews,
+        (SELECT COUNT(*) FROM interviews WHERE project_id = ${projectId}
+          AND status IN ('submitted', 'in_review', 'resubmitted')) AS pendingReview,
+        (SELECT COUNT(*) FROM exports WHERE project_id = ${projectId}
+          AND status = 'done') AS exportsDone,
+        (SELECT MAX(finished_at) FROM exports WHERE project_id = ${projectId}
+          AND status = 'done') AS lastExportAt,
+        (SELECT COUNT(*) FROM share_links WHERE project_id = ${projectId} AND revoked_at IS NULL
+          AND (expires_at IS NULL OR expires_at > SYSDATETIMEOFFSET())) AS activeShareLinks,
+        (SELECT COUNT(DISTINCT user_id) FROM memberships
+          WHERE project_id = ${projectId}) AS projectMembers`.execute(tx);
+    const row = r.rows[0]!;
+    return { ...row, lastExportAt: row.lastExportAt ? new Date(row.lastExportAt) : null };
   }
 
   // ─── Logo ─────────────────────────────────────────────────────────────────────────

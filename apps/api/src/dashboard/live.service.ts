@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger, type MessageEvent } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, type MessageEvent } from '@nestjs/common';
 import { evaluate, truthy, type Scope, type Value } from '@wansurvey/logic';
-import { projectSettings } from '@wansurvey/schema';
+import { caseExpiryHours, projectSettings } from '@wansurvey/schema';
 import { Observable } from 'rxjs';
 import { LIVE_REPO, type LiveRepo, type LiveTx } from './live-repo.js';
 import { BUS, projectChannel, type Bus } from '../jobs/bus.js';
+import { localDay } from '../stats/zoned-day.js';
 
 /** Minutes without activity after which an interviewer no longer shows as working. */
 const ACTIVE_MINUTES = 5;
@@ -15,6 +16,10 @@ const REFRESH_MS = 60_000;
 const SHARE_MS = 1_000;
 /** Bursts of changes (a wave of submissions) produce one snapshot per this window. */
 const DEBOUNCE_MS = 1_000;
+/** Flagged interviews awaiting review from one interviewer that make a risk. */
+const REPEATED_FLAGS = 3;
+/** Cases whose deadline falls within this many hours are at risk. */
+const SOON_HOURS = 48;
 
 /**
  * Variables from saved answers and the sample fields the interview ran with, enough to tell
@@ -53,7 +58,9 @@ export interface LiveSnapshot {
   completes: number;
   byMode: Record<string, number>;
   byDay: { day: string; completes: number }[];
-  quotas: { id: string; name: string; max: number; count: number }[];
+  /** Today in the project's time zone, and the planned fieldwork dates (when set). */
+  plan: { today: string; startsOn: string | null; endsOn: string | null };
+  quotas: { id: string; name: string; max: number; target: number | null; count: number }[];
   field: {
     cases: number;
     byStatus: Record<string, number>;
@@ -100,7 +107,8 @@ export class LiveService {
   async snapshot(tx: LiveTx, projectId: string): Promise<LiveSnapshot> {
     const t = tx;
     const p = await t.project(projectId);
-    const target = projectSettings(p?.settings).fieldwork.targetCompletes;
+    const fieldwork = projectSettings(p?.settings).fieldwork;
+    const target = fieldwork.targetCompletes;
 
     const modes = await t.modeTotals(projectId);
     const byMode = Object.fromEntries(modes.map((r) => [r.mode, r.n]));
@@ -114,7 +122,13 @@ export class LiveService {
     const quotaDefs = versions.flatMap((v) =>
       (v.compiled.quotas ?? []).map((quota) => ({ ...quota, qid: v.qid })),
     );
-    const quotas = quotaDefs.map((q) => ({ id: q.id, name: q.name, max: q.max, count: 0 }));
+    const quotas = quotaDefs.map((q) => ({
+      id: q.id,
+      name: q.name,
+      max: q.max,
+      target: q.target ?? null,
+      count: 0,
+    }));
     if (quotaDefs.length) {
       const refs = [...new Set(quotaDefs.flatMap((q) => q.expr.refs))];
       const fields = [...new Set(quotaDefs.flatMap((q) => caseFields(q.expr.ast)))];
@@ -145,6 +159,11 @@ export class LiveService {
       completes,
       byMode,
       byDay: days.map((d) => ({ day: d.day, completes: d.n })),
+      plan: {
+        today: localDay(new Date(), p?.timezone ?? 'UTC'),
+        startsOn: fieldwork.startsOn,
+        endsOn: fieldwork.endsOn,
+      },
       quotas,
       field: {
         cases: status.reduce((a, r) => a + r.n, 0),
@@ -155,6 +174,28 @@ export class LiveService {
       funnel: f && f.total ? f : null,
       active: active.map((a) => ({ ...a, lastAt: new Date(a.lastAt).toISOString() })),
     };
+  }
+
+  /**
+   * Fieldwork risks for supervisors (not in the shared snapshot, which clients also see):
+   * interviewers whose interviews awaiting review carry repeated quality flags, and cases
+   * whose deadline falls within the next 48 hours.
+   */
+  risks(tenantId: string, projectId: string) {
+    return this.repo.inTenant(tenantId, async (t) => {
+      const p = await t.project(projectId);
+      if (!p) throw new NotFoundException('Project not found');
+      const hours = caseExpiryHours(projectSettings(p?.settings).fieldwork);
+      const interviewers = (await t.flaggedByInterviewer(projectId)).filter(
+        (r) => r.flagged >= REPEATED_FLAGS,
+      );
+      return {
+        repeatedFlags: REPEATED_FLAGS,
+        interviewers,
+        expiringSoon: hours === null ? null : await t.expiringWithin(projectId, hours, SOON_HOURS),
+        soonHours: SOON_HOURS,
+      };
+    });
   }
 
   /** Snapshots being computed, and the last ones, per organisation and project. */

@@ -76,7 +76,15 @@ export interface Model {
   nodes: CompiledNode[];
   byId: Record<string, number>;
   vars: Record<string, VariableInfo>;
-  quotas: { id: string; name: string; max: number; disposition: string; expr: CompiledExpr }[];
+  quotas: {
+    id: string;
+    name: string;
+    max: number;
+    /** Completes the cell should reach; absent: the cap is the aim. */
+    target?: number | null;
+    disposition: string;
+    expr: CompiledExpr;
+  }[];
   /** Root variable → indices of nodes whose expressions read it (the dependency graph). */
   dependents: Record<string, number[]>;
   /** Structural problems found while building (duplicate ids, names...). */
@@ -329,6 +337,7 @@ export function buildModel(questionnaire: Questionnaire): Model {
     id: q.id,
     name: q.name,
     max: q.max,
+    ...(q.target != null ? { target: q.target } : {}),
     disposition: q.disposition,
     expr: mk(q.when),
   }));

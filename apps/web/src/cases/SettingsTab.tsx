@@ -23,6 +23,7 @@ import { CawiProjectSettings } from '../cawi/CawiTab.js';
 import { BrandingSettings } from './BrandingSettings.js';
 import { useCan } from '../designer/hooks.js';
 import { GoalsSection } from '../analysis/GoalsSection.js';
+import { ProjectStatusSection } from '../analysis/ProjectStatusSection.js';
 
 /** Per-project switches: automatic personal data for interviewers, and the assignment mode. */
 export function SettingsTab({ project }: { project: Project }) {
@@ -61,6 +62,7 @@ export function SettingsTab({ project }: { project: Project }) {
         'shortcuts',
         'privacy',
         'look',
+        'status',
       ]
     : ['fieldwork'];
   // No choice yet: the first topic (permissions may still be loading).
@@ -512,6 +514,28 @@ export function SettingsTab({ project }: { project: Project }) {
                     />
                     {t('analysis.settings.target')}
                   </label>
+                  <div className="flex flex-wrap gap-4">
+                    {(['startsOn', 'endsOn'] as const).map((k) => (
+                      <label key={k} className="flex flex-col gap-1">
+                        {t(`analysis.settings.${k}`)}
+                        <input
+                          type="date"
+                          className={`${controlCls} w-auto`}
+                          value={form.fieldwork[k] ?? ''}
+                          {...(k === 'endsOn' && form.fieldwork.startsOn
+                            ? { min: form.fieldwork.startsOn }
+                            : {})}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              fieldwork: { ...form.fieldwork, [k]: e.target.value || null },
+                            })
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="max-w-prose text-slate-600">{t('analysis.settings.planHelp')}</p>
                 </fieldset>
               </>,
             )}
@@ -719,6 +743,9 @@ export function SettingsTab({ project }: { project: Project }) {
         </Tabs.Content>
         <Tabs.Content value="look">
           <BrandingSettings project={project} />
+        </Tabs.Content>
+        <Tabs.Content value="status">
+          <ProjectStatusSection project={project} />
         </Tabs.Content>
         <Tabs.Content value="web">
           <CawiProjectSettings project={project} />

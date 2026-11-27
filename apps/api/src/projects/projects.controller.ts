@@ -191,6 +191,8 @@ export class ProjectsController {
     @Auth() ctx: AuthContext,
     @Param('id') id: string,
     @Body(new ZodPipe(ProjectPatch)) body: z.infer<typeof ProjectPatch>,
+    /** The settings as sent, to tell the fields given from the defaults filled in. */
+    @Body('settings') sent?: { fieldwork?: Record<string, unknown> },
   ) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
       // Each wording of the recording consent has its own version, kept with every answer.
@@ -212,6 +214,25 @@ export class ProjectsController {
             ruleId: r.id,
           });
       }
+      // Fieldwork fields left out keep their value: a client that sends only the target does
+      // not clear the planned dates.
+      if (body.settings?.fieldwork && sent?.fieldwork) {
+        const current = await t.project(id);
+        if (!current) throw new NotFoundException('Project not found');
+        const given = body.settings.fieldwork;
+        body.settings.fieldwork = {
+          ...projectSettings(current.settings).fieldwork,
+          ...Object.fromEntries(
+            Object.entries(given).filter(([k]) => Object.hasOwn(sent.fieldwork!, k)),
+          ),
+        };
+      }
+      const field = body.settings?.fieldwork;
+      if (field?.startsOn && field.endsOn && field.endsOn < field.startsOn)
+        throw new BadRequestException({
+          code: 'FIELDWORK_DATES',
+          message: 'Fieldwork ends before it starts',
+        });
       const project = await t.updateProject(id, body);
       if (!project) throw new NotFoundException('Project not found');
       await t.audit(
@@ -223,6 +244,20 @@ export class ProjectsController {
         }),
       );
       return withSettings(project);
+    });
+  }
+
+  /**
+   * What is still open before the project is closed or archived: cases, interviews to submit
+   * or review, the final export, client links and the people with access to this project.
+   */
+  @Get(':id/closeout')
+  @RequirePermission('projects.update', { projectParam: 'id' })
+  closeout(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const project = await t.project(id);
+      if (!project) throw new NotFoundException('Project not found');
+      return { status: project.status, ...(await t.closeout(id)) };
     });
   }
 

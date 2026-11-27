@@ -115,11 +115,18 @@ function fillDays(days: { day: string; completes: number }[], span = 30) {
  * boxes rather than a stretched SVG, so the figures keep their shape at any width and the
  * tallest column still has room for its label.
  */
-export function DayColumns({ days: given }: { days: { day: string; completes: number }[] }) {
+export function DayColumns({
+  days: given,
+  goal,
+}: {
+  days: { day: string; completes: number }[];
+  /** A dashed line across the columns (the completes needed per day), with its label. */
+  goal?: { value: number; label: string } | null;
+}) {
   const { t, i18n } = useTranslation();
   if (!given.length) return <p className="text-slate-600">–</p>;
   const days = fillDays(given);
-  const max = Math.max(1, ...days.map((d) => d.completes));
+  const max = Math.max(1, goal?.value ?? 0, ...days.map((d) => d.completes));
   const short = (d: string) =>
     new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, {
       day: 'numeric',
@@ -133,7 +140,24 @@ export function DayColumns({ days: given }: { days: { day: string; completes: nu
         aria-label={days.map((d) => `${short(d.day)}: ${d.completes}`).join(', ')}
         className="w-full max-w-2xl"
       >
-        <div className="flex h-32 items-end gap-[2px] border-b border-slate-300 pt-4">
+        <div className="relative flex h-32 items-end gap-[2px] border-b border-slate-300 pt-4">
+          {goal ? (
+            // Positioned within the columns' area (below the top padding), as the bars are.
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 top-4"
+            >
+              <div
+                className="absolute inset-x-0 border-t-2 border-dashed border-amber-600"
+                style={{ bottom: `${(100 * goal.value) / max}%` }}
+                data-testid="day-goal"
+              >
+                <span className="absolute right-0 -top-4 bg-white/80 px-1 text-[10px] leading-none text-amber-ink-900">
+                  {goal.label}
+                </span>
+              </div>
+            </div>
+          ) : null}
           {days.map((d) => (
             <div
               key={d.day}

@@ -267,7 +267,9 @@ describe.skipIf(!configured)(
       const snap = await get(sup, `/projects/${project}/live/snapshot`);
       expect(snap.status, JSON.stringify(snap.body)).toBe(200);
       expect(snap.body).toMatchObject({ target: 50, completes: 3, byMode: { CAPI: 3 } });
-      expect(snap.body.quotas).toEqual([{ id: 'Q_WORK', name: 'Trabajan', max: 10, count: 2 }]);
+      expect(snap.body.quotas).toEqual([
+        { id: 'Q_WORK', name: 'Trabajan', max: 10, target: null, count: 2 },
+      ]);
       expect(snap.body.active.map((a: { userId: string }) => a.userId)).toContain(iUser.id);
       expect((await get(me, `/projects/${project}/live/snapshot`)).status).toBe(403);
     });

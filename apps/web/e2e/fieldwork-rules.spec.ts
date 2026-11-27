@@ -85,6 +85,39 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   await shot(page, 'settings-goals');
   await expectAccessible(page);
 
+  // The planned fieldwork dates: the dashboard shows the pace and the goals' state.
+  const fieldwork = page.getByTestId('fieldwork-settings');
+  const started = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+  await fieldwork.getByLabel('Fieldwork starts').fill(started);
+  await fieldwork.getByLabel('Fieldwork ends').fill(inAWeek);
+  await saveSettings(page);
+  await resultsSection(page, 'Dashboard');
+  const pace = page.getByTestId('pace');
+  await expect(pace).toBeVisible();
+  await expect(pace.getByTestId('pace-state')).toHaveText(/On track|Behind|Target met/);
+  await expect(page.getByTestId('dashboard-goals')).toContainText('Whole team');
+  await expect(page.getByTestId('quotas').locator('tbody tr').first()).toHaveAttribute(
+    'data-state',
+    /.+/,
+  );
+  await shot(page, 'dashboard-pace');
+  await expectAccessible(page);
+
+  // The project's status, with what is still open before closing it (left as it is).
+  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project status', exact: true }).click();
+  const status = page.getByTestId('project-status');
+  await expect(status.getByRole('button', { name: 'Close the project' })).toBeVisible();
+  await expect(status.getByTestId('closeout').locator('li[data-item="openCases"]')).toContainText(
+    'still open',
+  );
+  await shot(page, 'project-status');
+  await expectAccessible(page);
+  await page.getByRole('tab', { name: 'Fieldwork', exact: true }).click();
+  await fieldwork.getByLabel('Fieldwork starts').fill('');
+  await fieldwork.getByLabel('Fieldwork ends').fill('');
+  await saveSettings(page);
+
   // The metrics show their progress, without the form.
   await resultsSection(page, 'Metrics');
   const progress = page.getByTestId('goals');

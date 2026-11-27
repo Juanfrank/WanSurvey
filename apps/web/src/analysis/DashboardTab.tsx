@@ -1,7 +1,18 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { api } from '../api.js';
+import { useCan } from '../designer/hooks.js';
 import { Card } from '../routes/ui.js';
-import { BarTable, DayColumns, fmtPct, Progress } from './charts.js';
+import { BarTable, DayColumns, fmtNum, fmtPct, Progress } from './charts.js';
+import {
+  fieldPace,
+  PACE_DAYS,
+  planProgress,
+  quotaStatus,
+  type PaceState,
+  type QuotaState,
+} from './pace.js';
 
 export interface LiveSnapshot {
   at: string;
@@ -9,7 +20,9 @@ export interface LiveSnapshot {
   completes: number;
   byMode: Record<string, number>;
   byDay: { day: string; completes: number }[];
-  quotas: { id: string; name: string; max: number; count: number }[];
+  /** Today in the project's time zone and the planned fieldwork dates. */
+  plan?: { today: string; startsOn: string | null; endsOn: string | null };
+  quotas: { id: string; name: string; max: number; target?: number | null; count: number }[];
   field: {
     cases: number;
     byStatus: Record<string, number>;
@@ -31,6 +44,62 @@ const MODES = ['CATI', 'CAPI', 'CAWI', 'PAPI'] as const;
 const STATUSES = ['fresh', 'assigned', 'in_progress', 'finalised', 'withdrawn'] as const;
 const FUNNEL = ['total', 'sent', 'opened', 'started', 'completed', 'bounced'] as const;
 
+const PILL = 'rounded px-1.5 py-0.5 text-xs font-medium';
+const PACE_CLS: Record<PaceState, string> = {
+  upcoming: 'bg-slate-100 text-slate-800',
+  on_track: 'bg-emerald-100 text-emerald-ink-900',
+  met: 'bg-emerald-100 text-emerald-ink-900',
+  behind: 'bg-amber-100 text-amber-ink-900',
+  ended: 'bg-red-100 text-red-ink-900',
+};
+const QUOTA_CLS: Record<QuotaState, string> = {
+  behind: 'bg-amber-100 text-amber-ink-900',
+  near_full: 'bg-amber-100 text-amber-ink-900',
+  on_track: 'bg-slate-100 text-slate-800',
+  met: 'bg-emerald-100 text-emerald-ink-900',
+  full: 'bg-red-100 text-red-ink-900',
+};
+const GOAL_CLS: Record<string, string> = {
+  upcoming: 'bg-slate-100 text-slate-800',
+  rest: 'bg-slate-100 text-slate-800',
+  on_track: 'bg-emerald-100 text-emerald-ink-900',
+  met: 'bg-emerald-100 text-emerald-ink-900',
+  behind: 'bg-amber-100 text-amber-ink-900',
+  missed: 'bg-red-100 text-red-ink-900',
+};
+const GOAL_ORDER: Record<string, number> = {
+  behind: 0,
+  missed: 1,
+  on_track: 2,
+  upcoming: 3,
+  rest: 4,
+  met: 5,
+};
+/** Goals shown on the dashboard; the rest are in Metrics. */
+const GOALS_SHOWN = 5;
+
+interface GoalRow {
+  id: string;
+  name: string | null;
+  completes: number;
+  target: number;
+  frequency: string;
+  state: string;
+}
+
+interface Risks {
+  repeatedFlags: number;
+  interviewers: {
+    userId: string;
+    name: string;
+    pending: number;
+    flagged: number;
+    kinds: Record<string, number>;
+  }[];
+  expiringSoon: number | null;
+  soonHours: number;
+}
+
 /** The live dashboard (M2): Server-Sent Events, reconnecting on its own. */
 export function DashboardTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation();
@@ -48,8 +117,76 @@ export function DashboardTab({ projectId }: { projectId: string }) {
     return () => es.close();
   }, [projectId]);
 
+  // Goals and risks name interviewers: for those who follow the team, not for clients.
+  const canTeam = useCan('metrics.team', projectId);
+  const canReview = useCan('interviews.review', projectId);
+  const goals = useQuery({
+    queryKey: ['goals', projectId],
+    queryFn: () => api<GoalRow[]>(`/projects/${projectId}/goals`),
+    enabled: canTeam,
+  });
+  // Re-read at most once a minute, following the snapshots.
+  const risks = useQuery({
+    queryKey: ['live-risks', projectId, snap?.at.slice(0, 16)],
+    queryFn: () => api<Risks>(`/projects/${projectId}/live/risks`),
+    enabled: canTeam && !!snap,
+    placeholderData: (prev) => prev,
+  });
+
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
+  const day = (d: string) =>
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    });
+  const plan = snap?.plan;
+  const pace =
+    snap && plan
+      ? fieldPace({
+          target: snap.target,
+          completes: snap.completes,
+          startsOn: plan.startsOn,
+          endsOn: plan.endsOn,
+          today: plan.today,
+          byDay: snap.byDay,
+        })
+      : null;
+  const quotas = snap
+    ? quotaStatus(
+        snap.quotas.map((q) => ({ ...q, target: q.target ?? null })),
+        plan ? planProgress(plan.startsOn, plan.endsOn, plan.today) : null,
+      )
+    : [];
+  const quotasBehind = quotas.filter((q) => q.state === 'behind').length;
+  // Goals needing attention first (behind, missed), as the quota cells.
+  const goalList = [...(goals.data ?? [])].sort(
+    (a, b) => (GOAL_ORDER[a.state] ?? 9) - (GOAL_ORDER[b.state] ?? 9),
+  );
+  // A full load: the project page reads its tab from the address when it opens.
+  const href = (tab: string) => `/projects/${projectId}?tab=${tab}`;
+  const riskItems = risks.data
+    ? [
+        ...(pace?.state === 'behind' && pace.requiredPerDay
+          ? [{ key: 'pace', text: t('analysis.live.behindPace', { count: pace.requiredPerDay }) }]
+          : []),
+        ...(quotasBehind
+          ? [{ key: 'quotas', text: t('analysis.live.quotasBehind', { count: quotasBehind }) }]
+          : []),
+        ...(risks.data.expiringSoon
+          ? [
+              {
+                key: 'expiring',
+                text: t('analysis.live.expiring', {
+                  count: risks.data.expiringSoon,
+                  hours: risks.data.soonHours,
+                }),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="dashboard">
@@ -95,6 +232,57 @@ export function DashboardTab({ projectId }: { projectId: string }) {
                 label={t('analysis.live.completes')}
               />
             ) : null}
+            {pace && plan?.startsOn && plan.endsOn ? (
+              <div className="flex flex-col gap-2" data-testid="pace">
+                <p className="flex flex-wrap items-center gap-2 text-slate-600">
+                  <span>
+                    {t('analysis.live.plan', { from: day(plan.startsOn), to: day(plan.endsOn) })}
+                    {pace.day > 0 && plan.today <= plan.endsOn
+                      ? ` · ${t('analysis.live.planDay', { day: pace.day, total: pace.totalDays })}`
+                      : ''}
+                  </span>
+                  <span className={`${PILL} ${PACE_CLS[pace.state]}`} data-testid="pace-state">
+                    {t(`analysis.live.paceStates.${pace.state}`)}
+                  </span>
+                </p>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                  <div>
+                    <dt className="text-xs text-slate-600">{t('analysis.live.expected')}</dt>
+                    <dd className="font-semibold tabular-nums" data-testid="pace-expected">
+                      {pace.expected}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-600">{t('analysis.live.required')}</dt>
+                    <dd className="font-semibold tabular-nums" data-testid="pace-required">
+                      {pace.requiredPerDay ?? '–'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-600">
+                      {t('analysis.live.current', {
+                        count: Math.min(PACE_DAYS, Math.max(1, pace.day)),
+                      })}
+                    </dt>
+                    <dd className="font-semibold tabular-nums">
+                      {pace.currentPerDay === null
+                        ? '–'
+                        : t('analysis.live.perDay', {
+                            n: fmtNum(i18n.language, pace.currentPerDay, 1),
+                          })}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-600">{t('analysis.live.forecast')}</dt>
+                    <dd className="font-semibold tabular-nums" data-testid="pace-forecast">
+                      {pace.forecast ? day(pace.forecast) : '–'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ) : snap.target ? (
+              <p className="text-slate-600">{t('analysis.live.noPlan')}</p>
+            ) : null}
             <BarTable
               caption={t('analysis.live.byMode')}
               rows={MODES.filter((m) => snap.byMode[m] !== undefined).map((m) => ({
@@ -107,11 +295,22 @@ export function DashboardTab({ projectId }: { projectId: string }) {
           </Card>
           <Card className="flex flex-col gap-2">
             <h3 className="font-medium">{t('analysis.live.byDay')}</h3>
-            <DayColumns days={snap.byDay} />
+            <DayColumns
+              days={snap.byDay}
+              goal={
+                pace?.requiredPerDay && (pace.state === 'on_track' || pace.state === 'behind')
+                  ? {
+                      value: pace.requiredPerDay,
+                      label: t('analysis.live.requiredLine', { n: pace.requiredPerDay }),
+                    }
+                  : null
+              }
+            />
           </Card>
-          {snap.quotas.length ? (
-            <Card className="flex flex-col gap-2">
+          {quotas.length ? (
+            <Card className="flex flex-col gap-2 lg:col-span-2">
               <h3 className="font-medium">{t('analysis.live.quotas')}</h3>
+              <p className="text-slate-600">{t('analysis.live.quotaHelp')}</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm" data-testid="quotas">
                   <thead>
@@ -121,29 +320,118 @@ export function DashboardTab({ projectId }: { projectId: string }) {
                         {t('analysis.live.quotaCount')}
                       </th>
                       <th scope="col" className="pl-3 text-right">
+                        {t('analysis.live.quotaAim')}
+                      </th>
+                      <th scope="col" className="pl-3 text-right">
                         {t('analysis.live.quotaMax')}
                       </th>
-                      <th scope="col" className="w-1/3">
-                        <span className="sr-only">%</span>
+                      <th scope="col" className="pl-3 text-right">
+                        %
+                      </th>
+                      <th scope="col" className="pl-3 text-right">
+                        {t('analysis.live.quotaMissing')}
+                      </th>
+                      <th scope="col" className="pl-3">
+                        {t('analysis.live.quotaState')}
+                      </th>
+                      <th scope="col" className="w-1/4">
+                        <span className="sr-only">{t('analysis.live.quotaAim')}</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {snap.quotas.map((q) => (
-                      <tr key={q.id}>
+                    {quotas.map((q) => (
+                      <tr key={q.id} data-quota={q.id} data-state={q.state}>
                         <th scope="row" className="py-1 text-left font-normal">
                           {q.name}
                         </th>
                         <td className="pl-3 text-right tabular-nums">{q.count}</td>
+                        <td className="pl-3 text-right tabular-nums">{q.aim}</td>
                         <td className="pl-3 text-right tabular-nums">{q.max}</td>
+                        <td className="pl-3 text-right tabular-nums">
+                          {fmtPct(i18n.language, q.share)}
+                        </td>
+                        <td className="pl-3 text-right tabular-nums">{q.missing}</td>
                         <td className="pl-3">
-                          <Progress value={q.count} max={q.max} label={q.name} />
+                          <span className={`${PILL} whitespace-nowrap ${QUOTA_CLS[q.state]}`}>
+                            {t(`analysis.live.quotaStates.${q.state}`)}
+                          </span>
+                          {q.state === 'behind' && q.expected !== null ? (
+                            <span className="block text-xs text-slate-600">
+                              {t('analysis.live.quotaExpected', { count: q.expected })}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="pl-3">
+                          <Progress value={q.count} max={q.aim} label={q.name} />
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </Card>
+          ) : null}
+          {canTeam && goalList.length ? (
+            <Card className="flex flex-col gap-2">
+              <h3 className="font-medium">{t('analysis.live.goals')}</h3>
+              <ul className="divide-y divide-slate-100" data-testid="dashboard-goals">
+                {goalList.slice(0, GOALS_SHOWN).map((g) => (
+                  <li
+                    key={g.id}
+                    data-goal={g.name ?? 'team'}
+                    className="flex flex-wrap items-center justify-between gap-2 py-1"
+                  >
+                    <span className="font-medium">{g.name ?? t('analysis.goals.team')}</span>
+                    <span className="flex items-center gap-2 text-slate-600">
+                      <span className="tabular-nums">
+                        {t('analysis.goals.count', { done: g.completes, target: g.target })}{' '}
+                        {t(`analysis.goals.per.${g.frequency}`)}
+                      </span>
+                      <span className={`${PILL} ${GOAL_CLS[g.state] ?? ''}`}>
+                        {t(`analysis.goals.states.${g.state}`)}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <a className="text-indigo-ink-700 underline" href={href('metrics')}>
+                {t('analysis.live.goalsSeeAll')}
+              </a>
+            </Card>
+          ) : null}
+          {canTeam && risks.data ? (
+            <Card className="flex flex-col gap-2">
+              <h3 className="font-medium">{t('analysis.live.risks')}</h3>
+              {riskItems.length || risks.data.interviewers.length ? (
+                <ul className="flex flex-col gap-1" data-testid="risks">
+                  {riskItems.map((r) => (
+                    <li key={r.key} data-risk={r.key}>
+                      {r.text}
+                    </li>
+                  ))}
+                  {risks.data.interviewers.map((r) => (
+                    <li key={r.userId} data-risk="interviewer">
+                      <span className="font-medium">{r.name}</span>
+                      {': '}
+                      {t('analysis.live.flagged', { flagged: r.flagged, pending: r.pending })}
+                      <span className="block text-xs text-slate-600">
+                        {Object.entries(r.kinds)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([k, n]) => `${t(`review.flags.${k}`, { defaultValue: k })} (${n})`)
+                          .join(' · ')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-slate-600">{t('analysis.live.risksNone')}</p>
+              )}
+              {canReview && risks.data.interviewers.length ? (
+                <a className="text-indigo-ink-700 underline" href={href('review')}>
+                  {t('analysis.live.reviewQueue')}
+                </a>
+              ) : null}
             </Card>
           ) : null}
           <Card className="flex flex-col gap-3">
