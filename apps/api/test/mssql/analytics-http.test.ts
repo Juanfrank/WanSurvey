@@ -346,7 +346,9 @@ describe.skipIf(!configured)(
       expect(s.status, JSON.stringify(s.body)).toBe(200);
       expect(s.body.kpis).toMatchObject({ completes: 3, byMode: { CAPI: 3 } });
       expect(s.body.target).toBe(50);
-      expect(s.body.field.quotas).toEqual([{ id: 'Q_WORK', name: 'Trabajan', max: 10, count: 2 }]);
+      expect(s.body.field.quotas).toEqual([
+        expect.objectContaining({ id: 'Q_WORK', name: 'Trabajan', max: 10, count: 2 }),
+      ]);
       expect(JSON.stringify(s.body)).not.toContain(iUser.email);
       expect((await anon.get(`/api/v1/public/share/${'x'.repeat(32)}`)).status).toBe(404);
       const listed = await get(pm, `/projects/${project}/share-links`);

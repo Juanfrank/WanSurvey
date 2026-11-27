@@ -53,9 +53,9 @@ describe('the one-file SQL script', () => {
     const users = buildScript({ ...opts, part: 'users' });
     expect(tables).toContain('CREATE TABLE survey.tenants');
     expect(tables).not.toContain('CREATE USER');
-    expect(tables).not.toMatch(/^GRANT [A-Z, ]+ ON survey\.\w+ TO survey_rw/m);
+    expect(tables).not.toMatch(/^EXEC\(N'GRANT [A-Z, ]+ ON survey\.\w+ TO survey_rw/m);
     expect(users).not.toContain('CREATE TABLE survey.tenants');
-    expect(users).toMatch(/^GRANT [A-Z, ]+ ON survey\.\w+ TO survey_rw/m);
+    expect(users).toMatch(/^EXEC\(N'GRANT [A-Z, ]+ ON survey\.\w+ TO survey_rw/m);
     expect(users).toContain('run (1) first');
     expect(users).not.toContain('INSERT INTO survey.__migrations');
   });
@@ -79,13 +79,15 @@ describe('the one-file SQL script', () => {
       .filter((t) => t !== '__migrations');
     expect(tables.length).toBeGreaterThan(70);
     for (const t of tables)
-      expect(text).toMatch(new RegExp(`-- ─── Table ${t} ─+\\nCREATE TABLE survey\\.${t} \\(`));
+      expect(text).toMatch(
+        new RegExp(`-- ─── Table ${t} ─+\\nEXEC\\(N'CREATE TABLE survey\\.${t} \\(`),
+      );
     // A heading is written once, not each time the kind comes up again.
     expect(text.match(/-- ═══ Tables /g)).toHaveLength(1);
     expect(text.match(/-- ═══ Functions and views /g)).toHaveLength(1);
     const users = buildScript({ schema: 'survey', appUser: 'survey_rw', part: 'users' });
     expect(users).toContain('-- ═══ Permissions of the application user ');
-    expect(users).toMatch(/-- ─── On tenants ─+\nGRANT/);
+    expect(users).toMatch(/-- ─── On tenants ─+\nEXEC\(N'GRANT/);
   });
 
   it('leaves the migrations out of the installation, and writes them apart when some are newer', () => {
