@@ -260,6 +260,80 @@ describe.skipIf(!configured)('SQL Server: paper forms over HTTP', () => {
     expect(third.body.code).toBe('CASE_CLOSED');
     await doubleEntry(false);
   });
+  it('double entry: who keyed each value, a third value with a note, and the agreement', async () => {
+    await doubleEntry(true);
+    const agreement = async () =>
+      (await supervisor.agent.get(`/api/v1/projects/${project}/papi/agreement`)).body as {
+        forms: number;
+        formsWithDifferences: number;
+        clerks: { name: string; forms: number; errors: number }[];
+        variables: { variable: string; differences: number }[];
+      };
+    const before = await agreement();
+    const caseId = await newCase(clerk1.id, 'P0400');
+    const first = (await key(k1, caseId, 41, 1, 'clerk-desk-0001')) as { interviewId: string };
+    await key(k2, caseId, 14, 2, 'clerk-desk-0002');
+    const open = (await supervisor.agent.get(`/api/v1/projects/${project}/papi/mismatches`))
+      .body as { id: string; externalId: string; variable: string; secondClerk: string }[];
+    const mine = open.filter((m) => m.externalId === 'P0400');
+    expect(mine.map((m) => m.variable)).toEqual(['AGE', 'SEX']);
+    expect(mine[0]).toMatchObject({ firstClerk: clerk1.email });
+    const clerk2 = mine[0]!.secondClerk;
+    expect(clerk2).toMatch(/@example\.org$/);
+    const age = mine[0]!.id;
+    // A typed value goes with choice "other" only.
+    expect(
+      (
+        await post(supervisor, `/projects/${project}/papi/mismatches/${age}/resolve`, {
+          choice: 'other',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await post(supervisor, `/projects/${project}/papi/mismatches/${age}/resolve`, {
+          choice: 'first',
+          value: 3,
+        })
+      ).status,
+    ).toBe(400);
+    // The typed value is checked like any answer.
+    const bad = await post(supervisor, `/projects/${project}/papi/mismatches/${age}/resolve`, {
+      choice: 'other',
+      value: 'abc',
+    });
+    expect(bad.status).toBe(400);
+    // Both clerks misread the form: it says 40.
+    const r = await post(supervisor, `/projects/${project}/papi/mismatches/${age}/resolve`, {
+      choice: 'other',
+      value: 40,
+      note: 'Leído en el formulario',
+    });
+    expect(r.body).toEqual({ resolved: true, value: 40, caseFinished: false });
+    await post(supervisor, `/projects/${project}/papi/mismatches/${mine[1]!.id}/resolve`, {
+      choice: 'first',
+    }).expect(200);
+    const [iv] = await rows(sql`SELECT answers FROM interviews WHERE id = ${first.interviewId}`);
+    expect(JSON.parse(iv!.answers as string)).toMatchObject({ AGE: 40, SEX: 1 });
+    const [audit] = await rows(sql`SELECT details FROM audit_log
+      WHERE action = 'entry.resolved' AND target_id = ${caseId} AND details LIKE '%other%'`);
+    expect(JSON.parse(audit!.details as string)).toMatchObject({
+      variable: 'AGE',
+      choice: 'other',
+      value: 40,
+      note: 'Leído en el formulario',
+    });
+    const after = await agreement();
+    expect(after.forms).toBe(before.forms + 1);
+    expect(after.formsWithDifferences).toBe(before.formsWithDifferences + 1);
+    const errors = (name: string, a: typeof after) =>
+      a.clerks.find((c) => c.name === name)?.errors ?? 0;
+    // Clerk 1 was wrong on AGE only; clerk 2 on AGE and SEX.
+    expect(errors(clerk1.email, after)).toBe(errors(clerk1.email, before) + 1);
+    expect(errors(clerk2, after)).toBe(errors(clerk2, before) + 2);
+    expect(after.variables.map((v) => v.variable)).toContain('AGE');
+    await doubleEntry(false);
+  });
   it('double entry still works when the first entry was reviewed meanwhile', async () => {
     await doubleEntry(true);
     const caseId = await newCase(clerk1.id, 'P0300');

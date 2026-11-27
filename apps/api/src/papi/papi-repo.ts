@@ -92,6 +92,21 @@ export interface MismatchListing {
   resolvedAt: Date | null;
   firstInterviewId: string;
   questionnaireVersionId: string;
+  /** Who keyed each entry (the clerks' names). */
+  firstClerk: string | null;
+  secondClerk: string | null;
+}
+
+/** How often the two keyings of a form agree (double entry), for data-quality follow-up. */
+export interface EntryAgreement {
+  /** Forms keyed twice and compared. */
+  forms: number;
+  /** Of those, the ones with at least one difference. */
+  formsWithDifferences: number;
+  /** Per clerk: compared forms keyed, and resolved differences where their value was not kept. */
+  clerks: { name: string; forms: number; errors: number }[];
+  /** The questions with the most differences. */
+  variables: { variable: string; differences: number }[];
 }
 
 export interface NewForm {
@@ -149,6 +164,7 @@ export interface PapiTx extends InterviewsTx {
     }[],
   ): Promise<void>;
   mismatches(projectId: string, status: 'open' | 'resolved' | 'all'): Promise<MismatchListing[]>;
+  entryAgreement(projectId: string): Promise<EntryAgreement>;
   lockMismatch(projectId: string, id: string): Promise<MismatchRow | null>;
   resolveMismatch(id: string, v: { value: unknown; by: string; at: Date }): Promise<void>;
   /** Sets (or, with null, drops) one answer of an interview, in its answers and in its state. */
@@ -411,11 +427,14 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
     const res = await ksql<Record<string, unknown>>`
       SELECT TOP (1000) m.id, m.case_id, c.external_id, m.variable, m.first_value, m.second_value,
         m.status, m.resolved_value, u.name AS resolver, m.resolved_at, m.first_interview_id,
-        i.questionnaire_version_id
+        i.questionnaire_version_id, u1.name AS first_clerk, u2.name AS second_clerk
       FROM entry_mismatches m
       JOIN cases c ON c.id = m.case_id
       JOIN interviews i ON i.id = m.first_interview_id
+      LEFT JOIN interviews i2 ON i2.id = m.second_interview_id
       LEFT JOIN users u ON u.id = m.resolved_by
+      LEFT JOIN users u1 ON u1.id = i.interviewer_id
+      LEFT JOIN users u2 ON u2.id = i2.interviewer_id
       WHERE m.project_id = ${projectId} ${status === 'all' ? ksql`` : ksql`AND m.status = ${status}`}
       ORDER BY c.external_id, m.variable`.execute(this.pmtx);
     return res.rows.map((r) => ({
@@ -431,7 +450,62 @@ export class MssqlPapiTx extends MssqlInterviewsTx implements PapiTx {
       resolvedAt: (r.resolved_at as Date | null) ?? null,
       firstInterviewId: low(r.first_interview_id as string),
       questionnaireVersionId: low(r.questionnaire_version_id as string),
+      firstClerk: (r.first_clerk as string | null) ?? null,
+      secondClerk: (r.second_clerk as string | null) ?? null,
     }));
+  }
+
+  async entryAgreement(projectId: string): Promise<EntryAgreement> {
+    // Every comparison of two keyings leaves one case event (afterSubmit).
+    const pairs = ksql`
+      SELECT e.type, TRY_CAST(JSON_VALUE(e.details, '$.first') AS uniqueidentifier) AS f,
+        TRY_CAST(JSON_VALUE(e.details, '$.second') AS uniqueidentifier) AS s
+      FROM case_events e JOIN cases c ON c.id = e.case_id
+      WHERE c.project_id = ${projectId} AND e.type IN ('entries_match', 'entries_differ')`;
+    const totals = await ksql<{ forms: number; differ: number }>`
+      SELECT COUNT(*) AS forms, ISNULL(SUM(CASE WHEN p.type = 'entries_differ' THEN 1 ELSE 0 END), 0)
+        AS differ
+      FROM (${pairs}) p`.execute(this.pmtx);
+    const forms = await ksql<{ id: string; name: string; forms: number }>`
+      SELECT u.id, u.name, COUNT(*) AS forms
+      FROM (${pairs}) p
+      CROSS APPLY (VALUES (p.f), (p.s)) v (iid)
+      JOIN interviews i ON i.id = v.iid
+      JOIN users u ON u.id = i.interviewer_id
+      GROUP BY u.id, u.name`.execute(this.pmtx);
+    // A resolved difference counts against the clerk whose value was not kept.
+    const errors = await ksql<{ id: string; errors: number }>`
+      SELECT i.interviewer_id AS id, COUNT(*) AS errors
+      FROM entry_mismatches m
+      CROSS APPLY (VALUES (m.first_interview_id, m.first_value),
+        (m.second_interview_id, m.second_value)) v (iid, val)
+      JOIN interviews i ON i.id = v.iid
+      WHERE m.project_id = ${projectId} AND m.status = 'resolved'
+        -- Compared as the difference was found: exactly (not by the database's collation).
+        AND ISNULL(v.val, N'null') COLLATE Latin1_General_BIN2
+          <> ISNULL(m.resolved_value, N'null') COLLATE Latin1_General_BIN2
+        AND i.interviewer_id IS NOT NULL
+      GROUP BY i.interviewer_id`.execute(this.pmtx);
+    const variables = await ksql<{ variable: string; differences: number }>`
+      SELECT TOP (5) variable, COUNT(*) AS differences FROM entry_mismatches
+      WHERE project_id = ${projectId}
+      GROUP BY variable ORDER BY COUNT(*) DESC, variable`.execute(this.pmtx);
+    const errorsOf = new Map(errors.rows.map((r) => [low(r.id), Number(r.errors)]));
+    return {
+      forms: Number(totals.rows[0]?.forms ?? 0),
+      formsWithDifferences: Number(totals.rows[0]?.differ ?? 0),
+      clerks: forms.rows
+        .map((r) => ({
+          name: r.name,
+          forms: Number(r.forms),
+          errors: errorsOf.get(low(r.id)) ?? 0,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      variables: variables.rows.map((r) => ({
+        variable: r.variable,
+        differences: Number(r.differences),
+      })),
+    };
   }
 
   async lockMismatch(projectId: string, id: string) {

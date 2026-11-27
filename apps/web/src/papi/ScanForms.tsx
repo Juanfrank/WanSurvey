@@ -52,7 +52,8 @@ export function ScanForms({
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
-  const [message, setMessage] = useState('');
+  // What to say, not the text: it follows the interface language when it changes.
+  const [message, setMessage] = useState<{ uploaded: number } | { error: unknown } | null>(null);
   const [inputKey, setInputKey] = useState(0);
   const list = useQuery({
     queryKey: ['papi-scans', projectId],
@@ -68,12 +69,12 @@ export function ScanForms({
       return upload<{ batches: string[] }>(`/projects/${projectId}/papi/scans`, form);
     },
     onSuccess: async (r) => {
-      setMessage(t('papi.scans.uploaded', { count: r.batches.length }));
+      setMessage({ uploaded: r.batches.length });
       setFiles([]);
       setInputKey((k) => k + 1);
       await qc.invalidateQueries({ queryKey: ['papi-scans', projectId] });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
   // The second round: this device takes the form's interview, which opens like any keyed form.
   const complete = async (f: ScanForm) => {
@@ -92,7 +93,7 @@ export function ScanForms({
         params: { projectId, interviewId },
       });
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     }
   };
 
@@ -121,7 +122,11 @@ export function ScanForms({
         </Button>
       </form>
       <p role="status" aria-live="polite" className="empty:hidden">
-        {message}
+        {!message
+          ? null
+          : 'uploaded' in message
+            ? t('papi.scans.uploaded', { count: message.uploaded })
+            : localiseError(t, message.error)}
       </p>
       {list.data && !list.data.length ? (
         <p className="text-slate-600">{t('papi.scans.none')}</p>

@@ -26,9 +26,12 @@ interface ScanInfo {
 export function ScanPanel({
   interviewId,
   currentKey,
+  pathKeys = [],
 }: {
   interviewId: string;
   currentKey: string | null;
+  /** The items on the interview's path, in order: to count the questions left for this round. */
+  pathKeys?: string[];
 }) {
   const { t } = useTranslation();
   const info = useQuery({
@@ -42,6 +45,9 @@ export function ScanPanel({
   const name = currentKey.split('[', 1)[0]!;
   const q = info.data.questions[name];
   const projectId = info.data.projectId;
+  // The questions left for this round, in the order they come: where the current one is.
+  const pending = pathKeys.filter((k) => info.data.questions[k.split('[', 1)[0]!]?.issue);
+  const at = pending.indexOf(currentKey);
   return (
     <section
       aria-labelledby="scan-panel"
@@ -51,6 +57,13 @@ export function ScanPanel({
       <h2 id="scan-panel" className="font-semibold">
         {t('papi.scans.panel')}
       </h2>
+      {pending.length ? (
+        <p className="font-medium" data-testid="scan-progress">
+          {at >= 0
+            ? t('papi.scans.progress', { n: at + 1, total: pending.length })
+            : t('papi.scans.progressOff', { count: pending.length })}
+        </p>
+      ) : null}
       {q?.issue ? (
         <p data-testid="scan-reason">
           {t('papi.scans.reason', {

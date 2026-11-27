@@ -106,10 +106,13 @@ export function PaperForm({ compiled, lang, context = {}, formId }: PaperFormPro
       {node.skips.map((s, i) =>
         s.expr.ast ? (
           <p key={`s${i}`} className="paper-route font-semibold">
-            {t('paper.ifGoTo', {
-              condition: describeCondition(s.expr.ast, ctx),
-              target: targetText(s.target),
-            })}
+            {/* "pase al final", not "pase a el final". */}
+            {s.target === SKIP_END
+              ? t('paper.ifGoToEnd', { condition: describeCondition(s.expr.ast, ctx) })
+              : t('paper.ifGoTo', {
+                  condition: describeCondition(s.expr.ast, ctx),
+                  target: targetText(s.target),
+                })}
           </p>
         ) : null,
       )}
@@ -118,7 +121,8 @@ export function PaperForm({ compiled, lang, context = {}, formId }: PaperFormPro
           <p key={`e${i}`} className="paper-route font-semibold">
             {t('paper.ifEnd', {
               condition: describeCondition(e.expr.ast, ctx),
-              disposition: e.disposition,
+              // The outcome's name, not its internal code (REFUSAL).
+              disposition: t(`disposition.${e.disposition}`, { defaultValue: e.disposition }),
             })}
           </p>
         ) : null,

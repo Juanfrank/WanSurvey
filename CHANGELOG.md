@@ -179,6 +179,15 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   an open case in the address (`?case=`); a three-level breadcrumb on the project and device pages;
   "My device" first beside the tabs. Interviewers and clerks no longer get the Questionnaires tab (paper
   forms are their own tab) and their case filter lists only published questionnaires.
+- **Double entry with context**: each difference shows which clerk keyed each value; when both are
+  wrong the supervisor types the value read on the form (checked like a reviewer's correction), with an
+  optional reason kept in the audit log
+  (`choice: "other"`); and a summary gives the forms compared, the share without differences, the values
+  not kept per clerk and the questions with most differences (`GET papi/agreement`). The paper form's
+  date and duration are checked (not after today; 1 to 600 whole minutes), and the second round of a
+  scanned form says which of the questions left it is on. Printed forms name the outcome ("rechazo",
+  not `REFUSAL`) and say "pase al final"; the routing map reads "salta a la siguiente fila del roster".
+  The upload message of scanned forms follows the interface language.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

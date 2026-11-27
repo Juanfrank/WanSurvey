@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
+import { number } from '../format.js';
 import { localiseError } from '../i18n-messages.js';
 import { startInterview } from '../interview/useInterview.js';
 import { Button } from '../routes/ui.js';
@@ -16,6 +17,36 @@ interface Mismatch {
   variable: string;
   firstValue: unknown;
   secondValue: unknown;
+  /** Who keyed each entry. */
+  firstClerk: string | null;
+  secondClerk: string | null;
+}
+interface Agreement {
+  forms: number;
+  formsWithDifferences: number;
+  clerks: { name: string; forms: number; errors: number }[];
+  variables: { variable: string; differences: number }[];
+}
+type Choice = { choice: 'first' | 'second' } | { choice: 'other'; value: unknown; note?: string };
+
+/**
+ * What the supervisor typed, as the question holds it: a number when the entries are numbers
+ * (with a decimal point or comma), a list of codes when they are lists. `undefined` when it
+ * cannot be one (empty, or not a number where a number is expected).
+ */
+export function typedValue(text: string, m: Pick<Mismatch, 'firstValue' | 'secondValue'>): unknown {
+  const v = text.trim();
+  if (!v) return undefined;
+  const numeric = (x: string) => /^-?\d+([.,]\d+)?$/.test(x);
+  const both = [m.firstValue, m.secondValue];
+  if (both.some(Array.isArray))
+    return v
+      .split(/[\s;]+|,\s*/)
+      .filter(Boolean)
+      .map((x) => (numeric(x) ? Number(x.replace(',', '.')) : x));
+  if (both.some((x) => typeof x === 'number'))
+    return numeric(v) ? Number(v.replace(',', '.')) : undefined;
+  return v;
 }
 
 const show = (v: unknown) =>
@@ -219,30 +250,77 @@ function Mismatches({ projectId }: { projectId: string }) {
     queryKey: ['papi-mismatches', projectId],
     queryFn: () => api<Mismatch[]>(`/projects/${projectId}/papi/mismatches`),
   });
-  const [message, setMessage] = useState('');
-  const resolve = useMutation({
-    mutationFn: (v: { m: Mismatch; choice: 'first' | 'second' }) =>
-      api<{ caseFinished: boolean }>(`/projects/${projectId}/papi/mismatches/${v.m.id}/resolve`, {
-        method: 'POST',
-        body: { choice: v.choice },
-      }),
-    onSuccess: async (r, v) => {
-      setMessage(
-        r.caseFinished
-          ? `${t('papi.mismatches.resolved', { variable: v.m.variable, id: v.m.externalId })} ${t('papi.mismatches.finished', { id: v.m.externalId })}`
-          : t('papi.mismatches.resolved', { variable: v.m.variable, id: v.m.externalId }),
-      );
-      await qc.invalidateQueries({ queryKey: ['papi-mismatches', projectId] });
-    },
-    onError: (e) => setMessage(localiseError(t, e)),
+  const agreement = useQuery({
+    queryKey: ['papi-agreement', projectId],
+    queryFn: () => api<Agreement>(`/projects/${projectId}/papi/agreement`),
   });
+  // What to say, not the text, so it follows the interface language.
+  const [message, setMessage] = useState<
+    { variable: string; id: string; finished: boolean } | { error: unknown } | null
+  >(null);
+  // The difference whose right value is being typed (both entries wrong).
+  const [typing, setTyping] = useState<string | null>(null);
+  const resolve = useMutation({
+    mutationFn: (v: { m: Mismatch } & Choice) => {
+      const { m, ...body } = v;
+      return api<{ caseFinished: boolean }>(
+        `/projects/${projectId}/papi/mismatches/${m.id}/resolve`,
+        { method: 'POST', body },
+      );
+    },
+    onSuccess: async (r, v) => {
+      setMessage({ variable: v.m.variable, id: v.m.externalId, finished: r.caseFinished });
+      setTyping(null);
+      await qc.invalidateQueries({ queryKey: ['papi-mismatches', projectId] });
+      await qc.invalidateQueries({ queryKey: ['papi-agreement', projectId] });
+    },
+    onError: (e) => setMessage({ error: e }),
+  });
+  const a = agreement.data;
   return (
     <section aria-labelledby="papi-mismatches" className="flex flex-col gap-2">
       <h2 id="papi-mismatches" className="text-base font-semibold">
         {t('papi.mismatches.title')}
       </h2>
+      {a && a.forms > 0 ? (
+        <div className="flex flex-col gap-1 text-slate-700" data-testid="entry-agreement">
+          <p>
+            {t('papi.mismatches.agreement', {
+              count: a.forms,
+              differ: a.formsWithDifferences,
+              agree: `${number((100 * (a.forms - a.formsWithDifferences)) / a.forms, 1)} %`,
+            })}
+          </p>
+          {a.clerks.length ? (
+            <p>
+              {t('papi.mismatches.byClerk')}{' '}
+              {a.clerks
+                .map((c) =>
+                  t('papi.mismatches.clerkErrors', {
+                    name: c.name,
+                    errors: c.errors,
+                    count: c.forms,
+                  }),
+                )
+                .join(' · ')}
+            </p>
+          ) : null}
+          {a.variables.length ? (
+            <p>
+              {t('papi.mismatches.byVariable')}{' '}
+              {a.variables.map((v) => `${v.variable} (${v.differences})`).join(' · ')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <p role="status" aria-live="polite" className="empty:hidden" data-testid="mismatch-message">
-        {message}
+        {!message
+          ? null
+          : 'error' in message
+            ? localiseError(t, message.error)
+            : message.finished
+              ? `${t('papi.mismatches.resolved', message)} ${t('papi.mismatches.finished', message)}`
+              : t('papi.mismatches.resolved', message)}
       </p>
       {list.data?.length ? (
         <div className="overflow-x-auto">
@@ -260,36 +338,79 @@ function Mismatches({ projectId }: { projectId: string }) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {list.data.map((m) => (
-                <tr key={m.id} data-mismatch={`${m.externalId}:${m.variable}`}>
+                <tr
+                  key={m.id}
+                  className="align-top"
+                  data-mismatch={`${m.externalId}:${m.variable}`}
+                >
                   <td className="py-1.5 font-medium">{m.externalId}</td>
-                  <td className="font-mono">{m.variable}</td>
-                  <td className="font-mono">{show(m.firstValue)}</td>
-                  <td className="font-mono">{show(m.secondValue)}</td>
-                  <td className="flex flex-wrap gap-2 py-1">
-                    <button
-                      type="button"
-                      className={smallBtn}
-                      disabled={resolve.isPending}
-                      onClick={() => resolve.mutate({ m, choice: 'first' })}
-                    >
-                      {t('papi.mismatches.keepFirst')}
-                      <span className="sr-only">
-                        {' '}
-                        {m.externalId} {m.variable}
+                  <td className="py-1.5 font-mono">{m.variable}</td>
+                  <td className="py-1.5">
+                    <span className="font-mono">{show(m.firstValue)}</span>
+                    {m.firstClerk ? (
+                      <span className="block text-xs text-slate-600">
+                        {t('papi.mismatches.by', { name: m.firstClerk })}
                       </span>
-                    </button>
-                    <button
-                      type="button"
-                      className={smallBtn}
-                      disabled={resolve.isPending}
-                      onClick={() => resolve.mutate({ m, choice: 'second' })}
-                    >
-                      {t('papi.mismatches.useSecond')}
-                      <span className="sr-only">
-                        {' '}
-                        {m.externalId} {m.variable}
+                    ) : null}
+                  </td>
+                  <td className="py-1.5">
+                    <span className="font-mono">{show(m.secondValue)}</span>
+                    {m.secondClerk ? (
+                      <span className="block text-xs text-slate-600">
+                        {t('papi.mismatches.by', { name: m.secondClerk })}
                       </span>
-                    </button>
+                    ) : null}
+                  </td>
+                  <td className="py-1">
+                    {typing === m.id ? (
+                      <OtherValue
+                        m={m}
+                        busy={resolve.isPending}
+                        onCancel={() => setTyping(null)}
+                        onSave={(value, note) =>
+                          resolve.mutate({ m, choice: 'other', value, ...(note ? { note } : {}) })
+                        }
+                      />
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          disabled={resolve.isPending}
+                          onClick={() => resolve.mutate({ m, choice: 'first' })}
+                        >
+                          {t('papi.mismatches.keepFirst')}
+                          <span className="sr-only">
+                            {' '}
+                            {m.externalId} {m.variable}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          disabled={resolve.isPending}
+                          onClick={() => resolve.mutate({ m, choice: 'second' })}
+                        >
+                          {t('papi.mismatches.useSecond')}
+                          <span className="sr-only">
+                            {' '}
+                            {m.externalId} {m.variable}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          disabled={resolve.isPending}
+                          onClick={() => setTyping(m.id)}
+                        >
+                          {t('papi.mismatches.other')}
+                          <span className="sr-only">
+                            {' '}
+                            {m.externalId} {m.variable}
+                          </span>
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -300,5 +421,67 @@ function Mismatches({ projectId }: { projectId: string }) {
         <p className="text-slate-600">{t('papi.mismatches.none')}</p>
       )}
     </section>
+  );
+}
+
+/** Both entries wrong: the value read on the paper form, and why, kept in the audit log. */
+function OtherValue({
+  m,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  m: Mismatch;
+  busy: boolean;
+  onSave(value: unknown, note: string): void;
+  onCancel(): void;
+}) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState('');
+  const [note, setNote] = useState('');
+  const parsed = typedValue(value, m);
+  // Shown once something is typed that the question cannot hold.
+  const wrong = !!value.trim() && parsed === undefined;
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      aria-label={t('papi.mismatches.otherTitle', { variable: m.variable, id: m.externalId })}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (parsed !== undefined) onSave(parsed, note.trim());
+      }}
+    >
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium">{t('papi.mismatches.otherValue')}</span>
+        <input
+          className={`${controlCls} w-28 font-mono`}
+          value={value}
+          autoFocus
+          aria-invalid={wrong ? true : undefined}
+          aria-describedby={wrong ? `other-${m.id}-error` : undefined}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        {wrong ? (
+          <span id={`other-${m.id}-error`} className="text-xs text-red-ink-800">
+            {t('papi.mismatches.notNumber')}
+          </span>
+        ) : null}
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium">{t('papi.mismatches.note')}</span>
+        <input
+          className={`${controlCls} w-56`}
+          value={note}
+          maxLength={500}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </label>
+      <Button type="submit" size="sm" disabled={busy || parsed === undefined}>
+        {t('papi.mismatches.save')}
+      </Button>
+      <Button type="button" size="sm" variant="secondary" onClick={onCancel}>
+        {t('papi.mismatches.cancel')}
+      </Button>
+    </form>
   );
 }
