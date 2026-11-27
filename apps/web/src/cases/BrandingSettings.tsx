@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, upload } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Shell } from '../respondent/RespondentPage.js';
-import { contrast } from '../respondent/theme.js';
+import { themeProblems } from '../respondent/theme.js';
 import { ProjectLogo } from '../routes/ProjectLogo.js';
 import { Button, ErrorText } from '../routes/ui.js';
 
@@ -60,9 +60,13 @@ export function BrandingSettings({ project }: { project: Project }) {
     onSuccess: (p) => done(p, t('cases.look.saved')),
     onError: fail,
   });
-  const set = (patch: Partial<CawiTheme>) => setTheme({ ...theme, ...patch });
-  const readable =
-    contrast(theme.primary, '#ffffff') >= 4.5 || contrast(theme.primary, '#0b1530') >= 4.5;
+  const set = (patch: Partial<CawiTheme>) => {
+    setError(null);
+    setTheme({ ...theme, ...patch });
+  };
+  // Every shade made from the main colour is checked; a style respondents could not read is
+  // not saved.
+  const problems = themeProblems(theme);
   const logoUrl = project.logoUpdatedAt
     ? `/api/v1/projects/${project.id}/logo?v=${Date.parse(project.logoUpdatedAt)}`
     : null;
@@ -190,20 +194,46 @@ export function BrandingSettings({ project }: { project: Project }) {
             </select>
           </label>
         </div>
-        {!readable ? (
-          <p className="text-amber-ink-800" role="status">
-            {t('cases.look.lowContrast')}
-          </p>
-        ) : null}
+        <label className="flex max-w-xl flex-col gap-1">
+          <span className="font-medium">{t('cases.look.logoAlt')}</span>
+          <input
+            className={inputCls}
+            maxLength={150}
+            value={theme.logoAlt ?? ''}
+            aria-describedby="look-logo-alt-help"
+            onChange={(e) => set({ logoAlt: e.target.value })}
+          />
+          <span id="look-logo-alt-help" className="text-slate-600">
+            {t('cases.look.logoAltHelp')}
+          </span>
+        </label>
+        <div role="status" className="empty:hidden">
+          {problems.length ? (
+            <ul className="list-disc pl-5 text-amber-ink-800" data-testid="look-problems">
+              {problems.map((p) => (
+                <li key={p}>{t(`cases.look.contrast.${p}`)}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
         <div className="flex items-center gap-3">
-          <Button type="button" size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={save.isPending}
+            onClick={() => {
+              if (!problems.length) return save.mutate();
+              setMessage('');
+              setError(t('cases.look.cannotSave'));
+            }}
+          >
             {t('cases.look.save')}
           </Button>
           <button
             type="button"
             className={smallBtn}
             onClick={() =>
-              setTheme({
+              set({
                 primary: '#0050dd',
                 background: '#f8fafc',
                 font: 'sans',

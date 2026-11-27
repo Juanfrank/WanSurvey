@@ -30,7 +30,16 @@ test('a project logo, and the web survey in the project colours with it', async 
   // The project header shows it at once.
   await expect(page.getByTestId('project-logo').first()).toBeVisible();
 
+  // A main colour whose shades respondents could not read is not saved.
+  await page.getByLabel('Main colour').fill('#ffd400');
+  await expect(page.getByTestId('look-problems').getByRole('listitem')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Save style' }).click();
+  await expect(page.getByText(/^The style was not saved/)).toBeVisible();
+  await expect(page.getByText('Style saved.')).toHaveCount(0);
+
   await page.getByLabel('Main colour').fill('#7a1f5c');
+  await expect(page.getByTestId('look-problems')).toHaveCount(0);
+  await page.getByLabel('Logo description').fill('Instituto Demo de Estadística');
   await page.getByRole('combobox', { name: 'Corners' }).selectOption({ label: 'Very round' });
   await page
     .getByRole('combobox', { name: 'Logo', exact: true })
@@ -60,7 +69,9 @@ test('a project logo, and the web survey in the project colours with it', async 
   const respondent = await (await browser.newContext()).newPage();
   await respondent.goto(`/o/${l.slug}`);
   const shell = respondent.getByTestId('respondent-shell');
-  await expect(shell.locator('header img')).toBeVisible();
+  await expect(shell.getByRole('img', { name: 'Instituto Demo de Estadística' })).toBeVisible();
+  // The page opens with the introduction: focus starts there, so it is read before the question.
+  await expect(respondent.locator('[data-qkey^="A0_CONSENT_TEXT"]')).toBeFocused();
   await expect(respondent.getByRole('button', { name: /^Siguiente/ })).toHaveCSS(
     'background-color',
     'rgb(122, 31, 92)',
@@ -73,6 +84,7 @@ test('a project logo, and the web survey in the project colours with it', async 
     data: { active: false },
   });
   await page.getByRole('button', { name: 'Back to the default style' }).click();
+  await page.getByLabel('Logo description').fill('');
   await page.getByRole('button', { name: 'Save style' }).click();
   await expect(page.getByText('Style saved.')).toBeVisible();
   page.once('dialog', (d) => void d.accept());

@@ -86,6 +86,8 @@ export const CawiTheme = z.object({
   corners: z.enum(['rounded', 'square', 'pill']).default('rounded'),
   /** Where the project logo goes in the header, or not shown. */
   logo: z.enum(['left', 'center', 'hidden']).default('left'),
+  /** What screen readers say for the logo (the organisation); empty when it is named beside it. */
+  logoAlt: z.string().trim().max(150).default(''),
 });
 export type CawiTheme = z.infer<typeof CawiTheme>;
 

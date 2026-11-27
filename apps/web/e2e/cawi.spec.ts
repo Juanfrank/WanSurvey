@@ -62,6 +62,14 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
   await r.goto(link);
   await expect(r).toHaveURL(/\/s\/[A-Za-z0-9_-]+$/);
   await expect(r.locator('[data-qkey^="A0_CONSENT_TEXT"]')).toContainText('estamos realizando');
+  // The footer speaks the survey's language, not the phone's (English here), and says so.
+  const footer = r.getByRole('contentinfo');
+  await expect(footer).toHaveAttribute('lang', 'es');
+  await expect(footer.getByRole('link')).toHaveText('Política de privacidad');
+  // No keyboard hints on a phone.
+  await expect(r.getByRole('button', { name: 'Siguiente' })).toHaveText('Siguiente', {
+    useInnerText: true,
+  });
   await shot(r, 'respondent-phone');
   await expectAccessible(r);
   // The move to the next page is written on the phone and then sent: wait for the send,

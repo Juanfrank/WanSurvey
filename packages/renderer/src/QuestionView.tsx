@@ -68,7 +68,10 @@ export function QuestionView(p: QuestionViewProps) {
         data-qkey={entry.key}
         lang={p.lang}
         tabIndex={-1}
-        className="flex flex-col gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        // Focused by the runner so screen readers start here. Respondents see no ring on it (it
+        // is not a control, and one looked like an editable field or an error); interviewers,
+        // who work from the keyboard, keep it.
+        className={`flex flex-col gap-2 focus:outline-none ${interviewer ? 'focus-visible:ring-2 focus-visible:ring-focus' : ''}`}
         aria-labelledby={`${domId}-text`}
       >
         <p id={`${domId}-text`} className={def.role === 'consent' ? 'text-lg' : 'text-base'}>
@@ -157,6 +160,7 @@ export function QuestionView(p: QuestionViewProps) {
     invalid: errors.length > 0 || !!localError,
     showCodes: interviewer,
     touch: !!p.touch,
+    ownDevice: p.mode === 'CAWI',
     ...(variant?.displayAs ? { displayAs: variant.displayAs } : {}),
     lang: p.lang,
     ...(routes ? { routes } : {}),

@@ -16,25 +16,30 @@ const FeedbackPage = lazy(() =>
   import('../feedback/FeedbackPage.js').then((m) => ({ default: m.FeedbackPage })),
 );
 
-/**
- * The language the page speaks: the browser's until a page sets the survey's own (on <html lang>),
- * so the footer reads like the survey above it and not like the device.
- */
-function usePageLanguage() {
-  const [lang, setLang] = useState(() => respondentLang(navigator.language));
+/** The page's language (`<html lang>`), which each public page sets: the survey's own one. */
+function usePageLang(): string {
+  const [lang, setLang] = useState(() => document.documentElement.lang);
   useEffect(() => {
     const html = document.documentElement;
-    const follow = () => {
-      if (html.lang) setLang(respondentLang(html.lang));
-    };
-    // A page may have set it already, in an effect that ran before this one ('es' is only the
-    // default of index.html until a page says otherwise).
-    if (html.lang !== 'es') follow();
-    const watch = new MutationObserver(follow);
+    const watch = new MutationObserver(() => setLang(html.lang));
     watch.observe(html, { attributes: true, attributeFilter: ['lang'] });
     return () => watch.disconnect();
   }, []);
   return lang;
+}
+
+/**
+ * Anyone answering can read how their data is handled: a plain link, no extra code, in the
+ * language of the page above it (the questionnaire's, once the survey has opened) rather than
+ * the browser's, and marked with that language for screen readers.
+ */
+function PrivacyFooter() {
+  const lang = respondentLang(usePageLang());
+  return (
+    <footer lang={lang} style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
+      <a href="/privacy">{respondentText(lang).privacy}</a>
+    </footer>
+  );
 }
 
 /**
@@ -47,7 +52,11 @@ function PublicApp() {
     window.history.replaceState(null, '', href);
     setRoute(matchPublic(new URL(href, window.location.origin).pathname));
   }, []);
-  const lang = usePageLanguage();
+  // A page that is not found speaks the browser's language, and says so.
+  const unknown = !route;
+  useEffect(() => {
+    if (unknown) document.documentElement.lang = respondentLang(navigator.language);
+  }, [unknown]);
   let page;
   switch (route?.page) {
     case 's':
@@ -77,12 +86,7 @@ function PublicApp() {
   return (
     <>
       <Suspense fallback={null}>{page}</Suspense>
-      {/* Anyone answering can read how their data is handled; a plain link, no extra code. */}
-      {route?.page === 'f' ? null : (
-        <footer style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
-          <a href="/privacy">{respondentText(lang).privacy}</a>
-        </footer>
-      )}
+      {route?.page === 'f' ? null : <PrivacyFooter />}
     </>
   );
 }

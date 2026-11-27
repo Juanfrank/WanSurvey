@@ -113,6 +113,15 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   turning it off masks (tablets, telephone console); a confidentiality reminder next to shown case data and
   the calling console's sample; the Organisation page says who answers for the data and where it is kept; the
   respondent's "Privacy policy" footer follows the survey's language.
+- **Web survey accessibility**: the project logo can carry a description that screen readers read
+  (Logo and style); e-mail and phone questions let the respondent's browser fill them in (only on
+  the web survey); a page that opens with a text starts there, not at the first answer; the
+  privacy footer speaks the survey's language; Logo and style refuses to save while any shade made
+  from the main colour is unreadable (the API does not check it yet); respondents no longer see a
+  focus box around a text item; phones show no keyboard hints and the buttons wrap instead of
+  overflowing. `docs/accessibility.md` has a manual plan for
+  NVDA, VoiceOver and 200 % zoom.
+
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

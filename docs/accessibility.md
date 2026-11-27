@@ -29,12 +29,13 @@ Pages checked with axe in the browser: sign-in and the waiting page, the designe
 | --------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1.1.1 Non-text content                  | Pass   | Charts are tables with bars (figures written out); the day chart has a text alternative and a table                                                                             |
 | 1.3.1 Info and relationships            | Pass   | Option groups are `fieldset`/`legend`; tables have headers; headings in order                                                                                                   |
-| 1.4.3 Contrast                          | Pass   | axe colour-contrast on every page above                                                                                                                                         |
+| 1.3.5 Identify input purpose            | Pass   | Web respondents' e-mail and phone questions carry `autocomplete` (`email`, `tel`); off on interviewers' devices                                                                 |
+| 1.4.3 Contrast                          | Pass   | axe colour-contrast on every page above; a web survey style whose derived shades fall under 4.5:1 (3:1 for marks) is refused by Logo and style (the API does not check it yet)  |
 | 1.4.4 Resize text / 1.4.10 Reflow       | Pass   | 320 px and 200% zoom without sideways scrolling; every wide table scrolls inside its own box                                                                                    |
 | 1.4.11 Non-text contrast                | Pass   | Focus outline 2 px in `--color-focus` (3:1 or more in the light and dark themes, white on the navy panel; a project colour that would fade is replaced); bars against slate-100 |
 | 2.1.1 Keyboard                          | Pass   | Every flow above by keyboard; no keyboard traps (dialogs close with Esc)                                                                                                        |
 | 2.3.3 Animation from interactions       | Pass   | `prefers-reduced-motion` turns off transitions and animations everywhere                                                                                                        |
-| 2.4.3 Focus order / 2.4.7 Focus visible | Pass   | Focus moves to the new question's first control on every step; always visible                                                                                                   |
+| 2.4.3 Focus order / 2.4.7 Focus visible | Pass   | Focus moves to the new question's first control on every step (to the opening text when a web page starts with one); always visible on controls                                 |
 | 2.4.11 Focus not obscured               | Pass   | No sticky overlays over the focused control                                                                                                                                     |
 | 2.5.8 Target size (minimum)             | Pass   | 44 × 44 px on the respondent's and CAPI screens (stricter than AA's 24 px)                                                                                                      |
 | 2.4.2 Page titled                       | Pass   | Every staff page is titled after its heading and open tab; respondents' pages after the survey                                                                                  |
@@ -61,8 +62,30 @@ Pages checked with axe in the browser: sign-in and the waiting page, the designe
 
 An organisation can pick an accent from a fixed palette (Administration, Organisation, Appearance). The tokens of each accent are generated for the light and the dark theme, and `checkAccent` (`packages/schema/src/theme.ts`) verifies the 4.5:1 text contrast on every surface; a unit test runs it on the whole palette, and the API refuses an accent that fails. A person's own theme choice always wins over the organisation default, and the respondent pages keep the neutral look.
 
+## Manual test plan (before each major release)
+
+The automated checks above do not hear what a screen reader says nor see a page at 200 %. Before
+each major release one person runs this plan and writes the result (pass, or the problem with
+its screen and step) in the release notes. Each script runs in **NVDA + Firefox** (Windows) and
+**VoiceOver + Safari** (macOS; the respondent part also with VoiceOver on an iPhone), with the
+interface in Spanish and then in English.
+
+| Script                  | Steps (by keyboard only, listening)                                                                                                           | Listen for                                                                                                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web respondent          | Open a personal link of a survey with an introduction, a logo with a description and an e-mail question; answer two pages, go back once, send | The logo's description; the introduction read before the first question; the survey's language throughout, footer included; e-mail offered by autofill; "Respuestas guardadas" announced once |
+| Invite a person         | Administration → Users: invite a person with a role, then open the row's "Actions" menu                                                       | Column headers read with each cell; the dialog's title on opening; the result announced; focus back on the button that opened it                                                              |
+| Change a permission     | Administration → Roles: change one permission of a role and save                                                                              | Each checkbox read with its role and its permission (row and column headers); the save announced                                                                                              |
+| Filter the activity log | Administration → Activity log: filter by person and by date, open an entry                                                                    | The number of results announced after filtering; the entry's details reachable and read in order                                                                                              |
+| An interview (CAPI)     | Open an assigned case, answer three questions with digits, record a note, pause                                                               | Question text, then options with their codes; errors read when Next is refused; the note dialog's title                                                                                       |
+
+**Zoom at 200 %** (or a 640 px window): besides the respondent and project pages that
+`e2e/hardening.spec.ts` checks, look at Users, Roles, Activity log and Organisation, and the web
+survey style in project settings. Nothing may need sideways scrolling of the page (a wide table
+may scroll inside its own box) and no menu, dialog or sticky bar may cover the focused control.
+
 ## Known limits
 
-- Screen-reader testing was done with the axe rules and the accessibility tree in Playwright, not with every screen reader and browser pair; a manual pass with NVDA and VoiceOver is recommended before each major release.
+- Screen-reader testing in CI is done with the axe rules and the accessibility tree in Playwright, not with a screen reader; the manual plan above covers NVDA and VoiceOver before each major release.
+- The back-office pages Users, Roles, Activity log and Organisation are checked at 200 % zoom by hand (manual plan above), not yet in `e2e/hardening.spec.ts`.
 - The case map (Leaflet) is decorative for keyboard users: every case on it is also in the list, with its address.
 - "Go to question" moves by section, then to the question within it; a search by variable or text is in phase 2.

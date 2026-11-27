@@ -203,3 +203,48 @@ describe('PaperForm (PAPI)', () => {
     expect(screen.getByText(/Write 00 for an unknown day or month/)).toBeTruthy();
   });
 });
+
+describe('autofill of the respondent’s own data (WCAG 1.3.5)', () => {
+  const ask = (id: string, text: string, format?: 'email' | 'phone') => ({
+    kind: 'question',
+    id,
+    name: id,
+    type: 'text',
+    ...(format ? { format } : {}),
+    text: { en: text },
+  });
+  const contact = compile({
+    id: 'CONTACT',
+    title: { en: 'Contact' },
+    defaultLanguage: 'en',
+    languages: ['en'],
+    sections: [
+      {
+        id: 'S',
+        title: { en: 'S' },
+        items: [
+          ask('MAIL', 'Your e-mail', 'email'),
+          ask('TEL', 'Your phone', 'phone'),
+          ask('CITY', 'Your city'),
+        ],
+      },
+    ],
+  } as never);
+  const autofill = (mode: Mode) => {
+    const session = createInterview(contact, { mode, now: () => new Date('2026-10-12T00:00:00Z') });
+    const { unmount, container } = render(<AllQuestions session={session} mode={mode} />);
+    const out = ['MAIL', 'TEL', 'CITY'].map((k) =>
+      container.querySelector(`[data-qkey="${k}"] input`)!.getAttribute('autocomplete'),
+    );
+    unmount();
+    return out;
+  };
+
+  it('lets the browser fill in e-mail and phone on the respondent’s own device', () => {
+    expect(autofill('CAWI')).toEqual(['email', 'tel', 'off']);
+  });
+
+  it.each(['CAPI', 'CATI'] as const)('keeps it off on the interviewer’s device (%s)', (mode) => {
+    expect(autofill(mode)).toEqual(['off', 'off', 'off']);
+  });
+});

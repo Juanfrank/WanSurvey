@@ -462,8 +462,15 @@ export const casesEn = {
     cornerKinds: { rounded: 'Rounded', square: 'Square', pill: 'Very round' },
     logoPlace: 'Logo',
     places: { left: 'Beside the title', center: 'Centred above', hidden: 'Not shown' },
-    lowContrast:
-      'This colour gives text on buttons too little contrast; choose a darker or lighter one.',
+    logoAlt: 'Logo description',
+    logoAltHelp:
+      'What screen readers say in place of the logo, such as the name of the organisation carrying out the survey. Leave it empty when that name already appears next to the logo.',
+    contrast: {
+      fill: 'Text on buttons has too little contrast with this main colour (it needs 4.5:1).',
+      ink: 'Text in the shades of this main colour is too light to read on white (it needs 4.5:1); choose a darker colour.',
+      mark: 'Selected answers and the progress bar barely show on white with this main colour (they need 3:1); choose a darker colour.',
+    },
+    cannotSave: 'The style was not saved: choose a main colour respondents can read.',
     save: 'Save style',
     reset: 'Back to the default style',
     saved: 'Style saved.',
@@ -1051,8 +1058,15 @@ export const casesEs: CasesCatalogue = {
     cornerKinds: { rounded: 'Redondeadas', square: 'Rectas', pill: 'Muy redondeadas' },
     logoPlace: 'Logo',
     places: { left: 'Junto al título', center: 'Centrado arriba', hidden: 'No se muestra' },
-    lowContrast:
-      'Con este color el texto de los botones tiene poco contraste; elija uno más oscuro o más claro.',
+    logoAlt: 'Descripción del logo',
+    logoAltHelp:
+      'Lo que leen los lectores de pantalla en lugar del logo, como el nombre de la organización que hace la encuesta. Déjelo vacío si ese nombre ya aparece junto al logo.',
+    contrast: {
+      fill: 'Con este color principal el texto de los botones tiene poco contraste (necesita 4,5:1).',
+      ink: 'El texto en los tonos de este color principal es demasiado claro para leerse sobre blanco (necesita 4,5:1); elija un color más oscuro.',
+      mark: 'Con este color principal las respuestas elegidas y la barra de avance apenas se ven sobre blanco (necesitan 3:1); elija un color más oscuro.',
+    },
+    cannotSave: 'El estilo no se guardó: elija un color principal que los encuestados puedan leer.',
     save: 'Guardar estilo',
     reset: 'Volver al estilo predeterminado',
     saved: 'Estilo guardado.',
