@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, apiFull } from '../api.js';
+import { dateTime, number } from '../format.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
@@ -21,6 +22,17 @@ import { PhoneIcon } from '../routes/icons.js';
 import { CallbackReminders } from '../routes/Notifications.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button } from '../routes/ui.js';
+import {
+  allDay,
+  fromNow,
+  groupOutcomes,
+  keyIndex,
+  longWhen,
+  outcomeKey,
+  phoneKind,
+  startOfDay,
+  type OutcomeGroup,
+} from './calls-logic.js';
 
 interface Script {
   id: string;
@@ -48,6 +60,8 @@ interface Served {
     attempts: number;
     timezone: string;
     sample: Record<string, unknown>;
+    /** Labels of the sample fields that have one. */
+    fieldLabels?: Record<string, string>;
   };
   phones: { id: string; value: string; label: string | null }[];
   history: CallRow[];
@@ -76,8 +90,27 @@ interface Callback {
   reason: string | null;
 }
 
-/** Outcomes an answered call can still end with, when its interview stopped early. */
-const INTERRUPTED: CallOutcome[] = ['callback', 'appointment', 'refusal', 'do_not_contact'];
+interface Shift {
+  calls: number;
+  contacts: number;
+  completes: number;
+  talkMs: number;
+}
+
+/** How each group of outcomes looks: answered stands out, the final ones read as such. */
+const GROUP_CLS: Record<OutcomeGroup, string> = {
+  reached:
+    'border-indigo-300 bg-indigo-50/60 font-semibold has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-100',
+  notReached: 'border-slate-200 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50',
+  reschedule: 'border-slate-200 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50',
+  final: 'border-red-200 bg-red-50/40 has-[:checked]:border-red-600 has-[:checked]:bg-red-50',
+};
+
+/**
+ * Outcomes an answered call can still end with, when its interview stopped early (in the order
+ * their groups are shown, so the keys read 1–4).
+ */
+const INTERRUPTED: CallOutcome[] = ['refusal', 'do_not_contact', 'callback', 'appointment'];
 
 function clock(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -103,8 +136,8 @@ function localAt(tz: string, opts: { minutes?: number; days?: number; hhmm?: str
 /**
  * The telephone interviewer's workspace: the next case to call, its numbers and data, the
  * introduction to read, then what happened on the call. Answered starts the interview;
- * callbacks are booked in the respondent's time zone. Keyboard-first: N, Alt+1–3, 1–9 and
- * Ctrl+Enter.
+ * callbacks are booked in the respondent's time zone. Keyboard-first: N, Alt+1–3, 1–9 and 0
+ * (the tenth outcome), and Ctrl+Enter.
  */
 export function CallsTab({
   projectId,
@@ -122,6 +155,8 @@ export function CallsTab({
   const [served, setServed] = useState<Served | null>(null);
   const [idle, setIdle] = useState<{ reason: string; nextAt: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** A new case has been asked for and has not come yet. */
+  const [seeking, setSeeking] = useState(false);
   const [message, setMessage] = useState(
     notice === 'interview_done' ? t('cati.interviewDone') : '',
   );
@@ -154,6 +189,15 @@ export function CallsTab({
     queryKey: ['cati-callbacks', projectId],
     queryFn: () => api<Callback[]>(`/projects/${projectId}/cati/callbacks`),
     refetchInterval: 30_000,
+  });
+
+  // The caller's day so far, shown while no case is open.
+  const since = startOfDay(now).toISOString();
+  const shift = useQuery({
+    queryKey: ['cati-shift', projectId, since],
+    queryFn: () =>
+      api<Shift>(`/projects/${projectId}/cati/shift?since=${encodeURIComponent(since)}`),
+    enabled: !served,
   });
 
   // A callback coming due is announced once.
@@ -189,7 +233,11 @@ export function CallsTab({
         return;
       }
       setBusy(true);
-      if (!current) setMessage('');
+      if (!current) {
+        setMessage('');
+        setIdle(null);
+        setSeeking(true);
+      }
       setDue('');
       try {
         const r = current
@@ -220,6 +268,7 @@ export function CallsTab({
         if (caseId) void qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
       } finally {
         setBusy(false);
+        setSeeking(false);
       }
     },
     [busy, projectId, qid, t, qc],
@@ -243,6 +292,7 @@ export function CallsTab({
   const choices = interrupted ? INTERRUPTED : [...CALL_OUTCOMES];
   const tz = served?.case.timezone ?? 'UTC';
   const hours = served?.callingHours ?? { from: '09:00', to: '21:00' };
+  const anyHour = allDay(hours);
   const callbackDate = callback ? zonedToUtc(callback, tz) : null;
   const callbackProblem =
     outcome && needsCallbackTime(outcome)
@@ -317,14 +367,15 @@ export function CallsTab({
           : r.nextContactAt
             ? t('cati.savedRetry', {
                 outcome: label,
-                time: new Date(r.nextContactAt).toLocaleString(i18n.language),
+                time: dateTime(r.nextContactAt),
               })
             : t('cati.saved', { outcome: label }),
       );
       setServed(null);
       setIdle(null);
       reset();
-      await qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
+      void qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
+      void qc.invalidateQueries({ queryKey: ['cati-shift', projectId] });
       requestAnimationFrame(() => nextRef.current?.focus());
     } catch (e) {
       setMessage(localiseError(t, e));
@@ -347,7 +398,6 @@ export function CallsTab({
     navigate,
     projectId,
     t,
-    i18n.language,
     qc,
   ]);
 
@@ -386,8 +436,8 @@ export function CallsTab({
       if (e.key.toLowerCase() === 'n' && !served) {
         e.preventDefault();
         void next();
-      } else if (served && /^[1-9]$/.test(e.key)) {
-        const o = choices[Number(e.key) - 1];
+      } else if (served && keyIndex(e.key) >= 0) {
+        const o = choices[keyIndex(e.key)];
         if (o) {
           e.preventDefault();
           choose(o);
@@ -431,7 +481,7 @@ export function CallsTab({
               {t('cati.next')} <kbd className="ml-1 text-xs opacity-80">N</kbd>
             </button>
           ) : null}
-          <p className="text-xs text-slate-600">{t('cati.shortcuts')}</p>
+          <p className="text-sm text-slate-700">{t('cati.shortcuts')}</p>
         </div>
         <p
           role="status"
@@ -449,16 +499,22 @@ export function CallsTab({
         >
           {due ? t('cati.callbackDue', { id: due }) : ''}
         </p>
+        {!served && seeking ? (
+          <p className="text-slate-700" data-testid="queue-loading">
+            {t('cati.loading')}
+          </p>
+        ) : null}
         {!served && idle ? (
           <p className="text-slate-700" data-testid="queue-empty">
             {t(`cati.reason.${idle.reason}`, { defaultValue: t('cati.reason.empty') })}{' '}
             {idle.nextAt
               ? t('cati.nextCallback', {
-                  time: new Date(idle.nextAt).toLocaleString(i18n.language),
+                  time: dateTime(idle.nextAt),
                 })
               : null}
           </p>
         ) : null}
+        {!served && shift.data ? <ShiftSummary shift={shift.data} /> : null}
 
         {served ? (
           <form
@@ -498,33 +554,63 @@ export function CallsTab({
 
             <fieldset className="flex flex-wrap gap-2">
               <legend className="mb-1 text-sm font-medium">{t('cati.phones')}</legend>
-              {served.phones.map((p, i) => (
-                <label
-                  key={p.id}
-                  className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
-                >
-                  <input
-                    type="radio"
-                    name="phone"
-                    checked={phone === i}
-                    onChange={() => setPhone(i)}
-                    aria-keyshortcuts={i < 3 ? `Alt+${i + 1}` : undefined}
-                  />
-                  <span className="font-mono">{p.value}</span>
-                  {p.label ? <span className="text-slate-600">{p.label}</span> : null}
-                  {i < 3 ? (
-                    <kbd className="text-xs text-slate-600">{t('cati.phoneKey', { n: i + 1 })}</kbd>
-                  ) : null}
-                  <a
-                    href={`tel:${p.value}`}
-                    className="text-sm text-indigo-ink-700 underline"
-                    aria-label={t('cati.dial', { number: p.value })}
-                  >
-                    ☎
-                  </a>
-                </label>
-              ))}
+              {served.phones.map((p, i) => {
+                const kind = phoneKind(p.label);
+                return (
+                  <div key={p.id} className="flex items-stretch gap-1.5" data-testid="phone">
+                    <label className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+                      <input
+                        type="radio"
+                        name="phone"
+                        checked={phone === i}
+                        onChange={() => setPhone(i)}
+                        aria-keyshortcuts={i < 3 ? `Alt+${i + 1}` : undefined}
+                      />
+                      <span className="font-mono">{p.value}</span>
+                      {p.label ? (
+                        <span className="text-slate-600">
+                          {kind ? t(`cati.phoneKind.${kind}`) : p.label}
+                        </span>
+                      ) : null}
+                      {i < 3 ? (
+                        <kbd className="text-xs text-slate-600">
+                          {t('cati.phoneKey', { n: i + 1 })}
+                        </kbd>
+                      ) : null}
+                    </label>
+                    <a
+                      href={`tel:${p.value}`}
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 text-sm font-semibold text-on-fill hover:bg-indigo-500"
+                      aria-label={t('cati.dial', { number: p.value })}
+                    >
+                      <PhoneIcon className="h-4 w-4" />
+                      {t('cati.dialShort')}
+                    </a>
+                  </div>
+                );
+              })}
             </fieldset>
+
+            <section aria-labelledby="calls-sample" className="text-sm">
+              <h4 id="calls-sample" className="mb-1 font-semibold">
+                {t('cati.sample')}
+              </h4>
+              <dl className="flex flex-wrap gap-x-5 gap-y-1" data-testid="case-sample">
+                {Object.entries(served.case.sample).map(([k, v]) => {
+                  const label = served.case.fieldLabels?.[k];
+                  return (
+                    <div key={k} className="flex gap-1.5">
+                      <dt className={label ? 'text-slate-600' : 'font-mono text-slate-600'}>
+                        {label ?? k}
+                      </dt>
+                      <dd className="font-medium">
+                        {v === null || v === undefined ? '—' : String(v)}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </section>
 
             {interrupted ? (
               <div className="flex flex-col items-start gap-2 rounded-md bg-amber-50 p-3 text-sm">
@@ -570,24 +656,49 @@ export function CallsTab({
               <ScriptBox scripts={served.scripts.intro} />
             ) : null}
 
-            <fieldset ref={outcomeRef} className="grid gap-1 sm:grid-cols-3" data-testid="outcomes">
+            <fieldset ref={outcomeRef} className="flex flex-col gap-2" data-testid="outcomes">
               <legend className="mb-1 text-sm font-medium">{t('cati.outcome')}</legend>
-              {choices.map((o, i) => (
-                <label
-                  key={o}
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50"
+              {groupOutcomes(choices).map((g) => (
+                <div
+                  key={g.id}
+                  role="group"
+                  aria-labelledby={`outcomes-${g.id}`}
+                  data-group={g.id}
+                  className="flex flex-col gap-1"
                 >
-                  <input
-                    type="radio"
-                    name="outcome"
-                    value={o}
-                    checked={outcome === o}
-                    onChange={() => choose(o)}
-                    aria-keyshortcuts={String(i + 1)}
-                  />
-                  <kbd className="w-4 text-xs text-slate-600">{i + 1}</kbd>
-                  {t(`cati.outcomes.${o}`)}
-                </label>
+                  <span
+                    id={`outcomes-${g.id}`}
+                    className={`text-xs font-semibold ${g.id === 'final' ? 'text-red-ink-800' : 'text-slate-600'}`}
+                  >
+                    {t(`cati.outcomeGroup.${g.id}`)}
+                  </span>
+                  <div
+                    className={
+                      g.id === 'reached' ? 'grid gap-1' : 'grid gap-1 sm:grid-cols-2 lg:grid-cols-4'
+                    }
+                  >
+                    {g.outcomes.map((o) => {
+                      const key = outcomeKey(choices.indexOf(o));
+                      return (
+                        <label
+                          key={o}
+                          className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm ${GROUP_CLS[g.id]}`}
+                        >
+                          <input
+                            type="radio"
+                            name="outcome"
+                            value={o}
+                            checked={outcome === o}
+                            onChange={() => choose(o)}
+                            aria-keyshortcuts={key ?? undefined}
+                          />
+                          {key ? <kbd className="w-4 text-xs text-slate-600">{key}</kbd> : null}
+                          {t(`cati.outcomes.${o}`)}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
             </fieldset>
 
@@ -614,10 +725,22 @@ export function CallsTab({
                     value={callback}
                     min={utcToZoned(new Date(now), tz)}
                     onChange={(e) => setCallback(e.target.value)}
-                    aria-describedby="callback-hours callback-problem"
+                    aria-describedby="callback-when callback-hours callback-problem"
                     aria-invalid={callbackProblem ? true : undefined}
                   />
                 </label>
+                <p
+                  id="callback-when"
+                  className="empty:hidden font-medium"
+                  data-testid="callback-when"
+                >
+                  {callbackDate && !Number.isNaN(callbackDate.getTime())
+                    ? t('cati.callbackWhen', {
+                        when: longWhen(callbackDate, tz, i18n.language),
+                        rel: fromNow(callbackDate, now, i18n.language),
+                      })
+                    : ''}
+                </p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -626,7 +749,7 @@ export function CallsTab({
                   >
                     {t('cati.inHour')}
                   </button>
-                  {[hours.from === hours.to ? '10:00' : hours.from, '18:00'].map((hhmm) => (
+                  {[anyHour ? '10:00' : hours.from, '18:00'].map((hhmm) => (
                     <button
                       key={hhmm}
                       type="button"
@@ -638,7 +761,7 @@ export function CallsTab({
                   ))}
                 </div>
                 <p id="callback-hours" className="text-slate-600">
-                  {t('cati.callbackHours', hours)}
+                  {anyHour ? t('cati.callbackAnyHour') : t('cati.callbackHours', hours)}
                 </p>
                 <p id="callback-problem" className="empty:hidden font-medium text-red-ink-800">
                   {callbackProblem === 'hours'
@@ -691,7 +814,12 @@ export function CallsTab({
             </label>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" disabled={!canSave} aria-keyshortcuts="Control+Enter">
+              <Button
+                type="submit"
+                disabled={!canSave}
+                aria-keyshortcuts="Control+Enter"
+                aria-describedby="save-why"
+              >
                 {outcome === 'answered' ? t('cati.start') : t('cati.save')}{' '}
                 <kbd className="ml-1 text-xs opacity-80">{t('cati.saveKey')}</kbd>
               </Button>
@@ -700,29 +828,27 @@ export function CallsTab({
                   {t('cati.skip')}
                 </button>
               ) : null}
+              <span id="save-why" className="empty:hidden text-sm text-slate-600">
+                {!outcome
+                  ? t('cati.why.outcome')
+                  : callbackProblem === 'none'
+                    ? t('cati.why.time')
+                    : callbackProblem
+                      ? t('cati.why.fixTime')
+                      : exitMissing
+                        ? t('cati.why.exit')
+                        : outcome === 'answered' && !qid && !served.questionnaireId
+                          ? t('cati.why.questionnaire')
+                          : ''}
+              </span>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <section aria-labelledby="calls-sample" className="text-sm">
-                <h4 id="calls-sample" className="mb-1 font-semibold">
-                  {t('cati.sample')}
-                </h4>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                  {Object.entries(served.case.sample).map(([k, v]) => (
-                    <div key={k} className="contents">
-                      <dt className="font-mono text-slate-600">{k}</dt>
-                      <dd>{v === null || v === undefined ? '—' : String(v)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-              <section aria-labelledby="calls-history" className="text-sm">
-                <h4 id="calls-history" className="mb-1 font-semibold">
-                  {t('cati.history')}
-                </h4>
-                <CallList rows={served.history.filter((h) => h.id !== served.attempt.id)} />
-              </section>
-            </div>
+            <section aria-labelledby="calls-history" className="text-sm">
+              <h4 id="calls-history" className="mb-1 font-semibold">
+                {t('cati.history')}
+              </h4>
+              <CallList rows={served.history.filter((h) => h.id !== served.attempt.id)} />
+            </section>
           </form>
         ) : null}
       </section>
@@ -759,6 +885,41 @@ export function CallsTab({
         />
       </SideDrawer>
     </div>
+  );
+}
+
+/** The caller's day so far: calls, contacts (and the contact rate), completes, time on the phone. */
+function ShiftSummary({ shift }: { shift: Shift }) {
+  const { t } = useTranslation();
+  const mins = Math.round(shift.talkMs / 60_000);
+  const rate = shift.calls ? Math.round((shift.contacts / shift.calls) * 100) : null;
+  const items = [
+    ['calls', number(shift.calls)],
+    [
+      'contacts',
+      rate === null ? number(shift.contacts) : `${number(shift.contacts)} (${number(rate)} %)`,
+    ],
+    ['completes', number(shift.completes)],
+    ['talk', t('cati.shift.minutes', { count: mins, n: number(mins) })],
+  ] as const;
+  return (
+    <section
+      aria-labelledby="calls-shift"
+      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+      data-testid="shift-summary"
+    >
+      <h3 id="calls-shift" className="eyebrow mb-2">
+        {t('cati.shift.title')}
+      </h3>
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {items.map(([k, v]) => (
+          <div key={k}>
+            <dt className="text-xs text-slate-600">{t(`cati.shift.${k}`)}</dt>
+            <dd className="text-xl font-semibold tabular-nums text-navy">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
