@@ -164,6 +164,13 @@ const adminAuditRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'audit',
   component: lazyRouteComponent(() => import('./admin/AuditPage.js'), 'AuditPage'),
+  // The activity log's filters given in the address, as text.
+  validateSearch: (s: Record<string, unknown>): Record<string, string> =>
+    Object.fromEntries(
+      ['actor', 'projectId', 'caseRef', 'preset'].flatMap((k) =>
+        typeof s[k] === 'string' || typeof s[k] === 'number' ? [[k, String(s[k])]] : [],
+      ),
+    ),
 });
 const adminApiKeysRoute = createRoute({
   getParentRoute: () => adminRoute,

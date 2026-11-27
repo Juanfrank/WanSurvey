@@ -283,8 +283,24 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await nav.getByRole('link', { name: 'Activity log' }).click();
   await page.getByRole('combobox', { name: 'Action' }).selectOption('team.created');
   await expect(page.locator('tr[data-action="team.created"]')).toHaveCount(1);
+  // Actions read in words, with the code beside them.
+  await expect(page.locator('tr[data-action="team.created"]')).toContainText('Created a team');
   await page.getByRole('combobox', { name: 'Action' }).selectOption('');
   await expect(page.locator('tr[data-action="user.invited"]').first()).toBeVisible();
+  // A quick filter, and a change of permissions shown as what was added and removed.
+  await page.getByRole('button', { name: 'Roles and permissions', exact: true }).click();
+  await expect(page.locator('tr[data-action="user.invited"]').first()).toBeVisible();
+  await expect(page.locator('tr[data-action="team.created"]')).toHaveCount(0);
+  const change = page.locator('tr[data-action="tenant.roles_updated"]').first();
+  const toggle = change.getByRole('button', { name: /^View details: Changed role permissions/ });
+  const panel = page.locator(`[id="${await toggle.getAttribute('aria-controls')}"]`);
+  await toggle.click();
+  await expect(change.getByRole('button', { name: 'Hide details' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  await expect(panel).toContainText('Reviewer');
+  await expect(panel).toContainText('− See the dashboard and results');
   await shot(page, 'admin-audit', { fullPage: false });
   await expectAccessible(page);
 

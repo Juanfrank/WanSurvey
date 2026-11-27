@@ -74,6 +74,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   matrix cells are bigger targets. Administrators see the API keys read only; revoking one asks in a
   dialog. The installation wizard has short labels with help underneath and says plainly that the schema
   is final.
+- **The activity log reads in words and answers data questions**: each action has a name in Spanish and
+  English (the code stays beside it); "View details" opens each entry's details as lines (a role change as
+  the permissions added and removed, other changes as before → after), with the full record as JSON below;
+  quick filters for data corrections, review decisions, exports and downloads, views of personal data, case
+  assignment, roles, deletions and sign-ins; filters by project and by case (its code or id); pages of 50
+  with no cap (the API takes `beforeAt`/`beforeId`, `actions`, `projectId` and `caseRef`), and the export
+  takes the same filters. Corrections and review decisions now record their project and case; earlier ones
+  are found by the other filters but not by project or case.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

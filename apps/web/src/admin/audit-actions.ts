@@ -93,3 +93,53 @@ export const AUDIT_ACTIONS = [
   'audio.listened',
   'audio.deleted',
 ] as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+/**
+ * Quick filters for the questions an auditor asks most (who corrected, exported, saw personal
+ * data, moved cases, changed permissions or deleted something), each a set of actions.
+ */
+export const AUDIT_PRESETS = {
+  corrections: ['interview.corrected', 'case.updated', 'entry.resolved', 'sample_field.updated'],
+  review: [
+    'interview.reviewed',
+    'interview.approved',
+    'interview.returned',
+    'interview.rejected',
+    'case.misidentified',
+  ],
+  exports: [
+    'data.exported',
+    'data.downloaded',
+    'case.subject_exported',
+    'audit.exported',
+    'share_link.created',
+  ],
+  pii: ['case.pii_viewed', 'case.subject_exported', 'cases.map_viewed', 'audio.listened'],
+  assignment: [
+    'cases.assigned',
+    'cases.withdrawn',
+    'case.claimed',
+    'case.released',
+    'case.checkout_released',
+    'assignment.created',
+    'assignment.updated',
+    'assignment.deleted',
+  ],
+  roles: ['tenant.roles_updated', 'user.role_changed', 'user.invited', 'user.deactivated'],
+  deletions: [
+    'questionnaire.deleted',
+    'team.deleted',
+    'library_item.deleted',
+    'assignment.deleted',
+    'audio.deleted',
+    'case.anonymised',
+    'apikey.revoked',
+    'webhook.deleted',
+    'share_link.revoked',
+  ],
+  signins: ['auth.login', 'auth.login_failed', 'auth.logout', 'auth.mfa_failed', 'auth.sso_failed'],
+} satisfies Record<string, readonly AuditAction[]>;
+
+export type AuditPreset = keyof typeof AUDIT_PRESETS;

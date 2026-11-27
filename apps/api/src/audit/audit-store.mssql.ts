@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { uuidv7 } from 'uuidv7';
 import { enqueueFromAudit } from '../webhooks/outbox.js';
 import { instant } from '../db/mssql/instant.js';
@@ -23,11 +24,46 @@ export interface AuditRow {
 
 export interface AuditFilter {
   action?: string;
+  /** Any of these actions (a preset such as "corrections" or "exports"). */
+  actions?: string[];
   actorUserId?: string;
   targetId?: string;
+  /** Entries about this project: on it, or naming it in their details. */
+  projectId?: string;
+  /** Entries about a case: its id or its external id, as target or in the details. */
+  caseRef?: string;
   from?: Date;
   to?: Date;
+  /** Newest-first paging: only entries older than this one. */
+  before?: { at: Date; id: string };
   limit: number;
+}
+
+const allOf = (tx: MssqlTx) => tx.selectFrom('audit_log').selectAll();
+type Q = ReturnType<typeof allOf>;
+
+/** The entries the filters every read of the log shares select (the screen and the export). */
+function filtered(tx: MssqlTx, f: Omit<AuditFilter, 'limit' | 'before'>): Q {
+  let r = allOf(tx);
+  if (f.action) r = r.where('action', '=', f.action);
+  if (f.actions?.length) r = r.where('action', 'in', f.actions);
+  if (f.actorUserId) r = r.where('actor_user_id', '=', f.actorUserId);
+  if (f.targetId) r = r.where('target_id', '=', f.targetId);
+  if (f.from) r = r.where('at', '>=', instant(f.from));
+  if (f.to) r = r.where('at', '<=', instant(f.to));
+  if (f.projectId) {
+    const p = f.projectId.toLowerCase();
+    r = r.where(
+      sql<boolean>`(LOWER(target_id) = ${p} OR LOWER(JSON_VALUE(details, '$.projectId')) = ${p})`,
+    );
+  }
+  if (f.caseRef) {
+    const c = f.caseRef.toLowerCase();
+    r = r.where(
+      sql<boolean>`(LOWER(target_id) = ${c} OR LOWER(JSON_VALUE(details, '$.caseId')) = ${c} OR LOWER(JSON_VALUE(details, '$.externalId')) = ${c})`,
+    );
+  }
+  return r;
 }
 
 export class AuditStore {
@@ -61,14 +97,7 @@ export class AuditStore {
     size: number,
     after?: { at: Date; id: string },
   ): Promise<AuditRow[]> {
-    let q = tx
-      .selectFrom('audit_log')
-      .selectAll()
-      .where('at', '>=', instant(filter.from))
-      .where('at', '<=', instant(filter.to));
-    if (filter.action) q = q.where('action', '=', filter.action);
-    if (filter.actorUserId) q = q.where('actor_user_id', '=', filter.actorUserId);
-    if (filter.targetId) q = q.where('target_id', '=', filter.targetId);
+    let q = filtered(tx, filter);
     if (after)
       q = q.where((eb) =>
         eb.or([
@@ -80,14 +109,17 @@ export class AuditStore {
     return rows.map(toRow);
   }
 
-  /** Newest first. */
+  /** Newest first, a page after `before` (the last entry of the previous page) when given. */
   async list(tx: MssqlTx, filter: AuditFilter): Promise<AuditRow[]> {
-    let q = tx.selectFrom('audit_log').selectAll();
-    if (filter.action) q = q.where('action', '=', filter.action);
-    if (filter.actorUserId) q = q.where('actor_user_id', '=', filter.actorUserId);
-    if (filter.targetId) q = q.where('target_id', '=', filter.targetId);
-    if (filter.from) q = q.where('at', '>=', instant(filter.from));
-    if (filter.to) q = q.where('at', '<=', instant(filter.to));
+    let q = filtered(tx, filter);
+    const before = filter.before;
+    if (before)
+      q = q.where((eb) =>
+        eb.or([
+          eb('at', '<', instant(before.at)),
+          eb.and([eb('at', '=', instant(before.at)), eb('id', '<', before.id)]),
+        ]),
+      );
     const rows = await q.orderBy('at', 'desc').orderBy('id', 'desc').top(filter.limit).execute();
     return rows.map(toRow);
   }

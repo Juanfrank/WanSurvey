@@ -513,7 +513,14 @@ export class ReviewService implements OnModuleInit {
         action: AUDIT[body.to],
         targetType: 'interview',
         targetId: id,
-        details: { from: row.status, to: body.to },
+        // The project and case too, so the activity log can be filtered by them.
+        details: {
+          from: row.status,
+          to: body.to,
+          projectId: row.projectId,
+          caseId: row.caseId,
+          externalId: row.caseId ? await t.externalIdOf(row.caseId) : null,
+        },
       }),
     );
     if (row.submittedAt) await this.stats.touched(t, row.tenantId, row.projectId, row.submittedAt);
@@ -658,7 +665,15 @@ export class ReviewService implements OnModuleInit {
         action: 'interview.corrected',
         targetType: 'interview',
         targetId: id,
-        details: { variable: body.variable, reason: body.reason, cleared: r.cleared.length },
+        details: {
+          variable: body.variable,
+          reason: body.reason,
+          cleared: r.cleared.length,
+          // The project and case too, so the activity log can answer "who changed X in case Y".
+          projectId: row.projectId,
+          caseId: row.caseId,
+          externalId: row.caseId ? await t.externalIdOf(row.caseId) : null,
+        },
       }),
     );
     return {
