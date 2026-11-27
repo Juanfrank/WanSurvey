@@ -69,6 +69,8 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await picker.getByRole('button', { name: 'In 1 hour' }).click();
     await expect(picker.getByRole('radio', { name: 'Me' })).toBeChecked();
     await expect(picker).toContainText('Calling hours: 00:00–00:00');
+    // The chosen moment written out, whatever format the browser's own picker uses.
+    await expect(picker).toContainText(/Call back on \w+day, \w+ \d+, \d{4}/);
     await shot(page, 'cati-callback');
     await page.keyboard.press('Control+Enter');
     await expect(page.getByTestId('calls-message')).toContainText('Saved: Call back later');

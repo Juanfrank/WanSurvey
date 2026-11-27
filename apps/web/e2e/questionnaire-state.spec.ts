@@ -36,15 +36,15 @@ test('a questionnaire is disabled, enabled again, and completed with a continuat
   await expect(row.getByTestId('q-state')).not.toContainText('Disabled');
 
   await actions();
-  await page.getByRole('menuitem', { name: 'Complete…' }).click();
-  const dialog = page.getByRole('dialog', { name: `Complete “${name}”` });
+  await page.getByRole('menuitem', { name: 'Close fieldwork…' }).click();
+  const dialog = page.getByRole('dialog', { name: `Close fieldwork for “${name}”` });
   await dialog
     .getByRole('combobox', { name: 'Continue in (optional)' })
     .selectOption({ label: 'Household questionnaire' });
   await shot(page, 'complete-dialog');
   await expectAccessible(page);
-  await dialog.getByRole('button', { name: 'Complete', exact: true }).click();
-  await expect(row.getByTestId('q-state')).toContainText('Completed');
+  await dialog.getByRole('button', { name: 'Close fieldwork', exact: true }).click();
+  await expect(row.getByTestId('q-state')).toContainText('Fieldwork closed');
   await expect(row.getByTestId('q-state')).toContainText('continues in Household questionnaire');
   await shot(page, 'questionnaire-states');
   await expectAccessible(page);
@@ -52,7 +52,7 @@ test('a questionnaire is disabled, enabled again, and completed with a continuat
   // Reopened, then removed.
   await actions();
   await page.getByRole('menuitem', { name: 'Reopen' }).click();
-  await expect(row.getByTestId('q-state')).not.toContainText('Completed');
+  await expect(row.getByTestId('q-state')).not.toContainText('Fieldwork closed');
   page.once('dialog', (d) => void d.accept());
   await actions();
   await page.getByRole('menuitem', { name: 'Delete…' }).click();

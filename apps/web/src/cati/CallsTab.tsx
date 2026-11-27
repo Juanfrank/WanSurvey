@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, apiFull } from '../api.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
+import { dateTimeFull } from '../format.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
 import { PhoneIcon } from '../routes/icons.js';
@@ -614,7 +615,7 @@ export function CallsTab({
                     value={callback}
                     min={utcToZoned(new Date(now), tz)}
                     onChange={(e) => setCallback(e.target.value)}
-                    aria-describedby="callback-hours callback-problem"
+                    aria-describedby="callback-when callback-hours callback-problem"
                     aria-invalid={callbackProblem ? true : undefined}
                   />
                 </label>
@@ -637,6 +638,11 @@ export function CallsTab({
                     </button>
                   ))}
                 </div>
+                <p id="callback-when" className="empty:hidden font-medium" aria-live="polite">
+                  {callbackDate
+                    ? t('cati.callbackWhen', { when: dateTimeFull(callbackDate, tz) })
+                    : ''}
+                </p>
                 <p id="callback-hours" className="text-slate-600">
                   {t('cati.callbackHours', hours)}
                 </p>
