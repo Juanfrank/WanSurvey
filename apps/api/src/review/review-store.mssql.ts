@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 import { idOrder } from '../db/mssql/order.js';
+import { FLAG_KINDS } from './flags.js';
 
 /**
  * Review on SQL Server (Kysely): the review queue, comments, the interview's review status and
@@ -21,6 +22,8 @@ export interface QueueFilter {
   status: string[];
   interviewerId?: string;
   mode?: string;
+  /** Only interviews with this result (COMPLETE, SCREENED_OUT, REFUSAL…). */
+  disposition?: string;
   /** Only interviews that carry this quality flag. */
   flag?: string;
   sampled?: boolean;
@@ -43,13 +46,24 @@ export interface CorrectionEvent {
 export class ReviewStore {
   /** Interviews to review, newest submission first, with their flags and number of comments. */
   async queue(tx: MssqlTx, f: QueueFilter) {
-    const where = sql`i.project_id = ${f.projectId} AND i.status IN (${sql.join(f.status)})
-      ${f.interviewerId ? sql`AND i.interviewer_id = ${f.interviewerId}` : sql``}
+    // A second paper entry is not reviewed on its own: it is folded into the first (the record
+    // kept), which carries the differences between the two until they are resolved.
+    const shared = sql`i.project_id = ${f.projectId} AND i.status IN (${sql.join(f.status)})
+      AND i.entry_pass = 1
       ${f.mode ? sql`AND i.mode = ${f.mode}` : sql``}
-      ${f.flag ? sql`AND EXISTS (SELECT 1 FROM OPENJSON(i.flags) WHERE [key] = ${f.flag})` : sql``}
+      ${f.disposition ? sql`AND i.disposition = ${f.disposition}` : sql``}
+      ${
+        f.flag === 'doubleEntry'
+          ? sql`AND EXISTS (SELECT 1 FROM entry_mismatches m WHERE m.first_interview_id = i.id)`
+          : f.flag
+            ? sql`AND EXISTS (SELECT 1 FROM OPENJSON(i.flags) WHERE [key] = ${f.flag})`
+            : sql``
+      }
       ${f.sampled !== undefined ? sql`AND i.sampled = ${f.sampled ? 1 : 0}` : sql``}
       ${f.from ? sql`AND i.submitted_at >= ${`${f.from}T00:00:00Z`}` : sql``}
       ${f.to ? sql`AND i.submitted_at <= ${`${f.to}T23:59:59.999Z`}` : sql``}`;
+    const where = sql`${shared}
+      ${f.interviewerId ? sql`AND i.interviewer_id = ${f.interviewerId}` : sql``}`;
     const total = await sql<{
       n: number;
     }>`SELECT COUNT(*) AS n FROM interviews i WHERE ${where}`.execute(tx);
@@ -67,10 +81,18 @@ export class ReviewStore {
       sampled: boolean;
       submissions: number;
       comments: number;
+      second_clerk: string | null;
+      open_differences: number;
     }>`
       SELECT i.id, c.external_id, u.name AS interviewer, i.interviewer_id, i.mode, i.status,
         i.disposition, i.submitted_at, i.active_ms, i.flags, i.sampled, i.submissions,
-        (SELECT COUNT(*) FROM review_comments rc WHERE rc.interview_id = i.id) AS comments
+        (SELECT COUNT(*) FROM review_comments rc WHERE rc.interview_id = i.id) AS comments,
+        (SELECT TOP (1) ISNULL(su.name, N'—') FROM interviews s
+         LEFT JOIN users su ON su.id = s.interviewer_id
+         WHERE s.case_id = i.case_id AND s.entry_pass = 2 AND s.submitted_at IS NOT NULL
+         ORDER BY s.submitted_at DESC) AS second_clerk,
+        (SELECT COUNT(*) FROM entry_mismatches m
+         WHERE m.first_interview_id = i.id AND m.status = 'open') AS open_differences
       FROM interviews i
       LEFT JOIN cases c ON c.id = i.case_id
       LEFT JOIN users u ON u.id = i.interviewer_id
@@ -81,8 +103,30 @@ export class ReviewStore {
           : sql`i.submitted_at DESC, i.id`
       }
       OFFSET ${(f.page - 1) * f.limit} ROWS FETCH NEXT ${f.limit} ROWS ONLY`.execute(tx);
+    // Per interviewer, under the same filters (but any interviewer): how many interviews and
+    // how many carry a quality flag, so the queue can be worked person by person.
+    const people = await sql<{
+      interviewer_id: string | null;
+      name: string | null;
+      n: number;
+      flagged: number;
+    }>`
+      SELECT i.interviewer_id, u.name, COUNT(*) AS n, SUM(fl.flagged) AS flagged
+      FROM interviews i
+      LEFT JOIN users u ON u.id = i.interviewer_id
+      OUTER APPLY (SELECT CASE WHEN EXISTS (SELECT 1 FROM OPENJSON(i.flags)
+        WHERE [key] IN (${sql.join([...FLAG_KINDS])})) THEN 1 ELSE 0 END AS flagged) fl
+      WHERE ${shared} AND i.interviewer_id IS NOT NULL
+      GROUP BY i.interviewer_id, u.name
+      ORDER BY SUM(fl.flagged) DESC, COUNT(*) DESC, u.name`.execute(tx);
     return {
       total: total.rows[0]?.n ?? 0,
+      interviewers: people.rows.map((r) => ({
+        id: r.interviewer_id!.toLowerCase(),
+        name: r.name,
+        interviews: r.n,
+        flagged: r.flagged,
+      })),
       page: f.page,
       limit: f.limit,
       rows: rows.rows.map((r) => ({
@@ -183,7 +227,63 @@ export class ReviewStore {
       LEFT JOIN users u ON u.id = i.reviewed_by
       WHERE i.project_id = ${projectId} AND i.interviewer_id = ${userId} AND i.status = 'returned'
       ORDER BY i.reviewed_at DESC`.execute(tx);
-    return res.rows.map((r) => ({ ...r, id: r.id.toLowerCase() }));
+    const ids = res.rows.map((r) => r.id);
+    // The comments on single questions still to deal with, so the interviewer knows where to go.
+    const open = ids.length
+      ? await sql<{ interview_id: string; variable: string; body: string }>`
+          SELECT rc.interview_id, rc.variable, rc.body FROM review_comments rc
+          WHERE rc.interview_id IN (${sql.join(ids)}) AND rc.variable IS NOT NULL
+            AND rc.resolved_at IS NULL
+          ORDER BY rc.created_at`.execute(tx)
+      : { rows: [] };
+    return res.rows.map((r) => ({
+      ...r,
+      id: r.id.toLowerCase(),
+      questions: open.rows
+        .filter((c) => c.interview_id.toLowerCase() === r.id.toLowerCase())
+        .map((c) => ({ variable: c.variable, body: c.body })),
+    }));
+  }
+
+  /** Differences between the two paper entries, with this interview as the first, not resolved. */
+  async openDifferences(tx: MssqlTx, interviewId: string) {
+    const res = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM entry_mismatches
+      WHERE first_interview_id = ${interviewId} AND status = 'open'`.execute(tx);
+    return res.rows[0]?.n ?? 0;
+  }
+
+  /**
+   * One interviewer's own quality signals in a project (their submitted first entries): how
+   * their interviews fared in review, how many carry each quality flag, and the median length
+   * of their complete interviews beside the team's.
+   */
+  async ownQuality(tx: MssqlTx, projectId: string, userId: string) {
+    const mine = await sql<{
+      status: string;
+      disposition: string | null;
+      active_ms: number;
+      submissions: number;
+      flags: string | null;
+    }>`
+      SELECT status, disposition, active_ms, submissions, flags FROM interviews
+      WHERE project_id = ${projectId} AND interviewer_id = ${userId} AND entry_pass = 1
+        AND submitted_at IS NOT NULL`.execute(tx);
+    const team = await sql<{ median: number | null }>`
+      SELECT TOP (1) PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY active_ms) OVER () AS median
+      FROM interviews
+      WHERE project_id = ${projectId} AND entry_pass = 1 AND disposition = 'COMPLETE'
+        AND interviewer_id IS NOT NULL AND status IN (${sql.join(COUNTED)})`.execute(tx);
+    return {
+      rows: mine.rows.map((r) => ({
+        status: r.status,
+        disposition: r.disposition,
+        activeMs: r.active_ms,
+        submissions: r.submissions,
+        flags: parse<Record<string, unknown>>(r.flags) ?? {},
+      })),
+      teamMedianMs: team.rows[0]?.median ?? null,
+    };
   }
 
   // Comments

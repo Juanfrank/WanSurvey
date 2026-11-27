@@ -45,6 +45,9 @@ interface Detail {
     sampled: boolean;
     submissions: number;
     state: Record<string, unknown>;
+    entryPass?: number;
+    /** Differences with the second paper entry still to resolve (approval waits for them). */
+    openDifferences?: number;
   };
   context: { case?: Record<string, unknown> };
   compiled: CompiledQuestionnaire;
@@ -105,6 +108,7 @@ export function ReviewPage() {
   const [text, setText] = useState('');
   const [correcting, setCorrecting] = useState<string | null>(null);
   const [commenting, setCommenting] = useState<string | null | undefined>(undefined);
+  const [onlyIssues, setOnlyIssues] = useState(false);
   const d = detail.data;
 
   const session = useMemo(() => {
@@ -158,6 +162,14 @@ export function ReviewPage() {
   const answers = session.getAnswers();
   const byKey = (k: string | null) => d.comments.filter((c) => c.variable === k);
   const historyOf = (k: string) => d.history.filter((h) => h.variable === k);
+  // A question with something to look at: a confirmed warning, a note, a comment or a change.
+  const hasIssue = (k: string) =>
+    d.warnings.some((w) => w.key === k) ||
+    d.notes.some((n) => n.key === k) ||
+    byKey(k).length > 0 ||
+    historyOf(k).length > 1;
+  const issues = path.filter((e) => hasIssue(e.key)).length;
+  const shown = onlyIssues ? path.filter((e) => hasIssue(e.key)) : path;
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="review-screen">
@@ -225,16 +237,39 @@ export function ReviewPage() {
       {d.allowed.length ? (
         <p className="text-xs text-slate-600">{t('review.screen.keys')}</p>
       ) : null}
+      {d.interview.openDifferences ? (
+        <p
+          className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2"
+          data-testid="entries-differ"
+        >
+          {t('review.screen.entriesDiffer', { count: d.interview.openDifferences })}
+        </p>
+      ) : null}
 
       <section
         aria-labelledby="review-path"
         className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
       >
-        <h2 id="review-path" className="mb-2 text-base font-semibold">
-          {t('review.screen.path')}
-        </h2>
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <h2 id="review-path" className="text-base font-semibold">
+            {t('review.screen.path')}
+          </h2>
+          <span className="text-xs text-slate-600" data-testid="issue-count">
+            {t('review.screen.issues', { count: issues })}
+          </span>
+          {issues ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={onlyIssues}
+                onChange={(e) => setOnlyIssues(e.target.checked)}
+              />
+              {t('review.screen.onlyIssues')}
+            </label>
+          ) : null}
+        </div>
         <ol className="flex flex-col divide-y divide-slate-100">
-          {path.map((e) => {
+          {shown.map((e) => {
             const v = answers[e.key];
             const changes = historyOf(e.key);
             const notes = d.notes.filter((n) => n.key === e.key);
@@ -246,6 +281,14 @@ export function ReviewPage() {
                 <div className="flex flex-wrap items-baseline gap-x-3">
                   <span className="font-mono text-xs text-slate-600">{e.key}</span>
                   <span className="flex-1">{session.text(e.key)}</span>
+                  {warns.length ? (
+                    <span
+                      className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-ink-900"
+                      data-testid="question-warning"
+                    >
+                      {t('review.screen.warningBadge', { count: warns.length })}
+                    </span>
+                  ) : null}
                   {ms !== undefined ? (
                     <span className="tabular-nums text-xs text-slate-600">
                       {t('review.screen.time', { s: Math.round(ms / 100) / 10 })}

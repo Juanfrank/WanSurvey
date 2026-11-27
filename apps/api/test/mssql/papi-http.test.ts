@@ -198,6 +198,24 @@ describe.skipIf(!configured)('SQL Server: paper forms over HTTP', () => {
     ]);
     const [still] = await rows(sql`SELECT status FROM cases WHERE id = ${caseId}`);
     expect(still!.status).toBe('in_progress');
+    // The review queue shows the pair once, as the first entry with its open difference, and
+    // the first entry cannot be approved until the difference is resolved.
+    const queue = await supervisor.agent.get(`/api/v1/projects/${project}/review/queue`);
+    const pair = queue.body.rows.filter((r: { externalId: string }) => r.externalId === 'P0200');
+    expect(pair).toEqual([
+      expect.objectContaining({
+        id: first.interviewId,
+        openDifferences: 1,
+        secondClerk: expect.any(String),
+      }),
+    ]);
+    const blocked = await post(supervisor, `/review/interviews/${first.interviewId}/transition`, {
+      to: 'approved',
+    });
+    expect(blocked.body.code).toBe('ENTRIES_DIFFER');
+    const shown = await supervisor.agent.get(`/api/v1/review/interviews/${first.interviewId}`);
+    expect(shown.body.interview.openDifferences).toBe(1);
+    expect(shown.body.allowed).not.toContain('approved');
     // Clerks do not resolve.
     expect(
       (

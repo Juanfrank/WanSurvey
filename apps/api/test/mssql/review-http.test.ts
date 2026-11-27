@@ -198,7 +198,12 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
     // The interviewer sees it, takes it on another device, fixes HOURS and resubmits.
     const mine = await me.agent.get(`/api/v1/projects/${project}/review/returned`);
     expect(mine.body).toEqual([
-      expect.objectContaining({ id, comment: 'Corrija las horas, por favor.' }),
+      expect.objectContaining({
+        id,
+        comment: 'Corrija las horas, por favor.',
+        // The questions with a comment still open, so the interviewer can go straight there.
+        questions: [{ variable: 'HOURS', body: 'Revise las horas: el formulario dice 45.' }],
+      }),
     ]);
     const d0 = await me.agent.get(`/api/v1/review/interviews/${id}`);
     expect(d0.body.comments.map((c: { variable: string | null }) => c.variable)).toEqual([
@@ -252,6 +257,13 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
     expect(audit.map((a) => a.action)).toEqual(
       expect.arrayContaining(['interview.returned', 'interview.approved']),
     );
+    // The interviewer sees their own signals: approved, returned once.
+    const own = await me.agent.get(`/api/v1/projects/${project}/review/mine`);
+    expect(own.status).toBe(200);
+    expect(own.body).toMatchObject({ approved: 1, returned: 1, rejected: 0 });
+    expect(own.body.submitted).toBeGreaterThanOrEqual(1);
+    // Only those who interview or key forms have signals of their own.
+    expect((await reviewer.agent.get(`/api/v1/projects/${project}/review/mine`)).status).toBe(403);
   });
 
   it('corrections re-run the logic: path changes clear answers; opening new questions is refused', async () => {
@@ -325,6 +337,22 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
     await sql`UPDATE interviews SET flags = '{"speeding": 400}' WHERE id = ${id}`.execute(t.owner);
     const flagged = await sup.agent.get(`/api/v1/projects/${project}/review/queue?flag=speeding`);
     expect(flagged.body.rows.map((r: { id: string }) => r.id)).toEqual([id]);
+    // The queue counts each interviewer's interviews and the flagged ones among them.
+    expect(flagged.body.interviewers).toEqual([
+      { id: iUser.id.toLowerCase(), name: expect.any(String), interviews: 1, flagged: 1 },
+    ]);
+    const all = await sup.agent.get(`/api/v1/projects/${project}/review/queue`);
+    const byMe = all.body.interviewers.find((x: { id: string }) => x.id === iUser.id.toLowerCase());
+    expect(byMe.flagged).toBeGreaterThanOrEqual(1);
+    expect(byMe.interviews).toBe(all.body.total);
+    // By result: this interview has none of the outcome asked for.
+    const refusals = await sup.agent.get(
+      `/api/v1/projects/${project}/review/queue?disposition=REFUSAL`,
+    );
+    expect(refusals.body.rows.map((r: { id: string }) => r.id)).not.toContain(id);
+    expect(
+      (await sup.agent.get(`/api/v1/projects/${project}/review/queue?disposition=NOPE`)).status,
+    ).toBe(400);
     await post(sup, `/review/interviews/${id}/transition`, {
       to: 'rejected',
       comment: 'Entrevista inventada',

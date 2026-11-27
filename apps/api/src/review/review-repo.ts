@@ -17,6 +17,7 @@ export interface ReviewQuery {
   status: string[];
   interviewerId?: string;
   mode?: string;
+  disposition?: string;
   flag?: string;
   sampled?: boolean;
   sort?: 'risk';
@@ -62,7 +63,26 @@ export interface ReviewTx extends InterviewsTx {
       sampled: boolean;
       submissions: number;
       comments: number;
+      /** Who keyed the second paper entry folded into this one, if any. */
+      secondClerk: string | null;
+      /** Differences between the two paper entries not yet resolved. */
+      openDifferences: number;
     }[];
+    interviewers: { id: string; name: string | null; interviews: number; flagged: number }[];
+  }>;
+  openDifferences(interviewId: string): Promise<number>;
+  ownQuality(
+    projectId: string,
+    userId: string,
+  ): Promise<{
+    rows: {
+      status: string;
+      disposition: string | null;
+      activeMs: number;
+      submissions: number;
+      flags: Record<string, unknown>;
+    }[];
+    teamMedianMs: number | null;
   }>;
   externalIdOf(caseId: string): Promise<string | null>;
   dwellSample(
@@ -146,6 +166,7 @@ export interface ReviewTx extends InterviewsTx {
       reviewedAt: Date | null;
       reviewer: string | null;
       comment: string | null;
+      questions: { variable: string; body: string }[];
     }[]
   >;
   otherTexts(projectId: string, variable?: string): Promise<OtherText[]>;
@@ -210,8 +231,19 @@ export class MssqlReviewTx extends MssqlInterviewsTx implements ReviewTx {
         sampled: !!x.sampled,
         submissions: x.submissions,
         comments: x.comments,
+        secondClerk: x.second_clerk,
+        openDifferences: x.open_differences,
       })),
+      interviewers: r.interviewers,
     };
+  }
+
+  openDifferences(interviewId: string) {
+    return this.review.openDifferences(this.mtx, interviewId);
+  }
+
+  ownQuality(projectId: string, userId: string) {
+    return this.review.ownQuality(this.mtx, projectId, userId);
   }
 
   dwellSample(versionId: string, excludeId: string, interviews: number) {
@@ -433,6 +465,7 @@ export class MssqlReviewTx extends MssqlInterviewsTx implements ReviewTx {
       reviewedAt: r.reviewed_at as Date | null,
       reviewer: r.reviewer,
       comment: r.comment,
+      questions: r.questions,
     }));
   }
 

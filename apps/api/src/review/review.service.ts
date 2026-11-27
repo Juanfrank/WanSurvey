@@ -9,7 +9,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { createInterview } from '@wansurvey/logic';
-import type { Permission, ReviewSettings } from '@wansurvey/schema';
+import { Disposition, type Permission, type ReviewSettings } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService, type AuditAction } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
@@ -18,6 +18,7 @@ import { MASK, maskContact, maskSample } from '../cases/case-logic.js';
 import type { InterviewRow } from '../interviews/interviews-repo.js';
 import { InterviewsService, personalVariables } from '../interviews/interviews.service.js';
 import { REVIEW_REPO, type ReviewRepo, type ReviewTx } from './review-repo.js';
+import { COUNTED } from './review-store.mssql.js';
 import { Engine } from '../db/engine.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { StatsService } from '../stats/stats.service.js';
@@ -39,6 +40,7 @@ export const QueueQuery = z.object({
     .pipe(z.array(z.enum(['submitted', 'in_review', 'approved', 'returned', 'rejected'])).min(1)),
   interviewerId: z.uuid().optional(),
   mode: z.enum(['CATI', 'CAPI', 'CAWI', 'PAPI']).optional(),
+  disposition: Disposition.optional(),
   flag: z.enum(FLAG_KINDS).optional(),
   sort: z.enum(['risk']).optional(),
   sampled: z
@@ -312,7 +314,13 @@ export class ReviewService implements OnModuleInit {
   /** Interviews to review, newest submission first, with their flags (R2). */
   async queue(t: ReviewTx, projectId: string, q: z.infer<typeof QueueQuery>) {
     const r = await t.queue(projectId, q);
-    return { total: r.total, page: q.page, limit: q.limit, rows: r.rows };
+    return {
+      total: r.total,
+      page: q.page,
+      limit: q.limit,
+      rows: r.rows,
+      interviewers: r.interviewers,
+    };
   }
 
   private async load(t: ReviewTx, id: string, lock = false) {
@@ -372,10 +380,13 @@ export class ReviewService implements OnModuleInit {
         : values;
     const context = this.runtime.contextOf(row);
     const state = row.state as Record<string, unknown>;
+    // A first paper entry is approved only once its differences with the second are resolved.
+    const openDifferences = row.entryPass === 1 ? await t.openDifferences(id) : 0;
     const allowed = reviewer
       ? (Object.entries(TRANSITIONS[row.status] ?? {}) as [To, Permission][])
           .filter(([, perm]) => can(ctx.memberships, perm, row.projectId))
           .map(([to]) => to)
+          .filter((to) => to !== 'approved' || !openDifferences)
       : [];
     return {
       interview: {
@@ -399,6 +410,7 @@ export class ReviewService implements OnModuleInit {
           ? state
           : { ...state, answers: maskValues(state.answers), stash: maskValues(state.stash) },
         entryPass: row.entryPass,
+        openDifferences,
       },
       context: canSee
         ? context
@@ -475,6 +487,11 @@ export class ReviewService implements OnModuleInit {
       });
     if (!can(ctx.memberships, perm, row.projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not do this' });
+    if (body.to === 'approved' && row.entryPass === 1 && (await t.openDifferences(id)))
+      throw new ConflictException({
+        code: 'ENTRIES_DIFFER',
+        message: 'Resolve the differences between the two paper entries first',
+      });
     if (body.to === 'returned') {
       if (!body.comment?.trim())
         throw new BadRequestException({
@@ -686,6 +703,39 @@ export class ReviewService implements OnModuleInit {
   /** The caller's interviews returned for fixing, with the latest comment. */
   async returned(t: ReviewTx, ctx: AuthContext, projectId: string) {
     return t.returnedTo(projectId, ctx.userId);
+  }
+
+  /**
+   * The caller's own quality signals (what a reviewer sees about them): how their submitted
+   * interviews fared in review, the flags they carry and their median length beside the team's.
+   */
+  async ownQuality(t: ReviewTx, ctx: AuthContext, projectId: string) {
+    const { rows, teamMedianMs } = await t.ownQuality(projectId, ctx.userId);
+    const count = (status: string) => rows.filter((r) => r.status === status).length;
+    const flags: Partial<Record<(typeof FLAG_KINDS)[number], number>> = {};
+    for (const r of rows)
+      for (const k of FLAG_KINDS) if (r.flags[k] !== undefined) flags[k] = (flags[k] ?? 0) + 1;
+    const lengths = rows
+      .filter((r) => r.disposition === 'COMPLETE' && COUNTED.includes(r.status))
+      .map((r) => r.activeMs)
+      .sort((a, b) => a - b);
+    const mid = lengths.length >> 1;
+    const median = !lengths.length
+      ? null
+      : lengths.length % 2
+        ? lengths[mid]!
+        : (lengths[mid - 1]! + lengths[mid]!) / 2;
+    return {
+      submitted: rows.length,
+      approved: count('approved'),
+      rejected: count('rejected'),
+      // Sent back at least once: still waiting for the fix, or fixed and sent again.
+      returned: rows.filter((r) => r.status === 'returned' || r.submissions > 1).length,
+      flagged: rows.filter((r) => FLAG_KINDS.some((k) => r.flags[k] !== undefined)).length,
+      flags,
+      medianMs: median,
+      teamMedianMs,
+    };
   }
 
   // -------------------------------------------------------------------------

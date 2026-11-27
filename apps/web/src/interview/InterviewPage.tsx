@@ -280,7 +280,19 @@ export function InterviewPage() {
         </Dialog>
       ) : null}
       {payload.interview.status === 'returned' ? (
-        <ReturnedComments interviewId={interviewId} />
+        <ReturnedComments
+          interviewId={interviewId}
+          onGoTo={
+            paused
+              ? undefined
+              : (key) => {
+                  if (!session.canJumpTo(key)) return false;
+                  session.jumpTo(key);
+                  iv.onChange();
+                  return true;
+                }
+          }
+        />
       ) : null}
       {payload.interview.mode === 'PAPI' ? (
         <PaperMeta
@@ -609,7 +621,14 @@ function PaperMeta({
 }
 
 /** What the reviewer asked to fix, beside the interview being corrected (R1). */
-function ReturnedComments({ interviewId }: { interviewId: string }) {
+function ReturnedComments({
+  interviewId,
+  onGoTo,
+}: {
+  interviewId: string;
+  /** Moves the interview to a commented question; false when it cannot be reached. */
+  onGoTo?: (key: string) => boolean;
+}) {
   const { t } = useTranslation();
   const [comments, setComments] = useState<ReviewComment[]>([]);
   useEffect(() => {
@@ -631,6 +650,18 @@ function ReturnedComments({ interviewId }: { interviewId: string }) {
           <li key={c.id}>
             {c.variable ? <span className="mr-1 font-mono text-xs">{c.variable}</span> : null}
             {c.body} <span className="text-xs text-slate-600">— {c.author}</span>
+            {c.resolvedAt ? (
+              <span className="ml-1 text-xs text-slate-600">({t('review.screen.resolved')})</span>
+            ) : null}
+            {c.variable && onGoTo ? (
+              <button
+                type="button"
+                className="ml-2 text-xs text-indigo-ink-700 underline"
+                onClick={() => onGoTo(c.variable!)}
+              >
+                {t('review.returned.goTo', { key: c.variable })}
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>
