@@ -67,9 +67,18 @@ const AssignBody = z
     onlyUnassigned: z.boolean().default(false),
     /** With a filter: only this questionnaire's cases. */
     questionnaireId: z.uuid().optional(),
+    /**
+     * Move the cases this person holds and has not started (for instance when they fall ill)
+     * instead of a list; with `questionnaireId`, only that questionnaire's.
+     */
+    fromUserId: z.uuid().optional(),
     userId: z.uuid().nullable(),
   })
-  .refine((b) => !!b.caseIds !== (b.filter !== undefined), 'Give either caseIds or filter');
+  .refine(
+    (b) => [!!b.caseIds, b.filter !== undefined, !!b.fromUserId].filter(Boolean).length === 1,
+    'Give one of caseIds, filter or fromUserId',
+  )
+  .refine((b) => !(b.fromUserId && b.onlyUnassigned), 'A move takes held cases, not free ones');
 
 const DistributeBody = z.object({
   /** Left out: every free case (of the questionnaire, when given). */
@@ -473,6 +482,14 @@ export class CasesController {
         );
         ids = all.filter(match).map((c) => c.id);
       }
+      if (body.fromUserId) {
+        if (body.fromUserId.toLowerCase() === body.userId?.toLowerCase())
+          throw new BadRequestException({
+            code: 'SAME_PERSON',
+            message: 'The cases already belong to this person',
+          });
+        ids = await t.heldCaseIds(projectId, body.fromUserId, ['assigned'], body.questionnaireId);
+      }
       if (body.onlyUnassigned && ids?.length) {
         const free = new Set(
           (await t.among(projectId, ids, { unassigned: true })).map((r) => r.id),
@@ -487,10 +504,18 @@ export class CasesController {
           })
         ).map((r) => r.id),
       );
-      const n = await this.svc.assign(t, ctx, projectId, [...workable], body.userId, 'manual', {
-        statuses: ['fresh', 'assigned', 'in_progress'],
-        unassigned: body.onlyUnassigned,
-      });
+      const n = await this.svc.assign(
+        t,
+        ctx,
+        projectId,
+        [...workable],
+        body.userId,
+        body.fromUserId ? 'moved' : 'manual',
+        // Moving someone's cases: only those still theirs and not started meanwhile.
+        body.fromUserId
+          ? { statuses: ['assigned'], holder: body.fromUserId }
+          : { statuses: ['fresh', 'assigned', 'in_progress'], unassigned: body.onlyUnassigned },
+      );
       await t.audit(
         this.audit.fromContext(ctx, {
           action: 'cases.assigned',
@@ -500,6 +525,7 @@ export class CasesController {
             to: body.userId,
             count: n,
             ...(body.filter !== undefined ? { filter: body.filter } : {}),
+            ...(body.fromUserId ? { from: body.fromUserId } : {}),
           },
         }),
       );
@@ -699,8 +725,10 @@ export class CasesController {
       await this.svc.project(t, projectId);
       const people = await this.svc.assignees(t, projectId);
       const load = await t.workload(projectId);
+      const teams = await t.teamsOf(people.map((p) => p.userId));
       return people.map((p) => ({
         ...p,
+        teams: teams.filter((m) => m.userId === p.userId).map(({ id, name }) => ({ id, name })),
         workload: Object.fromEntries(
           load.filter((l) => l.userId === p.userId).map((l) => [l.status, l.n]),
         ),

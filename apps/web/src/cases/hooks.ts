@@ -45,8 +45,18 @@ export interface Assignee {
   name: string;
   email: string;
   roles: string[];
+  /** The organisation's teams the person is in. */
+  teams?: { id: string; name: string }[];
   workload: Partial<Record<CaseStatus, number>>;
 }
+
+/**
+ * People who go to the field. `roles` lists only the roles that let the person work cases, so
+ * anyone who has one besides owner or administrator (whose roles carry every permission) works
+ * cases by design; owners and administrators alone are offered apart and not chosen by default.
+ */
+export const isFieldWorker = (p: Pick<Assignee, 'roles'>) =>
+  p.roles.some((r) => r !== 'owner' && r !== 'admin');
 
 export function useAssignees(projectId: string, enabled: boolean) {
   return useQuery({

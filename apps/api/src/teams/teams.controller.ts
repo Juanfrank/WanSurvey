@@ -33,12 +33,8 @@ const TeamPatch = z.object({
 /**
  * Teams of the organisation (a field crew, a call-centre shift): a name, a leader and members,
  * all people of the organisation. Seen by whoever sees the people (`users.read`); changed by
- * whoever manages them (`users.manage`).
- */
-/**
- * Teams of the organisation (a field crew, a call-centre shift): a name, a leader and members,
- * all people of the organisation. Seen by whoever sees the people (`users.read`); changed by
- * whoever manages them (`users.manage`).
+ * whoever manages them (`users.manage`). In a project, the people who can work cases carry their
+ * teams, so a share-out can go to one team.
  */
 @ApiTags('teams')
 @Controller('teams')

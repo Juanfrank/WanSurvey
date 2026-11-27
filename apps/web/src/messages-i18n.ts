@@ -173,6 +173,7 @@ export const messagesEn = {
     NOT_VALIDATED: 'Map and check the file first.',
     NO_ID_COLUMN: 'Choose exactly one column as the case id.',
     BAD_FILTER: 'The condition can only use case fields, status, priority and mode.',
+    SAME_PERSON: 'The cases already belong to this person.',
     NOT_AN_ASSIGNEE:
       'Cases can only go to active interviewers or data entry clerks of this project.',
     ALREADY_TAKEN: 'Someone else has just taken this case.',
@@ -361,6 +362,7 @@ export const messagesEs: MessagesCatalogue = {
     NOT_VALIDATED: 'Primero asigne las columnas y revise el archivo.',
     NO_ID_COLUMN: 'Elija exactamente una columna como id del caso.',
     BAD_FILTER: 'La condición solo puede usar campos del caso, estado, prioridad y modo.',
+    SAME_PERSON: 'Los casos ya son de esta persona.',
     NOT_AN_ASSIGNEE:
       'Los casos solo se pueden dar a entrevistadores o digitadores activos de este proyecto.',
     ALREADY_TAKEN: 'Otra persona acaba de tomar este caso.',

@@ -6,6 +6,7 @@ import { ProjectSettings } from '@wansurvey/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CasesTab } from '../src/cases/CasesTab.js';
 import { CaseMap } from '../src/cases/CaseMap.js';
+import { DistributeDialog } from '../src/cases/DistributeDialog.js';
 import { SettingsTab } from '../src/cases/SettingsTab.js';
 
 const me = {
@@ -102,6 +103,55 @@ describe('cases grid', () => {
       rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
     });
     expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+});
+
+describe('share out at random', () => {
+  it('chooses the interviewers by default, leaves other roles apart and picks a team', async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    const team = { id: 'tn', name: 'Cuadrilla Norte' };
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <DistributeDialog
+          projectId="p"
+          questionnaireId={null}
+          caseIds={[]}
+          people={[
+            {
+              userId: 'i1',
+              name: 'Ines',
+              email: 'i@x',
+              roles: ['interviewer'],
+              teams: [team],
+              workload: {},
+            },
+            { userId: 'i2', name: 'Juan', email: 'j@x', roles: ['interviewer'], workload: {} },
+            { userId: 'o1', name: 'Olga', email: 'o@x', roles: ['owner'], workload: {} },
+          ]}
+          onClose={() => {}}
+          onDone={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    const everyone = screen.getByRole('checkbox', { name: 'All interviewers' });
+    expect((everyone as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: 'Juan' }) as HTMLInputElement).checked).toBe(true);
+    const owner = screen.getByRole('checkbox', { name: /Olga/ }) as HTMLInputElement;
+    expect(owner.checked).toBe(false);
+    expect(screen.getByText('Other roles (1 person)')).toBeTruthy();
+    expect(screen.getByText(/\(Owner\)/)).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText('Team'), 'tn');
+    expect((screen.getByRole('checkbox', { name: 'Juan' }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+    await waitFor(() => {
+      const last = calls.filter((c) => c.url.endsWith('/cases/distribute/preview')).at(-1);
+      expect(JSON.parse(String(last?.init?.body)).userIds).toEqual(['i1']);
+    });
   });
 });
 

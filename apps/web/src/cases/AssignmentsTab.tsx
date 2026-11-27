@@ -49,6 +49,9 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
   const [preview, setPreview] = useState<{ matching: number; unassigned: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [moveFrom, setMoveFrom] = useState('');
+  const [moveTo, setMoveTo] = useState('');
+  const [moved, setMoved] = useState('');
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ['rules', projectId] });
@@ -117,6 +120,26 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
     onError: fail,
   });
 
+  // Someone falls ill or leaves: the cases they hold and have not started go to someone else.
+  const move = useMutation({
+    mutationFn: () =>
+      api<{ changed: number }>(`/projects/${projectId}/cases/assign`, {
+        method: 'POST',
+        // All of their not-started cases, whatever the questionnaire, as the workload counts them.
+        body: { fromUserId: moveFrom, userId: moveTo },
+      }),
+    onSuccess: async (r) => {
+      setError(null);
+      setMoved(t('cases.rules.moved', { count: r.changed }));
+      setMoveFrom('');
+      setMoveTo('');
+      await refresh();
+    },
+    onError: fail,
+  });
+  const nameOf = (id: string) => people.data?.find((p) => p.userId === id)?.name ?? '';
+  const movable = people.data?.find((p) => p.userId === moveFrom)?.workload.assigned ?? 0;
+
   const describe = (src: string | null) => {
     if (!src) return '';
     const p = tryParse(src);
@@ -149,6 +172,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
                   <th scope="col" className="py-1">
                     {t('cases.rules.person')}
                   </th>
+                  <th scope="col">{t('cases.rules.teams')}</th>
                   {STATUSES.filter((s) => s !== 'fresh').map((s) => (
                     <th key={s} scope="col">
                       {t(`cases.status.${s}`)}
@@ -162,8 +186,13 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
                     <th scope="row" className="py-1.5 text-left font-medium">
                       {p.name}
                     </th>
+                    <td className="text-slate-700">
+                      {p.teams?.map((tm) => tm.name).join(', ') || '—'}
+                    </td>
                     {STATUSES.filter((s) => s !== 'fresh').map((s) => (
-                      <td key={s}>{p.workload[s] ?? 0}</td>
+                      <td key={s} data-status={s}>
+                        {p.workload[s] ?? 0}
+                      </td>
                     ))}
                   </tr>
                 ))}
@@ -173,6 +202,81 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
         ) : (
           <p className="text-sm text-slate-600">{t('cases.rules.noPeople')}</p>
         )}
+        {(people.data?.length ?? 0) > 1 ? (
+          <form
+            className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-3 text-sm"
+            aria-label={t('cases.rules.move')}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (
+                moveFrom &&
+                moveTo &&
+                window.confirm(
+                  t('cases.rules.confirmMove', {
+                    count: movable,
+                    from: nameOf(moveFrom),
+                    to: nameOf(moveTo),
+                  }),
+                )
+              )
+                move.mutate();
+            }}
+          >
+            <h3 className="font-semibold">{t('cases.rules.move')}</h3>
+            <p className="text-slate-700">{t('cases.rules.moveHint')}</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="font-medium text-slate-700">{t('cases.rules.moveFrom')}</span>
+                <select
+                  className={controlCls}
+                  value={moveFrom}
+                  onChange={(e) => {
+                    setMoveFrom(e.target.value);
+                    if (e.target.value === moveTo) setMoveTo('');
+                    setMoved('');
+                  }}
+                >
+                  <option value="">{t('cases.list.pickPerson')}</option>
+                  {people.data?.map((p) => (
+                    <option key={p.userId} value={p.userId}>
+                      {t('cases.rules.withAssigned', {
+                        name: p.name,
+                        count: p.workload.assigned ?? 0,
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="font-medium text-slate-700">{t('cases.rules.moveTo')}</span>
+                <select
+                  className={controlCls}
+                  value={moveTo}
+                  onChange={(e) => setMoveTo(e.target.value)}
+                >
+                  <option value="">{t('cases.list.pickPerson')}</option>
+                  {people.data
+                    ?.filter((p) => p.userId !== moveFrom)
+                    .map((p) => (
+                      <option key={p.userId} value={p.userId}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={!moveFrom || !moveTo || moveFrom === moveTo || !movable || move.isPending}
+              >
+                {t('cases.rules.moveRun', { count: movable })}
+              </Button>
+              <span role="status" aria-live="polite">
+                {moved}
+              </span>
+            </div>
+          </form>
+        ) : null}
       </Card>
 
       <Card className="flex flex-col gap-4">

@@ -151,8 +151,12 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
     .selectOption({ label: 'At random, evenly' });
   await page.getByRole('button', { name: 'Assign', exact: true }).click();
   const share = page.getByRole('dialog', { name: 'Share out at random' });
-  await share.getByRole('checkbox', { name: 'Everyone' }).check();
+  // Interviewers are chosen to begin with; owners and administrators sit apart, not chosen.
+  await expect(share.getByRole('checkbox', { name: 'All interviewers' })).toBeChecked();
   await expect(share.getByRole('checkbox', { name: 'Demo clerk' })).toBeChecked();
+  await share.getByText(/Other roles \(\d+ people\)/).click();
+  await expect(share.getByRole('checkbox', { name: /Demo owner/ })).not.toBeChecked();
+  await expect(share.getByRole('checkbox', { name: /Demo admin/ })).not.toBeChecked();
   // The fair method: a preview of what each person would get, within its limit.
   await share
     .getByRole('combobox', { name: 'Method' })
@@ -228,7 +232,14 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await page.getByRole('button', { name: 'Assignment rules' }).click();
   rules = page.getByRole('dialog', { name: 'Assignment rules' });
   const clerkRow = rules.getByTestId('workload').locator(`tr[data-person="${CLERK}"]`);
-  await expect(clerkRow.locator('td').first()).toHaveText('10');
+  await expect(clerkRow.locator('td[data-status="assigned"]')).toHaveText('10');
+  // When someone falls ill, the cases they have not started go to another person at once.
+  const move = rules.getByRole('form', { name: 'Move someone’s cases' });
+  await move.getByLabel('From').selectOption({ label: 'Demo clerk (10 not started)' });
+  await move.getByLabel('To').selectOption({ label: 'Demo interviewer' });
+  await expect(move.getByRole('button', { name: 'Move 10 cases' })).toBeEnabled();
+  await move.scrollIntoViewIfNeeded();
+  await shot(page, 'cases-workload-move', { fullPage: false });
 });
 
 test('interviewers see their cases automatically; in pool mode the first to take a case holds it', async ({

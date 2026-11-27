@@ -1,12 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { CheckField, NumberField, SelectField } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, ErrorText } from '../routes/ui.js';
-import type { Assignee } from './hooks.js';
+import { isFieldWorker, type Assignee } from './hooks.js';
 
 const METHODS = ['even', 'capacity', 'performance', 'fair'] as const;
 type Method = (typeof METHODS)[number];
@@ -51,7 +51,24 @@ export function DistributeDialog({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const field = people.filter(isFieldWorker);
+  const others = people.filter((p) => !isFieldWorker(p));
+  // Field workers are chosen to begin with; owners or administrators only when ticked.
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set(field.map((p) => p.userId)));
+  const [touched, setTouched] = useState(false);
+  const fieldIds = field.map((p) => p.userId).join();
+  // The people may arrive after the dialog opens: choose the field workers then, until changed.
+  useEffect(() => {
+    if (!touched && fieldIds) setChosen(new Set(fieldIds.split(',')));
+  }, [fieldIds, touched]);
+  const choose = (next: Set<string>) => {
+    setTouched(true);
+    setChosen(next);
+  };
+  const [team, setTeam] = useState('');
+  const teams = [
+    ...new Map(people.flatMap((p) => p.teams ?? []).map((tm) => [tm.id, tm])).values(),
+  ].sort((a, b) => a.name.localeCompare(b.name));
   const [balance, setBalance] = useState(false);
   const [method, setMethod] = useState<Method>('even');
   const [manual, setManual] = useState<Record<string, number> | null>(null);
@@ -96,9 +113,31 @@ export function DistributeDialog({
       );
     },
   });
-  const all = chosen.size === people.length;
+  const all = field.length > 0 && field.every((p) => chosen.has(p.userId));
   const nameOf = new Map(people.map((p) => [p.userId, p.name]));
   const rows = chosen.size ? (preview.data?.rows ?? []) : [];
+  const person = (p: Assignee) => (
+    <label key={p.userId} className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={chosen.has(p.userId)}
+        onChange={(e) => {
+          const next = new Set(chosen);
+          if (e.target.checked) next.add(p.userId);
+          else next.delete(p.userId);
+          choose(next);
+        }}
+      />
+      <span>
+        {p.name}
+        {isFieldWorker(p) ? null : (
+          <span className="ml-1 text-xs text-slate-600">
+            ({p.roles.map((r) => t(`team.roleNames.${r}`, { defaultValue: r })).join(', ')})
+          </span>
+        )}
+      </span>
+    </label>
+  );
   return (
     <Dialog title={t('cases.distribute.title')} onClose={onClose}>
       <form
@@ -124,33 +163,61 @@ export function DistributeDialog({
           }}
           hint={t(`cases.distribute.methodHints.${method}`)}
         />
+        {teams.length ? (
+          <SelectField
+            label={t('cases.distribute.team')}
+            value={team}
+            options={[
+              { value: '', label: t('cases.distribute.anyTeam') },
+              ...teams.map((tm) => ({ value: tm.id, label: tm.name })),
+            ]}
+            onChange={(id) => {
+              setTeam(id);
+              choose(
+                new Set(
+                  (id ? people.filter((p) => p.teams?.some((tm) => tm.id === id)) : field).map(
+                    (p) => p.userId,
+                  ),
+                ),
+              );
+            }}
+            hint={t('cases.distribute.teamHint')}
+          />
+        ) : null}
         <fieldset className="flex flex-col gap-1">
           <legend className="mb-1 font-medium">{t('cases.distribute.people')}</legend>
-          <label className="flex items-center gap-2 border-b border-slate-200 pb-1">
-            <input
-              type="checkbox"
-              checked={all}
-              onChange={() => setChosen(all ? new Set() : new Set(people.map((p) => p.userId)))}
-            />
-            {t('cases.distribute.everyone')}
-          </label>
+          {field.length ? (
+            <label className="flex items-center gap-2 border-b border-slate-200 pb-1">
+              <input
+                type="checkbox"
+                checked={all}
+                onChange={() => {
+                  const next = new Set(chosen);
+                  for (const p of field) {
+                    if (all) next.delete(p.userId);
+                    else next.add(p.userId);
+                  }
+                  choose(next);
+                }}
+              />
+              {t('cases.distribute.everyone')}
+            </label>
+          ) : null}
           <div className="grid max-h-60 gap-1 overflow-auto sm:grid-cols-2">
-            {people.map((p) => (
-              <label key={p.userId} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={chosen.has(p.userId)}
-                  onChange={(e) => {
-                    const next = new Set(chosen);
-                    if (e.target.checked) next.add(p.userId);
-                    else next.delete(p.userId);
-                    setChosen(next);
-                  }}
-                />
-                {p.name}
-              </label>
-            ))}
+            {field.map((p) => person(p))}
           </div>
+          {others.length ? (
+            <details
+              className="mt-1"
+              open={!field.length || others.some((p) => chosen.has(p.userId))}
+            >
+              <summary className="cursor-pointer text-slate-700">
+                {t('cases.distribute.others', { count: others.length })}
+              </summary>
+              <p className="mt-1 text-xs text-slate-600">{t('cases.distribute.othersHint')}</p>
+              <div className="mt-1 grid gap-1 sm:grid-cols-2">{others.map((p) => person(p))}</div>
+            </details>
+          ) : null}
         </fieldset>
         {method === 'capacity' ? (
           <CheckField

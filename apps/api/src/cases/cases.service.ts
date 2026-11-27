@@ -153,7 +153,7 @@ export class CasesService {
     caseIds: string[],
     userId: string | null,
     via: string,
-    only: { statuses?: string[]; unassigned?: boolean } = {},
+    only: { statuses?: string[]; unassigned?: boolean; holder?: string } = {},
   ): Promise<number> {
     if (userId) await this.assertAssignee(tx, projectId, userId);
     const changed = await tx.assign(projectId, caseIds, userId, only);
