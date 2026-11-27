@@ -57,6 +57,8 @@ import { CATI_REPO, MssqlCatiRepo } from './cati/cati-repo.js';
 import { MssqlReviewRepo, REVIEW_REPO } from './review/review-repo.js';
 import { METRICS_REPO, MssqlMetricsRepo } from './metrics/metrics-repo.js';
 import { LIVE_REPO, MssqlLiveRepo } from './dashboard/live-repo.js';
+import { HomeController } from './home/home.controller.js';
+import { HOME_REPO, MssqlHomeRepo } from './home/home-repo.js';
 import { MssqlPrivacyRepo, PRIVACY_REPO } from './privacy/privacy-repo.js';
 import { ANALYSIS_REPO, MssqlAnalysisRepo } from './analysis/analysis-repo.js';
 import { TeamsController } from './teams/teams.controller.js';
@@ -213,6 +215,7 @@ export class AppModule {
         ReviewController,
         AnalysisController,
         GoalsController,
+        HomeController,
         TeamsController,
         ProjectPeopleController,
         PublicShareController,
@@ -264,6 +267,7 @@ export class AppModule {
         { provide: REVIEW_REPO, useClass: MssqlReviewRepo },
         { provide: METRICS_REPO, useClass: MssqlMetricsRepo },
         { provide: LIVE_REPO, useClass: MssqlLiveRepo },
+        { provide: HOME_REPO, useClass: MssqlHomeRepo },
         { provide: PRIVACY_REPO, useClass: MssqlPrivacyRepo },
         { provide: ANALYSIS_REPO, useClass: MssqlAnalysisRepo },
         { provide: SWEEP_REPO, useClass: MssqlSweepRepo },

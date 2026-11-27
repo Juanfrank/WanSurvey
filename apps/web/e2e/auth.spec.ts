@@ -13,6 +13,8 @@ test('sign in, switch organisation, sign out', async ({ page }) => {
   await pickOrganisation(page, 'Second Agency');
   await expect(page.getByRole('main').getByText('Business Panel')).toBeVisible();
   await expect(page.getByRole('main').getByText('Household Survey 2026')).toHaveCount(0);
+  // Back to the first organisation: the next sign-in opens the last one used.
+  await pickOrganisation(page, 'Demo Research');
   await openAccount(page);
   await page.getByRole('combobox', { name: 'Language' }).selectOption('es');
   await expect(page.getByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
@@ -49,6 +51,36 @@ test('the side panel compacts to a rail of icons, opens over the page on hover, 
   await page.mouse.move(800, 400);
   await expect(page.getByRole('button', { name: 'Compact the side panel' })).toBeVisible();
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(280);
+});
+
+test('home shows a project manager the projects with their fieldwork', async ({ page }) => {
+  await login(page);
+  await pickOrganisation(page, 'Demo Research');
+  await expect(page.getByRole('heading', { name: /Welcome, project_manager/ })).toBeVisible();
+  const table = page.getByTestId('home-portfolio');
+  await expect(table.getByRole('columnheader', { name: 'Unassigned' })).toBeVisible();
+  await expect(table.getByRole('row', { name: /Household Survey 2026/ })).toBeVisible();
+  // The preview stays a secondary link for those who design questionnaires.
+  await expect(page.getByRole('link', { name: 'Open the preview' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My day' })).toHaveCount(0);
+  await expectAccessible(page);
+  await shot(page, 'home-project-manager');
+});
+
+test('home shows an interviewer their day and not the preview', async ({ page }) => {
+  await login(page, 'interviewer@demo.wansurvey.test');
+  await expect(page.getByRole('heading', { name: /Welcome, interviewer/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My day' })).toBeVisible();
+  await expect(page.getByText('Cases to do', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'For today' })).toBeVisible();
+  const project = page.getByTestId('home-day-project').filter({ hasText: 'Household Survey 2026' });
+  await expect(project.getByRole('link', { name: 'My cases' })).toBeVisible();
+  await expect(page.getByTestId('home-portfolio')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Open the preview' })).toHaveCount(0);
+  await expectAccessible(page);
+  await shot(page, 'home-interviewer');
+  await project.getByRole('link', { name: 'My cases' }).click();
+  await expect(page).toHaveURL(/tab=cases/);
 });
 
 test('wrong password shows a clear error', async ({ page }) => {

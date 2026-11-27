@@ -16,6 +16,7 @@ import { interviewEn, interviewEs } from './interview/i18n.js';
 import { designerEn, designerEs } from './designer/i18n.js';
 import { messagesEn, messagesEs } from './messages-i18n.js';
 import { passwordEn, passwordEs, teamEn, teamEs } from './team/i18n.js';
+import { homeEn, homeEs } from './routes/home-i18n.js';
 
 const en = {
   app: {
@@ -108,13 +109,7 @@ const en = {
     openApp: 'Open in authenticator app',
     enable: 'Turn on',
   },
-  home: {
-    welcome: 'Welcome, {{name}}',
-    intro: 'Use the questionnaire preview to test routing, wording and validation in every mode.',
-    openPreview: 'Open the preview',
-    projects: 'Projects',
-    noProjects: 'No projects yet.',
-  },
+  home: homeEn,
   waiting: {
     title: 'Waiting for access',
     explain: 'You can sign in, but you cannot work here until an administrator gives you a role.',
@@ -331,14 +326,7 @@ const es: Catalogue = {
     openApp: 'Abrir en la aplicación de autenticación',
     enable: 'Activar',
   },
-  home: {
-    welcome: 'Bienvenido/a, {{name}}',
-    intro:
-      'Use la vista previa del cuestionario para probar flujos, textos y validaciones en cada modo.',
-    openPreview: 'Abrir la vista previa',
-    projects: 'Proyectos',
-    noProjects: 'Aún no hay proyectos.',
-  },
+  home: homeEs,
   waiting: {
     title: 'Esperando acceso',
     explain:
