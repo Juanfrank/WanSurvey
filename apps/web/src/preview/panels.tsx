@@ -45,7 +45,10 @@ export function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] })
         </p>
       ) : null}
       {diagnostics.length ? (
-        <ul className="max-h-48 overflow-auto rounded-md border border-slate-200 bg-white text-sm">
+        <ul
+          tabIndex={0}
+          className="max-h-48 overflow-auto rounded-md border border-slate-200 bg-white text-sm"
+        >
           {diagnostics.map((d, i) => (
             <li key={i} className="flex gap-2 border-b border-slate-100 px-3 py-1.5 last:border-0">
               <span

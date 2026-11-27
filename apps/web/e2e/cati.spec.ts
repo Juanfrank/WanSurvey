@@ -75,7 +75,9 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await expect(picker.getByRole('radio', { name: 'Me' })).toBeChecked();
     // Hours open all day read as no restriction; the time is confirmed in words.
     await expect(picker).toContainText('No calling-hour restriction.');
-    await expect(picker.getByTestId('callback-when')).toContainText('in 1 hour');
+    await expect(picker.getByTestId('callback-when')).toContainText(
+      /respondent’s time \(in (1 hour|\d+ minutes)\)/,
+    );
     await shot(page, 'cati-callback');
     await page.keyboard.press('Control+Enter');
     await expect(page.getByTestId('calls-message')).toContainText('Saved: Call back later');

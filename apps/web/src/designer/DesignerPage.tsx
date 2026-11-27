@@ -787,7 +787,7 @@ function LogicCheck({
                   {t('designer.routing.highlight')}
                 </button>
               </div>
-              <ul className="flex max-h-48 flex-col gap-1 overflow-auto text-sm">
+              <ul tabIndex={0} className="flex max-h-48 flex-col gap-1 overflow-auto text-sm">
                 {diagnostics
                   .filter((x) => x.itemId)
                   .map((x, i) => (

@@ -74,6 +74,10 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
 
   // 2. The questionnaire, built with the mouse.
   await page.getByLabel('Nombre del cuestionario').fill('Satisfacción con servicios');
+  // No mode is chosen for you: this one is fielded in all four, as before.
+  const modes = page.getByTestId('new-q-modes');
+  for (const m of ['CATI', 'CAPI', 'CAWI', 'PAPI'])
+    await modes.getByRole('checkbox', { name: new RegExp(`^${m}`) }).check();
   await page.getByRole('button', { name: 'Crear y abrir' }).click();
   // Its id comes from the name, as the exports will show it (Ajustes del cuestionario → General).
   const sections = page.getByRole('tablist', { name: 'Secciones del cuestionario' });
@@ -98,13 +102,16 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByLabel('Etiqueta de la opción 2 (es)').press('Enter');
   await page.getByLabel('Etiqueta de la opción 3 (es)').fill('Centro');
   await page.getByRole('tab', { name: 'Lógica', exact: true }).click();
+  await page.getByRole('button', { name: 'Agregar un parámetro del enlace' }).click();
   await page.getByRole('textbox', { name: /^Parámetro del enlace/ }).fill('sede');
   await addQuestion(
     /^Escala/,
     '_SATIS',
     'En general, ¿qué tan satisfecho/a está con la atención en la sede {{A_SEDE | label}}?',
   );
-  await page.getByLabel('Colores').selectOption({ label: 'Rojo → ámbar → verde' });
+  await page
+    .getByLabel('Colores')
+    .selectOption({ label: 'Rojo → ámbar → verde (valoración de servicios)' });
   await page.getByLabel('Etiqueta del extremo inferior (es)').fill('Nada satisfecho/a');
   await page.getByLabel('Etiqueta del extremo superior (es)').fill('Muy satisfecho/a');
   // What to improve: only for 3 or less, optional.
@@ -273,7 +280,10 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await links
     .getByLabel('Otros parámetros para todos los enlaces (avanzado, opcional)')
     .fill('sede=3');
-  const linkText = await links.locator('[data-link]').first().textContent();
+  // The token is cut short until the link is shown, like a password.
+  const firstLink = links.locator('[data-link]').first();
+  await firstLink.getByRole('button', { name: /^Mostrar el enlace de / }).click();
+  const linkText = await firstLink.textContent();
   const url = linkText!.match(/http\S+?\?sede=3/)![0];
   const phone = await newBrowser(browser, true);
   await phone.page.goto(url);

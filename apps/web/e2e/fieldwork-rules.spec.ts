@@ -104,7 +104,7 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   await expectAccessible(page);
 
   // The project's status, with what is still open before closing it (left as it is).
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Project status', exact: true }).click();
   const status = page.getByTestId('project-status');
   await expect(status.getByRole('button', { name: 'Close the project' })).toBeVisible();
@@ -113,7 +113,7 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   );
   await shot(page, 'project-status');
   await expectAccessible(page);
-  await page.getByRole('tab', { name: 'Fieldwork', exact: true }).click();
+  await page.getByRole('tab', { name: 'Goals', exact: true }).click();
   await fieldwork.getByLabel('Fieldwork starts').fill('');
   await fieldwork.getByLabel('Fieldwork ends').fill('');
   await saveSettings(page);
