@@ -526,6 +526,9 @@ export interface PlanCheck {
   params?: Record<string, string | number>;
 }
 
+/** Expected response rates above this are flagged as optimistic (plausibility check). */
+export const RESPONSE_PLAUSIBLE = 0.8;
+
 /**
  * Layer 3: what stops the selection, what weakens it, and what can and cannot be said from
  * it (no margin of error for non-probability designs, decision 5).
@@ -565,6 +568,16 @@ export function planChecks(plan: SamplingPlanInput, stats: FrameStats): PlanChec
       severity: 'warning',
       params: { asked: d.clusters, available: stats.clusters },
     });
+  // Plausibility (H156): a response above 80 % is rare in the field, and a sample with no
+  // reserves has nothing to release when units refuse or cannot be found.
+  if (plan.size.response > RESPONSE_PLAUSIBLE)
+    out.push({
+      code: 'response_optimistic',
+      severity: 'warning',
+      params: { rate: Math.round(plan.size.response * 100) },
+    });
+  if (d.family !== 'census' && plan.size.reserve === 0)
+    out.push({ code: 'no_reserves', severity: 'warning' });
   if (stats.excluded)
     out.push({ code: 'coverage_loss', severity: 'info', params: { excluded: stats.excluded } });
   if (!plan.source.populationKnown) out.push({ code: 'population_unknown', severity: 'info' });

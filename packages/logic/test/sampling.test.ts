@@ -1,6 +1,7 @@
 import { SamplingPlanInput } from '@wansurvey/schema/sampling';
 import { describe, expect, it } from 'vitest';
 import {
+  planChecks,
   planSizes,
   allocate,
   operationalSize,
@@ -164,5 +165,45 @@ describe('census sizes', () => {
       10,
     );
     expect(sizes).toMatchObject({ required: 8, selected: 10, reserves: 0, cases: 10 });
+  });
+});
+
+describe('plausibility checks', () => {
+  const stats = {
+    units: 100,
+    eligible: 100,
+    excluded: 0,
+    strata: 0,
+    smallestStratum: null,
+    clusters: 0,
+  };
+  const plan = (size: Partial<SamplingPlanInput['size']>, family = 'probability') =>
+    SamplingPlanInput.parse({
+      design: { family, method: family === 'census' ? 'census' : 'srs' },
+      size: size,
+    });
+  const codes = (p: SamplingPlanInput) => planChecks(p, stats).map((c) => c.code);
+
+  it('flags a response rate above 80 % and a plan without reserves', () => {
+    const checks = planChecks(plan({}), stats);
+    expect(checks).toContainEqual({
+      code: 'response_optimistic',
+      severity: 'warning',
+      params: { rate: 100 },
+    });
+    expect(checks.map((c) => c.code)).toContain('no_reserves');
+  });
+
+  it('stays quiet with a realistic response rate and some reserves', () => {
+    const c = codes(plan({ response: 0.6, reserve: 0.2 }));
+    expect(c).not.toContain('response_optimistic');
+    expect(c).not.toContain('no_reserves');
+    expect(codes(plan({ response: 0.8, reserve: 0.1 }))).not.toContain('response_optimistic');
+  });
+
+  it('does not ask a census for reserves', () => {
+    const c = codes(plan({ response: 0.7 }, 'census'));
+    expect(c).not.toContain('no_reserves');
+    expect(c).not.toContain('response_optimistic');
   });
 });

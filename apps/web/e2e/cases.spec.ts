@@ -47,6 +47,8 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
   await expect(mapping.getByLabel('Becomes: id')).toHaveValue('externalId');
   await expect(mapping.getByLabel('Becomes: phone')).toHaveValue('phone');
   await expect(mapping.getByLabel('Personal: first_name')).toBeChecked();
+  // What "Personal" does, and that exact age or place can identify someone too.
+  await expect(page.getByTestId('pii-help')).toContainText('Exact age, city or region');
   await expect(mapping.getByLabel('Type: region')).toHaveValue('number');
   await page.getByLabel('Country code for phones without one').fill('51');
   await shot(page, 'cases-import-mapping');
@@ -77,6 +79,14 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
   const bubble = page.getByRole('tooltip').filter({ hasText: 'Design effect' });
   await expect(bubble).toBeVisible();
   await expect(bubble).toContainText('Suggested standard:');
+  // The bubble can be dismissed with Escape without moving the pointer (WCAG 1.4.13).
+  await page.keyboard.press('Escape');
+  await expect(bubble).toBeHidden();
+  await page.mouse.move(0, 0);
+  await tip.hover();
+  await expect(bubble).toBeVisible();
+  // A 24 px target (WCAG 2.5.8).
+  expect((await tip.boundingBox())?.width).toBeGreaterThanOrEqual(24);
   await page.mouse.move(0, 0);
   await expect(bubble).toBeHidden();
   await selector.locator('[data-tip="stratified"]').focus();
@@ -91,6 +101,15 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
   await expect(selector.locator('[data-check="census_no_sampling_error"]')).toBeVisible();
   await expect(selector.locator('[data-size="toSelect"]')).toHaveText('10');
   await expect(selector.locator('[data-check="no_margin_of_error"]')).toHaveCount(0);
+  // Plausibility: a 100 % response is flagged; a census needs no reserves.
+  await expect(selector.locator('[data-check="response_optimistic"]')).toContainText('100 %');
+  await expect(selector.locator('[data-check="no_reserves"]')).toHaveCount(0);
+  // The index of the steps and the state of the checks stay in view.
+  const index = page.getByRole('navigation', { name: 'Steps of the selector' });
+  await expect(index.getByRole('link', { name: '2 · Selection design' })).toBeVisible();
+  await expect(index.getByTestId('checks-summary')).toContainText(
+    'No blocking problems · 1 warning',
+  );
   await shot(page, 'cases-sampling', { fullPage: true });
   await expectAccessible(page);
   page.once('dialog', (d) => void d.accept());

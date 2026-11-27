@@ -29,6 +29,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   detail, a sensitive required question web respondents cannot decline, a grid of more than 7
   rows, an "Other" option that does not ask to specify, and a Yes/No question that asks two things.
 
+- **Sampling selector: a step index and the checks always in view.** A bar fixed at the top links to
+  the four layers and says how many problems block the selection and how many warnings there are. The
+  plan now warns when the expected response is above 80 % or there are no reserves (except in a census).
+  The (i) help buttons are 24 px targets, and their bubble closes with Escape and stays open under the
+  pointer.
+- **Importing cases suggests more personal columns**: dates of birth, document and tax numbers and
+  postcodes, besides names and contacts; the mapping step explains what "Personal" does and that exact
+  age, city or region can also identify someone.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

@@ -29,7 +29,12 @@ export function Layer({
   const id = useId();
   return (
     <Card>
-      <section aria-labelledby={id} className="flex flex-col gap-4" data-testid={testId}>
+      <section
+        id={testId}
+        aria-labelledby={id}
+        className="flex scroll-mt-20 flex-col gap-4"
+        data-testid={testId}
+      >
         <div>
           <h2 id={id} className="text-lg font-semibold">
             {title}
@@ -45,21 +50,31 @@ export function Layer({
 /**
  * An (i) next to a term: on hover, focus or tap it explains the term and the usual standard
  * (`cases.sampling.tips.<id>`). The explanation is the button's description for screen readers.
+ * The target is 24 x 24 px (WCAG 2.5.8) around a 16 px glyph; the bubble stays open while the
+ * pointer is over it and Escape closes it wherever the pointer is (WCAG 1.4.13).
  */
 export function InfoTip({ id, term }: { id: string; term: string }) {
   const { t } = useTranslation();
   const tipId = useId();
   const [open, setOpen] = useState(false);
   const std = t(`cases.sampling.tips.${id}.std`, { defaultValue: '' });
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
   return (
     <span
-      className="relative inline-flex align-middle"
+      className="relative ml-0.5 inline-flex align-middle"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
       <button
         type="button"
-        className="ml-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-slate-400 font-serif text-[10px] font-bold italic leading-none text-slate-600 hover:border-indigo-600 hover:text-indigo-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="group inline-flex size-6 shrink-0 items-center justify-center rounded-full"
         aria-label={t('cases.sampling.tip.label', { term })}
         aria-describedby={tipId}
         aria-expanded={open}
@@ -71,27 +86,32 @@ export function InfoTip({ id, term }: { id: string; term: string }) {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false);
-        }}
       >
-        i
+        <span
+          aria-hidden
+          className="inline-flex size-4 items-center justify-center rounded-full border border-slate-500 font-serif text-xs font-bold italic leading-none text-slate-700 group-hover:border-indigo-600 group-hover:text-indigo-ink-700"
+        >
+          i
+        </span>
       </button>
+      {/* The padding, not a margin, bridges the gap so the pointer can move onto the bubble. */}
       <span
         role="tooltip"
         id={tipId}
         hidden={!open}
-        className="absolute left-1/2 top-full z-30 mt-1.5 w-72 max-w-[80vw] -translate-x-1/2 rounded-lg border border-slate-200 bg-white p-3 text-left text-xs font-normal not-italic leading-relaxed text-slate-700 shadow-lg"
+        className="absolute left-1/2 top-full z-30 w-72 max-w-[80vw] -translate-x-1/2 pt-1"
       >
-        <span className="block">{t(`cases.sampling.tips.${id}.text`)}</span>
-        {std ? (
-          <span className="mt-1.5 block">
-            <strong className="font-semibold text-slate-900">
-              {t('cases.sampling.tip.standard')}
-            </strong>{' '}
-            {std}
-          </span>
-        ) : null}
+        <span className="block rounded-lg border border-slate-200 bg-white p-3 text-left text-sm font-normal not-italic leading-relaxed text-slate-700 shadow-lg">
+          <span className="block">{t(`cases.sampling.tips.${id}.text`)}</span>
+          {std ? (
+            <span className="mt-1.5 block">
+              <strong className="font-semibold text-slate-900">
+                {t('cases.sampling.tip.standard')}
+              </strong>{' '}
+              {std}
+            </span>
+          ) : null}
+        </span>
       </span>
     </span>
   );
@@ -130,7 +150,7 @@ export function Choice<T extends string>({
       >
         {options.map((o) => (
           <div key={o.value} className="relative">
-            <label className="flex h-full cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white p-3 pr-7 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+            <label className="flex h-full cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white p-3 pr-8 text-sm has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
               <input
                 type="radio"
                 name={name}
@@ -144,7 +164,7 @@ export function Choice<T extends string>({
               </span>
             </label>
             {o.tip ? (
-              <span className="absolute right-2 top-2.5">
+              <span className="absolute right-1.5 top-1.5">
                 <InfoTip id={o.tip} term={o.label} />
               </span>
             ) : null}

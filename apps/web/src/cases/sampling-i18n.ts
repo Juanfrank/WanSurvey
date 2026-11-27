@@ -18,6 +18,17 @@ export const samplingEn = {
   layer3: '3 · Check and preview',
   layer3Help: 'Size, distribution, eligibility, exclusions and statistical limits.',
   layer4: '4 · Cases',
+  sourceKind: 'Kind of source',
+  designFamily: 'Kind of design',
+  index: 'Steps of the selector',
+  summary: {
+    ok: 'No blocking problems',
+    errors_one: '{{count}} problem blocks the selection',
+    errors_other: '{{count}} problems block the selection',
+    warnings_one: '{{count}} warning',
+    warnings_other: '{{count}} warnings',
+    see: 'See the checks',
+  },
   sources: {
     frame: 'Imported sampling frame',
     registry: 'Connected register or database',
@@ -210,6 +221,10 @@ export const samplingEn = {
     substitution_bias:
       'Substitutes can bias a probability sample; they are recorded on both cases.',
     substitution_recorded: 'Substitutes are recorded on both cases.',
+    response_optimistic:
+      'An expected response of {{rate}} % is rarely reached in the field: use the rate of earlier waves or similar surveys.',
+    no_reserves:
+      'No reserves: when units refuse or cannot be found there is nothing to release. Size them from the rates of earlier waves.',
   },
   save: 'Save the plan',
   saved: 'Plan saved.',
@@ -313,6 +328,17 @@ export const samplingEs: typeof samplingEn = {
   layer3Help:
     'Tamaño previsto, distribución, elegibilidad, exclusiones y limitaciones estadísticas.',
   layer4: '4 · Casos',
+  sourceKind: 'Tipo de fuente',
+  designFamily: 'Tipo de diseño',
+  index: 'Pasos del selector',
+  summary: {
+    ok: 'Sin problemas que bloqueen',
+    errors_one: '{{count}} problema bloquea la selección',
+    errors_other: '{{count}} problemas bloquean la selección',
+    warnings_one: '{{count}} aviso',
+    warnings_other: '{{count}} avisos',
+    see: 'Ver las verificaciones',
+  },
   sources: {
     frame: 'Marco muestral importado',
     registry: 'Registro o base de datos conectada',
@@ -511,6 +537,10 @@ export const samplingEs: typeof samplingEn = {
     substitution_bias:
       'Los sustitutos pueden sesgar una muestra probabilística; quedan registrados en ambos casos.',
     substitution_recorded: 'Los sustitutos quedan registrados en ambos casos.',
+    response_optimistic:
+      'Una respuesta esperada del {{rate}} % rara vez se alcanza en campo: use la tasa de olas anteriores o de encuestas similares.',
+    no_reserves:
+      'Sin reservas: si hay rechazos o unidades no localizadas no habrá nada que liberar. Dimensiónelas con las tasas de olas anteriores.',
   },
   save: 'Guardar el plan',
   saved: 'Plan guardado.',

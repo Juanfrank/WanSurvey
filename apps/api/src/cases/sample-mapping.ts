@@ -58,7 +58,12 @@ export function fieldNameFor(header: string): string {
 }
 
 const PII_HINT =
-  /(name|nombre|apellido|surname|dni|passport|birth|nacimiento|address|direccion|email|correo|phone|telefono|celular|mobile)/;
+  /(name|nombre|apellido|surname|dni|passport|pasaporte|birth|nacimiento|address|direccion|domicilio|street|calle|postcode|postal|document|cedula|national_?id|id_?number|email|correo|phone|telefono|celular|mobile)/;
+/**
+ * Short identifiers that only count as whole words of the header (so `zip` but not `zipped`):
+ * date of birth, national and tax numbers, postcode.
+ */
+const PII_TOKEN = /(^|_)(dob|fnac|ssn|curp|rut|nif|nie|cuit|cuil|rfc|tax_?id|zip)(_|$)/;
 
 /** First guess at a mapping from header names; the person reviews it before validating. */
 export function suggestMapping(headers: string[], sample: string[][] = []): ImportMapping {
@@ -87,7 +92,7 @@ export function suggestMapping(headers: string[], sample: string[][] = []): Impo
         : values.length && values.every((v) => parseDate(v) !== null)
           ? 'date'
           : 'text';
-    return { kind: 'sample', field, type, pii: PII_HINT.test(n) };
+    return { kind: 'sample', field, type, pii: PII_HINT.test(n) || PII_TOKEN.test(n) };
   });
   return { columns, existing: 'skip', skipInvalid: false };
 }
