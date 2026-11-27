@@ -66,7 +66,15 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await sup.getByRole('tab', { name: 'Review' }).click();
   const queued = sup.getByTestId('review-queue').locator(`tr[data-case="${caseId}"]`);
   await expect(queued).toBeVisible();
+  // The queue by interviewer: choosing the interviewer keeps their interviews only.
+  const people = sup.getByTestId('queue-interviewers');
+  await people.getByRole('button', { name: /^Demo interviewer/ }).click();
+  await expect(queued).toBeVisible();
+  await expect(
+    sup.getByTestId('review-queue').locator('tbody tr').filter({ hasNotText: 'Demo interviewer' }),
+  ).toHaveCount(0);
   await shot(sup, 'review-queue');
+  await people.getByRole('button', { name: /^Demo interviewer/ }).click();
   await expectAccessible(sup);
   await queued.getByRole('button', { name: `Review ${caseId}` }).click();
   const screen = sup.getByTestId('review-screen');
@@ -78,6 +86,16 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await expect(screen.locator('[data-qkey="A2_AGE"]').getByTestId('comments')).toContainText(
     '16 años',
   );
+  // Only the questions with something to look at (here the commented, twice-typed age).
+  await expect(screen.getByTestId('issue-count')).toHaveText(
+    '1 question with warnings, notes, comments or changes',
+  );
+  await screen.getByLabel('Show only those').check();
+  await expect(screen.locator('[data-qkey="A1_CONSENT"]')).toBeHidden();
+  await expect(screen.locator('[data-qkey="A2_AGE"]')).toBeVisible();
+  await screen.getByLabel('Show only those').uncheck();
+  // The A/R keys are not taken from a form field: leave the checkbox first.
+  await sup.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await sup.keyboard.press('r');
   await overlaysSettled(sup, 2);
   await sup.getByLabel('Comment', { exact: true }).fill('Corrija la edad, por favor.');
@@ -91,15 +109,17 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await iv.getByRole('tab', { name: 'My cases' }).click();
   const returned = iv.getByTestId('returned');
   await expect(returned).toContainText('Corrija la edad');
+  // The commented question is listed with its comment, and the interviewer's own signals show.
+  await expect(returned.getByTestId('returned-questions')).toContainText(
+    'A2_AGE La cédula dice 16 años.',
+  );
+  await expect(iv.getByTestId('my-quality')).toBeVisible();
   await shot(iv, 'returned-to-me');
   await returned.getByRole('button', { name: `Fix ${caseId}` }).click();
   await expect(iv.getByTestId('returned-comments')).toContainText('16 años');
-  await iv.getByTestId('section-nav').getByRole('button').first().click();
-  await onQuestion(iv, 'A0_CONSENT_TEXT');
-  await iv.keyboard.press('Enter');
-  await onQuestion(iv, 'A1');
-  await iv.keyboard.press('Enter');
-  await onQuestion(iv, 'A2');
+  // Straight to the commented question.
+  await iv.getByTestId('returned-comments').getByRole('button', { name: 'Go to A2_AGE' }).click();
+  await expect(question(iv, 'A2')).toBeVisible();
   await question(iv, 'A2').locator('input').first().fill('16');
   await question(iv, 'A2').locator('input').first().press('Enter');
   await submit(iv);

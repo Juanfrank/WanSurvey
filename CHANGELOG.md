@@ -19,6 +19,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Review by interviewer, by result, and double entry as one item**: the review queue counts each
+  interviewer's interviews and those with quality flags (click to see only theirs), filters by result
+  (complete, screened out, refusal…), and shows a paper form keyed twice once, as its first entry with
+  the differences still open; that entry cannot be approved until they are resolved (`ENTRIES_DIFFER`).
+  The review screen marks questions with confirmed warnings and can show only the questions with
+  warnings, notes, comments or changes. "Returned to me" lists the commented questions, the interview
+  offers "Go to" each one, and interviewers see their own quality signals (approved, returned, rejected,
+  flags, median length beside the team's; `GET /projects/:id/review/mine`).
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

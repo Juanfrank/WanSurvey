@@ -32,7 +32,21 @@ interface QueueRow {
   sampled: boolean;
   submissions: number;
   comments: number;
+  /** Who keyed the second paper entry folded into this one, if any. */
+  secondClerk?: string | null;
+  /** Differences between the two paper entries still to resolve. */
+  openDifferences?: number;
 }
+
+interface InterviewerCount {
+  id: string;
+  name: string | null;
+  interviews: number;
+  flagged: number;
+}
+
+/** The results a reviewer most often sorts by: complete interviews apart from the rest. */
+const DISPOSITIONS = ['COMPLETE', 'PARTIAL', 'SCREENED_OUT', 'REFUSAL', 'BREAK_OFF', 'QUOTA_FULL'];
 
 const STATUSES = [
   'submitted,in_review',
@@ -95,6 +109,8 @@ function Queue({ projectId }: { projectId: string }) {
   const [status, setStatus] = useState(STATUSES[0]!);
   const [flag, setFlag] = useState('');
   const [mode, setMode] = useState('');
+  const [disposition, setDisposition] = useState('');
+  const [interviewer, setInterviewer] = useState('');
   const [sampled, setSampled] = useState(false);
   const [byRisk, setByRisk] = useState(false);
   const [active, setActive] = useState(0);
@@ -102,16 +118,19 @@ function Queue({ projectId }: { projectId: string }) {
   const params = new URLSearchParams({ status });
   if (flag) params.set('flag', flag);
   if (mode) params.set('mode', mode);
+  if (disposition) params.set('disposition', disposition);
+  if (interviewer) params.set('interviewerId', interviewer);
   if (sampled) params.set('sampled', 'true');
   if (byRisk) params.set('sort', 'risk');
   const q = useQuery({
     queryKey: ['review-queue', projectId, params.toString()],
     queryFn: () =>
-      api<{ total: number; rows: QueueRow[] }>(
+      api<{ total: number; rows: QueueRow[]; interviewers?: InterviewerCount[] }>(
         `/projects/${projectId}/review/queue?${params.toString()}`,
       ),
   });
   const rows = q.data?.rows ?? [];
+  const people = q.data?.interviewers ?? [];
   const open = (id: string) =>
     navigate({
       to: '/projects/$projectId/review/$interviewId',
@@ -172,6 +191,36 @@ function Queue({ projectId }: { projectId: string }) {
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-1">
+          <span>{t('review.queue.result')}</span>
+          <select
+            className={`${controlCls} w-auto`}
+            value={disposition}
+            onChange={(e) => setDisposition(e.target.value)}
+          >
+            <option value="">{t('review.queue.anyResult')}</option>
+            {DISPOSITIONS.map((d) => (
+              <option key={d} value={d}>
+                {dispositionLabel(t, d)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span>{t('review.queue.interviewer')}</span>
+          <select
+            className={`${controlCls} w-auto`}
+            value={interviewer}
+            onChange={(e) => setInterviewer(e.target.value)}
+          >
+            <option value="">{t('review.queue.anyInterviewer')}</option>
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name ?? '—'}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="flex items-center gap-2 self-end">
           <input type="checkbox" checked={byRisk} onChange={(e) => setByRisk(e.target.checked)} />
           {t('review.queue.byRisk')}
@@ -184,6 +233,34 @@ function Queue({ projectId }: { projectId: string }) {
           {t('review.queue.total', { count: q.data?.total ?? 0 })} · {t('review.queue.keys')}
         </span>
       </div>
+      {people.length > 1 || interviewer ? (
+        <div className="flex flex-col gap-1" data-testid="queue-interviewers">
+          <h3 className="text-sm font-medium">{t('review.queue.byInterviewer')}</h3>
+          <ul className="flex flex-wrap gap-2">
+            {people.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  aria-pressed={interviewer === p.id}
+                  className="rounded-full border border-slate-300 bg-white px-3 py-1 text-left text-xs hover:bg-indigo-50 aria-[pressed=true]:border-indigo-500 aria-[pressed=true]:bg-indigo-100"
+                  data-interviewer={p.id}
+                  onClick={() => setInterviewer(interviewer === p.id ? '' : p.id)}
+                >
+                  <span className="font-medium">{p.name ?? '—'}</span>{' '}
+                  <span className="tabular-nums text-slate-700">
+                    {t('review.queue.personCount', { count: p.interviews })}
+                  </span>
+                  {p.flagged ? (
+                    <span className="ml-1 rounded bg-amber-100 px-1 tabular-nums text-amber-ink-900">
+                      {t('review.queue.personFlagged', { count: p.flagged })}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {rows.length ? (
         <div className="overflow-x-auto">
           <table className="w-full" data-testid="review-queue">
@@ -238,6 +315,19 @@ function Queue({ projectId }: { projectId: string }) {
                     {r.submissions > 1 ? (
                       <span className="ml-1 text-xs text-slate-600">
                         {t('review.queue.round', { n: r.submissions })}
+                      </span>
+                    ) : null}
+                    {r.secondClerk ? (
+                      <span
+                        className={`ml-1 rounded px-1 text-xs ${r.openDifferences ? 'bg-amber-100 text-amber-ink-900' : 'bg-slate-100 text-slate-700'}`}
+                        data-testid="double-entry"
+                      >
+                        {r.openDifferences
+                          ? t('review.queue.doubleOpen', {
+                              count: r.openDifferences,
+                              name: r.secondClerk,
+                            })
+                          : t('review.queue.doubleDone', { name: r.secondClerk })}
                       </span>
                     ) : null}
                   </td>

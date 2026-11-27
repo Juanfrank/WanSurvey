@@ -66,6 +66,13 @@ export class ReviewController {
     return this.repo.inTenant(ctx.tenantId, (t) => this.review.returned(t, ctx, projectId));
   }
 
+  /** The caller's own quality signals in the project. */
+  @Get('projects/:projectId/review/mine')
+  @RequirePermission(['interviews.conduct', 'dataentry.key'], PERM)
+  mine(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
+    return this.repo.inTenant(ctx.tenantId, (t) => this.review.ownQuality(t, ctx, projectId));
+  }
+
   @Get('review/interviews/:id')
   @RequirePermission(REVIEW_OR_OWN, { anyProject: true })
   detail(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
