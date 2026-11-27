@@ -169,6 +169,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col gap-6" data-testid="sampling">
       <p className="text-sm text-slate-700">{t('cases.sampling.intro')}</p>
+      <StepIndex checks={checks} />
 
       {/* Layer 1 */}
       <Layer
@@ -177,7 +178,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
         testId="layer-1"
       >
         <Choice
-          legend={t('cases.sampling.layer1')}
+          legend={t('cases.sampling.sourceKind')}
           tip="source"
           value={plan.source.kind}
           disabled={locked}
@@ -321,7 +322,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
         testId="layer-2"
       >
         <Choice
-          legend={t('cases.sampling.layer2')}
+          legend={t('cases.sampling.designFamily')}
           tip="family"
           value={plan.design.family}
           disabled={locked}
@@ -974,7 +975,10 @@ export function SamplingTab({ projectId }: { projectId: string }) {
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-slate-200 pt-4">
+        <div
+          id="sp-checks"
+          className="flex scroll-mt-20 flex-col gap-2 border-t border-slate-200 pt-4"
+        >
           <h3 className="font-semibold">{t('cases.sampling.checks')}</h3>
           <ul className="flex flex-col gap-1.5" data-testid="checks">
             {checks.map((c, i) => (
@@ -1125,5 +1129,54 @@ export function SamplingTab({ projectId }: { projectId: string }) {
         ) : null}
       </Layer>
     </div>
+  );
+}
+
+/**
+ * A sticky index of the layers, with the state of the checks always in view (H29): what
+ * blocks the selection is visible without scrolling to the end of the page.
+ */
+function StepIndex({ checks }: { checks: PlanCheck[] }) {
+  const { t } = useTranslation();
+  const errors = checks.filter((c) => c.severity === 'error').length;
+  const warnings = checks.filter((c) => c.severity === 'warning').length;
+  const tone = errors ? sevCls.error : warnings ? sevCls.warning : sevCls.info;
+  return (
+    <nav
+      aria-label={t('cases.sampling.index')}
+      className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-sm shadow-sm backdrop-blur"
+      data-testid="sampling-index"
+    >
+      <ol className="flex flex-wrap gap-x-1 gap-y-1">
+        {(['layer1', 'layer2', 'layer3', 'layer4'] as const).map((k, i) => (
+          <li key={k}>
+            <a
+              href={`#layer-${i + 1}`}
+              className="inline-block rounded-md px-2 py-1 font-medium text-indigo-ink-700 hover:bg-indigo-50"
+            >
+              {t(`cases.sampling.${k}`)}
+            </a>
+          </li>
+        ))}
+      </ol>
+      <a
+        href="#sp-checks"
+        className={`ml-auto inline-flex items-center gap-2 rounded-md border px-2.5 py-1 ${tone}`}
+        data-testid="checks-summary"
+        data-errors={errors}
+        data-warnings={warnings}
+      >
+        <span aria-hidden className="font-bold">
+          {sevIcon[errors ? 'error' : warnings ? 'warning' : 'info']}
+        </span>
+        <span>
+          {errors
+            ? t('cases.sampling.summary.errors', { count: errors })
+            : t('cases.sampling.summary.ok')}
+          {warnings ? ` · ${t('cases.sampling.summary.warnings', { count: warnings })}` : ''}
+        </span>
+        <span className="sr-only">{t('cases.sampling.summary.see')}</span>
+      </a>
+    </nav>
   );
 }

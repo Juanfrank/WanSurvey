@@ -291,6 +291,8 @@ export const casesEn = {
     field: 'Field name',
     type: 'Type',
     pii: 'Personal',
+    piiHelp:
+      'Personal columns are stored encrypted, hidden in case lists and shown only to people allowed to see personal data. Names, contacts, dates of birth and document numbers are suggested. Exact age, city or region can also identify someone when combined: consider marking them too.',
     targets: {
       ignore: 'Ignore',
       externalId: 'Case id',
@@ -838,6 +840,8 @@ export const casesEs: CasesCatalogue = {
     field: 'Nombre del campo',
     type: 'Tipo',
     pii: 'Personal',
+    piiHelp:
+      'Las columnas personales se guardan cifradas, se ocultan en las listas de casos y solo las ve quien tiene permiso para ver datos personales. Se sugieren nombres, contactos, fechas de nacimiento y números de documento. La edad exacta, la ciudad o la región también pueden identificar a alguien al combinarse: valore marcarlas también.',
     targets: {
       ignore: 'Ignorar',
       externalId: 'Id del caso',

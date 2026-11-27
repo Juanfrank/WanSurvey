@@ -237,6 +237,9 @@ export function ImportTab({
       {uploaded && mapping && !summary ? (
         <Card className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">{t('cases.import.stepMap')}</h2>
+          <p className="text-sm text-slate-600" data-testid="pii-help">
+            {t('cases.import.piiHelp')}
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[44rem] text-sm" data-testid="mapping-table">
               <thead className="text-left text-xs text-slate-600">
