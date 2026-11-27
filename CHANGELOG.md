@@ -190,6 +190,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **«Completar» is now «Cerrar trabajo de campo» (Close fieldwork)** in a questionnaire's actions, its
+  dialog, its state and its banner: the action closes data collection, it does not finish the design.
 - **The generated SQL scripts, and the ones in `infra/sql/`, are plain T-SQL**: one batch with no `GO`, no
   `:on error exit` and no `sqlcmd` variables, so they run in SSMS, Azure Data Studio or the portal as in
   `sqlcmd`. Passwords and names are written in `DECLARE` lines at the top (the file refuses to run with a
@@ -277,6 +279,11 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- **New projects take the organisation's time zone and language** (Administration > Organisation): the
+  new-project form showed and sent the browser's zone (often UTC) and always Spanish.
+- **A callback's date and time are written out in full** below the picker (in the interface language and
+  the respondent's zone): the browser's own picker follows the browser's locale (11/26/2026, 08:24 PM),
+  not the interface's.
 - The tables of the API keys and of the webhook deliveries had a column header with no text (the
   actions column): it now has one for screen readers.
 - A web respondent was shown the questions already answered by the link (`?sede=2`) or filled from

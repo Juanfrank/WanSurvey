@@ -248,6 +248,11 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(page.getByText('Organisation saved.')).toBeVisible();
   await shot(page, 'admin-organisation');
   await expectAccessible(page);
+  // A new project takes that zone, whatever the browser's.
+  await nav.getByRole('link', { name: 'Projects', exact: true }).click();
+  await page.getByRole('button', { name: 'New project' }).click();
+  await expect(page.getByText('Time zone: America/Lima')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
 
   // The activity log has it all.
   await nav.getByRole('link', { name: 'Activity log' }).click();

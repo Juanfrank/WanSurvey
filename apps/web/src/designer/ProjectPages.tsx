@@ -130,12 +130,26 @@ function NewProjectForm({ onCancel }: { onCancel: () => void }) {
   const [code, setCode] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
   const [modes, setModes] = useState<Mode[]>([...MODES]);
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  // The organisation's defaults of new projects (Administration > Organisation); the browser's
+  // zone only when the organisation has none. What is shown is what is sent.
+  const me = useMe();
+  const tenant = useQuery({
+    queryKey: ['tenant', me.data?.tenantId],
+    queryFn: () =>
+      api<{ settings: { defaultLanguage?: string; defaultTimezone?: string } }>('/tenant'),
+    enabled: !!me.data,
+  });
+  // Until they arrive (if they can: without the user, the browser's zone is all there is).
+  const waiting = tenant.isPending && !me.isError;
+  const defaults = tenant.data?.settings;
+  const zone =
+    defaults?.defaultTimezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const language = defaults?.defaultLanguage ?? 'es';
   const create = useMutation({
     mutationFn: () =>
       api<Project>('/projects', {
         method: 'POST',
-        body: { name, code, modesEnabled: modes, timezone: zone, languages: ['es'] },
+        body: { name, code, modesEnabled: modes, timezone: zone, languages: [language] },
       }),
     onSuccess: async (p) => {
       await qc.invalidateQueries({ queryKey: ['projects'] });
@@ -205,7 +219,9 @@ function NewProjectForm({ onCancel }: { onCancel: () => void }) {
             </label>
           ))}
         </fieldset>
-        <p className="text-sm text-slate-600">{t('designer.newProject.zone', { zone })}</p>
+        {!waiting && (
+          <p className="text-sm text-slate-600">{t('designer.newProject.zone', { zone })}</p>
+        )}
         {create.isError && (
           <ErrorText>
             {create.error instanceof ApiError && create.error.status === 409
@@ -216,7 +232,7 @@ function NewProjectForm({ onCancel }: { onCancel: () => void }) {
         <div className="flex gap-2">
           <Button
             type="submit"
-            disabled={create.isPending || !name.trim() || !codeOk || !modes.length}
+            disabled={create.isPending || waiting || !name.trim() || !codeOk || !modes.length}
           >
             {t('designer.newProject.create')}
           </Button>
