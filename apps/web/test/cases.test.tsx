@@ -4,7 +4,7 @@ import { userEvent } from '@testing-library/user-event';
 import axe from 'axe-core';
 import { ProjectSettings } from '@wansurvey/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CasesTab } from '../src/cases/CasesTab.js';
+import { CasesTab, caseKpis } from '../src/cases/CasesTab.js';
 import { CaseMap } from '../src/cases/CaseMap.js';
 import { SettingsTab } from '../src/cases/SettingsTab.js';
 
@@ -77,7 +77,8 @@ describe('cases grid', () => {
       </QueryClientProvider>,
     );
     const table = await screen.findByTestId('cases-table');
-    await waitFor(() => expect(within(table).getAllByText('•••')).toHaveLength(5));
+    // Hidden personal values read as such, not as a "•••" menu.
+    await waitFor(() => expect(within(table).getAllByText('hidden')).toHaveLength(5));
     expect(screen.getByText(/Personal fields are hidden/)).toBeTruthy();
 
     await user.click(screen.getByLabelText('Select case HH1'));
@@ -102,6 +103,50 @@ describe('cases grid', () => {
       rules: { 'color-contrast': { enabled: false }, region: { enabled: false } },
     });
     expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+});
+
+describe('case figures', () => {
+  it('give one card per status that adds up to the total, and filter the list', async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <CasesTab projectId="p" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('kpi-total').textContent).toBe('5'));
+    const fresh = screen.getByRole('button', { name: /^Fresh\s*5/ });
+    await user.click(fresh);
+    expect(fresh.getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(calls.some((c) => c.url.includes('status=fresh'))).toBe(true));
+  });
+
+  it('show interviewers their own work, not management figures', () => {
+    const data = {
+      counts: { fresh: 4, assigned: 3, in_progress: 2, finalised: 5 },
+      completed: 4,
+      returned: 1,
+      due: 2,
+    } as never;
+    expect(caseKpis(data, true, false).map((k) => [k.key, k.n])).toEqual([
+      ['todo', 5],
+      ['due', 2],
+      ['returned', 1],
+      ['finalised', 5],
+    ]);
+    expect(caseKpis(data, true, true).at(-1)).toMatchObject({ key: 'available', n: 4 });
+    const managers = caseKpis(data, false, false);
+    expect(managers.map((k) => k.key)).toEqual([
+      'fresh',
+      'assigned',
+      'in_progress',
+      'finalised',
+      'withdrawn',
+    ]);
+    expect(managers.find((k) => k.key === 'finalised')?.sub).toBe(4);
   });
 });
 

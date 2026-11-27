@@ -46,7 +46,7 @@ const ListQuery = z.object({
   q: z.string().max(200).optional(),
   /** Rule-style filter over case.*, status, priority (evaluated on the server). */
   filter: z.string().max(2000).optional(),
-  sort: z.enum(['externalId', 'priority', 'updatedAt']).default('externalId'),
+  sort: z.enum(['externalId', 'priority', 'updatedAt', 'todo']).default('externalId'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -182,7 +182,7 @@ export class CasesController {
           await t.cases(conds, order, { limit: q.limit, offset: (q.page - 1) * q.limit }),
         );
       }
-      const { byStatus, completed, held } = await t.caseCounts(base);
+      const { byStatus, completed, held, returned, due } = await t.caseCounts(base);
       const fields = await t.fields(projectId);
       // Lists mask personal fields; clear values come from an audited reveal per case, or,
       // for an interviewer's own cases, automatically with the first view recorded.
@@ -198,6 +198,10 @@ export class CasesController {
         completed,
         // Assigned: held by someone, whatever their state.
         held,
+        // Open cases with an interview sent back for corrections, and with a callback or
+        // appointment due within a day.
+        returned,
+        due,
         fields,
         assignmentMode: settings.assignmentMode,
         caseExpiryDays: settings.fieldwork.caseExpiryDays,

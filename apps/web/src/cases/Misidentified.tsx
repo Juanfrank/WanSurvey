@@ -5,6 +5,10 @@ import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 
+/** `smallBtn` in red, for actions that take a case out of fieldwork. */
+export const dangerBtn =
+  'rounded-md border border-red-300 bg-white px-3 py-1 text-sm font-semibold text-red-ink-800 hover:border-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50';
+
 /**
  * "The person reached is not the one of the record": the case is closed as not eligible and the
  * interviews made with the wrong person are rejected, so no report counts them. Asks for what
@@ -32,7 +36,7 @@ export function Misidentified({ projectId, caseId }: { projectId: string; caseId
   });
   if (!open)
     return (
-      <button type="button" className={smallBtn} onClick={() => setOpen(true)}>
+      <button type="button" className={dangerBtn} onClick={() => setOpen(true)}>
         {t('cases.misidentified.open')}
       </button>
     );

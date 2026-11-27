@@ -36,6 +36,10 @@ export interface CaseRowView {
   substituteFor: string | null;
   inclusionProb: number | null;
   baseWeight: number | null;
+  /** When the case is due for a callback or appointment, if it is. */
+  nextContactAt: Date | null;
+  /** An interview of the case was sent back to its interviewer for corrections. */
+  returned: boolean;
 }
 
 /** Which cases: always one project; the rest narrows. */
@@ -54,7 +58,11 @@ export interface CaseQuery {
 }
 
 export interface CaseOrder {
-  by: 'externalId' | 'priority' | 'updatedAt';
+  /**
+   * `todo`: what an interviewer should do first — returned interviews, callbacks and
+   * appointments due within a day, cases in progress, assigned, free, then the closed ones.
+   */
+  by: 'externalId' | 'priority' | 'updatedAt' | 'todo';
   dir: 'asc' | 'desc';
 }
 
@@ -131,11 +139,17 @@ export interface CasesTx {
     page?: { limit: number; offset: number },
   ): Promise<CaseRowView[]>;
   countCases(q: CaseQuery): Promise<number>;
-  /** Counts per status, those finished with a complete interview, and those held by someone. */
+  /**
+   * Counts per status, those finished with a complete interview, those held by someone, the
+   * open ones with an interview returned for corrections, and the open ones with a callback or
+   * appointment due within a day.
+   */
   caseCounts(q: CaseQuery): Promise<{
     byStatus: Record<string, number>;
     completed: number;
     held: number;
+    returned: number;
+    due: number;
   }>;
   /** Withdraws these cases of the project that nobody is working on; returns their ids. */
   withdrawMany(projectId: string, ids: string[]): Promise<string[]>;
@@ -300,6 +314,22 @@ export const CHUNK = 1000;
 const low = (s: string) => s.toLowerCase();
 const lowOrNull = (s: string | null) => (s === null ? null : s.toLowerCase());
 const parse = <T>(text: string | null): T => (text === null ? (null as T) : JSON.parse(text));
+
+/** An interview of the case is back with the interviewer now holding it, for corrections. */
+const RETURNED = ksql<boolean>`EXISTS (SELECT 1 FROM interviews ri
+  WHERE ri.case_id = c.id AND ri.status = 'returned' AND ri.interviewer_id = c.assigned_to)`;
+/** A callback or appointment due within the next 24 hours, or already overdue. */
+const DUE = ksql<boolean>`c.next_contact_at IS NOT NULL
+  AND c.next_contact_at <= DATEADD(hour, 24, SYSDATETIMEOFFSET())`;
+/** What an interviewer should do first (see `CaseOrder`). */
+const TODO_RANK = ksql`CASE
+  WHEN c.status IN ('assigned', 'in_progress') AND ${RETURNED} THEN 0
+  WHEN c.status IN ('assigned', 'in_progress') AND ${DUE} THEN 1
+  WHEN c.status = 'in_progress' THEN 2
+  WHEN c.status = 'assigned' THEN 3
+  WHEN c.status = 'fresh' THEN 4
+  WHEN c.status = 'finalised' THEN 5
+  ELSE 6 END`;
 
 export class MssqlCasesTx implements CasesTx {
   constructor(
@@ -480,6 +510,8 @@ export class MssqlCasesTx implements CasesTx {
           : 'c.external_id';
     let query = this.base(q)
       .select([
+        ksql<boolean>`CASE WHEN ${RETURNED} THEN 1 ELSE 0 END`.as('returned'),
+        'c.next_contact_at',
         'c.id',
         'c.external_id',
         'c.sample',
@@ -501,7 +533,16 @@ export class MssqlCasesTx implements CasesTx {
         'c.inclusion_prob',
         'c.base_weight',
       ])
-      .orderBy(col, order?.dir ?? 'asc')
+      .$if(order?.by === 'todo', (b) =>
+        b
+          .orderBy(TODO_RANK)
+          // Soonest callback first; cases without one after.
+          .orderBy(ksql`CASE WHEN c.next_contact_at IS NULL THEN 1 ELSE 0 END`)
+          .orderBy('c.next_contact_at')
+          .orderBy('c.priority', 'desc')
+          .orderBy('c.external_id'),
+      )
+      .$if(order?.by !== 'todo', (b) => b.orderBy(col, order?.dir ?? 'asc'))
       .orderBy('c.id');
     if (page) query = query.offset(page.offset).fetch(page.limit);
     const rows = await query.execute();
@@ -526,6 +567,8 @@ export class MssqlCasesTx implements CasesTx {
       substituteFor: lowOrNull(r.substitute_for),
       inclusionProb: r.inclusion_prob,
       baseWeight: r.base_weight,
+      nextContactAt: r.next_contact_at,
+      returned: Boolean(r.returned),
     }));
   }
 
@@ -550,10 +593,21 @@ export class MssqlCasesTx implements CasesTx {
       .select(ksql<number>`COUNT(*)`.as('n'))
       .where('c.assigned_to', 'is not', null)
       .executeTakeFirstOrThrow();
+    // SQL Server does not aggregate over a subquery: one count each.
+    const open = (cond: typeof RETURNED) =>
+      this.base(q)
+        .select(ksql<number>`COUNT(*)`.as('n'))
+        .where('c.status', 'in', ['assigned', 'in_progress'])
+        .where(cond)
+        .executeTakeFirstOrThrow();
+    const returned = await open(RETURNED);
+    const due = await open(DUE);
     return {
       byStatus: Object.fromEntries(counts.map((c) => [c.status, c.n])),
       completed: done.n,
       held: held.n,
+      returned: returned.n,
+      due: due.n,
     };
   }
 

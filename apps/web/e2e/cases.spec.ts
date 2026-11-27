@@ -122,7 +122,20 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
   await expect(row).toContainText('Demo clerk');
   // When it was assigned, and how long ago.
   await expect(row.locator('[data-col="since"]')).toHaveText('under 1 h');
-  await expect(row).toContainText('•••');
+  // Hidden personal values read as such, not as a "•••" menu.
+  await expect(row).toContainText('hidden');
+  // The figures are the case states, the same as the dashboard's, and add up to the total.
+  const kpis = page.getByRole('list', { name: 'Case figures' });
+  await expect(kpis.locator('[data-kpi]')).toHaveCount(5);
+  const sum = (await kpis.locator('[data-n]').allTextContents()).reduce((a, n) => a + +n, 0);
+  await expect(page.getByTestId('kpi-total')).toHaveText(String(sum));
+  // Readable names for the sample variables, with the code under them.
+  await page.getByText('Names of the sample variables').click();
+  await page.getByRole('textbox', { name: 'Name of first_name' }).fill('First name');
+  await page.getByRole('button', { name: 'Save names' }).click();
+  await expect(page.getByText('1 name saved.')).toBeVisible();
+  await expect(page.getByTestId('cases-table').locator('thead')).toContainText('First name');
+  await page.getByText('Names of the sample variables').click();
   await shot(page, 'cases-list');
   await expectAccessible(page);
 
@@ -199,12 +212,12 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await rules.getByRole('button', { name: 'Close' }).last().click();
 
   // Back in the list, the free cases go out by the rules.
-  const before = Number(await page.locator('[data-kpi="assigned"] p').last().textContent());
+  const before = Number(await page.locator('[data-kpi="assigned"] [data-n]').textContent());
   await page.getByLabel('How to assign').selectOption({ label: 'By the rules' });
   await expect(page.getByText('Assign free cases by the rules')).toBeVisible();
   await page.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(page.getByText(/cases? assigned\./)).toBeVisible();
-  await expect(page.locator('[data-kpi="assigned"] p').last()).not.toHaveText(String(before));
+  await expect(page.locator('[data-kpi="assigned"] [data-n]')).not.toHaveText(String(before));
   await shot(page, 'cases-kpis');
   await page.getByRole('button', { name: 'Assignment rules' }).click();
   rules = page.getByRole('dialog', { name: 'Assignment rules' });
@@ -233,7 +246,10 @@ test('interviewers see their cases automatically; in pool mode the first to take
   await interviewer.getByLabel('Search id or sample data').fill('XHH0007');
   const row = interviewer.locator('tr[data-case="XHH0007"]');
   await expect(row).toBeVisible();
-  await expect(row).not.toContainText('•••');
+  await expect(row).not.toContainText('hidden');
+  // Their own figures: what to do, not what is left to assign.
+  await expect(interviewer.locator('[data-kpi="todo"]')).toBeVisible();
+  await expect(interviewer.locator('[data-kpi="fresh"]')).toHaveCount(0);
   await expect(interviewer.getByText(/Personal data of your cases is shown/)).toBeVisible();
   await interviewer.getByRole('button', { name: 'Open case XHH0007' }).click();
   const drawer = interviewer.getByRole('dialog', { name: 'Case XHH0007' });
