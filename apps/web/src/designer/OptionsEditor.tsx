@@ -2,7 +2,7 @@ import type { AnswerOption, Code, LocalizedText } from '@wansurvey/schema';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toLiteral } from './ConditionBuilder.js';
-import { inputCls, smallBtn, useShownLanguages } from './fields.js';
+import { inputCls, smallBtn, useShownLanguages, useSourceLanguage } from './fields.js';
 import { PipeField } from './PipeAssist.js';
 
 type Row = { code: Code; label: LocalizedText } & Partial<
@@ -57,6 +57,8 @@ export function OptionsEditor({
     });
   };
   const shown = useShownLanguages(languages);
+  // Translating: the default language's label, read-only, beside each one.
+  const source = useSourceLanguage(languages);
   const add = () => {
     onChange([
       ...rows,
@@ -77,6 +79,11 @@ export function OptionsEditor({
               <th scope="col" className="w-20 pb-1 font-medium">
                 {t('designer.opt.code')}
               </th>
+              {source ? (
+                <th scope="col" className="pb-1 font-medium">
+                  {t('designer.sourceText', { lang: source })}
+                </th>
+              ) : null}
               {shown.map((l) => (
                 <th key={l} scope="col" className="pb-1 font-medium">
                   {t('designer.opt.label')} ({l})
@@ -115,6 +122,13 @@ export function OptionsEditor({
                     onChange={(e) => set(i, { code: toLiteral(e.target.value) })}
                   />
                 </td>
+                {source ? (
+                  <td className="py-2 pr-2 text-slate-700" data-testid="source-label">
+                    {r.label[source]?.trim() || (
+                      <span className="italic text-slate-500">{t('designer.sourceEmpty')}</span>
+                    )}
+                  </td>
+                ) : null}
                 {shown.map((l, li) => (
                   <td key={l} className="py-1 pr-2">
                     <PipeField

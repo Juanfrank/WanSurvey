@@ -530,7 +530,8 @@ function QuestionnairesSection({
   const [sample, setSample] = useState(SAMPLES[0]!.id);
   const [json, setJson] = useState<{ name: string; definition: unknown } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The modes the questionnaire is fielded in, chosen now (Q1): the project's, all ticked.
+  // The modes the questionnaire is fielded in, chosen now (Q1) among the project's. A mixed
+  // design is a decision: nothing is ticked unless the project has a single mode.
   const project = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api<Project>(`/projects/${projectId}`),
@@ -539,7 +540,7 @@ function QuestionnairesSection({
     ? MODES.filter((m) => project.data!.modesEnabled.includes(m))
     : MODES;
   const [modes, setModes] = useState<Mode[] | null>(null);
-  const chosen = modes ?? [...offered];
+  const chosen = modes ?? (offered.length === 1 ? [...offered] : []);
 
   const [format, setFormat] = useState<NewFormat>('questionnaire');
   const [draft, setDraft] = useState<FeedbackDraft>({
@@ -877,6 +878,15 @@ function QuestionnairesSection({
                       </label>
                     ))}
                   </div>
+                  {chosen.length > 1 ? (
+                    <p
+                      role="note"
+                      data-testid="new-q-mixed"
+                      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-ink-900"
+                    >
+                      {t('designer.create.modesMixed')}
+                    </p>
+                  ) : null}
                 </fieldset>
                 <fieldset className="flex flex-col gap-2 text-sm">
                   <legend className="mb-1 font-medium text-slate-700">

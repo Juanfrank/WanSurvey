@@ -104,6 +104,9 @@ export function SettingsEditor({
     specialCodes: DEFAULT_SPECIAL_CODES,
     cawiShowSpecialCodes: false,
   };
+  // Older drafts may not spell out the modes: the schema's default then applies.
+  const offeredIn = (k: 'DK' | 'RF'): readonly string[] =>
+    specials[k].offeredIn ?? DEFAULT_SPECIAL_CODES[k].offeredIn;
   const empty = (): LocalizedText => Object.fromEntries(langs.map((l) => [l, '']));
 
   return (
@@ -274,6 +277,41 @@ export function SettingsEditor({
                     )
                   }
                 />
+                {k !== 'NA' ? (
+                  <fieldset
+                    className="flex flex-wrap items-center gap-3 text-sm sm:col-start-2"
+                    data-testid={`special-modes-${k}`}
+                  >
+                    <legend className="mb-1 text-sm font-medium text-slate-700">
+                      {t('designer.settings.offeredIn', {
+                        kind: t(`designer.settings.special.${k}`),
+                      })}
+                    </legend>
+                    {(['CATI', 'CAPI', 'PAPI'] as const).map((m) => (
+                      <CheckField
+                        key={m}
+                        label={m}
+                        checked={offeredIn(k).includes(m)}
+                        onChange={(on) =>
+                          set({
+                            settings: {
+                              ...settings,
+                              specialCodes: {
+                                ...specials,
+                                [k]: {
+                                  ...specials[k],
+                                  offeredIn: MODES.filter((x) =>
+                                    x === m ? on : offeredIn(k).includes(x),
+                                  ),
+                                },
+                              },
+                            },
+                          })
+                        }
+                      />
+                    ))}
+                  </fieldset>
+                ) : null}
               </div>
             ))}
             <CheckField

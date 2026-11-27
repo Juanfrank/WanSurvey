@@ -8,8 +8,12 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ComparePanel } from '../src/designer/ComparePanel.js';
 import { ConditionBuilder } from '../src/designer/ConditionBuilder.js';
-import { EditingLanguageContext, LocalizedField } from '../src/designer/fields.js';
-import { ItemEditor } from '../src/designer/ItemEditor.js';
+import {
+  EditingLanguageContext,
+  LocalizedField,
+  SourceLanguageContext,
+} from '../src/designer/fields.js';
+import { ItemEditor, specialModes } from '../src/designer/ItemEditor.js';
 import { Outline } from '../src/designer/Outline.js';
 import { RoutingMap } from '../src/designer/RoutingMap.js';
 import { useRouting } from '../src/designer/useRouting.js';
@@ -612,5 +616,34 @@ describe('editing one questionnaire language at a time', () => {
     rerender(field('en'));
     expect(screen.getByLabelText('Question wording (en)')).toHaveProperty('value', '');
     expect(screen.queryByLabelText('Question wording (es)')).toBeNull();
+  });
+
+  it("shows the default language's text, read-only, while translating", () => {
+    const field = (lang: string) => (
+      <SourceLanguageContext.Provider value="es">
+        <EditingLanguageContext.Provider value={lang}>
+          <LocalizedField
+            label="Question wording"
+            value={{ es: '¿Trabaja?', en: '' }}
+            languages={['es', 'en']}
+            onChange={() => {}}
+          />
+        </EditingLanguageContext.Provider>
+      </SourceLanguageContext.Provider>
+    );
+    const { rerender } = render(field('en'));
+    expect(screen.getByTestId('source-text').textContent).toContain('¿Trabaja?');
+    rerender(field('es'));
+    expect(screen.queryByTestId('source-text')).toBeNull();
+  });
+});
+
+describe('special answers', () => {
+  it("says in which of the questionnaire's modes Don't know and Refused are offered", () => {
+    const d = draft();
+    expect(specialModes(d, 'DK')).toEqual(['CATI', 'CAPI', 'PAPI']);
+    const web = { ...d, settings: { ...d.settings, cawiShowSpecialCodes: true } };
+    expect(specialModes(web, 'RF')).toEqual(['CATI', 'CAPI', 'CAWI', 'PAPI']);
+    expect(specialModes({ ...d, modes: ['CAWI'] }, 'DK')).toEqual([]);
   });
 });

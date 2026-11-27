@@ -253,6 +253,21 @@ export function useShownLanguages(languages: string[]): string[] {
   return lang && languages.includes(lang) ? [lang] : languages;
 }
 
+/** The questionnaire's default language: its texts are shown beside a translation. */
+export const SourceLanguageContext = createContext<string | null>(null);
+
+/**
+ * While one other language is edited, the default language whose text is shown read-only
+ * beside it (null when editing the default language, or all languages at once).
+ */
+export function useSourceLanguage(languages: string[]): string | null {
+  const source = useContext(SourceLanguageContext);
+  const shown = useShownLanguages(languages);
+  return source && shown.length === 1 && shown[0] !== source && languages.includes(source)
+    ? source
+    : null;
+}
+
 export function LocalizedField({
   label,
   value,
@@ -282,6 +297,7 @@ export function LocalizedField({
     onChange(Object.keys(next).length ? next : undefined);
   };
   const shown = useShownLanguages(languages);
+  const source = useSourceLanguage(languages);
   // Texts still missing in the other languages (the one shown is visibly empty anyway).
   const missing = keepEmpty
     ? languages.filter((l) => !shown.includes(l) && !(value?.[l] ?? '').trim())
@@ -315,6 +331,19 @@ export function LocalizedField({
           );
         })}
       </div>
+      {source ? (
+        <p
+          className="ml-8 whitespace-pre-wrap rounded bg-slate-50 px-2 py-1 text-sm text-slate-700"
+          data-testid="source-text"
+        >
+          <span className="font-mono text-xs uppercase text-slate-500">
+            {t('designer.sourceText', { lang: source })}
+          </span>{' '}
+          {value?.[source]?.trim() || (
+            <span className="italic text-slate-500">{t('designer.sourceEmpty')}</span>
+          )}
+        </p>
+      ) : null}
       {hint ? <Hint id={`${id}-hint`}>{hint}</Hint> : null}
       {missing.length && (value?.[shown[0]!] ?? '').trim() ? (
         <Hint>{t('designer.missingTranslation', { langs: missing.join(', ') })}</Hint>

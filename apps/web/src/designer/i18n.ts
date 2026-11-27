@@ -28,6 +28,8 @@ export const designerEn = {
     modesHelp:
       'How this questionnaire will be fielded. Wording per mode, the preview, interviews, web outreach and paper forms follow this choice; it can be changed in the questionnaire settings.',
     modesRequired: 'Choose at least one mode.',
+    modesMixed:
+      'Several modes make a mixed-mode design: the same question can be answered differently on the phone, face to face, on the web and on paper. Check Preview › Compare modes and adjust the wording per mode (the Modes tab of each question).',
   },
   newProject: {
     open: 'New project',
@@ -104,6 +106,8 @@ export const designerEn = {
   nothingSelected: 'Select an item in the outline.',
   goTo: 'Go to {{id}}',
   missingTranslation: 'Missing translation: {{langs}}',
+  sourceText: 'Original ({{lang}})',
+  sourceEmpty: 'empty',
   outline: {
     title: 'Outline',
     add: 'Add item',
@@ -269,6 +273,9 @@ export const designerEn = {
   required: 'Answer required',
   allowDK: "Offer Don't know",
   allowRefused: 'Offer Refused',
+  specialsWhere: 'Offered in {{modes}}: {{what}}.',
+  specialsNowhere: 'Not offered in any mode of this questionnaire: {{what}}.',
+  specialsWhereHelp: 'The modes are chosen in Settings › Special answers.',
   sensitive: {
     label: 'Sensitive data (special category)',
     none: 'Not sensitive',
@@ -314,9 +321,13 @@ export const designerEn = {
   scale: 'Scale',
   scaleStyle: 'Style',
   palette: 'Colours',
+  paletteHelp:
+    'Without colours the scale looks the same in every mode. Recommended for opinion and attitude scales.',
+  paletteWarning:
+    'Red and green mark an answer as bad or good and can steer the answer; colour-blind people cannot tell them apart, and they do not exist on the phone or on paper, so the web stops being comparable with the other modes. Use it only to rate a service, not on attitude scales.',
   palettes: {
-    none: 'None',
-    diverging: 'Red → amber → green',
+    none: 'None (recommended)',
+    diverging: 'Red → amber → green (service ratings)',
     sequential: 'Light → dark',
     nps: 'NPS (detractors, passives, promoters)',
   },
@@ -496,6 +507,13 @@ export const designerEn = {
       'A web link with this parameter answers the question beforehand: recorded, never shown, and the logic follows it.',
     urlParamExample:
       'E.g. …?{{param}}=2 answers it with code 2 and skips it; the logic goes on from that answer.',
+    skipClears:
+      'Answers already given to the skipped items are deleted when the skip applies, for example when someone goes back and changes this answer.',
+    more: {
+      filter: 'Add an option filter',
+      data: 'Add data from the case',
+      url: 'Add a link parameter',
+    },
   },
   variants: {
     unusedMode: 'not used',
@@ -561,6 +579,10 @@ export const designerEn = {
     description: 'Description',
     tags: 'Tags (comma separated)',
     saved: 'Saved to the library.',
+    hasErrors_one:
+      'Fix this problem first: the library keeps only items without errors or unlabelled options, as others reuse them as they are.',
+    hasErrors_other:
+      'Fix these {{count}} problems first: the library keeps only items without errors or unlabelled options, as others reuse them as they are.',
     insert: 'From the library…',
     title: 'Insert from the question library',
     search: 'Search the library',
@@ -658,6 +680,7 @@ export const designerEn = {
     special: { DK: "Don't know", RF: 'Refused', NA: 'Not applicable' },
     specialLabel: 'Label ({{kind}})',
     cawiSpecials: "Offer Don't know / Refused to web respondents",
+    offeredIn: '{{kind}}: offered in',
     answerSets: 'Answer sets',
     answerSetsHelp: 'Option lists shared by several questions.',
     newSet: 'New answer set name',
@@ -867,6 +890,8 @@ export const designerEs: DesignerCatalogue = {
     modesHelp:
       'Cómo se aplicará este cuestionario. Los textos por modo, la vista previa, las entrevistas, las difusiones web y los formularios en papel siguen esta elección; puede cambiarse en la configuración del cuestionario.',
     modesRequired: 'Elija al menos un modo.',
+    modesMixed:
+      'Varios modos forman un diseño mixto: la misma pregunta puede responderse distinto por teléfono, cara a cara, en la web y en papel. Revise Vista previa › Comparar modos y ajuste los textos por modo (pestaña Modos de cada pregunta).',
   },
   newProject: {
     open: 'Nuevo proyecto',
@@ -943,6 +968,8 @@ export const designerEs: DesignerCatalogue = {
   nothingSelected: 'Seleccione un ítem en el esquema.',
   goTo: 'Ir a {{id}}',
   missingTranslation: 'Falta traducción: {{langs}}',
+  sourceText: 'Original ({{lang}})',
+  sourceEmpty: 'vacío',
   outline: {
     title: 'Esquema',
     add: 'Agregar ítem',
@@ -1110,6 +1137,9 @@ export const designerEs: DesignerCatalogue = {
   required: 'Respuesta obligatoria',
   allowDK: 'Ofrecer No sabe',
   allowRefused: 'Ofrecer Rehúsa',
+  specialsWhere: 'Se ofrece en {{modes}}: {{what}}.',
+  specialsNowhere: 'No se ofrece en ningún modo de este cuestionario: {{what}}.',
+  specialsWhereHelp: 'Los modos se eligen en Configuración › Respuestas especiales.',
   sensitive: {
     label: 'Dato sensible (categoría especial)',
     none: 'No sensible',
@@ -1155,9 +1185,13 @@ export const designerEs: DesignerCatalogue = {
   scale: 'Escala',
   scaleStyle: 'Estilo',
   palette: 'Colores',
+  paletteHelp:
+    'Sin colores, la escala se ve igual en todos los modos. Es lo recomendado para escalas de opinión o actitud.',
+  paletteWarning:
+    'El rojo y el verde marcan una respuesta como mala o buena y pueden inclinar la respuesta; no se distinguen con daltonismo y no existen por teléfono ni en papel, así que la web deja de ser comparable con los otros modos. Úselo solo para valorar un servicio, no en escalas de actitud.',
   palettes: {
-    none: 'Ninguno',
-    diverging: 'Rojo → ámbar → verde',
+    none: 'Ninguno (recomendado)',
+    diverging: 'Rojo → ámbar → verde (valoración de servicios)',
     sequential: 'Claro → oscuro',
     nps: 'NPS (detractores, pasivos, promotores)',
   },
@@ -1344,6 +1378,13 @@ export const designerEs: DesignerCatalogue = {
       'Un enlace web con este parámetro responde la pregunta de antemano: se registra, nunca se muestra y la lógica sigue esa respuesta.',
     urlParamExample:
       'Ej.: …?{{param}}=2 la responde con el código 2 y la salta; la lógica continúa desde esa respuesta.',
+    skipClears:
+      'Las respuestas ya dadas a los ítems saltados se borran cuando el salto se aplica, por ejemplo si alguien vuelve atrás y cambia esta respuesta.',
+    more: {
+      filter: 'Agregar un filtro de opciones',
+      data: 'Agregar datos del caso',
+      url: 'Agregar un parámetro del enlace',
+    },
   },
   variants: {
     unusedMode: 'no se usa',
@@ -1408,6 +1449,10 @@ export const designerEs: DesignerCatalogue = {
     description: 'Descripción',
     tags: 'Etiquetas (separadas por comas)',
     saved: 'Guardado en la biblioteca.',
+    hasErrors_one:
+      'Corrija primero este problema: la biblioteca solo guarda ítems sin errores ni opciones sin etiqueta, porque otros los reutilizan tal cual.',
+    hasErrors_other:
+      'Corrija primero estos {{count}} problemas: la biblioteca solo guarda ítems sin errores ni opciones sin etiqueta, porque otros los reutilizan tal cual.',
     insert: 'Desde la biblioteca…',
     title: 'Insertar desde la biblioteca de preguntas',
     search: 'Buscar en la biblioteca',
@@ -1506,6 +1551,7 @@ export const designerEs: DesignerCatalogue = {
     special: { DK: 'No sabe', RF: 'Rehúsa', NA: 'No aplica' },
     specialLabel: 'Etiqueta ({{kind}})',
     cawiSpecials: 'Ofrecer No sabe / Rehúsa a encuestados web',
+    offeredIn: '{{kind}}: se ofrece en',
     answerSets: 'Conjuntos de respuestas',
     answerSetsHelp: 'Listas de opciones compartidas por varias preguntas.',
     newSet: 'Nombre del nuevo conjunto',

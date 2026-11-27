@@ -19,8 +19,12 @@ async function saved(page: Page) {
   });
 }
 
-/** Creates a blank questionnaire in the demo project and opens it in the designer. */
-async function newQuestionnaire(page: Page, name: string, untick: string[] = []) {
+/** Creates a blank questionnaire in the demo project, in these modes, and opens it. */
+async function newQuestionnaire(
+  page: Page,
+  name: string,
+  modes: string[] = ['CATI', 'CAPI', 'CAWI', 'PAPI'],
+) {
   await login(page);
   // Other specs switch organisation, and the last one used opens by default.
   await pickOrganisation(page, 'Demo Research');
@@ -32,10 +36,12 @@ async function newQuestionnaire(page: Page, name: string, untick: string[] = [])
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Household questionnaire' })).toBeVisible();
   await page.getByLabel('Questionnaire name').fill(name);
-  // Every mode the project uses is ticked to begin with.
-  const modes = page.getByTestId('new-q-modes');
-  for (const m of untick)
-    await modes.getByRole('checkbox', { name: new RegExp(`^${m}`) }).uncheck();
+  // A mixed-mode design is a decision: nothing is ticked to begin with, and ticking several
+  // modes warns about mode effects.
+  const boxes = page.getByTestId('new-q-modes');
+  await expect(boxes.getByRole('checkbox', { checked: true })).toHaveCount(0);
+  for (const m of modes) await boxes.getByRole('checkbox', { name: new RegExp(`^${m}`) }).check();
+  await expect(page.getByTestId('new-q-mixed')).toHaveCount(modes.length > 1 ? 1 : 0);
   await page.getByRole('button', { name: 'Create and open' }).click();
   await expect(page.getByRole('tree', { name: 'Outline' })).toBeVisible();
   return page.url();
@@ -218,6 +224,9 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await page.getByLabel('Question wording (en)').fill('Do you work?');
   await page.getByLabel('Label of option 1 (en)').fill('Yes');
   await expect(page.getByLabel('Label of option 1 (es)')).toHaveCount(0);
+  // The Spanish original stays in view, read-only, beside what is translated.
+  await expect(page.getByTestId('source-text').first()).toContainText('¿Trabaja usted?');
+  await expect(page.getByTestId('source-label').first()).toContainText('Sí');
   await shot(page, 'designer-second-language');
   await page.getByLabel('Questionnaire language').selectOption('es');
   await expect(page.getByLabel('Question wording (es)')).toHaveValue('¿Trabaja usted?');
@@ -228,7 +237,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
 });
 
 test('a questionnaire takes its modes at creation (Q1)', async ({ page }) => {
-  await newQuestionnaire(page, 'Phone and web', ['CAPI', 'PAPI']);
+  await newQuestionnaire(page, 'Phone and web', ['CATI', 'CAWI']);
   await page.goBack();
   const row = page.getByRole('row').filter({ hasText: 'Phone and web' });
   const chips = row.getByTestId('mode-chips');
@@ -435,9 +444,17 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await thread.getByRole('button', { name: 'Resolve' }).click();
   await expect(outlineItem(pm, 'A_CONSENT').getByTestId('comment-badge')).toHaveCount(0);
 
-  // Save the question to the library, then insert it again: it gets a fresh name.
+  // Save the question to the library, then insert it again: it gets a fresh name. With
+  // errors (options without labels) it cannot be saved yet.
   await pm.getByRole('button', { name: 'Save to library' }).click();
   const save = pm.getByRole('dialog', { name: /Save A_CONSENT to the question library/ });
+  await expect(save.getByTestId('library-errors')).toBeVisible();
+  await expect(save.getByRole('button', { name: 'Save to library' })).toBeDisabled();
+  await save.getByRole('button', { name: 'Cancel' }).click();
+  await pm.getByLabel('Label of option 1 (es)').fill('Sí');
+  await pm.getByLabel('Label of option 2 (es)').fill('No');
+  await pm.getByRole('button', { name: 'Save to library' }).click();
+  await expect(save.getByTestId('library-errors')).toHaveCount(0);
   await save.getByLabel('Name').fill('Consent question');
   await save.getByLabel('Tags (comma separated)').fill('consent, core');
   await save.getByRole('button', { name: 'Save to library' }).click();

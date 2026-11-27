@@ -7,7 +7,7 @@ import {
   type SkipRule,
   type ValidationRule,
 } from '@wansurvey/schema';
-import { useId, useMemo } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConditionBuilder, unknownNames } from './ConditionBuilder.js';
 import {
@@ -110,6 +110,9 @@ export function skipTargets(draft: Draft, fromId: string, lang: string) {
 
 const DISPOSITION_KEYS = Object.keys(DISPOSITIONS) as Disposition[];
 
+const EXTRAS = ['filter', 'data', 'url'] as const;
+type Extra = (typeof EXTRAS)[number];
+
 export function LogicEditor({
   node,
   draft,
@@ -132,6 +135,16 @@ export function LogicEditor({
   const setSkips = (s: SkipRule[]) => onPatch({ skips: s.length ? s : undefined });
   const setEnds = (e: EndRule[]) => onPatch({ endIf: e.length ? e : undefined });
   const setChecks = (c: ValidationRule[]) => onPatch({ validations: c.length ? c : undefined });
+  // Optional parts with nothing in them are folded into "Add …" buttons.
+  const [opened, setOpened] = useState<ReadonlySet<Extra>>(new Set());
+  const open = (x: Extra) => setOpened((s) => new Set(s).add(x));
+  const hasOptions = !!(node.options || node.answerSetId || node.type === 'yesno');
+  const shown: Record<Extra, boolean> = {
+    filter: hasOptions && (!!node.optionFilter || opened.has('filter')),
+    data: !!node.prefill || opened.has('data'),
+    url: !!node.urlParam || opened.has('url'),
+  };
+  const folded = EXTRAS.filter((x) => !shown[x] && (x !== 'filter' || hasOptions));
   const nextCheckId = () => {
     const used = new Set(checks.map((c) => c.id));
     let n = checks.length + 1;
@@ -151,6 +164,15 @@ export function LogicEditor({
 
       <Group title={t('designer.logic.skips')}>
         <Hint>{t('designer.logic.skipsHelp')}</Hint>
+        {skips.length ? (
+          <p
+            role="note"
+            data-testid="skip-clears"
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
+          >
+            {t('designer.logic.skipClears')}
+          </p>
+        ) : null}
         {skips.map((s, i) => (
           <div
             key={i}
@@ -318,7 +340,7 @@ export function LogicEditor({
         </div>
       </Group>
 
-      {node.options || node.answerSetId || node.type === 'yesno' ? (
+      {shown.filter ? (
         <ExpressionField
           label={t('designer.logic.optionFilter')}
           hint={t('designer.logic.optionFilterHelp')}
@@ -328,79 +350,92 @@ export function LogicEditor({
           onChange={(optionFilter) => onPatch({ optionFilter })}
         />
       ) : null}
-      <Group title={t('designer.logic.fromData')}>
-        <p className="text-xs text-slate-600">{t('designer.logic.fromDataHelp')}</p>
-        {variables.some((v) => v.kind === 'case') ? (
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">{t('designer.logic.caseField')}</span>
-            <select
-              className={`${controlCls} w-auto`}
-              value={
-                variables.some((v) => v.kind === 'case' && v.name === node.prefill)
-                  ? node.prefill
-                  : ''
-              }
-              onChange={(e) => onPatch({ prefill: e.target.value || undefined })}
-            >
-              <option value="">{t('designer.logic.caseFieldNone')}</option>
-              {variables
-                .filter((v) => v.kind === 'case')
-                .map((v) => (
-                  <option key={v.name} value={v.name}>
-                    {v.text} ({v.name})
-                  </option>
-                ))}
-            </select>
-          </label>
-        ) : null}
-        <ExpressionField
-          label={t('designer.logic.prefill')}
-          hint={t('designer.logic.prefillHelp')}
-          value={node.prefill}
-          variables={variables}
-          onChange={(prefill) => onPatch({ prefill })}
-        />
-        {node.prefill ? (
-          <fieldset className="flex flex-col gap-1.5 text-sm">
-            <legend className="mb-1 font-medium">{t('designer.logic.prefillMode')}</legend>
-            {(['confirm', 'ifMissing', 'fixed'] as const).map((m) => (
-              <label key={m} className="flex items-start gap-2">
-                <input
-                  type="radio"
-                  className="mt-1"
-                  name={`prefill-mode-${node.id}`}
-                  checked={(node.prefillMode ?? 'confirm') === m}
-                  onChange={() => onPatch({ prefillMode: m === 'confirm' ? undefined : m })}
-                />
-                <span>
-                  <span className="font-medium">{t(`designer.logic.prefillModes.${m}`)}</span>
-                  <span className="block text-xs text-slate-600">
-                    {t(`designer.logic.prefillModeHints.${m}`)}
+      {shown.data ? (
+        <Group title={t('designer.logic.fromData')}>
+          <p className="text-xs text-slate-600">{t('designer.logic.fromDataHelp')}</p>
+          {variables.some((v) => v.kind === 'case') ? (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">{t('designer.logic.caseField')}</span>
+              <select
+                className={`${controlCls} w-auto`}
+                value={
+                  variables.some((v) => v.kind === 'case' && v.name === node.prefill)
+                    ? node.prefill
+                    : ''
+                }
+                onChange={(e) => onPatch({ prefill: e.target.value || undefined })}
+              >
+                <option value="">{t('designer.logic.caseFieldNone')}</option>
+                {variables
+                  .filter((v) => v.kind === 'case')
+                  .map((v) => (
+                    <option key={v.name} value={v.name}>
+                      {v.text} ({v.name})
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : null}
+          <ExpressionField
+            label={t('designer.logic.prefill')}
+            hint={t('designer.logic.prefillHelp')}
+            value={node.prefill}
+            variables={variables}
+            onChange={(prefill) => onPatch({ prefill })}
+          />
+          {node.prefill ? (
+            <fieldset className="flex flex-col gap-1.5 text-sm">
+              <legend className="mb-1 font-medium">{t('designer.logic.prefillMode')}</legend>
+              {(['confirm', 'ifMissing', 'fixed'] as const).map((m) => (
+                <label key={m} className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    className="mt-1"
+                    name={`prefill-mode-${node.id}`}
+                    checked={(node.prefillMode ?? 'confirm') === m}
+                    onChange={() => onPatch({ prefillMode: m === 'confirm' ? undefined : m })}
+                  />
+                  <span>
+                    <span className="font-medium">{t(`designer.logic.prefillModes.${m}`)}</span>
+                    <span className="block text-xs text-slate-600">
+                      {t(`designer.logic.prefillModeHints.${m}`)}
+                    </span>
                   </span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        ) : null}
-      </Group>
-      <label className="flex max-w-md flex-col gap-1 text-sm">
-        <span className="font-medium">{t('designer.logic.urlParam')}</span>
-        <input
-          className={`${controlCls} font-mono`}
-          value={node.urlParam ?? ''}
-          placeholder="sede"
-          onChange={(e) =>
-            onPatch({
-              urlParam: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') || undefined,
-            })
-          }
-        />
-        <span className="text-xs text-slate-600">
-          {node.urlParam
-            ? t('designer.logic.urlParamExample', { param: node.urlParam })
-            : t('designer.logic.urlParamHelp')}
-        </span>
-      </label>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+        </Group>
+      ) : null}
+      {shown.url ? (
+        <label className="flex max-w-md flex-col gap-1 text-sm">
+          <span className="font-medium">{t('designer.logic.urlParam')}</span>
+          <input
+            className={`${controlCls} font-mono`}
+            value={node.urlParam ?? ''}
+            placeholder="sede"
+            onChange={(e) =>
+              onPatch({
+                urlParam: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') || undefined,
+              })
+            }
+          />
+          <span className="text-xs text-slate-600">
+            {node.urlParam
+              ? t('designer.logic.urlParamExample', { param: node.urlParam })
+              : t('designer.logic.urlParamHelp')}
+          </span>
+        </label>
+      ) : null}
+      {folded.length ? (
+        <div className="flex flex-wrap gap-2" data-testid="logic-more">
+          {folded.map((x) => (
+            <button key={x} type="button" className={smallBtn} onClick={() => open(x)}>
+              {t(`designer.logic.more.${x}`)}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -400,16 +400,16 @@ export function Outline({
 
   return (
     <div className="relative flex min-w-0 flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="outline-h" className="font-semibold">
           {t('designer.outline.title')}
         </h2>
         {!readOnly ? (
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             <button
               ref={addQuestionRef}
               type="button"
-              className={`${smallBtn} inline-flex items-center gap-1`}
+              className={`${smallBtn} inline-flex items-center gap-1 whitespace-nowrap`}
               aria-label={t('designer.outline.addQuestionLabel')}
               aria-haspopup="menu"
               aria-expanded={menu?.mode === 'question'}
@@ -426,7 +426,7 @@ export function Outline({
             {!hasNotice(draft) ? (
               <button
                 type="button"
-                className={`${smallBtn} inline-flex items-center gap-1`}
+                className={`${smallBtn} inline-flex items-center gap-1 whitespace-nowrap`}
                 aria-label={t('designer.outline.addNoticeLabel')}
                 onClick={() => {
                   const r = addNotice(draft);
@@ -440,7 +440,7 @@ export function Outline({
             {minAge !== null && !hasAgeScreen(draft) ? (
               <button
                 type="button"
-                className={`${smallBtn} inline-flex items-center gap-1`}
+                className={`${smallBtn} inline-flex items-center gap-1 whitespace-nowrap`}
                 aria-label={t('designer.outline.addAgeScreenLabel', { age: minAge })}
                 onClick={() => {
                   const r = addAgeScreen(draft, minAge);
@@ -454,7 +454,7 @@ export function Outline({
             <button
               ref={addStructureRef}
               type="button"
-              className={`${smallBtn} inline-flex items-center gap-1`}
+              className={`${smallBtn} inline-flex items-center gap-1 whitespace-nowrap`}
               aria-label={t('designer.outline.addStructureLabel')}
               aria-haspopup="menu"
               aria-expanded={menu?.mode === 'structure'}

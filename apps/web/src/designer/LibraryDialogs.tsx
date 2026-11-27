@@ -1,8 +1,9 @@
+import type { Diagnostic } from '@wansurvey/logic';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseDiagnostic, localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { Dialog } from './Dialog.js';
 import { controlCls, inputCls, smallBtn } from './fields.js';
@@ -29,21 +30,43 @@ export interface LibraryItem {
   updatedAt: string;
 }
 
-/** Saves an item, block or roster (with its answer sets) to the organisation's library. */
+/** Warnings that also keep an item out of the library: others would reuse the gap. */
+const BLOCKING_WARNINGS = new Set(['empty_option_label']);
+
+/** The items of a library entry: its node and everything inside it. */
+const entryRows = (node: LibraryContent['node']) =>
+  flatten({
+    sections: [{ id: '_', title: {}, items: [node] }],
+  } as unknown as Draft).slice(1);
+
+/**
+ * Saves an item, block or roster (with its answer sets) to the organisation's library. Only
+ * what the checks find no error in is kept: the library is reused as it is.
+ */
 export function SaveToLibraryDialog({
   draft,
   id,
+  diagnostics,
   onClose,
   onSaved,
 }: {
   draft: Draft;
   id: string;
+  /** The draft's problems; errors and unlabelled options in the item block saving. */
+  diagnostics: Diagnostic[];
   onClose(): void;
   onSaved(message: string): void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const content = libraryContentOf(draft, id);
+  const ids = new Set(content ? entryRows(content.node).map((r) => r.node.id) : []);
+  const errors = diagnostics.filter(
+    (x) =>
+      (x.severity === 'error' || BLOCKING_WARNINGS.has(x.code)) &&
+      x.itemId !== undefined &&
+      ids.has(x.itemId),
+  );
   const [name, setName] = useState(content ? nodeName(content.node) : id);
   const [description, setDescription] = useState(
     content ? nodeLabel(content.node, draft.defaultLanguage) : '',
@@ -78,7 +101,7 @@ export function SaveToLibraryDialog({
         className="flex flex-col gap-3 text-sm"
         onSubmit={(e) => {
           e.preventDefault();
-          if (name.trim()) save.mutate();
+          if (name.trim() && !errors.length) save.mutate();
         }}
       >
         <label className="flex flex-col gap-1">
@@ -97,6 +120,23 @@ export function SaveToLibraryDialog({
           <span className="font-medium">{t('designer.library.tags')}</span>
           <input className={inputCls} value={tags} onChange={(e) => setTags(e.target.value)} />
         </label>
+        {errors.length ? (
+          <div
+            className="flex flex-col gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-ink-900"
+            data-testid="library-errors"
+          >
+            <p className="font-medium">
+              {t('designer.library.hasErrors', { count: errors.length })}
+            </p>
+            <ul className="list-disc pl-5">
+              {errors.map((x, i) => (
+                <li key={i}>
+                  <span className="font-mono">{x.itemId}</span> {localiseDiagnostic(t, x)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <p role="status" aria-live="polite" className="text-red-ink-800">
           {error}
         </p>
@@ -104,7 +144,7 @@ export function SaveToLibraryDialog({
           <Button type="button" variant="secondary" onClick={onClose}>
             {t('designer.library.cancel')}
           </Button>
-          <Button type="submit" disabled={!name.trim() || save.isPending}>
+          <Button type="submit" disabled={!name.trim() || !!errors.length || save.isPending}>
             {t('designer.library.save')}
           </Button>
         </div>
@@ -163,11 +203,7 @@ export function InsertFromLibraryDialog({
   const list = items.data ?? [];
   const pick = list.find((i) => i.id === chosen) ?? list[0] ?? null;
   const lang = draft.defaultLanguage;
-  const rows = pick
-    ? flatten({
-        sections: [{ id: '_', title: {}, items: [pick.content.node] }],
-      } as unknown as Draft).slice(1)
-    : [];
+  const rows = pick ? entryRows(pick.content.node) : [];
 
   const insert = (item: LibraryItem) => {
     const r = insertFromLibrary(draft, afterId, item.content, { inside });
