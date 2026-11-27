@@ -121,6 +121,8 @@ export interface CasesTx {
     projectId: string,
   ): Promise<{ userId: string; role: string; name: string; email: string }[]>;
   rolePermissions(): Promise<unknown>;
+  /** The organisation's teams these people are in, by person. */
+  teamsOf(userIds: string[]): Promise<{ userId: string; id: string; name: string }[]>;
   /** The project's questionnaires, oldest first. */
   questionnaireIds(projectId: string): Promise<string[]>;
 
@@ -178,6 +180,13 @@ export interface CasesTx {
   ): Promise<{ id: string; assignedTo: string | null }[]>;
   /** Free fresh cases of the project (of the questionnaire, when given). */
   freeCaseIds(projectId: string, questionnaireId?: string): Promise<string[]>;
+  /** The cases a person holds in these statuses (of the questionnaire, when given). */
+  heldCaseIds(
+    projectId: string,
+    userId: string,
+    statuses: string[],
+    questionnaireId?: string,
+  ): Promise<string[]>;
   /**
    * Gives these cases to the person (null: takes them back), locked and checked again; only cases
    * still in `only.statuses` and, with `only.unassigned`, still held by no one change hands.
@@ -186,7 +195,7 @@ export interface CasesTx {
     projectId: string,
     ids: string[],
     userId: string | null,
-    only: { statuses?: string[]; unassigned?: boolean },
+    only: { statuses?: string[]; unassigned?: boolean; holder?: string },
   ): Promise<{ id: string; from: string | null }[]>;
   /** The person takes a free fresh case; null when it is gone or not free. */
   claim(
@@ -404,6 +413,20 @@ export class MssqlCasesTx implements CasesTx {
   async rolePermissions() {
     const t = await this.tx.selectFrom('tenants').select('role_permissions').executeTakeFirst();
     return t ? parse(t.role_permissions) : undefined;
+  }
+
+  async teamsOf(userIds: string[]) {
+    if (!userIds.length) return [];
+    const rows = await this.tx
+      .selectFrom('team_members as m')
+      .innerJoin('teams as t', 't.id', 'm.team_id')
+      .select(['m.user_id', 't.id', 't.name'])
+      .where(
+        ksql<boolean>`m.user_id IN (SELECT CAST(j.[value] AS uniqueidentifier) FROM OPENJSON(${JSON.stringify(userIds)}) j)`,
+      )
+      .orderBy('t.name')
+      .execute();
+    return rows.map((r) => ({ userId: low(r.user_id), id: low(r.id), name: r.name }));
   }
 
   async questionnaireIds(projectId: string) {
@@ -711,11 +734,30 @@ export class MssqlCasesTx implements CasesTx {
     return (await q.execute()).map((r) => low(r.id));
   }
 
+  async heldCaseIds(
+    projectId: string,
+    userId: string,
+    statuses: string[],
+    questionnaireId?: string,
+  ) {
+    let q = this.tx
+      .selectFrom('cases')
+      .select('id')
+      .where('project_id', '=', projectId)
+      .where('assigned_to', '=', userId)
+      .where('status', 'in', statuses);
+    if (questionnaireId)
+      q = q.where((eb) =>
+        eb.or([eb('questionnaire_id', '=', questionnaireId), eb('questionnaire_id', 'is', null)]),
+      );
+    return (await q.execute()).map((r) => low(r.id));
+  }
+
   async assign(
     projectId: string,
     ids: string[],
     userId: string | null,
-    only: { statuses?: string[]; unassigned?: boolean },
+    only: { statuses?: string[]; unassigned?: boolean; holder?: string },
   ) {
     // The store locks the rows, checks them again and changes the ones that qualify; its history
     // events are written by the service, so they are not duplicated here.

@@ -19,6 +19,13 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Sharing out at random starts with the interviewers only**: owners and administrators (who may hold
+  cases) are listed apart under "Other roles", with their role, and not chosen unless ticked. A **team**
+  of the organisation can be chosen as the people to share among; each person who can work cases now
+  carries their teams (`GET /projects/:id/assignees`), also shown in the workload.
+- **Moving someone's cases** (when they fall ill or leave): the workload in the assignment rules moves
+  every case a person holds and has not started to another person in one step
+  (`POST /projects/:id/cases/assign` with `fromUserId`); interviews already started stay with them.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

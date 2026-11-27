@@ -275,7 +275,7 @@ export class CasesStore {
       caseIds: string[];
       userId: string | null;
       via: string;
-      only?: { statuses?: string[]; unassigned?: boolean };
+      only?: { statuses?: string[]; unassigned?: boolean; holder?: string };
     },
   ): Promise<{ id: string; from: string | null }[]> {
     const changed = await this.assignRows(tx, v);
@@ -299,7 +299,7 @@ export class CasesStore {
       projectId: string;
       caseIds: string[];
       userId: string | null;
-      only?: { statuses?: string[]; unassigned?: boolean };
+      only?: { statuses?: string[]; unassigned?: boolean; holder?: string };
     },
   ): Promise<{ id: string; from: string | null }[]> {
     let changed: { id: string; from: string | null }[] = [];
@@ -309,6 +309,7 @@ export class CasesStore {
         WHERE project_id = ${v.projectId} AND id IN (${sql.join(part)})`;
       if (v.only?.statuses?.length) q = sql`${q} AND status IN (${sql.join(v.only.statuses)})`;
       if (v.only?.unassigned) q = sql`${q} AND assigned_to IS NULL`;
+      if (v.only?.holder) q = sql`${q} AND assigned_to = ${v.only.holder}`;
       q = sql`${q} ORDER BY id`;
       const before = (await q.execute(tx)).rows
         .map((r) => ({ id: r.id.toLowerCase(), from: r.from?.toLowerCase() ?? null }))

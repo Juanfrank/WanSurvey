@@ -563,6 +563,62 @@ describe.skipIf(!configured)('SQL Server: cases over HTTP', () => {
     ]);
   });
 
+  it('moves the not-started cases of one person to another; assignees carry their teams', async () => {
+    const other = await createProject(t.owner, tenant.id);
+    const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const statuses = ['assigned', 'assigned', 'in_progress', 'fresh'];
+    for (const [i, id] of ids.entries())
+      await sql`INSERT INTO cases (id, tenant_id, project_id, external_id, sample, status, assigned_to)
+        VALUES (${id}, ${tenant.id}, ${other}, ${'M' + i}, '{}', ${statuses[i]!},
+          ${statuses[i] === 'fresh' ? null : interviewer.id})`.execute(t.owner);
+    const team = randomUUID();
+    await sql`INSERT INTO teams (id, tenant_id, name) VALUES (${team}, ${tenant.id}, 'Cuadrilla Norte')`.execute(
+      t.owner,
+    );
+    await sql`INSERT INTO team_members (team_id, user_id, tenant_id) VALUES (${team}, ${interviewer2.id}, ${tenant.id})`.execute(
+      t.owner,
+    );
+    const ppl = await pm.agent.get(`/api/v1/projects/${other}/assignees`);
+    expect(ppl.status).toBe(200);
+    const i2 = ppl.body.find((p: { userId: string }) => p.userId === interviewer2.id);
+    expect(i2.teams).toEqual([{ id: team, name: 'Cuadrilla Norte' }]);
+
+    const url = `/api/v1/projects/${other}/cases/assign`;
+    // Not to themselves, and not mixed with a list.
+    expect(
+      (await post(supervisor, url, { fromUserId: interviewer.id, userId: interviewer.id })).status,
+    ).toBe(400);
+    expect(
+      (
+        await post(supervisor, url, {
+          fromUserId: interviewer.id,
+          caseIds: ids,
+          userId: interviewer2.id,
+        })
+      ).status,
+    ).toBe(400);
+    const res = await post(supervisor, url, {
+      fromUserId: interviewer.id,
+      userId: interviewer2.id,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.changed).toBe(2);
+    const after = await rows(
+      sql`SELECT assigned_to FROM cases WHERE project_id = ${other} ORDER BY external_id`,
+    );
+    // The interview already started stays; the free case is not touched.
+    expect(after.map((r) => (r.assigned_to as string | null)?.toLowerCase() ?? null)).toEqual([
+      interviewer2.id,
+      interviewer2.id,
+      interviewer.id,
+      null,
+    ]);
+    expect(
+      (await post(interviewerS, url, { fromUserId: interviewer2.id, userId: interviewer.id }))
+        .status,
+    ).toBe(403);
+  });
+
   it('keeps cases inside their tenant', async () => {
     const other = await createTenant(t.owner);
     const s = await login(t, await createUser(t.owner, other.id, [{ role: 'admin' }]), other.slug);
