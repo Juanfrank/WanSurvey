@@ -122,9 +122,10 @@ export function AppLayout() {
         className="min-w-0 flex-1 px-4 py-4 min-[900px]:py-5 min-[900px]:pl-[calc(var(--pane-left,0px)+2rem)] min-[900px]:pr-[calc(var(--pane-right,0px)+2rem)]"
       >
         {/* Up to 1600 px: wide screens are used; on very wide ones lines do not drift apart. */}
-        <div className="relative mx-auto flex max-w-[100rem] flex-col">
-          {/* Beside the first line of the page on wide screens, so it takes no row of its own. */}
-          <div className="no-print mb-3 flex justify-end min-[900px]:absolute min-[900px]:right-0 min-[900px]:top-0 min-[900px]:z-10 min-[900px]:mb-0">
+        <div className="mx-auto flex max-w-[100rem] flex-col">
+          {/* A row of its own above the page: laid over the page's first line, it covered the
+              interview timer, the case header and long titles. */}
+          <div className="no-print mb-3 flex justify-end">
             <AccountMenu
               me={me.data}
               onSwitchTenant={(id) => void switchTenant(id)}
@@ -211,7 +212,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
       }}
     >
       <div
-        className={`flex flex-col gap-3 bg-navy-fill px-4 py-3 min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:gap-6 min-[900px]:overflow-y-auto min-[900px]:overflow-x-hidden min-[900px]:py-6 min-[900px]:transition-[width] min-[900px]:duration-200 ${
+        className={`flex flex-col gap-3 bg-navy-fill px-4 py-3 dark:border-slate-200 dark:min-[900px]:border-r min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-screen min-[900px]:gap-6 min-[900px]:overflow-y-auto min-[900px]:overflow-x-hidden min-[900px]:py-6 min-[900px]:transition-[width] min-[900px]:duration-200 ${
           rail ? 'min-[900px]:w-18 min-[900px]:items-center min-[900px]:px-4' : 'min-[900px]:w-74'
         } ${isCompact && !rail ? 'min-[900px]:shadow-card' : ''}`}
       >
@@ -242,7 +243,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
               className={`grid h-10 w-10 flex-none place-items-center rounded-lg text-on-fill ${
                 compact
                   ? 'bg-on-fill/10 hover:bg-on-fill/20'
-                  : 'bg-indigo-600 shadow-[0_0_0_2px_rgb(255_255_255/0.28)] hover:bg-indigo-500'
+                  : 'bg-indigo-600 shadow-[0_0_0_2px_rgb(255_255_255/0.28)] hover:bg-indigo-500 dark:bg-on-fill/15 dark:shadow-none dark:hover:bg-on-fill/25'
               }`}
             >
               <MenuIcon className="h-5 w-5" />

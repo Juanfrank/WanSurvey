@@ -55,7 +55,7 @@ export interface DrawerState {
   held: boolean;
   /** Opens (and keeps open until Escape, a click elsewhere or focus leaving) or closes it. */
   setOpen(v: boolean): void;
-  /** Opens it while the pointer is on the rail; leaving closes it unless it was opened on purpose. */
+  /** Opens it from pointing at the rail (it then stays open like the rest); `false` closes it unless it was opened on purpose. */
   peek(v: boolean): void;
 }
 
@@ -84,12 +84,19 @@ export function useDrawer(storageKey: string, pinnedDefault = true): DrawerState
   };
 }
 
+/** How long the pointer rests on the rail before the pane opens by itself. */
+const PEEK_DELAY_MS = 300;
+/** How long the pointer may stay off a pane opened by pointing before it closes. */
+const PEEK_GRACE_MS = 1200;
+
 /**
  * A side pane. Pinned, it is a sticky column beside the content. Collapsed, it is a slim sticky
- * rail (icon, title, count) that stays beside the content; pointing at it, clicking it or a
- * shortcut opens the pane over the content next to the rail, without moving the content. It
- * closes when the pointer leaves, on Escape, on a click elsewhere or when focus leaves it.
- * The content stays mounted while collapsed, so it keeps its state.
+ * rail (icon, title, count) that stays beside the content; resting the pointer on it (with a
+ * mouse), clicking it or a shortcut opens the pane over the content next to the rail, without
+ * moving the content. It closes on Escape, the close button, a click elsewhere or focus leaving
+ * it; opened by pointing, also once the pointer has stayed off it for a while (a moment off it,
+ * with a magnifier or a shaky hand, does not close it). The content stays mounted while
+ * collapsed, so it keeps its state.
  */
 export function SideDrawer({
   id,
@@ -98,6 +105,7 @@ export function SideDrawer({
   label,
   icon,
   badge,
+  badgeLabel,
   width = '22rem',
   className = '',
   children,
@@ -108,6 +116,8 @@ export function SideDrawer({
   label: string;
   icon: ReactNode;
   badge?: number;
+  /** What the count means, read with the rail button by a screen reader ("Due now: 1"). */
+  badgeLabel?: string;
   /** Width when pinned. */
   width?: string;
   className?: string;
@@ -116,19 +126,50 @@ export function SideDrawer({
   const { t } = useTranslation();
   const box = useRef<HTMLElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const enter = useRef<ReturnType<typeof setTimeout>>(undefined);
   const leave = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { inline, open } = drawer;
+  // Only a real mouse opens it by pointing; touch screens and pens open it with a tap.
+  const canPeek = useMedia('(hover: hover) and (pointer: fine)');
+  const countId = `${id}-count`;
 
-  // A click elsewhere closes the pane.
+  // A click elsewhere closes the pane, and so does Escape when focus is outside it (opened by
+  // pointing, it does not take the focus).
   useEffect(() => {
     if (inline || !open) return;
     const away = (e: MouseEvent) => {
       if (!box.current?.contains(e.target as Node)) drawer.setOpen(false);
     };
+    // Not an Escape meant for a dialog, menu or list that has the focus.
+    const esc = (e: KeyboardEvent) => {
+      const target = e.target as Element | null;
+      if (
+        e.key === 'Escape' &&
+        !e.defaultPrevented &&
+        !box.current?.contains(target) &&
+        !target?.closest?.('dialog, [role="dialog"], [role="menu"], [role="listbox"]')
+      )
+        drawer.setOpen(false);
+    };
     document.addEventListener('mousedown', away);
-    return () => document.removeEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
   }, [inline, open, drawer]);
-  useEffect(() => () => clearTimeout(leave.current), []);
+  // A pending open or close is dropped once the pane changes by other means.
+  useEffect(() => {
+    clearTimeout(enter.current);
+    clearTimeout(leave.current);
+  }, [inline, open]);
+  useEffect(
+    () => () => {
+      clearTimeout(enter.current);
+      clearTimeout(leave.current);
+    },
+    [],
+  );
 
   const pin = (
     <button
@@ -186,12 +227,15 @@ export function SideDrawer({
       aria-label={label}
       className={`no-print sticky top-4 z-20 h-[calc(100vh-2rem)] w-12 self-start min-[900px]:fixed min-[900px]:top-0 min-[900px]:bottom-0 min-[900px]:h-screen ${place}`}
       onMouseEnter={() => {
+        clearTimeout(enter.current);
         clearTimeout(leave.current);
-        drawer.peek(true);
+        if (canPeek && !open) enter.current = setTimeout(() => drawer.peek(true), PEEK_DELAY_MS);
       }}
+      // Passing over the rail on the way elsewhere does not open it.
       onMouseLeave={() => {
-        clearTimeout(leave.current);
-        leave.current = setTimeout(() => drawer.peek(false), 160);
+        clearTimeout(enter.current);
+        if (open && !drawer.held)
+          leave.current = setTimeout(() => drawer.peek(false), PEEK_GRACE_MS);
       }}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) drawer.setOpen(false);
@@ -215,9 +259,13 @@ export function SideDrawer({
           aria-expanded={open}
           aria-controls={id}
           aria-label={label}
+          aria-describedby={badge ? countId : undefined}
           title={label}
           // Pointing opened it: a click keeps it open; otherwise a click opens or closes it.
-          onClick={() => drawer.setOpen(!(open && drawer.held))}
+          onClick={() => {
+            clearTimeout(enter.current);
+            drawer.setOpen(!(open && drawer.held));
+          }}
           className={`grid h-9 w-9 place-items-center rounded-lg ${
             open
               ? 'bg-indigo-600 text-on-fill'
@@ -227,8 +275,18 @@ export function SideDrawer({
           {icon}
         </button>
         {badge ? (
-          <span className="rounded-full bg-amber-100 px-2 text-xs font-bold text-amber-ink-900">
-            {badge}
+          <span
+            id={countId}
+            className="rounded-full bg-amber-100 px-2 text-xs font-bold text-amber-ink-900"
+          >
+            {badgeLabel ? (
+              <>
+                <span className="sr-only">{badgeLabel}</span>
+                <span aria-hidden="true">{badge}</span>
+              </>
+            ) : (
+              badge
+            )}
           </span>
         ) : null}
         <span

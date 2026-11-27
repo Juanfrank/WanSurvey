@@ -165,6 +165,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **The account menu has a row of its own** at the top of every page, instead of floating over the
+  page's first line: it no longer covers the interview timer, the CATI header or the review's case
+  header. A disabled main button is now grey rather than a faded blue, so it no longer looks like one
+  more kind of button. In the dark theme the side panel darkens with the page.
+- **A collapsed side pane (callbacks, outline) opens when the pointer rests on its rail** for a moment,
+  and then stays open until Escape, its close button or a click elsewhere, instead of closing as soon as
+  the pointer drifts off it; on touch screens it opens with a tap only. A screen reader reads the
+  callbacks count with the rail button ("My callbacks, Due now: 1").
 - **The generated SQL scripts, and the ones in `infra/sql/`, are plain T-SQL**: one batch with no `GO`, no
   `:on error exit` and no `sqlcmd` variables, so they run in SSMS, Azure Data Studio or the portal as in
   `sqlcmd`. Passwords and names are written in `DECLARE` lines at the top (the file refuses to run with a

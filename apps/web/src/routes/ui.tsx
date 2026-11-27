@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { localiseError } from '../i18n-messages.js';
+import { CloseIcon } from './icons.js';
 import { LogoMark, LogoName } from './Logo.js';
 
 /** Small shared building blocks so screens stay consistent. */
@@ -23,22 +24,147 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 export function Button({
   variant = 'primary',
   size = 'md',
+  busy = false,
   className = '',
+  disabled,
+  children,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary';
   /** `sm`: the compact size, the same as `smallBtn`, for rows of controls. */
   size?: 'md' | 'sm';
+  /** An action under way: clicks do nothing and a spinner shows beside the text. */
+  busy?: boolean;
 }) {
+  // Disabled, the primary button turns neutral grey: a faded blue read as one more variant.
   const styles =
     variant === 'primary'
-      ? 'border border-indigo-600 bg-indigo-600 text-on-fill hover:border-indigo-500 hover:bg-indigo-500 disabled:hover:border-indigo-600 disabled:hover:bg-indigo-600'
-      : 'border border-slate-300 bg-white text-navy hover:border-indigo-600 hover:text-indigo-ink-600 disabled:hover:border-slate-300 disabled:hover:text-navy';
+      ? 'border border-indigo-600 bg-indigo-600 text-on-fill hover:border-indigo-500 hover:bg-indigo-500 disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-600 disabled:hover:border-slate-200 disabled:hover:bg-slate-200'
+      : 'border border-slate-300 bg-white text-navy hover:border-indigo-600 hover:text-indigo-ink-600 disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-navy';
   return (
     <button
-      className={`rounded-md ${size === 'sm' ? 'px-3 py-1' : 'px-4 py-2'} text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`}
+      className={`rounded-md ${size === 'sm' ? 'px-3 py-1' : 'px-4 py-2'} text-sm font-semibold disabled:cursor-not-allowed ${busy ? 'inline-flex cursor-wait items-center gap-2' : ''} ${styles} ${className}`}
+      disabled={disabled}
+      // Not `disabled` while busy: the focused button would lose the focus.
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
       {...rest}
-    />
+      onClick={busy ? (e) => e.preventDefault() : rest.onClick}
+    >
+      {busy ? (
+        <span
+          aria-hidden="true"
+          className="h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent"
+        />
+      ) : null}
+      {children}
+    </button>
+  );
+}
+
+export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+
+const badgeTones: Record<Tone, string> = {
+  neutral: 'bg-slate-100 text-slate-800',
+  info: 'bg-indigo-100 text-indigo-ink-900',
+  success: 'bg-emerald-100 text-emerald-ink-900',
+  warning: 'bg-amber-100 text-amber-ink-900',
+  danger: 'bg-red-100 text-red-ink-900',
+};
+
+/**
+ * A status label: one shape (a pill) and one size everywhere, its colour saying what kind of
+ * state it is, so the same colour means the same thing in every list.
+ */
+export function Badge({
+  tone = 'neutral',
+  dot = false,
+  className = '',
+  children,
+}: {
+  tone?: Tone;
+  /** A small dot before the text, for a state that is live (in progress, online). */
+  dot?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${badgeTones[tone]} ${className}`}
+    >
+      {dot ? <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" /> : null}
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Table styles shared by the administration lists, so they all read the same: a white table
+ * with a border, small semibold column headings, rows about 44 px high, figures on the right.
+ */
+export const tableCls =
+  'w-full border-collapse overflow-hidden rounded-xl border border-slate-200 bg-white text-sm';
+export const thCls =
+  'border-b border-slate-200 px-3 py-2 text-left text-xs font-semibold text-slate-600';
+export const tdCls = 'h-11 border-b border-slate-200 px-3 py-2 align-middle';
+/** Add to a heading or cell holding figures. */
+export const numCls = 'text-right tabular-nums';
+
+export type NoticeTone = 'success' | 'info' | 'warning' | 'error';
+
+const noticeTones: Record<NoticeTone, { box: string; mark: string }> = {
+  info: { box: 'border-indigo-200 bg-indigo-50 text-indigo-ink-900', mark: 'i' },
+  success: { box: 'border-emerald-200 bg-emerald-50 text-emerald-ink-900', mark: '✓' },
+  warning: { box: 'border-amber-200 bg-amber-50 text-amber-ink-900', mark: '!' },
+  error: { box: 'border-red-200 bg-red-50 text-red-ink-900', mark: '!' },
+};
+
+/**
+ * The one way to confirm an action or warn about something on a page: a tinted box with a
+ * mark, the message and, when the screen lets it go, a button to close it. Announced to screen
+ * readers (errors at once, the rest politely): keep it rendered and change its children, empty
+ * when there is nothing to say.
+ */
+export function Notice({
+  tone = 'success',
+  onClose,
+  className = '',
+  children,
+}: {
+  tone?: NoticeTone;
+  /** Shows a close button that calls this. */
+  onClose?: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const { box, mark } = noticeTones[tone];
+  // The live region stays on the page while empty, so a message put in it is announced.
+  return (
+    <div role={tone === 'error' ? 'alert' : 'status'} data-tone={tone} className={className}>
+      {children ? (
+        <div className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 text-sm ${box}`}>
+          <span
+            aria-hidden="true"
+            className="mt-0.5 grid h-4 w-4 flex-none place-items-center rounded-full border border-current text-[10px] font-bold leading-none"
+          >
+            {mark}
+          </span>
+          <div className="min-w-0 flex-1">{children}</div>
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('app.close')}
+              title={t('app.close')}
+              className="-my-0.5 -mr-1 grid h-6 w-6 flex-none place-items-center rounded-full hover:bg-current/10"
+            >
+              <CloseIcon className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

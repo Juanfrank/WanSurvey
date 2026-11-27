@@ -408,6 +408,7 @@ export function CallsTab({
       hour: '2-digit',
       minute: '2-digit',
     });
+  const dueCallbacks = (callbacks.data ?? []).filter((c) => new Date(c.at).getTime() <= now).length;
 
   return (
     <div
@@ -734,7 +735,8 @@ export function CallsTab({
         label={t('cati.callbacks')}
         width="21rem"
         icon={<PhoneIcon className="h-[18px] w-[18px]" />}
-        badge={callbacks.data?.filter((c) => new Date(c.at).getTime() <= now).length}
+        badge={dueCallbacks}
+        badgeLabel={`${t('cati.callbacksGroup.overdue')}: ${dueCallbacks}`}
         className="text-sm"
       >
         <CallbackReminders />

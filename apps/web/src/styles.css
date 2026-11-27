@@ -202,8 +202,8 @@
 
 /*
  * Dark theme (the person's choice, or the system's): the same classes, other values. Light
- * tints become dark tints, neutrals invert, coloured text lightens; fills (buttons, badges,
- * the side panel) keep their colour and white text. Not when printing: paper is light.
+ * tints become dark tints, neutrals invert, coloured text lightens; fills (buttons, badges)
+ * keep their colour and white text; the side panel darkens. Not when printing: paper is light.
  */
 @media screen {
   :root[data-theme='dark'] {
@@ -213,6 +213,9 @@
     --color-navy: #bbd3ff;
     --color-navy-2: #9cbcf5;
     --color-focus: #8db6ff;
+    /* The side panel darkens with the page, so it does not become the brightest area; the
+       brand blue stays for the current section and the focus. */
+    --color-navy-fill: #0e1730;
 
     --color-slate-50: #0f1626;
     --color-slate-100: #1a2338;
