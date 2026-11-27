@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { RENDERER_NS } from './i18n.js';
@@ -27,6 +28,12 @@ export interface InterviewRunnerProps {
   narrow?: boolean;
   /** Keys for don't know and refused (a project setting); F7 and F8 by default. */
   specialKeys?: SpecialKeys;
+  /**
+   * The host's closing step inside the end card, so the interviewer sees one card at the end,
+   * not two: `details` under the message (e.g. a summary) and `action` (e.g. submit) as the
+   * main button beside "Review answers".
+   */
+  done?: { details?: ReactNode; action?: ReactNode };
 }
 
 export interface SpecialKeys {
@@ -492,13 +499,17 @@ function Runner(p: InterviewRunnerProps) {
                 ? t('done.ended', { disposition: status.disposition })
                 : t('done.complete')}
           </p>
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-4 py-2"
-            onClick={back}
-          >
-            {t('done.reviewAnswers')}
-          </button>
+          {p.done?.details}
+          <div className="flex flex-wrap items-center gap-3">
+            {p.done?.action}
+            <button
+              type="button"
+              className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2"
+              onClick={back}
+            >
+              {t('done.reviewAnswers')}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-8">

@@ -580,6 +580,7 @@ export class InterviewsService {
         status: row.status,
         disposition: row.disposition,
         startedAt: row.startedAt,
+        updatedAt: row.updatedAt,
         state: row.state,
         stateVersion: row.stateVersion,
         /** This device wrote the snapshot last: its own copy includes it. */

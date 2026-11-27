@@ -41,6 +41,8 @@ export interface InterviewPayload {
     status: string;
     disposition: string | null;
     startedAt: string;
+    /** When the server copy last changed (absent on a device copy). */
+    updatedAt?: string;
     state: Partial<InterviewState>;
     /** The snapshot's version on the server, and whether this device wrote it. */
     stateVersion?: number;
@@ -213,6 +215,10 @@ export function useInterview(id: string) {
   const [lowSpace, setLowSpace] = useState(false);
   /** The case is downloaded to this device (offline work). */
   const [onDevice, setOnDevice] = useState(false);
+  /** Opened with answers already given: the interview is being taken up again. */
+  const [resumed, setResumed] = useState<{ updatedAt: string | null; serverTime: string } | null>(
+    null,
+  );
   const [, setTick] = useState(0);
   /** Recording of the interview: not asked, waiting for the respondent's answer, on, or stopped. */
   const [audio, setAudio] = useState<'off' | 'ask' | 'recording' | 'declined'>('off');
@@ -402,6 +408,16 @@ export function useInterview(id: string) {
         setPayload(p);
         setSession(s);
         const fresh = !hasState(state);
+        // The server's time of the last change, when its copy is the latest one.
+        const ahead = !!local && (!!local.start || local.seq > local.acked);
+        setResumed(
+          s.state().visited.length > 0 && s.status().state === 'in_progress'
+            ? {
+                updatedAt: p.offline || ahead ? null : (p.interview.updatedAt ?? null),
+                serverTime: p.serverTime,
+              }
+            : null,
+        );
         record([paradata('enter_question', { key: s.currentKey(), resumed: !fresh })]);
         if (fresh && p.settings?.capi?.gps === 'start_end' && p.interview.mode === 'CAPI')
           void position().then((at) => record([paradata('gps', { when: 'start', ...at })]));
@@ -587,6 +603,7 @@ export function useInterview(id: string) {
     problem,
     lowSpace,
     onDevice,
+    resumed,
     clock: ref.current?.clock ?? null,
     onChange,
     pause,

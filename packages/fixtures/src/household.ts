@@ -122,7 +122,7 @@ export const household: QuestionnaireInput = {
           text: es('¿Cuál es su sexo?'),
           variants: {
             CAPI: {
-              interviewerInstruction: es('REGISTRE SIN PREGUNTAR SI ES OBVIO'),
+              interviewerInstruction: es('PREGUNTE SIEMPRE; NO REGISTRE POR OBSERVACIÓN'),
             },
           },
         },

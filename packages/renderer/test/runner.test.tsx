@@ -93,7 +93,7 @@ describe('InterviewRunner (interviewer modes)', () => {
     await user.clear(screen.getByRole('textbox'));
     await user.keyboard('40{Enter}');
     expect(screen.getByRole('note', { name: 'Interviewer instruction' }).textContent).toBe(
-      'REGISTRE SIN PREGUNTAR SI ES OBVIO',
+      'PREGUNTE SIEMPRE; NO REGISTRE POR OBSERVACIÓN',
     );
     expect(screen.getAllByText('1').length).toBeGreaterThan(0); // option codes visible
   });
