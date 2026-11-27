@@ -174,14 +174,16 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(forgot.page.getByText('Your password was changed.')).toBeVisible();
   await forgot.ctx.close();
 
-  // A project manager sees the team but cannot change it.
+  // A project manager's menu lists only what they manage (the registry), not the team; the
+  // team is still there, read only, at its address.
   const pm = await freshPage(browser);
   await login(pm.page);
   await expect(pm.page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
-  await pm.page
-    .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Administration' })
-    .click();
+  const pmNav = pm.page.getByRole('navigation', { name: 'Main' });
+  await expect(pmNav.getByRole('link', { name: 'People registry' })).toBeVisible();
+  await expect(pmNav.getByRole('link', { name: 'Users', exact: true })).toHaveCount(0);
+  await expect(pmNav.getByRole('link', { name: 'Teams', exact: true })).toHaveCount(0);
+  await pm.page.goto('/admin/users');
   await expect(
     pm.page.getByText('You can see the users; an administrator changes them.'),
   ).toBeVisible();
@@ -213,14 +215,37 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   });
   await expect(allow).not.toBeChecked();
   await allow.check();
+  await expect(page.getByTestId('roles-unsaved')).toHaveText('1 unsaved change');
+  await expect(allow).toHaveAccessibleName('Reviewer: See the dashboard and results (changed)');
+  // Saving shows what changes first; a sensitive permission is pointed out.
+  const pii = matrix.getByRole('checkbox', { name: 'Reviewer: See personal data' });
+  await pii.check();
   await page.getByRole('button', { name: 'Save permissions' }).click();
+  await overlaysSettled(page, 3);
+  const confirm = page.getByRole('dialog', { name: 'Save these permissions?' });
+  await expect(confirm.locator('[data-role="reviewer"] [data-given="pii.view"]')).toContainText(
+    'personal data',
+  );
+  await shot(page, 'admin-roles-confirm');
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await pii.uncheck();
+  await page.getByRole('button', { name: 'Save permissions' }).click();
+  await page
+    .getByRole('dialog', { name: 'Save these permissions?' })
+    .getByRole('button', { name: 'Save the permissions' })
+    .click();
   await expect(page.getByText('Permissions saved.')).toBeVisible();
+  await expect(page.getByTestId('roles-unsaved')).toHaveCount(0);
   await shot(page, 'admin-roles');
   await expectAccessible(page);
   await page.reload();
   await expect(allow).toBeChecked();
   await page.getByRole('button', { name: 'Defaults for Reviewer' }).click();
   await page.getByRole('button', { name: 'Save permissions' }).click();
+  await page
+    .getByRole('dialog', { name: 'Save these permissions?' })
+    .getByRole('button', { name: 'Save the permissions' })
+    .click();
   await expect(page.getByText('Permissions saved.')).toBeVisible();
   await page.reload();
   await expect(allow).not.toBeChecked();
@@ -256,5 +281,15 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await page.getByRole('combobox', { name: 'Action' }).selectOption('');
   await expect(page.locator('tr[data-action="user.invited"]').first()).toBeVisible();
   await shot(page, 'admin-audit', { fullPage: false });
+  await expectAccessible(page);
+
+  // The administration opens on an overview: what needs attention, then the sections by block.
+  await nav.getByRole('link', { name: 'Administration', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Needs attention' })).toBeVisible();
+  await expect(page.getByTestId('admin-attention').locator('[data-tile="awaiting"]')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Security and integrations' }),
+  ).toBeVisible();
+  await shot(page, 'admin-home');
   await expectAccessible(page);
 });

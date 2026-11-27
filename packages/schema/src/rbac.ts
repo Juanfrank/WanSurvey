@@ -152,8 +152,45 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
 };
 
-/** Roles that must enrol TOTP before using the app. */
+/** Roles that must enrol TOTP before using the app, whatever the organisation decides. */
 export const ROLES_REQUIRING_2FA: readonly Role[] = ['owner', 'admin'];
+
+/** Roles an organisation may add to those that must enrol TOTP (its two-step policy). */
+export const OPTIONAL_2FA_ROLES = ROLES.filter((r) => !ROLES_REQUIRING_2FA.includes(r));
+
+/** The organisation's list of extra roles that must use two-step verification. */
+export const TwoFactorRoles = z
+  .array(z.enum(OPTIONAL_2FA_ROLES as [Role, ...Role[]]))
+  .max(ROLES.length)
+  .refine((list) => new Set(list).size === list.length, 'Repeated role');
+
+/**
+ * Every role that must enrol TOTP in an organisation: the fixed ones plus those its settings
+ * add (`settings.twoFactorRoles`). Unknown or malformed entries are ignored.
+ */
+export function rolesRequiring2fa(settings?: unknown): Role[] {
+  const extra = (settings && typeof settings === 'object' ? settings : {}) as {
+    twoFactorRoles?: unknown;
+  };
+  const list = Array.isArray(extra.twoFactorRoles)
+    ? extra.twoFactorRoles.filter((r): r is Role => OPTIONAL_2FA_ROLES.includes(r as Role))
+    : [];
+  return [...new Set<Role>([...ROLES_REQUIRING_2FA, ...list])];
+}
+
+/**
+ * Permissions that reach personal data or the integrity of what was collected: the roles page
+ * marks them and asks before they are given to another role.
+ */
+export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
+  'pii.view',
+  'exports.run',
+  'interviews.correct',
+  'audio.listen',
+  'audit.export',
+  'registry.read',
+  'registry.manage',
+];
 
 export function roleHasPermission(
   role: Role,

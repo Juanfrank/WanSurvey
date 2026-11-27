@@ -10,6 +10,27 @@ export const adminEn = {
   webhooks: 'Webhooks',
   peopleRegistry: 'People registry',
   roles: 'Roles and permissions',
+  groups: {
+    people: 'People and access',
+    organisation: 'Organisation',
+    security: 'Security and integrations',
+  },
+  home: {
+    title: 'Overview',
+    attention: 'Needs attention',
+    tiles: {
+      awaiting_one: 'person waiting for a role',
+      awaiting_other: 'people waiting for a role',
+      invited_one: 'invitation not accepted yet',
+      invited_other: 'invitations not accepted yet',
+      without2fa_one:
+        'person whose role requires two-step verification, with no authenticator app set up (a Microsoft sign-in with MFA also counts)',
+      without2fa_other:
+        'people whose role requires two-step verification, with no authenticator app set up (a Microsoft sign-in with MFA also counts)',
+      keysExpiring_one: 'API key ends within {{days}} days',
+      keysExpiring_other: 'API keys end within {{days}} days',
+    },
+  },
   apiKeysPage: {
     intro:
       'Keys let another system (Power BI, n8n, your own services) read this organisation’s data through the integration API, without a person’s account. A key reads only; it never shows personal data. Use /api/v1/ext/v1/… with the header Authorization: Bearer <key>.',
@@ -36,7 +57,12 @@ export const adminEn = {
     status: 'State',
     revoke: 'Revoke',
     revokeName: 'Revoke {{name}}',
-    confirmRevoke: 'Revoke the key “{{name}}”? Whatever uses it stops working at once.',
+    revokeTitle: 'Revoke the key “{{name}}”?',
+    revokeBody:
+      'Whatever uses it (Power BI, n8n, your own services) stops working at once. A revoked key cannot be turned back on: a new one would be needed.',
+    revokeConfirm: 'Revoke the key',
+    readOnly:
+      'You can see the keys; whoever manages the integration keys (by default the owner) creates and revokes them.',
     create: 'Create the key',
     cancel: 'Cancel',
     shownOnce: 'Copy the key now: it is shown only once.',
@@ -161,6 +187,26 @@ export const adminEn = {
     saved: 'Permissions saved.',
     allow: '{{role}}: {{permission}}',
     error: 'The permissions could not be saved.',
+    notApplicable: 'Not available for this role',
+    changedShort: 'changed',
+    unsaved_one: '{{count}} unsaved change',
+    unsaved_other: '{{count}} unsaved changes',
+    sensitive: 'Sensitive',
+    sensitiveLegend:
+      'Sensitive permissions reach personal data or the integrity of what was collected; giving them is confirmed before saving.',
+    confirmTitle: 'Save these permissions?',
+    confirmIntro: 'They apply at once to everyone with the role.',
+    given: 'Given',
+    taken: 'Taken away',
+    people_one: '{{count}} person has this role.',
+    people_other: '{{count}} people have this role.',
+    sensitiveGiven:
+      'This gives access to personal data or to the integrity of the data. Give it only if the role needs it.',
+    clientPii:
+      'Clients would see the personal data of the respondents. That usually needs an agreement with them.',
+    confirm: 'Save the permissions',
+    cancel: 'Cancel',
+    nothing: 'There are no changes to save.',
   },
   guide: {
     title: 'What can each role do?',
@@ -272,6 +318,21 @@ export const adminEn = {
       saved: 'Appearance saved.',
       error: 'The appearance could not be saved.',
     },
+    installation: {
+      title: 'Whole installation',
+      intro:
+        'These settings are not this organisation’s own: they apply to every organisation of the installation.',
+    },
+    security: {
+      title: 'Sign-in security',
+      intro:
+        'Owners and administrators always use two-step verification. Tick the other roles that must turn it on too: they are asked to at their next sign-in.',
+      always: 'always',
+      personalData: 'sees personal data',
+      exports: 'exports data',
+      save: 'Save the policy',
+      saved: 'Policy saved.',
+    },
     bi: {
       title: 'Analysis model refresh',
       intro:
@@ -379,6 +440,27 @@ export const adminEs: typeof adminEn = {
   webhooks: 'Webhooks',
   peopleRegistry: 'Registro de personas',
   roles: 'Roles y permisos',
+  groups: {
+    people: 'Personas y acceso',
+    organisation: 'Organización',
+    security: 'Seguridad e integraciones',
+  },
+  home: {
+    title: 'Resumen',
+    attention: 'Requiere atención',
+    tiles: {
+      awaiting_one: 'persona esperando un rol',
+      awaiting_other: 'personas esperando un rol',
+      invited_one: 'invitación aún sin aceptar',
+      invited_other: 'invitaciones aún sin aceptar',
+      without2fa_one:
+        'persona cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada (el ingreso con Microsoft con MFA también vale)',
+      without2fa_other:
+        'personas cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada (el ingreso con Microsoft con MFA también vale)',
+      keysExpiring_one: 'clave de API vence en menos de {{days}} días',
+      keysExpiring_other: 'claves de API vencen en menos de {{days}} días',
+    },
+  },
   apiKeysPage: {
     intro:
       'Las claves permiten que otro sistema (Power BI, n8n, sus propios servicios) lea los datos de esta organización por la API de integración, sin la cuenta de una persona. Una clave solo lee; nunca muestra datos personales. Use /api/v1/ext/v1/… con el encabezado Authorization: Bearer <clave>.',
@@ -405,7 +487,12 @@ export const adminEs: typeof adminEn = {
     status: 'Estado',
     revoke: 'Revocar',
     revokeName: 'Revocar {{name}}',
-    confirmRevoke: '¿Revocar la clave “{{name}}”? Lo que la use dejará de funcionar de inmediato.',
+    revokeTitle: '¿Revocar la clave “{{name}}”?',
+    revokeBody:
+      'Lo que la use (Power BI, n8n, sus propios servicios) dejará de funcionar de inmediato. Una clave revocada no se puede reactivar: haría falta una nueva.',
+    revokeConfirm: 'Revocar la clave',
+    readOnly:
+      'Puede ver las claves; quien administra las claves de integración (por defecto, el propietario) las crea y las revoca.',
     create: 'Crear la clave',
     cancel: 'Cancelar',
     shownOnce: 'Copie la clave ahora: solo se muestra una vez.',
@@ -530,6 +617,26 @@ export const adminEs: typeof adminEn = {
     saved: 'Permisos guardados.',
     allow: '{{role}}: {{permission}}',
     error: 'No se pudieron guardar los permisos.',
+    notApplicable: 'No disponible para este rol',
+    changedShort: 'modificado',
+    unsaved_one: '{{count}} cambio sin guardar',
+    unsaved_other: '{{count}} cambios sin guardar',
+    sensitive: 'Sensible',
+    sensitiveLegend:
+      'Los permisos sensibles dan acceso a datos personales o a la integridad de lo recolectado; concederlos se confirma antes de guardar.',
+    confirmTitle: '¿Guardar estos permisos?',
+    confirmIntro: 'Se aplican de inmediato a todas las personas con el rol.',
+    given: 'Se concede',
+    taken: 'Se quita',
+    people_one: '{{count}} persona tiene este rol.',
+    people_other: '{{count}} personas tienen este rol.',
+    sensitiveGiven:
+      'Da acceso a datos personales o a la integridad de los datos. Concédalo solo si el rol lo necesita.',
+    clientPii:
+      'Los clientes verían los datos personales de los encuestados. Eso suele requerir un acuerdo con ellos.',
+    confirm: 'Guardar los permisos',
+    cancel: 'Cancelar',
+    nothing: 'No hay cambios que guardar.',
   },
   guide: {
     title: '¿Qué puede hacer cada rol?',
@@ -641,6 +748,21 @@ export const adminEs: typeof adminEn = {
       hint: 'Son valores por defecto: quien elija su propio tema en el menú de la cuenta lo conserva. Cada color se verifica para que el texto se lea bien en el tema claro y en el oscuro. Las páginas que ven los encuestados siguen la preferencia de su propio dispositivo.',
       saved: 'Apariencia guardada.',
       error: 'No se pudo guardar la apariencia.',
+    },
+    installation: {
+      title: 'Toda la instalación',
+      intro:
+        'Estos ajustes no son propios de esta organización: valen para todas las organizaciones de la instalación.',
+    },
+    security: {
+      title: 'Seguridad del inicio de sesión',
+      intro:
+        'Propietarios y administradores siempre usan la verificación en dos pasos. Marque los demás roles que también deben activarla: se les pedirá en su próximo ingreso.',
+      always: 'siempre',
+      personalData: 've datos personales',
+      exports: 'exporta datos',
+      save: 'Guardar la política',
+      saved: 'Política guardada.',
     },
     bi: {
       title: 'Actualización del modelo de análisis',

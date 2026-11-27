@@ -140,6 +140,8 @@ export interface AuthTx extends AccountTx {
   acceptTerms(userId: string, version: number): Promise<void>;
   /** The organisation's branding (its look); readable by every member. */
   branding(): Promise<unknown>;
+  /** The organisation's settings (its two-step policy among them); readable by every member. */
+  settings(): Promise<unknown>;
   /** Opens a session; the person's last organisation is set when it differs. */
   openSession(v: NewSession, lastTenantId: string | null): Promise<void>;
   revokeSession(id: string): Promise<void>;
@@ -369,6 +371,15 @@ class MssqlAuthTx implements AuthTx {
     const r = await this.tx.selectFrom('tenants').select('branding').executeTakeFirst();
     try {
       return r ? JSON.parse(r.branding) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async settings(): Promise<unknown> {
+    const r = await this.tx.selectFrom('tenants').select('settings').executeTakeFirst();
+    try {
+      return r ? JSON.parse(r.settings) : null;
     } catch {
       return null;
     }

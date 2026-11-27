@@ -135,10 +135,10 @@ export function SetupPage() {
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
     setF({ ...f, [k]: e.target.value });
   const make = useMutation({
-    mutationFn: () =>
+    mutationFn: (form: typeof f) =>
       api<Plan>('/setup/scripts', {
         method: 'POST',
-        body: f,
+        body: form,
       }),
   });
   const plan = make.data;
@@ -207,7 +207,7 @@ export function SetupPage() {
                 className="flex flex-col gap-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  make.mutate();
+                  make.mutate(f);
                 }}
               >
                 <h2 className="text-lg font-semibold">{t('setup.form')}</h2>
@@ -239,34 +239,39 @@ export function SetupPage() {
                     value={f.schema}
                     required
                     autoComplete="off"
+                    aria-describedby="setup-schema-hint setup-schema-final"
                     onChange={set('schema')}
                   />
-                  <Hint>{t('setup.schemaHint')}</Hint>
+                  <Hint id="setup-schema-hint">{t('setup.schemaHint')}</Hint>
+                  {/* A decision that cannot be undone, said where it is taken. */}
+                  <p
+                    id="setup-schema-final"
+                    className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-ink-900"
+                  >
+                    {t('setup.schemaFinal')}
+                  </p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <Field
-                    id="setup-owner"
-                    label={t('setup.ownerUser')}
-                    value={f.ownerUser}
-                    required
-                    autoComplete="off"
-                    onChange={set('ownerUser')}
-                  />
-                  <Field
-                    id="setup-app"
-                    label={t('setup.appUser')}
-                    value={f.appUser}
-                    required
-                    autoComplete="off"
-                    onChange={set('appUser')}
-                  />
-                  <Field
-                    id="setup-ro"
-                    label={t('setup.readonlyUser')}
-                    value={f.readonlyUser}
-                    autoComplete="off"
-                    onChange={set('readonlyUser')}
-                  />
+                  {(
+                    [
+                      ['setup-owner', 'ownerUser', 'ownerHint', true],
+                      ['setup-app', 'appUser', 'appHint', true],
+                      ['setup-ro', 'readonlyUser', 'readonlyHint', false],
+                    ] as const
+                  ).map(([id, key, hint, required]) => (
+                    <div key={id} className="flex flex-col gap-1">
+                      <Field
+                        id={id}
+                        label={t(`setup.${key}`)}
+                        value={f[key]}
+                        required={required}
+                        autoComplete="off"
+                        aria-describedby={`${id}-hint`}
+                        onChange={set(key)}
+                      />
+                      <Hint id={`${id}-hint`}>{t(`setup.${hint}`)}</Hint>
+                    </div>
+                  ))}
                 </div>
                 <CheckField
                   label={t('setup.usersByDba')}
@@ -296,6 +301,13 @@ export function SetupPage() {
                 <h2 id="setup-results" className="text-xl font-semibold">
                   {t('setup.results')}
                 </h2>
+                <p className="-mt-3 text-sm text-slate-700" data-testid="setup-summary">
+                  {t('setup.summary', {
+                    server: make.variables?.server,
+                    database: make.variables?.database,
+                    schema: make.variables?.schema,
+                  })}
+                </p>
                 <Card>
                   <h3 className="mb-1 text-lg font-semibold">{t('setup.step1')}</h3>
                   <p className="mb-3 text-sm text-slate-700">{t('setup.step1Help')}</p>

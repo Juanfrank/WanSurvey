@@ -11,6 +11,7 @@ import {
   ROLES,
   roleMatrix,
   RoleOverrides,
+  TwoFactorRoles,
   type Permission,
 } from '@wansurvey/schema';
 import { z } from 'zod';
@@ -36,6 +37,8 @@ export const TenantSettings = z
           return false;
         }
       }, 'Unknown time zone'),
+    /** Roles that must use two-step verification besides owners and administrators. */
+    twoFactorRoles: TwoFactorRoles,
   })
   .partial()
   .strict();
