@@ -32,6 +32,7 @@ export class UsersService {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
       const rows = await t.members();
       const grants = await t.grants();
+      const workload = await t.workload();
       return rows.map((u) => ({
         ...u,
         memberships: grants
@@ -39,6 +40,16 @@ export class UsersService {
           .map((g) => ({ role: g.role, projectId: g.projectId })),
         /** Signed in (e.g. with Microsoft) but no role assigned yet. */
         awaitingRole: u.status === 'active' && !grants.some((g) => g.userId === u.id),
+        /** Open cases per project, and how many are on a device: to reassign before leaving. */
+        workload: workload
+          .filter((w) => w.userId === u.id)
+          .map(({ projectId, projectName, open, onDevice, deviceSince }) => ({
+            projectId,
+            projectName,
+            open,
+            onDevice,
+            deviceSince,
+          })),
       }));
     });
   }
