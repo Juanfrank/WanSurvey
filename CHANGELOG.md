@@ -19,6 +19,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **My device shows the sync state at a glance**: a status card (connection, interviews to send as a
+  large number, last sync, a warning after 24 hours without syncing, why "Sync now" is unavailable
+  offline), the deadline and priority of each downloaded case, and a personal-data notice. Beside the
+  project title, "My device" is a plain link with a separate indicator ("Online · 0 to send · 3 cases on
+  this device"). Signing out says what stays on the device: unsent interviews are kept (never removed),
+  and downloaded cases can be given back and removed.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

@@ -102,6 +102,9 @@ export const messagesEn = {
     NO_OFFLINE_STORAGE: 'This browser cannot store data offline.',
     STORAGE_FULL: 'This device has no space left for offline interviews. Sync and free some space.',
     STORAGE_BLOCKED: 'Close the other WanSurvey tabs on this device, then try again.',
+    UNSENT_ON_DEVICE: 'Some interviews on this device are not sent yet. Sync first.',
+    CASES_NOT_RETURNED:
+      'Some cases on this device could not be given back; they stay here. Ask your supervisor.',
     CASE_NOT_ON_DEVICE: 'This case is not on this device.',
     VERSION_NOT_ON_DEVICE: 'The questionnaire is not on this device.',
     CANNOT_CALL: 'This case cannot be called now.',
@@ -269,6 +272,9 @@ export const messagesEs: MessagesCatalogue = {
       'Este dispositivo no tiene espacio para entrevistas sin conexión. Sincronice y libere espacio.',
     STORAGE_BLOCKED:
       'Cierre las otras pestañas de WanSurvey en este dispositivo e intente de nuevo.',
+    UNSENT_ON_DEVICE: 'Hay entrevistas de este dispositivo sin enviar. Sincronice primero.',
+    CASES_NOT_RETURNED:
+      'Algunos casos de este dispositivo no se pudieron devolver; se quedan aquí. Consulte a su supervisor.',
     CASE_NOT_ON_DEVICE: 'Este caso no está en este dispositivo.',
     VERSION_NOT_ON_DEVICE: 'El cuestionario no está en este dispositivo.',
     CANNOT_CALL: 'Este caso no se puede llamar ahora.',

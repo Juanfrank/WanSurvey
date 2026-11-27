@@ -4,6 +4,7 @@ import {
   InterviewStore,
   type DeviceCase,
   DeviceError,
+  hasUnsent,
   keepStorage,
   serverCopy,
 } from './store.js';
@@ -237,9 +238,7 @@ export function deviceState(projectId: string) {
   return withStore(async (store) => {
     const cases = await store.cases(projectId);
     const locals = await store.all();
-    const waiting = locals.filter(
-      (l) => l.meta?.projectId === projectId && (l.seq > l.acked || l.start || l.submit),
-    ).length;
+    const waiting = locals.filter((l) => l.meta?.projectId === projectId && hasUnsent(l)).length;
     return {
       cases,
       waiting,
@@ -251,4 +250,88 @@ export function deviceState(projectId: string) {
 
 export function rememberProject(projectId: string, name: string) {
   return withStore((store) => store.setMeta(`project:${projectId}`, name));
+}
+
+/** Notes what the server says of cases on this device (deadline, priority) for offline use. */
+export function noteCaseDetails(
+  details: { caseId: string; dueAt: string | null; priority: number }[],
+) {
+  return withStore(async (store) => {
+    for (const d of details) {
+      const c = await store.getCase(d.caseId);
+      if (c && (c.dueAt !== d.dueAt || c.priority !== d.priority))
+        await store.patchCase(d.caseId, { dueAt: d.dueAt, priority: d.priority });
+    }
+  });
+}
+
+/**
+ * Recording segments waiting for upload (the audio database, `audio.ts`), without creating
+ * that database when it does not exist.
+ */
+function recordingsWaiting(): Promise<number> {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(0);
+  return new Promise((resolve) => {
+    const open = indexedDB.open('ws-audio');
+    open.onupgradeneeded = () => open.transaction?.abort();
+    open.onerror = () => resolve(0);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains('segments')) {
+        db.close();
+        resolve(0);
+        return;
+      }
+      const count = db.transaction('segments', 'readonly').objectStore('segments').count();
+      count.onsuccess = () => {
+        db.close();
+        resolve(count.result);
+      };
+      count.onerror = () => {
+        db.close();
+        resolve(0);
+      };
+    };
+  });
+}
+
+/**
+ * What this device holds, all projects together: interviews not yet sent, recordings not yet
+ * uploaded and cases.
+ */
+export function deviceSummary() {
+  return withStore(async (store) => ({
+    unsent: (await store.all()).filter(hasUnsent).length,
+    recordings: await recordingsWaiting(),
+    cases: (await store.allCases()).length,
+  }));
+}
+
+/**
+ * Gives back every case on this device and forgets the offline data (personal data included).
+ * Needs the connection, and nothing unsent: the store refuses to throw an interview away. Cases
+ * the server does not release (another person's, say) stay, and the data is then kept.
+ */
+export function clearDevice() {
+  return withStore(async (store) => {
+    if ((await store.all()).some(hasUnsent) || (await recordingsWaiting()))
+      throw new DeviceError('UNSENT_ON_DEVICE', 'Interviews on this device are not sent yet');
+    const deviceId = await store.deviceId();
+    const byProject = new Map<string, string[]>();
+    for (const c of await store.allCases())
+      byProject.set(c.projectId, [...(byProject.get(c.projectId) ?? []), c.caseId]);
+    let kept = 0;
+    for (const [projectId, caseIds] of byProject) {
+      const r = await api<{ checkedIn: string[] }>(`/projects/${projectId}/capi/checkin`, {
+        method: 'POST',
+        body: { deviceId, caseIds },
+      });
+      const back = new Set(r.checkedIn);
+      // Released cases leave at once, so a later failure leaves no case here the server freed.
+      for (const id of caseIds) if (back.has(id)) await store.removeCase(id);
+      kept += caseIds.filter((id) => !back.has(id)).length;
+    }
+    if (kept) throw new DeviceError('CASES_NOT_RETURNED', 'Some cases could not be given back');
+    await store.clearAll();
+  });
 }

@@ -10,6 +10,7 @@ import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
 import { LogoMark, LogoName } from './Logo.js';
 import { setOrgTheme } from '../org-theme.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
+import { confirmSignOut } from '../device/leave.js';
 
 const ME_KEY = 'wansurvey.me';
 
@@ -94,6 +95,8 @@ export function AppLayout() {
     if (await openTenant(tenantId)) await queryClient.invalidateQueries();
   };
   const logout = async () => {
+    // What stays on this device (unsent interviews, downloaded cases) is said first.
+    if (!(await confirmSignOut())) return;
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     forgetCachedMe();
     queryClient.clear();
