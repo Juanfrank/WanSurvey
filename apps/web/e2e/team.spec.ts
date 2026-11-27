@@ -53,7 +53,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   ).toHaveCount(0);
 
   // Invite Inés as an interviewer in one project.
-  await page.getByRole('button', { name: 'Invite a person' }).click();
+  await page.getByRole('button', { name: 'Invite a user' }).click();
   await page.getByLabel('E-mail', { exact: true }).fill(INES);
   await page.getByLabel('Full name').fill('Inés Invitada');
   await page.getByLabel('Staff code (optional)').fill('E-207');
@@ -72,7 +72,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(ines).toContainText('Interviewer · in Household Survey 2026');
 
   // A second person, whose first link gets lost: a new one replaces it.
-  await page.getByRole('button', { name: 'Invite a person' }).click();
+  await page.getByRole('button', { name: 'Invite a user' }).click();
   await page.getByLabel('E-mail', { exact: true }).fill(PABLO);
   await page.getByLabel('Full name').fill('Pablo Pérez');
   await page.getByLabel('Role 1', { exact: true }).selectOption({ label: 'Reviewer' });
@@ -129,26 +129,69 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await dialog
     .getByLabel('Where 2', { exact: true })
     .selectOption({ label: 'Household Survey 2026' });
+  // A supervisor does not conduct interviews: that row adds something. A reviewer row would not.
+  await expect(dialog.getByTestId('redundant-row')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Add a role' }).click();
+  await dialog.getByLabel('Role 3', { exact: true }).selectOption({ label: 'Reviewer' });
+  await dialog
+    .getByLabel('Where 3', { exact: true })
+    .selectOption({ label: 'Household Survey 2026' });
+  await expect(dialog.getByTestId('redundant-row')).toHaveText(
+    'This row adds nothing: Supervisor · Whole organisation already includes it.',
+  );
   await shot(page, 'team-roles');
+  await dialog.getByRole('button', { name: 'Remove role 3' }).click();
+  await expect(dialog.getByTestId('redundant-row')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Save roles' }).click();
   await expect(page.getByText('Roles of Inés Invitada saved.')).toBeVisible();
   await expect(ines).toContainText('Supervisor · Whole organisation');
   await expect(ines).toContainText('Interviewer · in Household Survey 2026');
+  // Who is an interviewer in Household Survey 2026?
+  await page.getByRole('combobox', { name: /^Role/ }).selectOption({ label: 'Interviewer' });
+  await page
+    .getByRole('combobox', { name: /^Project/ })
+    .selectOption({ label: 'Household Survey 2026' });
+  await expect(ines).toBeVisible();
+  await expect(team.locator(`[data-member="${ADMIN}"]`)).toHaveCount(0);
+  await page.getByRole('combobox', { name: /^Role/ }).selectOption('');
+  await page.getByRole('combobox', { name: /^Project/ }).selectOption('');
+
+  // Before deactivating someone with open cases, the dialog lists them to reassign first.
+  await page.getByRole('button', { name: 'Actions for Demo interviewer' }).click();
+  await page.getByRole('menuitem', { name: 'Deactivate…' }).click();
+  const leave = page.getByRole('dialog', { name: 'Deactivate Demo interviewer?' });
+  await expect(leave.getByTestId('deactivate-cases')).toContainText(
+    /\d+ open cases? in Household Survey 2026/,
+  );
+  await expect(
+    leave.getByRole('link', { name: 'Open the cases of Household Survey 2026' }),
+  ).toBeVisible();
+  await shot(page, 'team-deactivate');
+  await leave.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('[data-member="interviewer@demo.wansurvey.test"]')).toHaveAttribute(
+    'data-status',
+    'active',
+  );
 
   // Deactivated, she cannot sign in; reactivated, she can again.
-  page.once('dialog', (d) => void d.accept());
   await page.getByRole('button', { name: 'Actions for Inés Invitada' }).click();
   await page.getByRole('menuitem', { name: 'Deactivate…' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Deactivate Inés Invitada?' });
+  await expect(confirm).toContainText('They have no open cases.');
+  await confirm.getByRole('button', { name: 'Deactivate', exact: true }).click();
   await expect(ines).toHaveAttribute('data-status', 'deactivated');
+  await expect(ines).toContainText('Without effect while deactivated');
   const again = await freshPage(browser);
   await login(again.page, INES);
   await expect(again.page.getByRole('alert')).toBeVisible();
   await page.getByLabel('Status').selectOption('deactivated');
-  await expect(page.getByText('1 person')).toBeVisible();
+  await expect(page.getByText('1 user')).toBeVisible();
   await shot(page, 'team-list');
   await page.getByLabel('Status').selectOption('');
-  await page.getByRole('button', { name: 'Actions for Inés Invitada' }).click();
-  await page.getByRole('menuitem', { name: 'Reactivate' }).click();
+  // The message itself undoes it.
+  await expect(page.getByText('Inés Invitada was deactivated.')).toBeVisible();
+  await page.getByRole('button', { name: 'Reactivate', exact: true }).click();
+  await expect(page.getByText('Inés Invitada can sign in again.')).toBeVisible();
   await expect(ines).toHaveAttribute('data-status', 'active');
   await login(again.page, INES);
   await expect(again.page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
@@ -187,7 +230,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(
     pm.page.getByText('You can see the users; an administrator changes them.'),
   ).toBeVisible();
-  await expect(pm.page.getByRole('button', { name: 'Invite a person' })).toHaveCount(0);
+  await expect(pm.page.getByRole('button', { name: 'Invite a user' })).toHaveCount(0);
   await expect(pm.page.getByRole('button', { name: /^Actions for/ })).toHaveCount(0);
   await pm.ctx.close();
 
@@ -252,11 +295,14 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
 
   // Where roles are given, a guide says what each one may do.
   await nav.getByRole('link', { name: 'Users', exact: true }).click();
-  await page.getByRole('button', { name: 'Invite a person' }).click();
+  await page.getByRole('button', { name: 'Invite a user' }).click();
   await page.getByTestId('role-guide').getByText('What can each role do?').click();
   await expect(page.getByTestId('role-guide').locator('[data-role="interviewer"]')).toContainText(
     'Key paper forms',
   );
+  await expect(
+    page.getByRole('link', { name: 'Every permission of every role, in Roles and permissions' }),
+  ).toHaveAttribute('href', '/admin/roles');
   await shot(page, 'role-guide');
   await page.getByRole('button', { name: 'Cancel' }).click();
 

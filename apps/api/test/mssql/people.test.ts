@@ -151,6 +151,34 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: people', () => {
     expect((await app.withTenant(b.id, (tx) => store.member(tx, luis)))!.idCode).toBe('ID-Luis');
   });
 
+  it('counts each person’s open cases per project, and those on a device', async () => {
+    const at = new Date('2026-03-01T10:00:00Z');
+    await owner(async (db) => {
+      const add = (n: number, status: string, device: string | null, when: Date | null) =>
+        sql`INSERT INTO cases (id, tenant_id, project_id, external_id, sample, status, assigned_to, checked_out_device, checked_out_by, checked_out_at)
+            VALUES (${randomUUID()}, ${a.id}, ${a.project}, ${`W${n}-${stamp}`}, '{}', ${status}, ${eva}, ${device}, ${device ? eva : null}, ${when})`.execute(
+          db,
+        );
+      await add(1, 'assigned', null, null);
+      await add(2, 'in_progress', 'tablet-1', at);
+      await add(3, 'assigned', 'tablet-1', new Date('2026-03-02T10:00:00Z'));
+      // Finished cases are not open work.
+      await add(4, 'finalised', null, null);
+    });
+    const w = await app.withTenant(a.id, (tx) => store.workload(tx));
+    expect(w).toEqual([
+      {
+        userId: eva,
+        projectId: a.project,
+        projectName: 'P',
+        open: 3,
+        onDevice: 2,
+        deviceSince: at,
+      },
+    ]);
+    expect(await app.withTenant(b.id, (tx) => store.workload(tx))).toEqual([]);
+  });
+
   it('lets a person change their own account, and only them', async () => {
     await app.withTenant(
       a.id,

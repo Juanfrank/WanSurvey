@@ -37,6 +37,7 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
     queryFn: () => api<People>(`/projects/${projectId}/people`),
   });
   const [editing, setEditing] = useState<{ userId?: string; role?: Role } | null>(null);
+  const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   // Kept as keys, so the message follows a change of language.
   const [notice, setNotice] = useState<{ key: string; name: string; role?: Role } | null>(null);
   const save = useMutation({
@@ -48,6 +49,7 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
         people.data?.members.find((m) => m.userId === v.userId)?.name ??
         '';
       setEditing(null);
+      setRemoving(null);
       setNotice(
         v.role
           ? { key: 'team.projectPeople.saved', name, role: v.role }
@@ -55,6 +57,8 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
       );
       await qc.invalidateQueries({ queryKey: ['project-people', projectId] });
     },
+    // A refused removal is shown on the page, under the closed dialog.
+    onError: () => setRemoving(null),
   });
   const data = people.data;
   const canInvite = !!me.data?.permissions.includes('users.manage');
@@ -146,14 +150,7 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
                                 className={smallBtn}
                                 aria-label={t('team.projectPeople.remove', { name: m.name })}
                                 disabled={save.isPending}
-                                onClick={() => {
-                                  if (
-                                    window.confirm(
-                                      t('team.projectPeople.confirmRemove', { name: m.name }),
-                                    )
-                                  )
-                                    save.mutate({ userId: m.userId, role: null });
-                                }}
+                                onClick={() => setRemoving({ userId: m.userId, name: m.name })}
                               >
                                 {t('team.projectPeople.removeShort')}
                               </button>
@@ -169,6 +166,26 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
           </div>
         )}
       </Card>
+      {removing ? (
+        <Dialog
+          title={t('team.projectPeople.removeTitle', { name: removing.name })}
+          onClose={() => setRemoving(null)}
+        >
+          <p className="mb-4 text-sm text-slate-700">{t('team.projectPeople.removeBody')}</p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setRemoving(null)}>
+              {t('team.projectPeople.cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={save.isPending}
+              onClick={() => save.mutate({ userId: removing.userId, role: null })}
+            >
+              {t('team.projectPeople.removeShort')}
+            </Button>
+          </div>
+        </Dialog>
+      ) : null}
       {editing && data ? (
         <PersonDialog
           people={data}

@@ -5,14 +5,14 @@ import { SessionsStore } from '../auth/sessions-store.mssql.js';
 import { randomToken, sha256Hex } from '../common/crypto.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
-import { PeopleStore, type Grant, type Member } from './people-store.mssql.js';
+import { PeopleStore, type Grant, type Member, type Workload } from './people-store.mssql.js';
 
 /**
  * What the people service needs from the database (the pattern of `auth/auth-repo.ts`): the
  * implementation uses `PeopleStore` and `SessionsStore`. The rules (who may grant what, whom one may manage)
  * live once, in the service.
  */
-export type { Grant, Member };
+export type { Grant, Member, Workload };
 export type MemberStatus = 'invited' | 'active' | 'deactivated';
 
 export interface UsersTx {
@@ -20,6 +20,8 @@ export interface UsersTx {
   /** The roles of everyone in the organisation (or of one person). */
   grants(userId?: string): Promise<(Grant & { userId: string })[]>;
   setGrants(userId: string, grants: Grant[]): Promise<void>;
+  /** Everyone's open cases, per person and project, and how many are on a device. */
+  workload(): Promise<Workload[]>;
   /** The ids of those projects that exist in the organisation. */
   existingProjects(ids: string[]): Promise<string[]>;
   isMember(userId: string): Promise<boolean>;
@@ -71,6 +73,9 @@ class MssqlUsersTx implements UsersTx {
   }
   setGrants(userId: string, grants: Grant[]) {
     return this.people.setGrants(this.tx, this.tenantId, userId, grants);
+  }
+  workload() {
+    return this.people.workload(this.tx);
   }
   existingProjects(ids: string[]) {
     return this.people.existingProjects(this.tx, ids);

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
 
 /**
@@ -25,6 +26,16 @@ export interface Member {
 export interface Grant {
   role: string;
   projectId: string | null;
+}
+
+/** The open cases of one person in one project (`PeopleStore.workload`). */
+export interface Workload {
+  userId: string;
+  projectId: string;
+  projectName: string;
+  open: number;
+  onDevice: number;
+  deviceSince: Date | null;
 }
 
 const lower = (s: string | null) => (s === null ? null : s.toLowerCase());
@@ -86,6 +97,37 @@ export class PeopleStore {
       userId: g.user_id.toLowerCase(),
       role: g.role,
       projectId: lower(g.project_id),
+    }));
+  }
+
+  /**
+   * The open cases (assigned or in progress) of everyone in the organisation, per person and
+   * project: how many, how many of them are on a device (checked out for offline work), and
+   * since when the oldest of those is there.
+   */
+  async workload(tx: MssqlTx): Promise<Workload[]> {
+    const rows = await tx
+      .selectFrom('cases as c')
+      .innerJoin('projects as p', 'p.id', 'c.project_id')
+      .where('c.assigned_to', 'is not', null)
+      .where('c.status', 'in', ['assigned', 'in_progress'])
+      .select([
+        'c.assigned_to',
+        'c.project_id',
+        'p.name',
+        sql<number>`COUNT(*)`.as('open'),
+        sql<number>`SUM(CASE WHEN c.checked_out_device IS NULL THEN 0 ELSE 1 END)`.as('on_device'),
+        sql<Date | null>`MIN(c.checked_out_at)`.as('device_since'),
+      ])
+      .groupBy(['c.assigned_to', 'c.project_id', 'p.name'])
+      .execute();
+    return rows.map((r) => ({
+      userId: r.assigned_to!.toLowerCase(),
+      projectId: r.project_id.toLowerCase(),
+      projectName: r.name,
+      open: Number(r.open),
+      onDevice: Number(r.on_device),
+      deviceSince: r.device_since,
     }));
   }
 

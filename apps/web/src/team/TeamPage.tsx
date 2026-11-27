@@ -1,14 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ROLE_RANK, ROLES, type Role } from '@wansurvey/schema';
+import { Link } from '@tanstack/react-router';
 import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
+import type { RolesView } from '../admin/permissions.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls } from '../designer/fields.js';
 import { below, Menu, type MenuEntry } from '../designer/Menu.js';
+import { dateTime } from '../format.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, ErrorText, Field } from '../routes/ui.js';
 import { RoleGuide } from './RoleGuide.js';
+import { matchesGrants, redundantRows } from './roles.js';
 
 interface Grant {
   role: Role;
@@ -25,6 +29,22 @@ interface Member {
   idCode: string | null;
   memberships: Grant[];
   awaitingRole: boolean;
+  /** Open cases per project; `onDevice` of them are checked out to a device. */
+  workload: {
+    projectId: string;
+    projectName: string;
+    open: number;
+    onDevice: number;
+    deviceSince: string | null;
+  }[];
+}
+
+/** A message after an action, kept as a key so it follows a change of language. */
+interface Notice {
+  key: string;
+  vars: Record<string, string>;
+  /** Deactivated just now: the message offers to undo it. */
+  undo?: Member;
 }
 
 interface ProjectRow {
@@ -66,10 +86,13 @@ export function TeamPage() {
   );
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
+  const [leaving, setLeaving] = useState<Member | null>(null);
   const [menu, setMenu] = useState<{ m: Member; at: { x: number; y: number } } | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const grantable = ROLES.filter((r) => ROLE_RANK[r] <= myRank);
@@ -87,18 +110,20 @@ export function TeamPage() {
     },
     onSuccess: async ({ m, action }) => {
       setError(null);
+      setLeaving(null);
       setNotice(
         action === 'resend-invitation'
-          ? t('team.done.resent', { email: m.email })
+          ? { key: 'team.done.resent', vars: { email: m.email } }
           : action === 'force-logout'
-            ? t('team.done.logout', { name: m.name })
+            ? { key: 'team.done.logout', vars: { name: m.name } }
             : action === 'deactivate'
-              ? t('team.done.deactivated', { name: m.name })
-              : t('team.done.reactivated', { name: m.name }),
+              ? { key: 'team.done.deactivated', vars: { name: m.name }, undo: m }
+              : { key: 'team.done.reactivated', vars: { name: m.name } },
       );
       await refresh();
     },
     onError: (e) => {
+      setLeaving(null);
       setNotice(null);
       setError(errorText(e));
     },
@@ -109,7 +134,8 @@ export function TeamPage() {
   const shown = (members.data ?? []).filter(
     (m) =>
       (!q || m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)) &&
-      (!status || statusOf(m) === status),
+      (!status || statusOf(m) === status) &&
+      matchesGrants(m.memberships, roleFilter, projectFilter),
   );
   const manageable = (m: Member) =>
     canManage &&
@@ -156,10 +182,7 @@ export function TeamPage() {
           type: 'item',
           id: 'deactivate',
           label: t('team.deactivate'),
-          onSelect: () => {
-            if (window.confirm(t('team.confirmDeactivate', { name: m.name })))
-              act.mutate({ m, action: 'deactivate' });
-          },
+          onSelect: () => setLeaving(m),
         },
   ];
 
@@ -168,7 +191,7 @@ export function TeamPage() {
       {/* The action stays beside the title: the account pill sits at the right. */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <h1 className="text-2xl font-bold">{t('team.title')}</h1>
-        {canManage && !inviting ? (
+        {canManage ? (
           <Button onClick={() => setInviting(true)}>{t('team.invite.open')}</Button>
         ) : null}
       </div>
@@ -180,7 +203,20 @@ export function TeamPage() {
           role="status"
           className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-ink-800"
         >
-          {notice}
+          {t(notice.key, notice.vars)}
+          {notice.undo &&
+          members.data?.find((x) => x.id === notice.undo!.id)?.status === 'deactivated' ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="ml-3"
+              disabled={act.isPending}
+              onClick={() => act.mutate({ m: notice.undo!, action: 'reactivate' })}
+            >
+              {t('team.reactivate')}
+            </Button>
+          ) : null}
         </p>
       ) : null}
       {error ? <ErrorText>{error}</ErrorText> : null}
@@ -192,7 +228,7 @@ export function TeamPage() {
           onInvited={async (email) => {
             setInviting(false);
             setError(null);
-            setNotice(t('team.done.invited', { email }));
+            setNotice({ key: 'team.done.invited', vars: { email } });
             await refresh();
           }}
           errorText={errorText}
@@ -225,6 +261,36 @@ export function TeamPage() {
               ))}
             </select>
           </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-700">{t('team.roleFilter')}</span>
+            <select
+              className={inputCls}
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+            >
+              <option value="">{t('team.allRoles')}</option>
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {t(`team.roleNames.${r}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-700">{t('team.projectFilter')}</span>
+            <select
+              className={inputCls}
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+            >
+              <option value="">{t('team.allProjects')}</option>
+              {(projects.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <p className="pb-2 text-sm text-slate-600" role="status">
             {t('team.count', { count: shown.length })}
           </p>
@@ -235,6 +301,7 @@ export function TeamPage() {
               <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
                 <th className="px-2 py-2 font-semibold">{t('team.columns.person')}</th>
                 <th className="px-2 py-2 font-semibold">{t('team.columns.roles')}</th>
+                <th className="px-2 py-2 text-right font-semibold">{t('team.columns.cases')}</th>
                 <th className="px-2 py-2 font-semibold">{t('team.columns.status')}</th>
                 <th className="px-2 py-2 font-semibold">{t('team.columns.security')}</th>
                 <th className="px-2 py-2">
@@ -264,7 +331,9 @@ export function TeamPage() {
                   </td>
                   <td className="px-2 py-2.5">
                     {m.memberships.length ? (
-                      <ul className="flex flex-col gap-0.5">
+                      <ul
+                        className={`flex flex-col gap-0.5 ${m.status === 'deactivated' ? 'text-slate-500 line-through decoration-slate-400' : ''}`}
+                      >
                         {m.memberships.map((g, i) => (
                           <li key={i}>
                             <span className="font-medium">{t(`team.roleNames.${g.role}`)}</span>{' '}
@@ -282,6 +351,23 @@ export function TeamPage() {
                     ) : (
                       <span className="text-slate-500">{t('team.noRoles')}</span>
                     )}
+                    {m.status === 'deactivated' && m.memberships.length ? (
+                      <div className="mt-0.5 text-xs text-slate-600">{t('team.rolesInactive')}</div>
+                    ) : null}
+                    {m.awaitingRole && manageable(m) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-1 whitespace-nowrap"
+                        aria-label={t('team.assignRoleFor', { name: m.name })}
+                        onClick={() => setEditing(m)}
+                      >
+                        {t('team.assignRole')}
+                      </Button>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums" data-testid="open-cases">
+                    <OpenCases member={m} />
                   </td>
                   <td className="px-2 py-2.5">
                     <StatusChip status={statusOf(m)} />
@@ -317,6 +403,14 @@ export function TeamPage() {
           />
         ) : null}
       </Card>
+      {leaving ? (
+        <DeactivateDialog
+          member={leaving}
+          pending={act.isPending}
+          onCancel={() => setLeaving(null)}
+          onConfirm={() => act.mutate({ m: leaving, action: 'deactivate' })}
+        />
+      ) : null}
       {editing ? (
         <RolesDialog
           member={editing}
@@ -324,7 +418,7 @@ export function TeamPage() {
           projects={projects.data ?? []}
           onClose={() => setEditing(null)}
           onSaved={async () => {
-            setNotice(t('team.done.roles', { name: editing.name }));
+            setNotice({ key: 'team.done.roles', vars: { name: editing.name } });
             setError(null);
             setEditing(null);
             await refresh();
@@ -333,6 +427,92 @@ export function TeamPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+/** How many open cases the person has, and how many of them are on a device. */
+function OpenCases({ member }: { member: Member }) {
+  const { t } = useTranslation();
+  const open = member.workload.reduce((n, w) => n + w.open, 0);
+  const onDevice = member.workload.reduce((n, w) => n + w.onDevice, 0);
+  return (
+    <>
+      <div>{open}</div>
+      {onDevice ? (
+        <div className="whitespace-nowrap text-xs text-amber-ink-800">
+          {t('team.onDevice', { count: onDevice })}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Deactivating someone: what it does, and the open cases they leave behind (per project, with
+ * those on a device), so they can be reassigned first.
+ */
+function DeactivateDialog({
+  member,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  member: Member;
+  pending: boolean;
+  onCancel(): void;
+  onConfirm(): void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Dialog title={t('team.deactivateDialog.title', { name: member.name })} onClose={onCancel}>
+      <div className="flex flex-col gap-3 text-sm">
+        <p className="text-slate-700">{t('team.deactivateDialog.body')}</p>
+        {member.workload.length ? (
+          <div className="rounded-md bg-amber-50 px-3 py-2 text-amber-ink-800">
+            <ul className="flex flex-col gap-2" data-testid="deactivate-cases">
+              {member.workload.map((w) => (
+                <li key={w.projectId}>
+                  <span className="font-medium">
+                    {t('team.deactivateDialog.cases', {
+                      count: w.open,
+                      project: w.projectName,
+                    })}
+                  </span>
+                  {' · '}
+                  <Link
+                    to="/projects/$projectId"
+                    params={{ projectId: w.projectId }}
+                    search={{ tab: 'cases' }}
+                    className="font-medium text-indigo-ink-700 underline"
+                  >
+                    {t('team.deactivateDialog.openCases', { project: w.projectName })}
+                  </Link>
+                  {w.onDevice ? (
+                    <p className="mt-0.5">
+                      {t('team.deactivateDialog.onDevice', {
+                        count: w.onDevice,
+                        date: w.deviceSince ? dateTime(w.deviceSince) : '…',
+                      })}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">{t('team.deactivateDialog.reassign')}</p>
+          </div>
+        ) : (
+          <p className="text-slate-600">{t('team.deactivateDialog.noCases')}</p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            {t('team.invite.cancel')}
+          </Button>
+          <Button type="button" disabled={pending} onClick={onConfirm}>
+            {t('team.deactivateDialog.confirm')}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
@@ -367,6 +547,26 @@ function RolesEditor({
 }) {
   const { t } = useTranslation();
   const id = useId();
+  const me = useMe();
+  const canSeeMatrix = !!me.data?.permissions.includes('tenant.manage');
+  // What each role may do here (an organisation can change it): a row whose permissions
+  // another row already gives where it applies adds nothing.
+  const view = useQuery({
+    queryKey: ['tenant-roles', me.data?.tenantId],
+    queryFn: () => api<RolesView>('/tenant/roles'),
+    enabled: !!me.data,
+    staleTime: 60_000,
+  });
+  const permissions = useMemo(
+    () =>
+      view.data
+        ? Object.fromEntries(view.data.roles.map((r) => [r.role, r.permissions]))
+        : undefined,
+    [view.data],
+  );
+  const redundant = redundantRows(value, permissions);
+  const scopeName = (p: string | null) =>
+    p === null ? t('team.wholeOrg') : (projects.find((x) => x.id === p)?.name ?? '…');
   const set = (i: number, g: Partial<Grant>) =>
     onChange(value.map((x, j) => (j === i ? { ...x, ...g } : x)));
   return (
@@ -376,6 +576,15 @@ function RolesEditor({
         {t('team.roles.help')} {t('team.roles.rankNote')}
       </p>
       <RoleGuide roles={grantable} />
+      {canSeeMatrix ? (
+        <Link
+          to="/admin/roles"
+          target="_blank"
+          className="text-sm font-medium text-indigo-ink-700 hover:underline"
+        >
+          {t('team.roles.allPermissions')}
+        </Link>
+      ) : null}
       {value.map((g, i) => (
         <div key={i} className="flex flex-wrap items-start gap-2" data-testid="role-row">
           <label className="flex min-w-48 flex-1 flex-col gap-1 text-sm">
@@ -419,6 +628,14 @@ function RolesEditor({
           >
             ✕
           </button>
+          {redundant[i] != null ? (
+            <p className="basis-full text-sm text-amber-ink-800" data-testid="redundant-row">
+              {t('team.roles.redundant', {
+                role: t(`team.roleNames.${value[redundant[i]]!.role}`),
+                scope: scopeName(value[redundant[i]]!.projectId),
+              })}
+            </p>
+          ) : null}
         </div>
       ))}
       {!value.length ? (
@@ -480,7 +697,7 @@ function InviteForm({
   });
   const ok = /^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$/.test(email.trim()) && name.trim() && grants.length;
   return (
-    <Card>
+    <Dialog title={t('team.invite.title')} onClose={onCancel} wide>
       <form
         className="flex flex-col gap-4"
         aria-label={t('team.invite.title')}
@@ -489,7 +706,6 @@ function InviteForm({
           if (ok) invite.mutate();
         }}
       >
-        <h2 className="text-lg font-semibold">{t('team.invite.title')}</h2>
         <p className="-mt-2 text-sm text-slate-600">{t('team.invite.help')}</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
@@ -544,7 +760,7 @@ function InviteForm({
           </Button>
         </div>
       </form>
-    </Card>
+    </Dialog>
   );
 }
 

@@ -82,6 +82,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   with no cap (the API takes `beforeAt`/`beforeId`, `actions`, `projectId` and `caseRef`), and the export
   takes the same filters. Corrections and review decisions now record their project and case; earlier ones
   are found by the other filters but not by project or case.
+- **Users page: open cases, filters and a safer deactivation.** A column shows each user's open cases
+  and how many are on a device; the list filters by role and project; a user waiting for a role has an
+  "Assign a role" button. Deactivating opens a dialog that lists their open cases per project (with
+  those on a device and since when) and links to each project's cases; the message after it offers to
+  reactivate, and the roles of a deactivated user show as without effect. The roles editor warns when a
+  row adds nothing that another row already gives, and links to Roles and permissions. The invitation
+  opens in a dialog, removing someone from a project asks in a dialog instead of the browser's, and the
+  staff are called "users" on the Users page and in the project's list of users (not "people", which
+  the registry of respondents uses).
+
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

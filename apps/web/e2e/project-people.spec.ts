@@ -11,14 +11,14 @@ test('the project manager gives someone a role in the project, from the project'
     .click();
   await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await page.getByRole('tab', { name: 'People', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'People of the project' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Users of the project' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Add a person' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add a person' });
+  await page.getByRole('button', { name: 'Add a user' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add a user' });
   // A manager gives roles from supervisor down.
   await expect(dialog.getByRole('radio', { name: /^Project manager/ })).toHaveCount(0);
   await dialog
-    .getByRole('combobox', { name: 'Person' })
+    .getByRole('combobox', { name: 'User' })
     .selectOption({ label: 'Demo client_viewer · client.viewer@demo.wansurvey.test' });
   await dialog.getByRole('radio', { name: /^Reviewer/ }).check();
   await dialog.getByRole('button', { name: 'Save' }).click();
@@ -30,8 +30,12 @@ test('the project manager gives someone a role in the project, from the project'
   await expectAccessible(page);
 
   // Back as it was for the other tests.
-  page.once('dialog', (d) => void d.accept());
   await row.getByRole('button', { name: 'Remove Demo client_viewer from the project' }).click();
+  const confirm = page.getByRole('dialog', {
+    name: 'Remove Demo client_viewer from this project?',
+  });
+  await expect(confirm).toContainText('Their role in the organisation stays');
+  await confirm.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.getByText('Demo client_viewer left the project.')).toBeVisible();
   await expect(row).toHaveCount(0);
 });
