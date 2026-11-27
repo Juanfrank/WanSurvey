@@ -91,6 +91,12 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   opens in a dialog, removing someone from a project asks in a dialog instead of the browser's, and the
   staff are called "users" on the Users page and in the project's list of users (not "people", which
   the registry of respondents uses).
+- **Home by role**: administrators see who is waiting for a role, invitations not accepted and active
+  people without two-step verification; project managers, supervisors and clients see each project's
+  completes against the target, team pace, unassigned cases, callbacks due, interviews to review (with
+  those flagged too fast) and who is working now; interviewers see their day: interviews returned to
+  them, callbacks due with a button to call each one, cases to do and their goal for today. The
+  questionnaire preview is a secondary link, for those who design questionnaires. New `GET /home`.
 
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
