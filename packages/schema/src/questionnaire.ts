@@ -414,6 +414,8 @@ export const Quota = z.strictObject({
   /** Membership condition for the cell, e.g. `AGE_GROUP == 3`. */
   when: Expression,
   max: z.number().int().min(0),
+  /** Completes the cell should reach, when it differs from the cap (fieldwork follow-up). */
+  target: z.number().int().min(0).nullable().optional(),
   disposition: Disposition.default('QUOTA_FULL'),
 });
 export type Quota = z.infer<typeof Quota>;

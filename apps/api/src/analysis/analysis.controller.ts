@@ -67,6 +67,13 @@ export class AnalysisController {
     return this.live.snapshotOf(ctx.tenantId, projectId);
   }
 
+  /** Quality and deadline risks for those who follow the team (names of interviewers). */
+  @Get('live/risks')
+  @RequirePermission('metrics.team', PERM)
+  risks(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
+    return this.live.risks(ctx.tenantId, projectId);
+  }
+
   /** Server-Sent Events: `snapshot` on change, `heartbeat` every 15 s (M2). */
   @Sse('live')
   @RequirePermission('dashboards.read', PERM)

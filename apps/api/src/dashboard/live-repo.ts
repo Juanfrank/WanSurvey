@@ -57,7 +57,31 @@ export interface LiveTx extends CasesTx {
       lastAt: Date;
     }[]
   >;
+  /**
+   * Per interviewer, interviews awaiting review (submitted or in review), how many carry a
+   * risk flag, and how many of each flag; most flagged first.
+   */
+  flaggedByInterviewer(projectId: string): Promise<
+    {
+      userId: string;
+      name: string;
+      pending: number;
+      flagged: number;
+      kinds: Partial<Record<(typeof RISK_FLAGS)[number], number>>;
+    }[]
+  >;
+  /** Assigned cases whose deadline (`hours` after assignment) falls within `within` hours. */
+  expiringWithin(projectId: string, hours: number, within: number): Promise<number>;
 }
+
+/** Quality flags that make an interview risky (the ones `riskOf` weighs). */
+export const RISK_FLAGS = [
+  'speeding',
+  'straightlining',
+  'shortPages',
+  'positionCluster',
+  'farFromAddress',
+] as const;
 
 export interface LiveRepo {
   inTenant<T>(tenantId: string, fn: (t: LiveTx) => Promise<T>): Promise<T>;
@@ -193,6 +217,68 @@ export class MssqlLiveTx extends MssqlCasesTx implements LiveTx {
       externalId: r.external_id,
       lastAt: r.last_at,
     }));
+  }
+
+  async flaggedByInterviewer(projectId: string) {
+    const kinds = ksql.join(RISK_FLAGS.map((k) => ksql`${k}`));
+    const res = await ksql<{ user_id: string; name: string; flag: string | null; n: number }>`
+      SELECT i.interviewer_id AS user_id, u.name, f.[key] AS flag, COUNT(*) AS n
+      FROM interviews i JOIN users u ON u.id = i.interviewer_id
+      OUTER APPLY (SELECT [key] FROM OPENJSON(i.flags) WHERE [key] IN (${kinds})) f
+      WHERE i.project_id = ${projectId} AND i.status IN ('submitted', 'in_review', 'resubmitted')
+      GROUP BY i.interviewer_id, u.name, f.[key]`.execute(this.xtx);
+    const flaggedRes = await ksql<{ user_id: string; pending: number; flagged: number }>`
+      SELECT i.interviewer_id AS user_id, COUNT(*) AS pending, SUM(f.n) AS flagged
+      FROM interviews i
+      CROSS APPLY (SELECT CASE WHEN EXISTS (SELECT 1 FROM OPENJSON(i.flags)
+        WHERE [key] IN (${kinds})) THEN 1 ELSE 0 END AS n) f
+      WHERE i.project_id = ${projectId} AND i.status IN ('submitted', 'in_review', 'resubmitted')
+        AND i.interviewer_id IS NOT NULL
+      GROUP BY i.interviewer_id`.execute(this.xtx);
+    const out = new Map<
+      string,
+      {
+        userId: string;
+        name: string;
+        pending: number;
+        flagged: number;
+        kinds: Partial<Record<(typeof RISK_FLAGS)[number], number>>;
+      }
+    >();
+    for (const r of flaggedRes.rows)
+      out.set(low(r.user_id), {
+        userId: low(r.user_id),
+        name: '',
+        pending: r.pending,
+        flagged: r.flagged ?? 0,
+        kinds: {},
+      });
+    for (const r of res.rows) {
+      const o = out.get(low(r.user_id));
+      if (!o) continue;
+      o.name = r.name;
+      if (r.flag) o.kinds[r.flag as (typeof RISK_FLAGS)[number]] = r.n;
+    }
+    return [...out.values()].sort((a, b) => b.flagged - a.flagged || a.name.localeCompare(b.name));
+  }
+
+  async expiringWithin(projectId: string, hours: number, within: number) {
+    // Due from now to `within` hours ahead, among the cases the expiry job would close
+    // (`expireDue`): held by someone and not checked out to a device.
+    const now = Date.now();
+    const from = new Date(now - hours * 3_600_000);
+    const until = new Date(now + (within - hours) * 3_600_000);
+    const r = await this.xtx
+      .selectFrom('cases')
+      .select(ksql<number>`COUNT(*)`.as('n'))
+      .where('project_id', '=', projectId)
+      .where('status', 'in', ['assigned', 'in_progress'])
+      .where('assigned_to', 'is not', null)
+      .where('checked_out_device', 'is', null)
+      .where('assigned_at', '>', instant(from))
+      .where('assigned_at', '<=', instant(until))
+      .executeTakeFirstOrThrow();
+    return r.n;
   }
 }
 

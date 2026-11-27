@@ -3,7 +3,14 @@ import type { AuditEntry } from '../audit/audit.service.js';
 import { AuditStore } from '../audit/audit-store.mssql.js';
 import { Engine } from '../db/engine.js';
 import type { MssqlTx } from '../db/mssql/database.js';
-import { ProjectsStore, type ProjectRow, type TenantRow } from './projects-store.mssql.js';
+import {
+  ProjectsStore,
+  type Closeout,
+  type ProjectRow,
+  type TenantRow,
+} from './projects-store.mssql.js';
+
+export type { Closeout };
 
 /**
  * What the organisation and project controllers need from the database (the pattern of
@@ -73,6 +80,8 @@ export interface OrgTx {
   setLogo(id: string, v: { contentType: string; image: Buffer }): Promise<ProjectView | null>;
   logo(id: string): Promise<{ contentType: string; image: Buffer } | null>;
   removeLogo(id: string): Promise<ProjectView | null>;
+  /** What is still open in the project, before it is closed or archived. */
+  closeout(id: string): Promise<Closeout>;
   audit(entry: AuditEntry): Promise<void>;
 }
 
@@ -170,6 +179,10 @@ class MssqlOrgTx implements OrgTx {
     if (!(await this.project(id))) return null;
     await this.projectsStore.removeLogo(this.tx, id);
     return this.project(id);
+  }
+
+  closeout(id: string) {
+    return this.projectsStore.closeout(this.tx, id);
   }
 
   audit(entry: AuditEntry) {

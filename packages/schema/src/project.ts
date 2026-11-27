@@ -165,6 +165,9 @@ export const FieldworkSettings = z.object({
    * days setting is kept for projects that already use it.
    */
   caseExpiryHours: z.number().int().min(1).max(87_600).nullable().default(null),
+  /** Planned first and last day of fieldwork (project time zone): the dashboard's pace. */
+  startsOn: z.iso.date().nullable().default(null),
+  endsOn: z.iso.date().nullable().default(null),
 });
 export type FieldworkSettings = z.infer<typeof FieldworkSettings>;
 

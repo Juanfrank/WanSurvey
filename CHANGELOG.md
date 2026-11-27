@@ -146,6 +146,17 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   "hidden", sample variables can be given readable names, the case detail separates its sections and
   shows the withdraw and misidentified actions in red, and interviewers are no longer offered draft
   questionnaires.
+- **Project life cycle, fieldwork plan, pace and risks**: Settings → Project status moves a project
+  between draft, active, closed and archived (each change in the audit log) and lists what is still
+  open before closing it: open cases, interviews to submit or review, the final export, client links
+  and people with access. Settings → Fieldwork takes the planned start and end of fieldwork; the
+  dashboard then shows the completes due by today, those needed per day (also as a line over
+  completes per day), the current pace and the estimated end. Quota cells take an optional target
+  besides their maximum, and the dashboard shows target, %, missing and state (behind, nearly full,
+  full…), riskiest first. Supervisors and project managers also see the goals' state and a Risks card
+  (interviewers with repeated quality flags awaiting review, quota cells behind the pace, cases
+  reaching their deadline within 48 hours).
+
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

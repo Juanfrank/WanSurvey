@@ -592,6 +592,7 @@ export const casesEn = {
       shortcuts: 'Shortcuts',
       privacy: 'Privacy',
       look: 'Logo and style',
+      status: 'Project status',
     },
     reveal: 'Show interviewers the personal data of their cases automatically',
     revealHelp:
@@ -1227,6 +1228,7 @@ export const casesEs: CasesCatalogue = {
       shortcuts: 'Atajos',
       privacy: 'Privacidad',
       look: 'Logo y estilo',
+      status: 'Estado del proyecto',
     },
     reveal: 'Mostrar automáticamente a los entrevistadores los datos personales de sus casos',
     revealHelp:
