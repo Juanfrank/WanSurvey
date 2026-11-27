@@ -27,7 +27,12 @@ import { LiveService } from '../dashboard/live.service.js';
 import { EXPORTS_REPO, type ExportsRepo } from '../exports/exports-repo.js';
 import { ExportBody, ExportsService } from '../exports/exports.service.js';
 import { MetricsQuery, MetricsService } from '../metrics/metrics.service.js';
-import { AnalysisQuery, AnalysisService, CrosstabQuery } from './analysis.service.js';
+import {
+  AnalysisQuery,
+  AnalysisService,
+  CrosstabQuery,
+  fieldProgress,
+} from './analysis.service.js';
 import { DatasetService } from './dataset.service.js';
 import { ShareBody, ShareService } from './share.service.js';
 
@@ -110,14 +115,17 @@ export class AnalysisController {
     return this.repo.inTenant(ctx.tenantId, (t) => this.analysis.crosstab(t, projectId, q));
   }
 
+  /** The printable summary: the results, and how fieldwork is going (a progress report). */
   @Get('summary')
   @RequirePermission('dashboards.read', PERM)
-  summary(
+  async summary(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query(new ZodPipe(AnalysisQuery)) q: z.infer<typeof AnalysisQuery>,
   ) {
-    return this.repo.inTenant(ctx.tenantId, (t) => this.analysis.summary(t, projectId, q));
+    const s = await this.repo.inTenant(ctx.tenantId, (t) => this.analysis.summary(t, projectId, q));
+    const snap = await this.live.snapshotOf(ctx.tenantId, projectId);
+    return { ...s, field: fieldProgress(snap, !!q.approvedOnly) };
   }
 
   @Get('exports')
@@ -201,6 +209,7 @@ export class PublicShareController {
     @Inject(ANALYSIS_REPO) private readonly repo: AnalysisRepo,
     private readonly analysis: AnalysisService,
     private readonly share: ShareService,
+    private readonly live: LiveService,
   ) {}
 
   @Public()
@@ -215,9 +224,22 @@ export class PublicShareController {
     const link = await this.engine.shareLinkByHash(sha256Hex(token));
     if (!link)
       throw new NotFoundException({ code: 'LINK_EXPIRED', message: 'This link is not valid' });
-    return this.repo.inTenant(link.tenantId, async (t) => {
-      const projectId = await this.share.projectOf(t, link.id);
-      return this.analysis.summary(t, projectId, q);
-    });
+    const { projectId, approvedOnly, summary } = await this.repo.inTenant(
+      link.tenantId,
+      async (t) => {
+        const l = await this.share.linkOf(t, link.id);
+        // A link made for approved interviews only shows those, whatever the address asks.
+        const query = { ...q, ...(l.approvedOnly ? { approvedOnly: true } : {}) };
+        return {
+          projectId: l.projectId,
+          approvedOnly: !!query.approvedOnly,
+          summary: await this.analysis.summary(t, l.projectId, query),
+        };
+      },
+    );
+    return {
+      ...summary,
+      field: fieldProgress(await this.live.snapshotOf(link.tenantId, projectId), approvedOnly),
+    };
   }
 }

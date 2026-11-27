@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { codebook, crosstab, filterRows, topline, type Table } from '../src/index.js';
+import {
+  chiSquareP,
+  codebook,
+  crosstab,
+  filterRows,
+  textGroups,
+  topline,
+  type Table,
+} from '../src/index.js';
 
 const labels = (pairs: [number, string][]) => new Map(pairs);
 const table: Table = {
@@ -81,11 +89,48 @@ describe('topline', () => {
     expect(items.find((i) => i.name === 'AGE')).toMatchObject({
       kind: 'numeric',
       n: 3,
+      specials: 1,
+      blank: 1,
       mean: 40,
       median: 40,
       min: 30,
       max: 50,
     });
+  });
+
+  it('groups open answers written alike and marks computed variables', () => {
+    const t: Table = {
+      name: 't',
+      columns: [
+        { name: 'OTHER', label: 'Otra', type: 'string', variable: true, open: true },
+        {
+          name: 'TOTAL',
+          label: 'TOTAL',
+          type: 'numeric',
+          variable: true,
+          source: { kind: 'answer', variable: 'TOTAL', read: 'computed', numeric: true },
+        },
+      ],
+      rows: [
+        ['Otra', 1],
+        ['otra ', 2],
+        ['Otra', 3],
+        ['Ninguna', 4],
+        ['', 5],
+      ],
+    };
+    const [other, total] = topline(t);
+    expect(other).toMatchObject({
+      kind: 'text',
+      n: 4,
+      distinct: 2,
+      groups: [
+        { text: 'Otra', count: 3 },
+        { text: 'Ninguna', count: 1 },
+      ],
+    });
+    expect(other!.computed).toBeUndefined();
+    expect(total).toMatchObject({ kind: 'numeric', computed: true, n: 5 });
   });
 
   it('groups the options of a multiple choice', () => {
@@ -109,6 +154,25 @@ describe('crosstab', () => {
     expect(x.colTotals).toEqual([2, 1]);
     expect(x.total).toBe(3);
     expect(x.colPercents[0]).toEqual([50, 0]);
+    expect(x.rowPercents[1]).toEqual([50, 50]);
+    expect(x.totalPercents[0]![0]).toBeCloseTo(33.33, 1);
+    expect(x.chi2).toMatchObject({ df: 1, sparse: true });
+  });
+
+  it('tests independence with chi-square', () => {
+    // Known values: chi-square 3.841 on 1 df is p = 0.05; 9.488 on 4 df is p = 0.05.
+    expect(chiSquareP(3.841, 1)).toBeCloseTo(0.05, 3);
+    expect(chiSquareP(9.488, 4)).toBeCloseTo(0.05, 3);
+    expect(chiSquareP(0, 3)).toBe(1);
+    const rows: Table['rows'] = [];
+    for (let k = 0; k < 40; k++) rows.push([`a${k}`, 1, null, null, null, 1]);
+    for (let k = 0; k < 10; k++) rows.push([`b${k}`, 1, null, null, null, 2]);
+    for (let k = 0; k < 10; k++) rows.push([`c${k}`, 2, null, null, null, 1]);
+    for (let k = 0; k < 40; k++) rows.push([`d${k}`, 2, null, null, null, 2]);
+    const x = crosstab({ ...table, rows }, 'SEX', 'ZONE')!;
+    expect(x.chi2!.statistic).toBeCloseTo(36, 6);
+    expect(x.chi2!.p).toBeLessThan(0.001);
+    expect(x.chi2!.sparse).toBe(false);
   });
 
   it('refuses uncoded variables', () => {
@@ -117,6 +181,18 @@ describe('crosstab', () => {
 
   it('filters rows by a closed question', () => {
     expect(filterRows(table, 'ZONE', [2]).rows.map((r) => r[0])).toEqual(['c', 'd']);
+  });
+});
+
+describe('textGroups', () => {
+  it('evens out accents, case and punctuation, keeping the commonest spelling', () => {
+    expect(textGroups(['Rápido', 'rapido', 'RAPIDO.', 'Rápido', 'lento'])).toEqual({
+      groups: [
+        { text: 'Rápido', count: 4 },
+        { text: 'lento', count: 1 },
+      ],
+      distinct: 2,
+    });
   });
 });
 

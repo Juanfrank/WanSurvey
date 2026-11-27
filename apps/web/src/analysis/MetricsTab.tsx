@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls } from '../designer/fields.js';
+import { TableScroll } from '../routes/ui.js';
 import { fmtNum, fmtPct } from './charts.js';
 import { GoalsSection } from './GoalsSection.js';
 
@@ -35,6 +36,34 @@ const RATES = new Set<Key>([
   'rejectionRate',
 ]);
 
+/**
+ * The direction in which an unusual value calls for a look at the interviewer's work (rushed
+ * interviews, many refusals…); the other direction is only unusual.
+ */
+const CONCERN: Partial<Record<Key, -1 | 1>> = {
+  perHour: 1,
+  meanMinutes: -1,
+  medianMinutes: -1,
+  rr1: -1,
+  coop1: -1,
+  ref1: 1,
+  con1: -1,
+  dialsPerComplete: 1,
+  itemNonResponse: 1,
+  speeding: 1,
+  straightlining: 1,
+  rejectionRate: 1,
+  backPerInterview: 1,
+  syncLatencyS: 1,
+};
+
+const medianOf = (xs: number[]) => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+};
+
 interface Row {
   interviewerId: string;
   name: string;
@@ -66,10 +95,26 @@ export function MetricsTab({ projectId }: { projectId: string }) {
     const y = b.values[sort.key] ?? -Infinity;
     return (sort.desc ? y - x : x - y) || a.name.localeCompare(b.name);
   });
-  const show = (k: Key, v: number | null) =>
-    RATES.has(k)
+  const medians = Object.fromEntries(
+    KEYS.map((k) => [
+      k,
+      medianOf(rows.map((r) => r.values[k]).filter((v): v is number => v !== null)),
+    ]),
+  ) as Record<Key, number | null>;
+  /** What an unusual value means, in words: shown on hover and read by screen readers. */
+  const explain = (k: Key, o: -1 | 1, v: number | null) =>
+    t(o > 0 ? 'analysis.metrics.outlierTipHigh' : 'analysis.metrics.outlierTipLow', {
+      name: t(`analysis.metrics.keys.${k}`),
+      value: show(k, v),
+      median: show(k, medians[k]),
+    }) +
+    ' ' +
+    t(CONCERN[k] === o ? 'analysis.metrics.outlierCheck' : 'analysis.metrics.outlierFine');
+  function show(k: Key, v: number | null) {
+    return RATES.has(k)
       ? fmtPct(i18n.language, v, 1)
       : fmtNum(i18n.language, v, k === 'completes' ? 0 : 1);
+  }
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="metrics">
@@ -112,18 +157,24 @@ export function MetricsTab({ projectId }: { projectId: string }) {
         <p className="text-slate-600">{data.isLoading ? '…' : t('analysis.metrics.none')}</p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <TableScroll
+            label={data.data?.team ? t('analysis.metrics.title') : t('analysis.metrics.mine')}
+            className="rounded-lg border border-slate-200 bg-white"
+          >
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th scope="col" className="sticky left-0 bg-slate-50 px-3 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left align-bottom"
+                  >
                     {t('analysis.metrics.interviewer')}
                   </th>
                   {KEYS.map((k) => (
                     <th
                       key={k}
                       scope="col"
-                      className="px-2 py-2 text-right align-bottom font-medium"
+                      className="w-28 min-w-24 px-2 py-2 text-right align-bottom font-medium"
                       aria-sort={
                         sort.key === k ? (sort.desc ? 'descending' : 'ascending') : undefined
                       }
@@ -150,7 +201,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                   <tr key={r.interviewerId} data-testid="metrics-row">
                     <th
                       scope="row"
-                      className="sticky left-0 bg-white px-3 py-1.5 text-left font-medium"
+                      className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left font-medium"
                     >
                       {r.name}
                     </th>
@@ -160,20 +211,19 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                         <td
                           key={k}
                           className={`px-2 py-1.5 text-right tabular-nums ${
-                            o ? 'bg-amber-100 font-semibold text-amber-ink-950' : ''
+                            !o
+                              ? ''
+                              : CONCERN[k] === o
+                                ? 'bg-amber-100 font-semibold text-amber-ink-950'
+                                : 'bg-slate-100 font-semibold text-slate-900'
                           }`}
                           data-outlier={o ?? undefined}
+                          data-concern={o && CONCERN[k] === o ? true : undefined}
+                          title={o ? explain(k, o, r.values[k]) : undefined}
                         >
                           {show(k, r.values[k])}
                           {o ? (
-                            <span className="sr-only">
-                              {' '}
-                              (
-                              {o > 0
-                                ? t('analysis.metrics.outlierHigh')
-                                : t('analysis.metrics.outlierLow')}
-                              )
-                            </span>
+                            <span className="sr-only"> ({explain(k, o, r.values[k])})</span>
                           ) : null}
                           {o ? <span aria-hidden="true">{o > 0 ? ' ▲' : ' ▼'}</span> : null}
                         </td>
@@ -183,7 +233,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           {data.data?.team ? (
             <p className="text-slate-600">{t('analysis.metrics.outlierNote')}</p>
           ) : null}

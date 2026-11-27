@@ -6,6 +6,32 @@ import { type AnalysisTx } from './analysis-repo.js';
 import { median } from '../metrics/metrics.js';
 import { DataFilter, DatasetService, type Dataset } from './dataset.service.js';
 import { byCode } from '../common/sort.js';
+import type { LiveSnapshot } from '../dashboard/live.service.js';
+
+/** Rows of a table whose interview was approved (the `status` meta column). */
+export function approvedRows(table: Table): number {
+  const i = table.columns.findIndex(
+    (c) => c.source?.kind === 'meta' && c.source.field === 'status',
+  );
+  return i < 0 ? 0 : table.rows.filter((r) => r[i] === 'approved').length;
+}
+
+/**
+ * The fieldwork progress a client report shows next to the results: completes per day, the
+ * quotas and the cases by status and final outcome, for the whole project. Who is working now
+ * (names) stays out: the summary can go to people outside the organisation. With approved
+ * interviews only, the counts of completes (per day, per quota cell) stay out too: they include
+ * the interviews not reviewed yet and would contradict the results beside them.
+ */
+export function fieldProgress(s: LiveSnapshot, approvedOnly = false) {
+  return {
+    byDay: approvedOnly ? [] : s.byDay,
+    quotas: approvedOnly ? [] : s.quotas,
+    cases: s.field.cases,
+    byStatus: s.field.byStatus,
+    byDisposition: s.field.byDisposition,
+  };
+}
 
 /** Filters plus a closed question to keep (`where=SEX:1,2`) and the label language. */
 export const AnalysisQuery = DataFilter.extend({
@@ -78,6 +104,7 @@ export class AnalysisService {
       questionnaire: { id: data.questionnaireId, name: data.name },
       languages: data.compiled.questionnaire.languages,
       n: table.rows.length,
+      approved: approvedRows(table),
       items: topline(table),
       variables: crosstabVariables(table),
     };
@@ -122,7 +149,7 @@ export class AnalysisService {
       target: projectSettings(p?.settings).fieldwork.targetCompletes,
       generatedAt: new Date().toISOString(),
       filters: q,
-      kpis: { ...this.kpis(data), completes: table.rows.length },
+      kpis: { ...this.kpis(data), completes: table.rows.length, approved: approvedRows(table) },
       items: topline(table),
     };
   }

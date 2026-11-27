@@ -78,6 +78,10 @@ export interface ExportsTx extends AnalysisTx {
   failExport(id: string, error: string): Promise<void>;
   /** Marks the finished exports older than `before` as expired and returns their stored files. */
   expireExports(before: Date): Promise<{ id: string; key: string | null }[]>;
+  /** How many times each export was downloaded, and the latest download (who and when). */
+  exportDownloads(
+    ids: string[],
+  ): Promise<Map<string, { count: number; last: { at: Date; by: string | null } | null }>>;
 }
 
 export interface ExportsRepo {
@@ -264,6 +268,27 @@ export class MssqlExportsTx extends MssqlAnalysisTx implements ExportsTx {
       OUTPUT inserted.id, deleted.storage_key
       WHERE status = 'done' AND finished_at < ${instant(before)}`.execute(this.metx);
     return res.rows.map((r) => ({ id: low(r.id), key: r.storage_key }));
+  }
+
+  async exportDownloads(ids: string[]) {
+    const out = new Map<string, { count: number; last: { at: Date; by: string | null } | null }>();
+    if (!ids.length) return out;
+    const rows = await this.metx
+      .selectFrom('audit_log as a')
+      .leftJoin('users as u', 'u.id', 'a.actor_user_id')
+      .select(['a.target_id', 'a.at', 'u.name', 'u.email'])
+      .where('a.action', '=', 'data.downloaded')
+      .where('a.target_type', '=', 'export')
+      .where('a.target_id', 'in', ids)
+      .orderBy('a.at', 'desc')
+      .execute();
+    for (const r of rows) {
+      const id = low(r.target_id!);
+      const d = out.get(id);
+      if (d) d.count++;
+      else out.set(id, { count: 1, last: { at: r.at as Date, by: r.name || r.email || null } });
+    }
+    return out;
   }
 }
 

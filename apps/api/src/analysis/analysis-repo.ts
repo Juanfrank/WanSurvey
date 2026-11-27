@@ -43,6 +43,8 @@ export interface ShareRow {
   expiresAt: Date | null;
   revokedAt: Date | null;
   tokenEnc: string;
+  /** The summary it opens counts approved interviews only. */
+  approvedOnly: boolean;
 }
 
 export interface AnalysisTx extends CasesTx {
@@ -76,9 +78,11 @@ export interface AnalysisTx extends CasesTx {
     tokenEnc: string;
     createdBy: string;
     expiresAt: Date | null;
+    approvedOnly: boolean;
   }): Promise<string>;
   revokeShareLink(projectId: string, id: string): Promise<boolean>;
-  shareLinkProject(id: string): Promise<string | null>;
+  /** The project a link opens and whether it shows approved interviews only. */
+  shareLinkInfo(id: string): Promise<{ projectId: string; approvedOnly: boolean } | null>;
 }
 
 export interface AnalysisRepo {
@@ -284,7 +288,7 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
   async shareLinks(projectId: string) {
     const rows = await this.xtx
       .selectFrom('share_links')
-      .select(['id', 'created_at', 'expires_at', 'revoked_at', 'token_enc'])
+      .select(['id', 'created_at', 'expires_at', 'revoked_at', 'token_enc', 'approved_only'])
       .where('project_id', '=', projectId)
       .orderBy('created_at', 'desc')
       .execute();
@@ -294,6 +298,7 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
       expiresAt: r.expires_at as Date | null,
       revokedAt: r.revoked_at as Date | null,
       tokenEnc: r.token_enc,
+      approvedOnly: !!r.approved_only,
     }));
   }
 
@@ -310,6 +315,7 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
         created_by: v.createdBy,
         expires_at: v.expiresAt ? instant(v.expiresAt) : null,
         revoked_at: null,
+        approved_only: v.approvedOnly,
       })
       .execute();
     return id;
@@ -326,13 +332,13 @@ export class MssqlAnalysisTx extends MssqlCasesTx implements AnalysisTx {
     return Number(r.numUpdatedRows) > 0;
   }
 
-  async shareLinkProject(id: string) {
+  async shareLinkInfo(id: string) {
     const r = await this.xtx
       .selectFrom('share_links')
-      .select('project_id')
+      .select(['project_id', 'approved_only'])
       .where('id', '=', id)
       .executeTakeFirst();
-    return r ? low(r.project_id) : null;
+    return r ? { projectId: low(r.project_id), approvedOnly: !!r.approved_only } : null;
   }
 }
 

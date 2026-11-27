@@ -10,43 +10,57 @@ export interface Frequency {
   missing: boolean;
 }
 
-export type ToplineItem =
-  | {
-      kind: 'single';
-      name: string;
-      label: string;
-      base: number;
-      rows: Frequency[];
-      /** For an ordinal scale: the mean of the valid answers. */
-      mean?: number | null;
-    }
-  | {
-      kind: 'multi';
-      name: string;
-      label: string;
-      /** Respondents who answered the question. */
-      base: number;
-      rows: { code: string; label: string; count: number; percent: number | null }[];
-    }
-  | {
-      kind: 'text';
-      name: string;
-      label: string;
-      /** Respondents who wrote something. */
-      n: number;
-      /** The latest answers, newest first (at most `TEXT_EXAMPLES`). */
-      latest: string[];
-    }
-  | {
-      kind: 'numeric';
-      name: string;
-      label: string;
-      n: number;
-      mean: number | null;
-      median: number | null;
-      min: number | null;
-      max: number | null;
-    };
+/** Fields every topline item has: the variable, its label, and whether a formula computes it. */
+interface ItemHead {
+  name: string;
+  label: string;
+  /** A computed variable (no question text: its label is its name unless the designer gave one). */
+  computed?: boolean;
+}
+
+export type ToplineItem = ItemHead &
+  (
+    | {
+        kind: 'single';
+        base: number;
+        rows: Frequency[];
+        /** For an ordinal scale: the mean of the valid answers. */
+        mean?: number | null;
+      }
+    | {
+        kind: 'multi';
+        /** Respondents who answered the question. */
+        base: number;
+        rows: { code: string; label: string; count: number; percent: number | null }[];
+      }
+    | {
+        kind: 'text';
+        /** Respondents who wrote something. */
+        n: number;
+        /** The latest answers, newest first (at most `TEXT_EXAMPLES`). */
+        latest: string[];
+        /**
+         * The most frequent answers once spelling is evened out (case, accents, spaces), most
+         * frequent first (at most `TEXT_EXAMPLES`), each in the form written most often.
+         */
+        groups: { text: string; count: number }[];
+        /** Different answers after evening out. */
+        distinct: number;
+      }
+    | {
+        kind: 'numeric';
+        /** Valid answers. */
+        n: number;
+        /** Answers coded don't know / refused (left out of the statistics). */
+        specials: number;
+        /** Interviews with no value (not asked, skipped). */
+        blank: number;
+        mean: number | null;
+        median: number | null;
+        min: number | null;
+        max: number | null;
+      }
+  );
 
 /** How many open answers the topline shows per question. */
 export const TEXT_EXAMPLES = 10;
@@ -64,6 +78,46 @@ function stats(values: number[]) {
     min: s[0]!,
     max: s[s.length - 1]!,
   };
+}
+
+const isComputed = (c: Column) => c.source?.kind === 'answer' && c.source.read === 'computed';
+const head = (c: Column): ItemHead => ({
+  name: c.name,
+  label: c.label,
+  ...(isComputed(c) ? { computed: true } : {}),
+});
+
+/** Spelling evened out: accents, case and repeated spaces do not make answers different. */
+const textKey = (s: string) =>
+  s
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[\s.,;:!?¡¿"'()-]+/g, ' ')
+    .trim();
+
+/** Open answers grouped by their evened-out spelling, the most frequent first. */
+export function textGroups(written: string[]): {
+  groups: { text: string; count: number }[];
+  distinct: number;
+} {
+  const byKey = new Map<string, { count: number; forms: Map<string, number> }>();
+  for (const w of written) {
+    const text = w.trim().replace(/\s+/g, ' ');
+    const key = textKey(text) || text;
+    const g = byKey.get(key) ?? { count: 0, forms: new Map<string, number>() };
+    g.count++;
+    g.forms.set(text, (g.forms.get(text) ?? 0) + 1);
+    byKey.set(key, g);
+  }
+  const groups = [...byKey.values()]
+    .map((g) => ({
+      // The form written most often (the first of those on a tie).
+      text: [...g.forms].reduce((a, b) => (b[1] > a[1] ? b : a))[0],
+      count: g.count,
+    }))
+    .sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
+  return { groups: groups.slice(0, TEXT_EXAMPLES), distinct: groups.length };
 }
 
 const isCoded = (c: Column) =>
@@ -114,10 +168,10 @@ export function topline(table: Table): ToplineItem[] {
         .filter((v): v is string => typeof v === 'string' && !!v.trim() && !special.has(v));
       items.push({
         kind: 'text',
-        name: col.name,
-        label: col.label,
+        ...head(col),
         n: written.length,
         latest: written.slice(-TEXT_EXAMPLES).reverse(),
+        ...textGroups(written),
       });
       return;
     }
@@ -143,6 +197,7 @@ export function topline(table: Table): ToplineItem[] {
         kind: 'multi',
         name: col.group.name,
         label: col.group.label,
+        ...(isComputed(col) ? { computed: true } : {}),
         base,
         rows: idx.map((j, k) => {
           const c = table.columns[j]!;
@@ -164,18 +219,23 @@ export function topline(table: Table): ToplineItem[] {
           : undefined;
       items.push({
         kind: 'single',
-        name: col.name,
-        label: col.label,
+        ...head(col),
         ...f,
         ...(mean === undefined ? {} : { mean }),
       });
       return;
     }
     const missing = new Set(col.missing ?? []);
-    const values = table.rows
-      .map((r) => r[i])
-      .filter((v): v is number => typeof v === 'number' && !missing.has(v));
-    items.push({ kind: 'numeric', name: col.name, label: col.label, ...stats(values) });
+    const cells = table.rows.map((r) => r[i]);
+    const values = cells.filter((v): v is number => typeof v === 'number' && !missing.has(v));
+    const specials = cells.filter((v) => typeof v === 'number' && missing.has(v)).length;
+    items.push({
+      kind: 'numeric',
+      ...head(col),
+      ...stats(values),
+      specials,
+      blank: cells.length - values.length - specials,
+    });
   });
   return items;
 }
@@ -197,6 +257,92 @@ export interface Crosstab {
   total: number;
   /** Column percentages: counts[r][c] / colTotals[c]. */
   colPercents: (number | null)[][];
+  /** Row percentages: counts[r][c] / rowTotals[r]. */
+  rowPercents: (number | null)[][];
+  /** Percentages of the table total. */
+  totalPercents: (number | null)[][];
+  /**
+   * Pearson's chi-square test of independence, over the rows and columns with answers; null
+   * when there are fewer than two of either. `sparse`: more than a fifth of the expected counts
+   * are under 5, so the p-value is only a rough guide.
+   */
+  chi2: { statistic: number; df: number; p: number; sparse: boolean } | null;
+}
+
+/** Bases under this many interviews are flagged: their percentages move a lot with one answer. */
+export const LOW_BASE = 30;
+
+/** ln Γ(x) (Lanczos). */
+function lnGamma(x: number): number {
+  const c = [
+    76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155,
+    0.1208650973866179e-2, -0.5395239384953e-5,
+  ];
+  let y = x;
+  const tmp = x + 5.5 - (x + 0.5) * Math.log(x + 5.5);
+  let ser = 1.000000000190015;
+  for (const k of c) ser += k / ++y;
+  return -tmp + Math.log((2.5066282746310005 * ser) / x);
+}
+
+/** The upper regularised incomplete gamma Q(a, x) (series below a + 1, continued fraction above). */
+function gammaQ(a: number, x: number): number {
+  if (x <= 0) return 1;
+  const gln = lnGamma(a);
+  if (x < a + 1) {
+    let ap = a;
+    let sum = 1 / a;
+    let del = sum;
+    for (let n = 0; n < 500; n++) {
+      del *= x / ++ap;
+      sum += del;
+      if (Math.abs(del) < Math.abs(sum) * 1e-14) break;
+    }
+    return 1 - sum * Math.exp(-x + a * Math.log(x) - gln);
+  }
+  const tiny = 1e-300;
+  let b = x + 1 - a;
+  let c = 1 / tiny;
+  let d = 1 / b;
+  let h = d;
+  for (let i = 1; i < 500; i++) {
+    const an = -i * (i - a);
+    b += 2;
+    d = an * d + b;
+    if (Math.abs(d) < tiny) d = tiny;
+    c = b + an / c;
+    if (Math.abs(c) < tiny) c = tiny;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < 1e-14) break;
+  }
+  return Math.exp(-x + a * Math.log(x) - gln) * h;
+}
+
+/** The probability of a chi-square of `df` degrees of freedom being at least `x`. */
+export const chiSquareP = (x: number, df: number) =>
+  Math.min(1, Math.max(0, gammaQ(df / 2, x / 2)));
+
+function chiSquare(counts: number[][], rowTotals: number[], colTotals: number[], total: number) {
+  const rs = rowTotals.map((n, i) => (n > 0 ? i : -1)).filter((i) => i >= 0);
+  const cs = colTotals.map((n, j) => (n > 0 ? j : -1)).filter((j) => j >= 0);
+  if (rs.length < 2 || cs.length < 2) return null;
+  let statistic = 0;
+  let small = 0;
+  for (const i of rs)
+    for (const j of cs) {
+      const e = (rowTotals[i]! * colTotals[j]!) / total;
+      if (e < 5) small++;
+      statistic += (counts[i]![j]! - e) ** 2 / e;
+    }
+  const df = (rs.length - 1) * (cs.length - 1);
+  return {
+    statistic,
+    df,
+    p: chiSquareP(statistic, df),
+    sparse: small > 0.2 * rs.length * cs.length,
+  };
 }
 
 /** Two coded questions against each other, valid answers only (S2). */
@@ -225,14 +371,18 @@ export function crosstab(table: Table, rowName: string, colName: string): Crosst
   }
   const rowTotals = counts.map((r) => r.reduce((x, y) => x + y, 0));
   const colTotals = cols.map((_, b) => counts.reduce((x, r) => x + r[b]!, 0));
+  const total = rowTotals.reduce((x, y) => x + y, 0);
   return {
     row: { name: rc.name, label: rc.label, categories: rows },
     col: { name: cc.name, label: cc.label, categories: cols },
     counts,
     rowTotals,
     colTotals,
-    total: rowTotals.reduce((x, y) => x + y, 0),
+    total,
     colPercents: counts.map((r) => r.map((n, b) => pct(n, colTotals[b]!))),
+    rowPercents: counts.map((r, a) => r.map((n) => pct(n, rowTotals[a]!))),
+    totalPercents: counts.map((r) => r.map((n) => pct(n, total))),
+    chi2: chiSquare(counts, rowTotals, colTotals, total),
   };
 }
 
