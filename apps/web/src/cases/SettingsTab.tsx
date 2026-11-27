@@ -88,7 +88,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
   // Topics in groups, listed down the side: the operation, the modes, the brand and privacy.
   const groups: { id: string; subs: string[] }[] = canUpdate
     ? [
-        { id: 'operation', subs: ['status', 'assignment', 'review', 'cleaning', 'fieldwork'] },
+        { id: 'operation', subs: ['assignment', 'review', 'cleaning', 'fieldwork', 'status'] },
         { id: 'modes', subs: ['phone', 'field', ...(canWeb ? ['web'] : []), 'paper'] },
         { id: 'brand', subs: ['look', 'privacy', 'shortcuts'] },
       ]

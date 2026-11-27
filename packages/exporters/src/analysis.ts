@@ -274,15 +274,18 @@ export const LOW_BASE = 30;
 
 /** ln Γ(x) (Lanczos). */
 function lnGamma(x: number): number {
+  // Numerical Recipes' Lanczos coefficients, as published (the rule misreads some of them).
+  /* eslint-disable no-loss-of-precision */
   const c = [
     76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155,
-    0.1208650973866179e-2, -0.5395239384953e-5,
+    0.001208650973866179, -0.5395239384953e-5,
   ];
+  /* eslint-enable no-loss-of-precision */
   let y = x;
   const tmp = x + 5.5 - (x + 0.5) * Math.log(x + 5.5);
   let ser = 1.000000000190015;
   for (const k of c) ser += k / ++y;
-  return -tmp + Math.log((2.5066282746310005 * ser) / x);
+  return -tmp + Math.log((Math.sqrt(2 * Math.PI) * ser) / x);
 }
 
 /** The upper regularised incomplete gamma Q(a, x) (series below a + 1, continued fraction above). */

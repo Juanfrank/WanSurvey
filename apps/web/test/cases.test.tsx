@@ -106,7 +106,8 @@ describe('cases grid', () => {
       </QueryClientProvider>,
     );
     const table = await screen.findByTestId('cases-table');
-    await waitFor(() => expect(within(table).getAllByText('•••')).toHaveLength(5));
+    // Hidden personal values read as such, not as a "•••" menu.
+    await waitFor(() => expect(within(table).getAllByText('hidden')).toHaveLength(5));
     expect(screen.getByText(/Personal fields are hidden/)).toBeTruthy();
 
     await user.click(screen.getByLabelText('Select case HH1'));
@@ -148,7 +149,7 @@ describe('case figures', () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <CasesTab projectId="p" />
+        {inRouter(<CasesTab projectId="p" />).ui}
       </QueryClientProvider>,
     );
     await waitFor(() => expect(screen.getByTestId('kpi-total').textContent).toBe('5'));

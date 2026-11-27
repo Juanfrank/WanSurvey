@@ -92,6 +92,10 @@ export const auditLogEn = {
     },
     entry: { resolved: 'Resolved a double-entry difference' },
     papi: { scans_uploaded: 'Uploaded scanned forms' },
+    cawi: {
+      links_viewed: 'Viewed the personal web links',
+      links_downloaded: 'Downloaded the personal web links',
+    },
     data: { exported: 'Exported data', downloaded: 'Downloaded an export' },
     share_link: { created: 'Shared results by link', revoked: 'Revoked a shared link' },
     library_item: { created: 'Added to the library', deleted: 'Deleted from the library' },
@@ -318,6 +322,10 @@ export const auditLogEs: typeof auditLogEn = {
     },
     entry: { resolved: 'Resolvió una diferencia de doble digitación' },
     papi: { scans_uploaded: 'Subió formularios escaneados' },
+    cawi: {
+      links_viewed: 'Vio los enlaces web personales',
+      links_downloaded: 'Descargó los enlaces web personales',
+    },
     data: { exported: 'Exportó datos', downloaded: 'Descargó una exportación' },
     share_link: {
       created: 'Compartió resultados por enlace',

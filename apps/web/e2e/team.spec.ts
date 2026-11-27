@@ -265,12 +265,12 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await pii.check();
   await page.getByRole('button', { name: 'Save permissions' }).click();
   await overlaysSettled(page, 3);
-  const confirm = page.getByRole('dialog', { name: 'Save these permissions?' });
-  await expect(confirm.locator('[data-role="reviewer"] [data-given="pii.view"]')).toContainText(
+  const saveDialog = page.getByRole('dialog', { name: 'Save these permissions?' });
+  await expect(saveDialog.locator('[data-role="reviewer"] [data-given="pii.view"]')).toContainText(
     'personal data',
   );
   await shot(page, 'admin-roles-confirm');
-  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await saveDialog.getByRole('button', { name: 'Cancel' }).click();
   await pii.uncheck();
   await page.getByRole('button', { name: 'Save permissions' }).click();
   await page
