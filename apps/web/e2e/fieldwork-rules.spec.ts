@@ -23,7 +23,7 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   await openProject(page);
 
   // Cases expire 30 days after assignment; the list says when.
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
   const days = page.getByLabel(/Time an interviewer has to work a case/);
   await days.fill('30');
   await shot(page, 'settings-expiry');
@@ -53,8 +53,8 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   await expect(checks.locator('[data-cross-check]')).toHaveCount(0);
 
   // Goals are set in the settings: the demo interviewer, 2 completes each business day.
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
-  await page.getByRole('tab', { name: 'Fieldwork', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Goals', exact: true }).click();
   const goals = page.getByTestId('goals');
   const today = new Date().toISOString().slice(0, 10);
   const inAWeek = new Date(Date.now() + 6 * 86_400_000).toISOString().slice(0, 10);
@@ -124,8 +124,8 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   await expect(progress.locator('tr[data-goal="Whole team"]')).toBeVisible();
   await expect(progress.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
 
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
-  await page.getByRole('tab', { name: 'Fieldwork', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Goals', exact: true }).click();
   for (const name of ['Demo interviewer', 'Whole team']) {
     page.once('dialog', (d) => void d.accept());
     await goals
@@ -136,7 +136,7 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   }
 
   // Back to no deadline, so the demo's old assigned cases do not expire under other tests.
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Assignment', exact: true }).click();
   await days.fill('');
   await saveSettings(page);

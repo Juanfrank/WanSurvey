@@ -15,7 +15,13 @@ export const casesEn = {
     results: 'Results',
     exports: 'Exports',
     people: 'People',
-    settings: 'Settings',
+    settings: 'Project settings',
+    overview: 'Overview',
+    distribution: 'Distribution',
+    distributionSections: 'Distribution channels',
+    supervision: 'Supervision',
+    supervisionSections: 'Supervision sections',
+    queue: 'Review queue',
     list: 'Case list',
     topline: 'Summary',
     casesSections: 'Case sections',
@@ -23,6 +29,12 @@ export const casesEn = {
     sampling: 'Sampling selector',
     questionnaire: 'Questionnaire',
     noQuestionnaire: 'Create a questionnaire first: each questionnaire has its own cases.',
+  },
+  overview: {
+    setGoals: 'Set goals in the project settings',
+  },
+  distribution: {
+    none: 'No questionnaire goes out on the web or on paper yet: none has those modes, or none is published.',
   },
   privacy: {
     title: 'Personal data',
@@ -580,6 +592,11 @@ export const casesEn = {
   settings: {
     title: 'Project settings',
     sections: 'Settings topics',
+    groups: {
+      modes: 'Modes',
+      operation: 'Operation',
+      brand: 'Brand and privacy',
+    },
     tabs: {
       assignment: 'Assignment',
       cleaning: 'Cleaning',
@@ -588,7 +605,7 @@ export const casesEn = {
       web: 'Web',
       paper: 'Paper',
       review: 'Review',
-      fieldwork: 'Fieldwork',
+      fieldwork: 'Goals',
       shortcuts: 'Shortcuts',
       privacy: 'Privacy',
       look: 'Logo and style',
@@ -645,7 +662,13 @@ export const casesEs: CasesCatalogue = {
     results: 'Resultados',
     exports: 'Exportar',
     people: 'Personas',
-    settings: 'Configuración',
+    settings: 'Ajustes del proyecto',
+    overview: 'Resumen',
+    distribution: 'Distribución',
+    distributionSections: 'Canales de distribución',
+    supervision: 'Supervisión',
+    supervisionSections: 'Secciones de supervisión',
+    queue: 'Cola de revisión',
     list: 'Lista de casos',
     topline: 'Resumen',
     casesSections: 'Secciones de casos',
@@ -653,6 +676,12 @@ export const casesEs: CasesCatalogue = {
     sampling: 'Selector muestral',
     questionnaire: 'Cuestionario',
     noQuestionnaire: 'Primero cree un cuestionario: cada cuestionario tiene sus propios casos.',
+  },
+  overview: {
+    setGoals: 'Fijar metas en los ajustes del proyecto',
+  },
+  distribution: {
+    none: 'Todavía ningún cuestionario sale por web ni en papel: ninguno tiene esos modos o ninguno está publicado.',
   },
   privacy: {
     title: 'Datos personales',
@@ -1214,8 +1243,13 @@ export const casesEs: CasesCatalogue = {
     remove: 'Quitar',
   },
   settings: {
-    title: 'Configuración del proyecto',
-    sections: 'Temas de configuración',
+    title: 'Ajustes del proyecto',
+    sections: 'Temas de los ajustes',
+    groups: {
+      modes: 'Modos',
+      operation: 'Operación',
+      brand: 'Marca y privacidad',
+    },
     tabs: {
       assignment: 'Asignación',
       cleaning: 'Depuración',
@@ -1224,7 +1258,7 @@ export const casesEs: CasesCatalogue = {
       web: 'Web',
       paper: 'Papel',
       review: 'Revisión',
-      fieldwork: 'Trabajo de campo',
+      fieldwork: 'Metas',
       shortcuts: 'Atajos',
       privacy: 'Privacidad',
       look: 'Logo y estilo',
@@ -1258,7 +1292,7 @@ export const casesEs: CasesCatalogue = {
       'Lo que se le dice y pregunta a la persona (versión {{version}}; sube cuando cambia el texto)',
     gps: 'Registrar la ubicación del dispositivo al inicio y al final de cada entrevista',
     gpsNotice: 'Aviso a los entrevistadores sobre la ubicación',
-    save: 'Guardar configuración',
-    saved: 'Configuración guardada.',
+    save: 'Guardar ajustes',
+    saved: 'Ajustes guardados.',
   },
 };

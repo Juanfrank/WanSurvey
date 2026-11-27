@@ -28,6 +28,8 @@ import { CallsTab } from '../cati/CallsTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
 import { ReviewTab } from '../review/ReviewTab.js';
 import { DashboardTab } from '../analysis/DashboardTab.js';
+import { GoalsSection } from '../analysis/GoalsSection.js';
+import { CawiTab } from '../cawi/CawiTab.js';
 import { ExportsTab } from '../analysis/ExportsTab.js';
 import { MetricsTab } from '../analysis/MetricsTab.js';
 import { ResultsTab } from '../analysis/ResultsTab.js';
@@ -264,6 +266,7 @@ function QuestionnairesSection({
   canPaper,
   panel,
   onPanel,
+  onDistribution,
 }: {
   projectId: string;
   project: Project | undefined;
@@ -271,6 +274,8 @@ function QuestionnairesSection({
   canPaper: boolean;
   panel: QPanel;
   onPanel(p: QPanel): void;
+  /** Opens the project's Distribution tab on this questionnaire's web survey or paper forms. */
+  onDistribution(qid: string, sub: DistributionSub): void;
 }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -283,13 +288,8 @@ function QuestionnairesSection({
     q: QuestionnaireRow;
     at: { x: number; y: number };
   } | null>(null);
-  // A questionnaire's web survey and paper forms live in its Distribution tab.
-  const openDistribution = (qid: string, sub: 'web' | 'paper') =>
-    void navigate({
-      to: '/projects/$projectId/questionnaires/$qid',
-      params: { projectId, qid },
-      search: { tab: 'distribution', sub },
-    });
+  // A questionnaire's web survey and paper forms are fieldwork: the project's Distribution tab.
+  const openDistribution = onDistribution;
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
       api<{ name: string }>(`/projects/${projectId}/questionnaires/${id}`, {
@@ -990,45 +990,50 @@ export function ModeChips({ modes }: { modes: readonly string[] }) {
 }
 
 type ProjectTab =
+  | 'overview'
   | 'cases'
   | 'questionnaires'
   | 'calls'
-  | 'paper'
+  | 'distribution'
   | 'review'
   | 'results'
   | 'exports'
   | 'people'
   | 'settings';
-type ResultsSub = 'topline' | 'dashboard' | 'metrics';
+type DistributionSub = 'web' | 'paper';
+/** Field supervision: the review queue and the interviewers' metrics. */
+type ReviewSub = 'queue' | 'metrics';
 
-/** Old `?tab=` values still land in the right place: web and paper forms, dashboard, import… */
+/** Old and current `?tab=` values: each lands in its tab and sub-tab. */
 const FROM_SEARCH: Record<
   string,
-  { tab: ProjectTab; cases?: CasesSub; results?: ResultsSub; distribution?: 'web' | 'paper' }
+  { tab: ProjectTab; cases?: CasesSub; review?: ReviewSub; distribution?: DistributionSub }
 > = {
+  overview: { tab: 'overview' },
+  // The live dashboard is the project's overview.
+  dashboard: { tab: 'overview' },
   cases: { tab: 'cases' },
   import: { tab: 'cases', cases: 'sampling' },
   sampling: { tab: 'cases', cases: 'sampling' },
   assignments: { tab: 'cases' },
   questionnaires: { tab: 'questionnaires' },
-  // Web surveys and paper forms are in each questionnaire's Distribution tab (clerks who do
-  // not see the questionnaires keep a Paper forms tab).
-  web: { tab: 'questionnaires', distribution: 'web' },
-  paper: { tab: 'questionnaires', distribution: 'paper' },
+  // Web surveys and paper forms of every questionnaire, with the questionnaire in `?q=`.
+  distribution: { tab: 'distribution' },
+  web: { tab: 'distribution', distribution: 'web' },
+  paper: { tab: 'distribution', distribution: 'paper' },
   calls: { tab: 'calls' },
-  review: { tab: 'review' },
-  results: { tab: 'results', results: 'topline' },
-  dashboard: { tab: 'results', results: 'dashboard' },
-  metrics: { tab: 'results', results: 'metrics' },
+  review: { tab: 'review', review: 'queue' },
+  metrics: { tab: 'review', review: 'metrics' },
+  results: { tab: 'results' },
   exports: { tab: 'exports' },
   people: { tab: 'people' },
   settings: { tab: 'settings' },
 };
 
 /**
- * A project, in the order work happens: cases (list, sampling selector, assignments), the
- * questionnaires (with their web survey and paper forms as actions), calls, review, results
- * (summary, dashboard, metrics), exports and settings; each as allowed by role.
+ * A project, in the order work happens: its overview, the questionnaires, cases (list,
+ * sampling selector, assignments), calls, distribution (web surveys and paper forms),
+ * supervision (review, metrics), results, exports and settings; each as allowed by role.
  */
 export function ProjectPage() {
   const { projectId } = useParams({ strict: false }) as { projectId: string };
@@ -1044,6 +1049,12 @@ export function ProjectPage() {
     queryFn: () => api<Project>(`/projects/${projectId}`),
   });
   const canQuestionnaires = useCan('questionnaires.read', projectId);
+  const canDesign = useCan('questionnaires.edit', projectId);
+  const canComment = useCan('questionnaires.comment', projectId);
+  const canPublish = useCan('questionnaires.publish', projectId);
+  // Who only reads the questionnaires to fill them in (interviewers, clerks) works from cases,
+  // calls and paper forms: no list of questionnaires, drafts included, to choose from.
+  const showQuestionnaires = canQuestionnaires && (canDesign || canComment || canPublish);
   const canCasesAll = useCan('cases.read_all', projectId);
   const canCasesOwn = useCan('cases.read_assigned', projectId);
   const canImport = useCan('cases.import', projectId);
@@ -1077,66 +1088,58 @@ export function ProjectPage() {
     ...(canImport ? (['sampling'] as const) : []),
     ...(canCasesAll || canCasesOwn ? (['list'] as const) : []),
   ];
-  const resultsSubs: ResultsSub[] = [
-    ...(canDashboard ? (['topline', 'dashboard'] as const) : []),
+  const reviewSubs: ReviewSub[] = [
+    ...(canReview || canApprove ? (['queue'] as const) : []),
     ...(canMetrics ? (['metrics'] as const) : []),
   ];
-  // Who designs starts at the questionnaires; callers at their calls (the call screen and
-  // their callbacks), other interviewers and clerks at their cases.
-  const canDesign = useCan('questionnaires.edit', projectId);
+  // Web surveys for who sends them; paper forms for who keys, scans or reviews them.
+  const distributionSubs: DistributionSub[] = [
+    ...(canWeb && showQuestionnaires ? (['web'] as const) : []),
+    ...(canPaper ? (['paper'] as const) : []),
+  ];
   const tabs: ProjectTab[] = [
+    // Where fieldwork stands: progress against the target, quotas and goals.
+    ...(canDashboard ? (['overview'] as const) : []),
     ...(canCall && !canDesign ? (['calls'] as const) : []),
     // The questionnaires are defined first; then the sample says who answers them.
-    ...(canQuestionnaires ? (['questionnaires'] as const) : []),
+    ...(showQuestionnaires ? (['questionnaires'] as const) : []),
     ...(casesSubs.length ? (['cases'] as const) : []),
     ...(canCall && canDesign ? (['calls'] as const) : []),
-    // Data-entry clerks who do not see the questionnaires keep paper forms as a tab.
-    ...(canPaper && !canQuestionnaires ? (['paper'] as const) : []),
-    ...(canReview || canApprove ? (['review'] as const) : []),
-    ...(resultsSubs.length ? (['results'] as const) : []),
+    ...(distributionSubs.length ? (['distribution'] as const) : []),
+    ...(reviewSubs.length ? (['review'] as const) : []),
+    ...(canDashboard ? (['results'] as const) : []),
     ...(canExport ? (['exports'] as const) : []),
     ...(canPeople ? (['people'] as const) : []),
     ...(canSettings || canGoals ? (['settings'] as const) : []),
   ];
   const initial = search.tab ? FROM_SEARCH[search.tab] : undefined;
-  const [tab, setTab] = useState<ProjectTab | null>(
-    initial?.distribution === 'paper' && !canQuestionnaires ? 'paper' : (initial?.tab ?? null),
-  );
+  const [tab, setTab] = useState<ProjectTab | null>(initial?.tab ?? null);
   const [casesSub, setCasesSub] = useState<CasesSub>(initial?.cases ?? 'list');
-  const [resultsSub, setResultsSub] = useState<ResultsSub>(initial?.results ?? 'topline');
+  const [reviewSub, setReviewSub] = useState<ReviewSub>(initial?.review ?? 'queue');
+  const [distributionSub, setDistributionSub] = useState<DistributionSub>(
+    initial?.distribution ?? 'web',
+  );
   const navigate = useNavigate();
   const [panel, setPanel] = useState<QPanel>(null);
-  // Old links to the web survey or paper forms open the questionnaire's Distribution tab.
-  // Taken once: the address is rewritten as the page settles.
-  const [redirect] = useState(() =>
-    initial?.distribution
-      ? { sub: initial.distribution, q: search.q, notice: search.notice }
-      : null,
-  );
-  const redirecting = !!redirect && canQuestionnaires;
+  // The settings topic to open (the goals, from the overview).
+  const [settingsTopic, setSettingsTopic] = useState<string | undefined>();
+  // Who designs starts at the overview once a questionnaire is out (at the questionnaires
+  // before); callers at their calls, other interviewers and clerks at their cases.
   const qList = useQuery({
     queryKey: ['questionnaires', projectId],
-    queryFn: () => api<{ id: string }[]>(`/projects/${projectId}/questionnaires`),
-    enabled: redirecting,
+    queryFn: () => api<QuestionnaireRow[]>(`/projects/${projectId}/questionnaires`),
+    enabled: canDesign && canDashboard,
   });
-  useEffect(() => {
-    if (!redirect || !redirecting || !qList.data) return;
-    const qid = qList.data.find((q) => q.id === redirect.q)?.id ?? qList.data[0]?.id;
-    if (qid)
-      void navigate({
-        to: '/projects/$projectId/questionnaires/$qid',
-        params: { projectId, qid },
-        search: {
-          tab: 'distribution',
-          sub: redirect.sub,
-          ...(redirect.notice ? { notice: redirect.notice } : {}),
-        },
-        replace: true,
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- redirects once when the list arrives
-  }, [qList.data, redirecting]);
-  const start = canDesign
-    ? (tabs[0] ?? null)
+  const fielded = qList.data?.some((q) => q.publishedVersions > 0);
+  const firstWork = tabs.find((x) => x !== 'overview') ?? null;
+  const start: ProjectTab | null = canDesign
+    ? tabs.includes('overview')
+      ? fielded === undefined && !qList.isError
+        ? null
+        : fielded
+          ? 'overview'
+          : firstWork
+      : firstWork
     : tabs.includes('calls')
       ? 'calls'
       : tabs.includes('cases')
@@ -1144,37 +1147,96 @@ export function ProjectPage() {
         : (tabs[0] ?? null);
   const current = tab && tabs.includes(tab) ? tab : start;
   const cases = casesSubs.includes(casesSub) ? casesSub : casesSubs.at(-1)!;
-  const results = resultsSubs.includes(resultsSub) ? resultsSub : resultsSubs[0]!;
+  const review = reviewSubs.includes(reviewSub) ? reviewSub : reviewSubs[0]!;
+  const distribution = distributionSubs.includes(distributionSub)
+    ? distributionSub
+    : distributionSubs[0]!;
   // The place in the page is kept in the address (?tab=…), so Back and reload return to it.
   const place =
     current === 'cases'
       ? cases === 'list'
         ? 'cases'
         : cases
-      : current === 'results'
-        ? results === 'topline'
-          ? 'results'
-          : results
-        : current === 'questionnaires' && panel
-          ? panel.kind
-          : current;
+      : current === 'review'
+        ? review === 'queue'
+          ? 'review'
+          : review
+        : current === 'distribution'
+          ? distribution
+          : current === 'questionnaires' && panel
+            ? panel.kind
+            : current;
   useEffect(() => {
-    if (!place || place === search.tab || redirecting) return;
+    if (!place || place === search.tab) return;
     void navigate({
       to: '/projects/$projectId',
       params: { projectId },
-      search: (s: Record<string, unknown>) => ({ ...s, tab: place }),
+      // An open case belongs to the case list.
+      search: ({ case: open, ...s }: Record<string, unknown>) => ({
+        ...s,
+        ...(place === 'cases' && typeof open === 'string' ? { case: open } : {}),
+        tab: place,
+      }),
       replace: true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the tab only when it changes
   }, [place]);
+  const openDistribution = (qid: string, sub: DistributionSub) => {
+    setDistributionSub(sub);
+    setTab('distribution');
+    void navigate({
+      to: '/projects/$projectId',
+      params: { projectId },
+      search: (s: Record<string, unknown>) => ({ ...s, q: qid, tab: sub }),
+      // Like the other tabs, kept in place of the address (the page does not read it back).
+      replace: true,
+    });
+  };
+  const tabLabel = (x: ProjectTab) =>
+    x === 'cases' && !canCasesAll
+      ? t('cases.list.mine')
+      : x === 'review'
+        ? reviewSubs.length > 1
+          ? t('cases.tabs.supervision')
+          : t(`cases.tabs.${reviewSubs[0] === 'queue' ? 'review' : 'metrics'}`)
+        : x === 'distribution' && distributionSubs.length === 1
+          ? t(`cases.tabs.${distributionSubs[0]!}`)
+          : t(`cases.tabs.${x}`);
 
   return (
     <div className="flex flex-col gap-6">
       <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-        <Link to="/projects" className="hover:underline">
-          {t('designer.projects')}
-        </Link>
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>
+            <Link to="/projects" className="hover:underline">
+              {t('designer.projects')}
+            </Link>
+          </li>
+          {project.data ? (
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true">/</span>
+              <Link
+                to="/projects/$projectId"
+                params={{ projectId }}
+                className="hover:underline"
+                onClick={() => {
+                  setTab(null);
+                  setPanel(null);
+                }}
+              >
+                {project.data.name}
+              </Link>
+            </li>
+          ) : null}
+          {current ? (
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true">/</span>
+              <span aria-current="page" className="font-medium text-slate-700">
+                {tabLabel(current)}
+              </span>
+            </li>
+          ) : null}
+        </ol>
       </nav>
       <div className="flex flex-wrap items-center gap-4">
         {project.data ? (
@@ -1192,25 +1254,40 @@ export function ProjectPage() {
           }}
           className="flex flex-col gap-4"
         >
-          <Tabs.List
-            aria-label={t('cases.tabs.label')}
-            className="flex flex-wrap gap-1 border-b border-slate-200"
-          >
-            {tabs.map((x) => (
-              <Tabs.Trigger
-                key={x}
-                value={x}
-                className={tabCls}
-                // The Cases tab always opens on the case list; the questionnaires on their list.
-                onClick={() => {
-                  if (x === 'cases') setCasesSub('list');
-                  if (x === 'questionnaires') setPanel(null);
-                }}
-              >
-                {x === 'cases' && !canCasesAll ? t('cases.list.mine') : t(`cases.tabs.${x}`)}
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
+          <div className="flex flex-wrap items-end gap-x-3 border-b border-slate-200">
+            <Tabs.List aria-label={t('cases.tabs.label')} className="flex flex-wrap gap-1">
+              {tabs.map((x) => (
+                <Tabs.Trigger
+                  key={x}
+                  value={x}
+                  className={tabCls}
+                  // The Cases tab always opens on the case list; the questionnaires on their list.
+                  onClick={() => {
+                    if (x === 'cases') setCasesSub('list');
+                    if (x === 'questionnaires') setPanel(null);
+                  }}
+                >
+                  {tabLabel(x)}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+          </div>
+          <Tabs.Content value="overview">
+            {current === 'overview' ? (
+              <ProjectOverview
+                projectId={projectId}
+                goals={canMetrics}
+                onGoals={
+                  canGoals || canSettings
+                    ? () => {
+                        setSettingsTopic('fieldwork');
+                        setTab('settings');
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
+          </Tabs.Content>
           <Tabs.Content value="cases">
             <ProjectCases projectId={projectId} sub={cases} onSub={setCasesSub} />
           </Tabs.Content>
@@ -1222,47 +1299,50 @@ export function ProjectPage() {
               canPaper={canPaper}
               panel={panel}
               onPanel={setPanel}
+              onDistribution={openDistribution}
             />
           </Tabs.Content>
           <Tabs.Content value="calls">
             <CallsTab projectId={projectId} notice={search.notice} call={search.call} />
           </Tabs.Content>
-          <Tabs.Content value="paper">
-            <PaperTab projectId={projectId} notice={search.notice} />
+          <Tabs.Content value="distribution">
+            <ProjectDistribution
+              projectId={projectId}
+              subs={distributionSubs}
+              sub={distribution}
+              onSub={setDistributionSub}
+              notice={search.notice}
+              drafts={canDesign}
+            />
           </Tabs.Content>
           <Tabs.Content value="review">
-            <ReviewTab projectId={projectId} />
-          </Tabs.Content>
-          <Tabs.Content value="results">
             <Tabs.Root
-              value={results}
-              onValueChange={(v) => setResultsSub(v as ResultsSub)}
+              value={review}
+              onValueChange={(v) => setReviewSub(v as ReviewSub)}
               className="flex flex-col gap-4"
             >
-              {resultsSubs.length > 1 ? (
+              {reviewSubs.length > 1 ? (
                 <Tabs.List
-                  aria-label={t('cases.tabs.resultsSections')}
+                  aria-label={t('cases.tabs.supervisionSections')}
                   className="flex flex-wrap gap-1"
                 >
-                  {resultsSubs.map((x) => (
+                  {reviewSubs.map((x) => (
                     <Tabs.Trigger key={x} value={x} className={subTabCls}>
                       {t(`cases.tabs.${x}`)}
                     </Tabs.Trigger>
                   ))}
                 </Tabs.List>
               ) : null}
-              <Tabs.Content value="topline">
-                <ResultsTab projectId={projectId} />
-              </Tabs.Content>
-              <Tabs.Content value="dashboard">
-                {current === 'results' && results === 'dashboard' ? (
-                  <DashboardTab projectId={projectId} />
-                ) : null}
+              <Tabs.Content value="queue">
+                <ReviewTab projectId={projectId} />
               </Tabs.Content>
               <Tabs.Content value="metrics">
                 <MetricsTab projectId={projectId} />
               </Tabs.Content>
             </Tabs.Root>
+          </Tabs.Content>
+          <Tabs.Content value="results">
+            <ResultsTab projectId={projectId} />
           </Tabs.Content>
           <Tabs.Content value="exports">
             <ExportsTab projectId={projectId} />
@@ -1271,10 +1351,156 @@ export function ProjectPage() {
             <ProjectPeople projectId={projectId} />
           </Tabs.Content>
           <Tabs.Content value="settings">
-            {project.data ? <SettingsTab project={project.data} /> : null}
+            {project.data ? <SettingsTab project={project.data} topic={settingsTopic} /> : null}
           </Tabs.Content>
         </Tabs.Root>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The project's overview, where a manager starts the day: the live progress against the
+ * target with its quotas and fieldwork, and how the goals stand.
+ */
+function ProjectOverview({
+  projectId,
+  goals,
+  onGoals,
+}: {
+  projectId: string;
+  /** Whether the goals can be read (metrics). */
+  goals: boolean;
+  onGoals?: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-8" data-testid="project-overview">
+      <DashboardTab projectId={projectId} />
+      {goals ? (
+        <div className="flex flex-col gap-2">
+          <GoalsSection projectId={projectId} />
+          {onGoals ? (
+            <p>
+              <button
+                type="button"
+                className="text-sm font-medium text-indigo-ink-700 hover:underline"
+                onClick={onGoals}
+              >
+                {t('cases.overview.setGoals')}
+              </button>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Web surveys and paper forms of every questionnaire, out of the questionnaire's editor: a
+ * choice of questionnaire (kept in `?q=`), then its channels.
+ */
+function ProjectDistribution({
+  projectId,
+  subs,
+  sub,
+  onSub,
+  notice,
+  drafts,
+}: {
+  projectId: string;
+  subs: DistributionSub[];
+  sub: DistributionSub;
+  onSub(s: DistributionSub): void;
+  notice?: string;
+  /** Also questionnaires not published yet (who designs them). */
+  drafts: boolean;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { q?: string };
+  const list = useQuery({
+    queryKey: ['questionnaires', projectId],
+    queryFn: () => api<QuestionnaireRow[]>(`/projects/${projectId}/questionnaires`),
+  });
+  const mode = { web: 'CAWI', paper: 'PAPI' } as const;
+  const qs = (list.data ?? []).filter(
+    (q) =>
+      // The one asked for (from its actions) is always there.
+      (q.id === search.q || ((drafts || q.publishedVersions > 0) && q.state !== 'completed')) &&
+      subs.some((s) => q.modes.includes(mode[s])),
+  );
+  const current = qs.find((q) => q.id === search.q) ?? qs[0];
+  const here = subs.filter((s) => current?.modes.includes(mode[s]));
+  const active = here.includes(sub) ? sub : here[0];
+  if (list.isPending) return <p aria-busy="true">…</p>;
+  if (!current || !active)
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-slate-600">{t('cases.distribution.none')}</p>
+        {/* Scans and double-entry differences do not wait for a questionnaire. */}
+        {subs.includes('paper') ? <PaperTab projectId={projectId} notice={notice} /> : null}
+      </div>
+    );
+  return (
+    <div className="flex flex-col gap-4">
+      {qs.length > 1 ? (
+        <label className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-medium text-slate-600">{t('cases.tabs.questionnaire')}</span>
+          <select
+            className={`${inputCls} w-auto`}
+            value={current.id}
+            onChange={(e) =>
+              void navigate({
+                to: '.',
+                search: (s: Record<string, unknown>) => ({
+                  ...s,
+                  q: e.target.value,
+                  case: undefined,
+                }),
+                replace: true,
+              })
+            }
+          >
+            {qs.map((q) => (
+              <option key={q.id} value={q.id}>
+                {q.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      <Tabs.Root
+        value={active}
+        onValueChange={(v) => onSub(v as DistributionSub)}
+        className="flex flex-col gap-4"
+      >
+        {here.length > 1 ? (
+          <Tabs.List
+            aria-label={t('cases.tabs.distributionSections')}
+            className="flex flex-wrap gap-1"
+          >
+            {here.map((x) => (
+              <Tabs.Trigger key={x} value={x} className={subTabCls}>
+                {t(`cases.tabs.${x}`)}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+        ) : null}
+        {/* Keyed by questionnaire, so each one's forms start from its own data. */}
+        <Tabs.Content value="web">
+          <CawiTab key={current.id} projectId={projectId} questionnaireId={current.id} />
+        </Tabs.Content>
+        <Tabs.Content value="paper">
+          <PaperTab
+            key={current.id}
+            projectId={projectId}
+            questionnaireId={current.id}
+            notice={notice}
+          />
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   );
 }

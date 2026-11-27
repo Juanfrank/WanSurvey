@@ -75,9 +75,9 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   // 2. The questionnaire, built with the mouse.
   await page.getByLabel('Nombre del cuestionario').fill('Satisfacción con servicios');
   await page.getByRole('button', { name: 'Crear y abrir' }).click();
-  // Its id comes from the name, as the exports will show it (Configuración → General).
+  // Its id comes from the name, as the exports will show it (Ajustes del cuestionario → General).
   const sections = page.getByRole('tablist', { name: 'Secciones del cuestionario' });
-  await sections.getByRole('tab', { name: 'Configuración', exact: true }).click();
+  await sections.getByRole('tab', { name: 'Ajustes del cuestionario', exact: true }).click();
   await expect(page.getByLabel('Id del cuestionario')).toHaveValue('SATISFACCION_CON_SERVICIOS');
   await sections.getByRole('tab', { name: 'Diseño', exact: true }).click();
   const outline = page.getByRole('tree', { name: 'Esquema' });
@@ -128,6 +128,9 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
     .getByRole('navigation', { name: 'Ruta de navegación' })
     .getByRole('link', { name: `Encuesta de satisfacción vecinal ${CODE}` })
     .click();
+  // With a questionnaire out, the project opens on its overview.
+  await expect(page.getByTestId('project-overview')).toBeVisible();
+  await page.getByRole('tab', { name: 'Cuestionarios', exact: true }).click();
   const row = page.getByRole('row', { name: /Satisfacción con servicios/ });
   await expect(row).toContainText('v1');
   await expect(row).toContainText('En uso');
@@ -166,20 +169,20 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByLabel('Asignar seleccionados a').selectOption({ label: 'Demo interviewer' });
   await page.getByRole('button', { name: 'Asignar', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'Demo interviewer' })).toHaveCount(8);
-  await page.getByRole('tab', { name: 'Configuración', exact: true }).click();
+  await page.getByRole('tab', { name: 'Ajustes del proyecto', exact: true }).click();
   await page.getByRole('tab', { name: 'Teléfono', exact: true }).click();
   // Calls all day, so the test does not depend on the hour it runs at.
   await page.getByLabel('Llamar desde').fill('00:00');
   await page.getByLabel('Llamar hasta').fill('00:00');
   await page.getByLabel('Intentos por caso').fill('1');
-  await page.getByRole('button', { name: 'Guardar configuración' }).click();
-  await expect(page.getByText('Configuración guardada.')).toBeVisible();
+  await page.getByRole('button', { name: 'Guardar ajustes' }).click();
+  await expect(page.getByText('Ajustes guardados.')).toBeVisible();
   // Nobody is called until the project says on what basis it may contact the sample.
   await page.getByRole('tab', { name: 'Privacidad', exact: true }).click();
   await expect(page.getByText(/No hay base declarada para este canal/).first()).toBeVisible();
   await page.getByLabel('Llamadas telefónicas').selectOption({ label: 'Misión pública' });
-  await page.getByRole('button', { name: 'Guardar configuración' }).click();
-  await expect(page.getByText('Configuración guardada.')).toBeVisible();
+  await page.getByRole('button', { name: 'Guardar ajustes' }).click();
+  await expect(page.getByText('Ajustes guardados.')).toBeVisible();
 
   // 5. The interviewer, in their own browser, lands on their cases and calls.
   const { ctx: ivCtx, page: iv } = await newBrowser(browser);
@@ -290,8 +293,8 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await desk.page.getByRole('button', { name: 'Enviar mis respuestas' }).click();
   await expect(desk.page.getByText('¡Muchas gracias por responder la encuesta!')).toBeVisible();
   await desk.ctx.close();
-  // Back from the questionnaire's Distribution tab to the project.
-  await page.goBack();
+  // The web survey opened in the project's Distribution tab: the results are a tab away.
+  await expect(page.getByRole('tab', { name: 'Distribución', selected: true })).toBeVisible();
 
   // 8. Results: three completes, the scale as a distribution, the open answers, no raw pipes.
   await page.getByRole('tab', { name: 'Resultados', exact: true }).click();

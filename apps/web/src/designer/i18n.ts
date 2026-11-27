@@ -898,7 +898,7 @@ export const designerEs: DesignerCatalogue = {
     fileRequired: 'Elija un archivo JSON.',
     modes: 'Modos',
     modesHelp:
-      'Cómo se aplicará este cuestionario. Los textos por modo, la vista previa, las entrevistas, las difusiones web y los formularios en papel siguen esta elección; puede cambiarse en la configuración del cuestionario.',
+      'Cómo se aplicará este cuestionario. Los textos por modo, la vista previa, las entrevistas, las difusiones web y los formularios en papel siguen esta elección; puede cambiarse en los ajustes del cuestionario.',
     modesRequired: 'Elija al menos un modo.',
     modesMixed:
       'Varios modos forman un diseño mixto: la misma pregunta puede responderse distinto por teléfono, cara a cara, en la web y en papel. Revise Vista previa › Comparar modos y ajuste los textos por modo (pestaña Modos de cada pregunta).',
@@ -910,7 +910,7 @@ export const designerEs: DesignerCatalogue = {
     code: 'Código',
     codeHelp: 'Corto y único en la organización: letras, números, - y _ (p. ej., HH2026).',
     modes: 'Modos que usará',
-    zone: 'Zona horaria: {{zone}} (puede cambiarse en la configuración).',
+    zone: 'Zona horaria: {{zone}} (puede cambiarse en los ajustes del proyecto).',
     create: 'Crear proyecto',
     cancel: 'Cancelar',
     duplicate: 'Ya existe un proyecto con este código.',
@@ -929,15 +929,15 @@ export const designerEs: DesignerCatalogue = {
     label: 'Secciones del cuestionario',
     design: 'Diseño',
     distribution: 'Distribución',
-    settings: 'Configuración',
+    settings: 'Ajustes del cuestionario',
   },
   designSections: 'Secciones del diseño',
-  settingsSections: 'Temas de configuración',
+  settingsSections: 'Temas de los ajustes',
   distribution: {
     label: 'Canales de distribución',
     web: 'Encuesta web',
     paper: 'Formularios en papel',
-    none: 'Este cuestionario no se aplica por web ni en papel. Active esos modos en Configuración → Modos.',
+    none: 'Este cuestionario no se aplica por web ni en papel. Active esos modos en Ajustes del cuestionario → Modos.',
   },
   emptyEditor: 'Agregue una sección para empezar.',
   tab: {

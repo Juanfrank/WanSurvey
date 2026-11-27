@@ -232,9 +232,27 @@ export function DevicePage() {
   return (
     <div className="flex flex-col gap-6" data-testid="device">
       <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-        <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
-          {name || t('designer.projects')}
-        </Link>
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>
+            <Link to="/projects" className="hover:underline">
+              {t('designer.projects')}
+            </Link>
+          </li>
+          {name ? (
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true">/</span>
+              <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
+                {name}
+              </Link>
+            </li>
+          ) : null}
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true">/</span>
+            <span aria-current="page" className="font-medium text-slate-700">
+              {t('device.title')}
+            </span>
+          </li>
+        </ol>
       </nav>
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <h1 className="text-2xl font-bold">{t('device.title')}</h1>

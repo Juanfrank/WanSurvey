@@ -8,6 +8,7 @@ import {
   expectAccessible,
   login,
   pickOrganisation,
+  paperTab,
   questionnaireAction,
   shot,
 } from './helpers.js';
@@ -24,7 +25,9 @@ async function openPaper(page: Page, email: string) {
     .getByRole('link', { name: 'Projects', exact: true })
     .click();
   await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
-  await questionnaireAction(page, 'Paper forms');
+  // Clerks do not see the questionnaires: their paper forms are a tab of the project.
+  if (email === CLERK || email === CLERK2) await paperTab(page);
+  else await questionnaireAction(page, 'Paper forms');
 }
 
 const question = (page: Page, id: string) => page.locator(`[data-qkey^="${id}"]`).first();
@@ -97,8 +100,7 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
       await browser.newContext({ storageState: './e2e/english-ui.json' })
     ).newPage();
     await openPaper(pm, PM);
-    await pm.goBack();
-    await pm.getByRole('tab', { name: 'Settings', exact: true }).click();
+    await pm.getByRole('tab', { name: 'Project settings', exact: true }).click();
     await pm.getByRole('tab', { name: 'Paper', exact: true }).click();
     await pm.getByLabel(/Key every form twice/).check();
     await pm.getByRole('button', { name: 'Save settings' }).click();

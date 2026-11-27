@@ -1,7 +1,14 @@
 import { expect, test } from './fixtures.js';
 import { connectDb } from './db.js';
 import { uuidv7 } from 'uuidv7';
-import { expectAccessible, login, pickOrganisation, questionnaireAction, shot } from './helpers.js';
+import {
+  expectAccessible,
+  login,
+  pickOrganisation,
+  paperTab,
+  questionnaireAction,
+  shot,
+} from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
 
@@ -69,7 +76,7 @@ test('scanned forms: a PDF with two forms is split and read, and the clerk finis
       .getByRole('link', { name: 'Projects', exact: true })
       .click();
     await clerk.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
-    await questionnaireAction(clerk, 'Paper forms');
+    await paperTab(clerk);
     await clerk
       .getByTestId('scans')
       .locator('[data-batch="escaneo-lote-1.pdf"]')

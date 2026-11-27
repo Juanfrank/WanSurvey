@@ -29,7 +29,7 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
 
   // Declare the lawful basis in the project's web settings, then create and send an outreach
   // to some cases of region 3 from the questionnaire's Distribution tab.
-  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Web', exact: true }).click();
   await page.getByLabel('Lawful basis for e-mailing this sample').selectOption('consent');
   await page.getByLabel('Sender name').fill('Encuesta de hogares 2026');
