@@ -51,6 +51,17 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   common labels translated; case data above the outcomes, with the sample fields' labels; the save
   button says what is missing; and, with no case open, the caller's day so far (calls, contacts,
   completes, time on the phone; `GET /projects/:id/cati/shift`).
+- **Questionnaire designer, after the expert panel**: one toolbar on every tab (name, then language,
+  save state, undo, redo and publish as one group), kept at the top while scrolling; the outline's add
+  buttons wrap instead of being cut. The Logic tab no longer says "Always (no condition)" twice, folds the
+  option filter, case data and link parameter into "Add …" buttons until used, and warns in plain view
+  that answers to skipped items are deleted. Under Don't know / Refused the editor says in which of the
+  questionnaire's modes they are really offered, and Settings › Special answers chooses those modes
+  (CATI, CAPI, PAPI). The red → amber → green scale palette is marked for service ratings, with a
+  warning about mode effects and colour blindness. While translating, the default language's text and
+  option labels are shown read-only beside each field. The library refuses an item with errors or
+  unlabelled options. A new questionnaire starts with no mode ticked (unless the project has one), and
+  ticking several warns that it is a mixed-mode design.
 - **The environment-variable templates say what is required**: each `<…>` placeholder starts with
   `REQUIRED`, `OPTIONAL` or `CONDITIONAL` and, for the last, says when it is required. A placeholder left
   as it is counts as not set when it is optional or conditional, and stops the application, naming it, when

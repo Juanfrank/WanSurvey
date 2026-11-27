@@ -16,7 +16,7 @@ import { CawiTab } from '../cawi/CawiTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
 import { TypeEnvContext } from './context.js';
 import { Dialog } from './Dialog.js';
-import { EditingLanguageContext, smallBtn } from './fields.js';
+import { EditingLanguageContext, smallBtn, SourceLanguageContext } from './fields.js';
 import { download, useApiScenarios, useCan, useRetire, useVersions } from './hooks.js';
 import { ItemEditor } from './ItemEditor.js';
 import { initials, Outline, SETTINGS_ID } from './Outline.js';
@@ -204,406 +204,430 @@ export function DesignerPage() {
     <TypeEnvContext.Provider value={typeVars}>
       <PipeVariablesContext.Provider value={variables}>
         <EditingLanguageContext.Provider value={lang}>
-          <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
-            {/* As tall as the account pill beside it, so the name row starts below it. */}
-            <nav
-              aria-label={t('designer.breadcrumb')}
-              className="text-sm text-slate-600 min-[900px]:min-h-10"
-            >
-              <Link to="/projects" className="hover:underline">
-                {t('designer.projects')}
-              </Link>{' '}
-              /{' '}
-              <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
-                {project.data?.name ?? t('designer.project')}
-              </Link>
-            </nav>
-            {qState && qState !== 'active' ? (
-              <p
-                role="status"
-                data-testid="q-state-banner"
-                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
+          <SourceLanguageContext.Provider value={draft.defaultLanguage ?? null}>
+            <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
+              {/* As tall as the account pill beside it, so the name row starts below it. */}
+              <nav
+                aria-label={t('designer.breadcrumb')}
+                className="text-sm text-slate-600 min-[900px]:min-h-10"
               >
-                {t(`designer.qActions.banner.${qState}`)}
-              </p>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="sr-only">{d.name}</h1>
-              <label className="flex min-w-0 sm:min-w-[16rem] flex-1 items-center gap-2">
-                <span className="sr-only">{t('designer.name')}</span>
-                <input
-                  className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                  value={d.name}
-                  readOnly={!canEdit}
-                  onChange={(e) => d.rename(e.target.value)}
-                />
-              </label>
-              {draft.languages.length > 1 ? (
-                <label className="flex items-center gap-2 text-sm">
-                  <span>{t('designer.contentLanguage')}</span>
-                  <select
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1"
-                    value={lang}
-                    onChange={(e) => setEditLang(e.target.value)}
-                  >
-                    {draft.languages.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                        {l === draft.defaultLanguage ? ` (${t('designer.settings.default')})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <SaveStatus status={d.status} />
-              {canEdit ? (
-                <>
-                  <button type="button" className={smallBtn} disabled={!d.canUndo} onClick={d.undo}>
-                    {t('designer.undo')}
-                  </button>
-                  <button type="button" className={smallBtn} disabled={!d.canRedo} onClick={d.redo}>
-                    {t('designer.redo')}
-                  </button>
-                </>
-              ) : null}
-              {canPublish ? (
-                <Button
-                  type="button"
-                  onClick={() => setPublishing(true)}
-                  disabled={d.status === 'conflict'}
+                <Link to="/projects" className="hover:underline">
+                  {t('designer.projects')}
+                </Link>{' '}
+                /{' '}
+                <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
+                  {project.data?.name ?? t('designer.project')}
+                </Link>
+              </nav>
+              {qState && qState !== 'active' ? (
+                <p
+                  role="status"
+                  data-testid="q-state-banner"
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
                 >
-                  {t('designer.publish.open')}
-                </Button>
+                  {t(`designer.qActions.banner.${qState}`)}
+                </p>
               ) : null}
-            </div>
-            {!canEdit ? (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900">
-                {t('designer.readOnly')}
-              </p>
-            ) : null}
-            <p role="status" aria-live="polite" className="sr-only">
-              {message}
-            </p>
-            {editors.length || notice ? (
+              {/* One toolbar on every tab, kept at the top while scrolling: the name, then the
+                language, save state, undo, redo and publish as one group on the right. */}
               <div
-                className="flex flex-wrap items-center gap-2 text-sm text-slate-700"
-                data-testid="presence"
+                className="sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-2 py-2"
+                data-testid="designer-toolbar"
               >
-                {editors.length ? (
-                  <>
-                    <span>{t('designer.collab.others')}</span>
-                    {editors.map((e) => (
-                      <span
-                        key={e.userId}
-                        className="flex items-center gap-1 rounded-full bg-sky-50 py-0.5 pl-0.5 pr-2"
-                      >
-                        <span
-                          aria-hidden
-                          className="rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-on-fill"
-                        >
-                          {initials(e.name)}
-                        </span>
-                        {e.name}
-                        {e.itemId ? (
-                          <span className="text-xs text-slate-600">
-                            {t('designer.collab.on', { id: e.itemId })}
-                          </span>
-                        ) : null}
-                      </span>
-                    ))}
-                  </>
-                ) : null}
-                {notice ? <span className="text-xs text-slate-600">{notice}</span> : null}
-              </div>
-            ) : null}
-
-            <Tabs.Root
-              value={top}
-              onValueChange={(v) => go(v as Top)}
-              className="flex flex-col gap-4"
-            >
-              <TabBar
-                label={t('designer.top.label')}
-                items={[
-                  { value: 'design', label: t('designer.top.design') },
-                  ...(canWeb || canPaper
-                    ? [{ value: 'distribution', label: t('designer.top.distribution') }]
-                    : []),
-                  { value: 'settings', label: t('designer.top.settings') },
-                ]}
-              />
-              <Tabs.Content value="design">
-                <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
-                  <SubTabBar
-                    label={t('designer.designSections')}
-                    items={[
-                      { value: 'design', label: t('designer.tab.form') },
-                      {
-                        value: 'routing',
-                        label: (
-                          <>
-                            {t('designer.tab.routing')}
-                            {errorCount ? (
-                              <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
-                                {errorCount}
-                              </span>
-                            ) : null}
-                          </>
-                        ),
-                      },
-                      { value: 'preview', label: t('designer.tab.preview') },
-                      { value: 'scenarios', label: t('designer.tab.scenarios') },
-                      { value: 'versions', label: t('designer.tab.versions') },
-                    ]}
+                <h1 className="sr-only">{d.name}</h1>
+                <label className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-[14rem]">
+                  <span className="sr-only">{t('designer.name')}</span>
+                  <input
+                    className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                    value={d.name}
+                    readOnly={!canEdit}
+                    onChange={(e) => d.rename(e.target.value)}
                   />
-
-                  <Tabs.Content
-                    value="design"
-                    className="grid grid-cols-[3rem_minmax(0,1fr)] gap-4 min-[900px]:grid-cols-1"
-                  >
-                    <SideDrawer
-                      id="designer-outline"
-                      drawer={outline}
-                      side="left"
-                      label={t('designer.outline.title')}
-                      icon={<ListIcon />}
-                    >
-                      <Outline
-                        draft={draft}
-                        selected={selected}
-                        onSelect={setSelected}
-                        change={d.change}
-                        errorsById={errorsById}
-                        routing={routing}
-                        lang={lang}
-                        readOnly={!canEdit}
-                        onRename={() => setRenameTick((n) => n + 1)}
-                        onEnter={focusEditor}
-                        announce={setMessage}
-                        others={others}
-                        commentCounts={commentCounts}
-                        onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
-                        minAge={project.data?.settings?.notice?.minAge ?? null}
-                        onSaveToLibrary={(id) => {
-                          setSelected(id);
-                          setSavingToLibrary(true);
-                        }}
-                      />
-                    </SideDrawer>
-                    <div className="flex min-w-0 flex-col gap-4">
-                      <section
-                        ref={editorRef}
-                        tabIndex={-1}
-                        aria-label={t('designer.editor')}
-                        className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
+                </label>
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+                  {draft.languages.length > 1 ? (
+                    <label className="flex items-center gap-2 text-sm">
+                      <span>{t('designer.contentLanguage')}</span>
+                      <select
+                        className="rounded-md border border-slate-300 bg-white px-2 py-1"
+                        value={lang}
+                        onChange={(e) => setEditLang(e.target.value)}
                       >
-                        {others.get(selected)?.length ? (
-                          <p
-                            className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-ink-950"
-                            data-testid="same-item"
+                        {draft.languages.map((l) => (
+                          <option key={l} value={l}>
+                            {l}
+                            {l === draft.defaultLanguage
+                              ? ` (${t('designer.settings.default')})`
+                              : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <SaveStatus status={d.status} />
+                  {canEdit ? (
+                    <>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        disabled={!d.canUndo}
+                        onClick={d.undo}
+                      >
+                        {t('designer.undo')}
+                      </button>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        disabled={!d.canRedo}
+                        onClick={d.redo}
+                      >
+                        {t('designer.redo')}
+                      </button>
+                    </>
+                  ) : null}
+                  {canPublish ? (
+                    <Button
+                      type="button"
+                      onClick={() => setPublishing(true)}
+                      disabled={d.status === 'conflict'}
+                    >
+                      {t('designer.publish.open')}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              {!canEdit ? (
+                <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-ink-900">
+                  {t('designer.readOnly')}
+                </p>
+              ) : null}
+              <p role="status" aria-live="polite" className="sr-only">
+                {message}
+              </p>
+              {editors.length || notice ? (
+                <div
+                  className="flex flex-wrap items-center gap-2 text-sm text-slate-700"
+                  data-testid="presence"
+                >
+                  {editors.length ? (
+                    <>
+                      <span>{t('designer.collab.others')}</span>
+                      {editors.map((e) => (
+                        <span
+                          key={e.userId}
+                          className="flex items-center gap-1 rounded-full bg-sky-50 py-0.5 pl-0.5 pr-2"
+                        >
+                          <span
+                            aria-hidden
+                            className="rounded-full bg-sky-800 px-1.5 text-[10px] font-semibold text-on-fill"
                           >
-                            {t('designer.collab.sameItem', {
-                              who: others.get(selected)!.join(', '),
-                            })}
-                          </p>
-                        ) : null}
-                        <EditorHeader
+                            {initials(e.name)}
+                          </span>
+                          {e.name}
+                          {e.itemId ? (
+                            <span className="text-xs text-slate-600">
+                              {t('designer.collab.on', { id: e.itemId })}
+                            </span>
+                          ) : null}
+                        </span>
+                      ))}
+                    </>
+                  ) : null}
+                  {notice ? <span className="text-xs text-slate-600">{notice}</span> : null}
+                </div>
+              ) : null}
+
+              <Tabs.Root
+                value={top}
+                onValueChange={(v) => go(v as Top)}
+                className="flex flex-col gap-4"
+              >
+                <TabBar
+                  label={t('designer.top.label')}
+                  items={[
+                    { value: 'design', label: t('designer.top.design') },
+                    ...(canWeb || canPaper
+                      ? [{ value: 'distribution', label: t('designer.top.distribution') }]
+                      : []),
+                    { value: 'settings', label: t('designer.top.settings') },
+                  ]}
+                />
+                <Tabs.Content value="design">
+                  <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
+                    <SubTabBar
+                      label={t('designer.designSections')}
+                      items={[
+                        { value: 'design', label: t('designer.tab.form') },
+                        {
+                          value: 'routing',
+                          label: (
+                            <>
+                              {t('designer.tab.routing')}
+                              {errorCount ? (
+                                <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
+                                  {errorCount}
+                                </span>
+                              ) : null}
+                            </>
+                          ),
+                        },
+                        { value: 'preview', label: t('designer.tab.preview') },
+                        { value: 'scenarios', label: t('designer.tab.scenarios') },
+                        { value: 'versions', label: t('designer.tab.versions') },
+                      ]}
+                    />
+
+                    <Tabs.Content
+                      value="design"
+                      className="grid grid-cols-[3rem_minmax(0,1fr)] gap-4 min-[900px]:grid-cols-1"
+                    >
+                      <SideDrawer
+                        id="designer-outline"
+                        drawer={outline}
+                        side="left"
+                        label={t('designer.outline.title')}
+                        icon={<ListIcon />}
+                      >
+                        <Outline
                           draft={draft}
                           selected={selected}
-                          onGo={setSelected}
-                          onSave={
-                            canEdit &&
-                            selected !== SETTINGS_ID &&
-                            !draft.sections.some((x) => x.id === selected)
-                              ? () => setSavingToLibrary(true)
-                              : undefined
-                          }
+                          onSelect={setSelected}
+                          change={d.change}
+                          errorsById={errorsById}
+                          routing={routing}
+                          lang={lang}
+                          readOnly={!canEdit}
+                          onRename={() => setRenameTick((n) => n + 1)}
+                          onEnter={focusEditor}
+                          announce={setMessage}
+                          others={others}
+                          commentCounts={commentCounts}
+                          onInsertFromLibrary={(after, inside) => setLibraryAt({ after, inside })}
+                          minAge={project.data?.settings?.notice?.minAge ?? null}
+                          onSaveToLibrary={(id) => {
+                            setSelected(id);
+                            setSavingToLibrary(true);
+                          }}
                         />
-                        <fieldset disabled={!canEdit} className="min-w-0">
-                          {selected === SETTINGS_ID ? (
-                            <p className="text-sm text-slate-600">{t('designer.emptyEditor')}</p>
-                          ) : (
-                            <ItemEditor
-                              key={selected}
-                              draft={draft}
-                              id={selected}
-                              lang={lang}
-                              variables={variables}
-                              change={d.change}
-                              focusNameSignal={renameTick}
-                              select={setSelected}
-                            />
-                          )}
-                        </fieldset>
-                      </section>
-                      <CommentsPanel
-                        projectId={projectId}
-                        qid={qid}
-                        itemId={selected === SETTINGS_ID ? null : selected}
-                        canWrite={canComment}
-                        onGoTo={(id) => (id ? setSelected(id) : go('settings', 'general'))}
-                      />
-                    </div>
-                  </Tabs.Content>
+                      </SideDrawer>
+                      <div className="flex min-w-0 flex-col gap-4">
+                        <section
+                          ref={editorRef}
+                          tabIndex={-1}
+                          aria-label={t('designer.editor')}
+                          className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm focus:outline-none"
+                        >
+                          {others.get(selected)?.length ? (
+                            <p
+                              className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-ink-950"
+                              data-testid="same-item"
+                            >
+                              {t('designer.collab.sameItem', {
+                                who: others.get(selected)!.join(', '),
+                              })}
+                            </p>
+                          ) : null}
+                          <EditorHeader
+                            draft={draft}
+                            selected={selected}
+                            onGo={setSelected}
+                            onSave={
+                              canEdit &&
+                              selected !== SETTINGS_ID &&
+                              !draft.sections.some((x) => x.id === selected)
+                                ? () => setSavingToLibrary(true)
+                                : undefined
+                            }
+                          />
+                          <fieldset disabled={!canEdit} className="min-w-0">
+                            {selected === SETTINGS_ID ? (
+                              <p className="text-sm text-slate-600">{t('designer.emptyEditor')}</p>
+                            ) : (
+                              <ItemEditor
+                                key={selected}
+                                draft={draft}
+                                id={selected}
+                                lang={lang}
+                                variables={variables}
+                                change={d.change}
+                                focusNameSignal={renameTick}
+                                select={setSelected}
+                              />
+                            )}
+                          </fieldset>
+                        </section>
+                        <CommentsPanel
+                          projectId={projectId}
+                          qid={qid}
+                          itemId={selected === SETTINGS_ID ? null : selected}
+                          canWrite={canComment}
+                          onGoTo={(id) => (id ? setSelected(id) : go('settings', 'general'))}
+                        />
+                      </div>
+                    </Tabs.Content>
 
-                  <Tabs.Content value="routing" className="flex flex-col gap-3">
-                    <LogicCheck
-                      diagnostics={d.diagnostics}
-                      highlight={highlight}
-                      onHighlight={setHighlight}
-                      onGoTo={(id) => {
-                        setSelected(id);
-                        setTab('design');
-                        requestAnimationFrame(focusEditor);
-                      }}
-                    />
-                    {routing ? (
-                      <RoutingMap
-                        draft={draft}
-                        routing={routing}
-                        lang={lang}
-                        problems={highlight ? problemsById : null}
-                        onOpen={(id) => {
+                    <Tabs.Content value="routing" className="flex flex-col gap-3">
+                      <LogicCheck
+                        diagnostics={d.diagnostics}
+                        highlight={highlight}
+                        onHighlight={setHighlight}
+                        onGoTo={(id) => {
                           setSelected(id);
                           setTab('design');
                           requestAnimationFrame(focusEditor);
                         }}
                       />
-                    ) : (
-                      <Card>{t('designer.routing.unavailable')}</Card>
-                    )}
-                  </Tabs.Content>
+                      {routing ? (
+                        <RoutingMap
+                          draft={draft}
+                          routing={routing}
+                          lang={lang}
+                          problems={highlight ? problemsById : null}
+                          onOpen={(id) => {
+                            setSelected(id);
+                            setTab('design');
+                            requestAnimationFrame(focusEditor);
+                          }}
+                        />
+                      ) : (
+                        <Card>{t('designer.routing.unavailable')}</Card>
+                      )}
+                    </Tabs.Content>
 
-                  <Tabs.Content value="preview">
-                    <DraftPreview d={d} projectId={projectId} qid={qid} />
-                  </Tabs.Content>
+                    <Tabs.Content value="preview">
+                      <DraftPreview d={d} projectId={projectId} qid={qid} />
+                    </Tabs.Content>
 
-                  <Tabs.Content value="scenarios">
-                    <ScenariosTab d={d} projectId={projectId} qid={qid} />
-                  </Tabs.Content>
+                    <Tabs.Content value="scenarios">
+                      <ScenariosTab d={d} projectId={projectId} qid={qid} />
+                    </Tabs.Content>
 
-                  <Tabs.Content value="versions">
-                    <VersionsPanel
-                      projectId={projectId}
-                      qid={qid}
-                      canPublish={canPublish}
-                      draft={d.questionnaire}
+                    <Tabs.Content value="versions">
+                      <VersionsPanel
+                        projectId={projectId}
+                        qid={qid}
+                        canPublish={canPublish}
+                        draft={d.questionnaire}
+                      />
+                    </Tabs.Content>
+                  </Tabs.Root>
+                </Tabs.Content>
+                <Tabs.Content value="distribution">
+                  <Distribution
+                    projectId={projectId}
+                    qid={qid}
+                    sub={search.sub}
+                    notice={search.notice}
+                    web={
+                      canWeb && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('CAWI')
+                    }
+                    paper={
+                      canPaper && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('PAPI')
+                    }
+                    onSub={(sub) => go('distribution', sub)}
+                  />
+                </Tabs.Content>
+                <Tabs.Content value="settings">
+                  <Tabs.Root
+                    value={settingsPart}
+                    onValueChange={(v) => go('settings', v)}
+                    className="flex flex-col gap-4"
+                  >
+                    <SubTabBar
+                      label={t('designer.settingsSections')}
+                      items={SETTINGS_PARTS.map((x) => ({
+                        value: x,
+                        label: x === 'modes' ? t('designer.modes') : t(`designer.settings.${x}`),
+                      }))}
                     />
-                  </Tabs.Content>
-                </Tabs.Root>
-              </Tabs.Content>
-              <Tabs.Content value="distribution">
-                <Distribution
+                    <Tabs.Content value={settingsPart}>
+                      <Card>
+                        <h2 className="sr-only">
+                          {settingsPart === 'modes'
+                            ? t('designer.modes')
+                            : t(`designer.settings.${settingsPart}`)}
+                        </h2>
+                        <fieldset disabled={!canEdit} className="min-w-0">
+                          <SettingsEditor
+                            draft={draft}
+                            variables={variables}
+                            change={d.change}
+                            part={settingsPart}
+                          />
+                        </fieldset>
+                      </Card>
+                    </Tabs.Content>
+                  </Tabs.Root>
+                </Tabs.Content>
+              </Tabs.Root>
+
+              {publishing ? (
+                <PublishDialog
                   projectId={projectId}
                   qid={qid}
-                  sub={search.sub}
-                  notice={search.notice}
-                  web={canWeb && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('CAWI')}
-                  paper={
-                    canPaper && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('PAPI')
-                  }
-                  onSub={(sub) => go('distribution', sub)}
+                  draft={draft}
+                  flush={d.flush}
+                  onClose={() => setPublishing(false)}
+                  onPublished={(v) => {
+                    setPublishing(false);
+                    setMessage(t('designer.publish.done', { version: v }));
+                    setTab('versions');
+                  }}
                 />
-              </Tabs.Content>
-              <Tabs.Content value="settings">
-                <Tabs.Root
-                  value={settingsPart}
-                  onValueChange={(v) => go('settings', v)}
-                  className="flex flex-col gap-4"
-                >
-                  <SubTabBar
-                    label={t('designer.settingsSections')}
-                    items={SETTINGS_PARTS.map((x) => ({
-                      value: x,
-                      label: x === 'modes' ? t('designer.modes') : t(`designer.settings.${x}`),
-                    }))}
-                  />
-                  <Tabs.Content value={settingsPart}>
-                    <Card>
-                      <h2 className="sr-only">
-                        {settingsPart === 'modes'
-                          ? t('designer.modes')
-                          : t(`designer.settings.${settingsPart}`)}
-                      </h2>
-                      <fieldset disabled={!canEdit} className="min-w-0">
-                        <SettingsEditor
-                          draft={draft}
-                          variables={variables}
-                          change={d.change}
-                          part={settingsPart}
-                        />
-                      </fieldset>
-                    </Card>
-                  </Tabs.Content>
-                </Tabs.Root>
-              </Tabs.Content>
-            </Tabs.Root>
-
-            {publishing ? (
-              <PublishDialog
-                projectId={projectId}
-                qid={qid}
-                draft={draft}
-                flush={d.flush}
-                onClose={() => setPublishing(false)}
-                onPublished={(v) => {
-                  setPublishing(false);
-                  setMessage(t('designer.publish.done', { version: v }));
-                  setTab('versions');
-                }}
-              />
-            ) : null}
-            {libraryAt ? (
-              <InsertFromLibraryDialog
-                draft={draft}
-                afterId={libraryAt.after}
-                inside={libraryAt.inside}
-                onClose={() => setLibraryAt(null)}
-                onInsert={(next, newId, msg) => {
-                  d.change(next);
-                  setSelected(newId);
-                  setLibraryAt(null);
-                  setMessage(msg);
-                  setNotice(msg);
-                }}
-              />
-            ) : null}
-            {savingToLibrary ? (
-              <SaveToLibraryDialog
-                draft={draft}
-                id={selected}
-                onClose={() => setSavingToLibrary(false)}
-                onSaved={(msg) => {
-                  setSavingToLibrary(false);
-                  setMessage(msg);
-                  setNotice(msg);
-                }}
-              />
-            ) : null}
-            {d.conflict ? (
-              <Dialog title={t('designer.conflict.title')} onClose={() => undefined}>
-                <p className="mb-4 text-sm">
-                  {t('designer.conflict.text', {
-                    who: d.conflict.updatedBy ?? t('designer.conflict.someone'),
-                    when: timeOnly(d.conflict.updatedAt),
-                  })}
-                </p>
-                {d.conflict.items?.length ? (
-                  <p className="mb-4 text-sm" data-testid="conflict-items">
-                    {t('designer.collab.conflictItems', { list: d.conflict.items.join(', ') })}
+              ) : null}
+              {libraryAt ? (
+                <InsertFromLibraryDialog
+                  draft={draft}
+                  afterId={libraryAt.after}
+                  inside={libraryAt.inside}
+                  onClose={() => setLibraryAt(null)}
+                  onInsert={(next, newId, msg) => {
+                    d.change(next);
+                    setSelected(newId);
+                    setLibraryAt(null);
+                    setMessage(msg);
+                    setNotice(msg);
+                  }}
+                />
+              ) : null}
+              {savingToLibrary ? (
+                <SaveToLibraryDialog
+                  draft={draft}
+                  id={selected}
+                  diagnostics={d.diagnostics}
+                  onClose={() => setSavingToLibrary(false)}
+                  onSaved={(msg) => {
+                    setSavingToLibrary(false);
+                    setMessage(msg);
+                    setNotice(msg);
+                  }}
+                />
+              ) : null}
+              {d.conflict ? (
+                <Dialog title={t('designer.conflict.title')} onClose={() => undefined}>
+                  <p className="mb-4 text-sm">
+                    {t('designer.conflict.text', {
+                      who: d.conflict.updatedBy ?? t('designer.conflict.someone'),
+                      when: timeOnly(d.conflict.updatedAt),
+                    })}
                   </p>
-                ) : null}
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button variant="secondary" type="button" onClick={() => void d.reloadTheirs()}>
-                    {t('designer.conflict.reload')}
-                  </Button>
-                  <Button type="button" onClick={() => void d.overwriteMine()}>
-                    {t('designer.conflict.overwrite')}
-                  </Button>
-                </div>
-              </Dialog>
-            ) : null}
-          </div>
+                  {d.conflict.items?.length ? (
+                    <p className="mb-4 text-sm" data-testid="conflict-items">
+                      {t('designer.collab.conflictItems', { list: d.conflict.items.join(', ') })}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button variant="secondary" type="button" onClick={() => void d.reloadTheirs()}>
+                      {t('designer.conflict.reload')}
+                    </Button>
+                    <Button type="button" onClick={() => void d.overwriteMine()}>
+                      {t('designer.conflict.overwrite')}
+                    </Button>
+                  </div>
+                </Dialog>
+              ) : null}
+            </div>
+          </SourceLanguageContext.Provider>
         </EditingLanguageContext.Provider>
       </PipeVariablesContext.Provider>
     </TypeEnvContext.Provider>

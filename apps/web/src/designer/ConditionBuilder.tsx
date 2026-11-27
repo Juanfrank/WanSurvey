@@ -309,9 +309,6 @@ function GroupEditor({
           </label>
         </div>
       ) : null}
-      {group.items.length === 0 && root ? (
-        <p className="text-sm text-slate-600">{t('designer.cond.none')}</p>
-      ) : null}
       <ol className="flex flex-col gap-2">
         {group.items.map((item, i) => {
           const n = `${prefix}${i + 1}`;

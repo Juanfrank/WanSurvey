@@ -1,6 +1,9 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import {
+  DEFAULT_SPECIAL_CODES,
+  MODES,
   SENSITIVE_CATEGORIES,
+  type Mode,
   type Block,
   type Computed,
   type ContainerItem,
@@ -575,6 +578,47 @@ function EditorTabs({
   );
 }
 
+/**
+ * The modes of this questionnaire in which a special answer (Don't know, Refused) is offered:
+ * the questionnaire's modes that its settings list for it, and the web when the settings show
+ * special answers to web respondents. The same rule as the interview engine.
+ */
+export function specialModes(draft: Draft, kind: 'DK' | 'RF'): Mode[] {
+  const settings = draft.settings;
+  const offeredIn =
+    settings?.specialCodes?.[kind]?.offeredIn ?? DEFAULT_SPECIAL_CODES[kind].offeredIn;
+  return (draft.modes ?? MODES).filter(
+    (m) => offeredIn.includes(m) || (m === 'CAWI' && !!settings?.cawiShowSpecialCodes),
+  );
+}
+
+/** Says, under the Don't know / Refused boxes, in which modes they are really offered. */
+function SpecialsWhere({ draft, question }: { draft: Draft; question: Question }) {
+  const { t } = useTranslation();
+  const kinds = (['DK', 'RF'] as const).filter((k) =>
+    k === 'DK' ? question.allowDK !== false : question.allowRefused !== false,
+  );
+  if (!kinds.length) return null;
+  // Kinds offered in the same modes share a line.
+  const lines = new Map<string, string[]>();
+  for (const k of kinds) {
+    const key = specialModes(draft, k).join(', ');
+    lines.set(key, [...(lines.get(key) ?? []), t(`designer.settings.special.${k}`)]);
+  }
+  return (
+    <p className="text-xs text-slate-600" data-testid="specials-where">
+      {[...lines]
+        .map(([modes, what]) =>
+          modes
+            ? t('designer.specialsWhere', { modes, what: what.join(', ') })
+            : t('designer.specialsNowhere', { what: what.join(', ') }),
+        )
+        .join(' ')}{' '}
+      {t('designer.specialsWhereHelp')}
+    </p>
+  );
+}
+
 function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
   const { t } = useTranslation();
   const q = props.node;
@@ -637,6 +681,7 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
           onChange={(on) => p({ personal: on || undefined })}
         />
       </div>
+      <SpecialsWhere draft={props.draft} question={q} />
       <SelectField
         label={t('designer.sensitive.label')}
         value={q.sensitive ?? ''}
@@ -820,7 +865,8 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
             <SelectField
               label={t('designer.palette')}
               value={q.scale.palette ?? ''}
-              options={(['', 'diverging', 'sequential', 'nps'] as const).map((v) => ({
+              hint={q.scale.palette === 'diverging' ? undefined : t('designer.paletteHelp')}
+              options={(['', 'sequential', 'nps', 'diverging'] as const).map((v) => ({
                 value: v,
                 label: t(`designer.palettes.${v || 'none'}`),
               }))}
@@ -828,6 +874,15 @@ function QuestionEditor(props: EditorProps & { node: Question; patch: Patch }) {
                 p({ scale: clean({ ...q.scale!, palette: palette || undefined }) })
               }
             />
+          ) : null}
+          {q.scale.style !== 'slider' && q.scale.palette === 'diverging' ? (
+            <p
+              role="note"
+              data-testid="palette-warning"
+              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
+            >
+              {t('designer.paletteWarning')}
+            </p>
           ) : null}
           <div className="grid grid-cols-3 gap-3">
             <NumberField
