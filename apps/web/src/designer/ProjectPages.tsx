@@ -36,6 +36,7 @@ import { Dialog } from './Dialog.js';
 import { below, Menu, type MenuEntry } from './Menu.js';
 import { useCan } from './hooks.js';
 import { dateTime } from '../format.js';
+import { DeviceStatusLink } from '../device/status.js';
 
 export interface Project {
   id: string;
@@ -1180,15 +1181,7 @@ export function ProjectPage() {
           <ProjectLogo project={project.data} className="h-10 w-auto max-w-[10rem]" />
         ) : null}
         <h1 className="text-2xl font-bold">{project.data?.name ?? '…'}</h1>
-        {canDevice ? (
-          <Link
-            to="/projects/$projectId/device"
-            params={{ projectId }}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
-          >
-            {t('device.link')}
-          </Link>
-        ) : null}
+        {canDevice ? <DeviceStatusLink projectId={projectId} /> : null}
       </div>
       {current ? (
         <Tabs.Root

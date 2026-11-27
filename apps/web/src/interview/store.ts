@@ -81,7 +81,14 @@ export interface DeviceCase {
   shortcuts?: ShortcutSettings;
   /** Present when the project records interviews: what the device needs to draw and ask. */
   audio?: { samplePercent: number; consentText: string; consentVersion: number };
+  /** When the case's assignment expires (the project's deadline), noted while online. */
+  dueAt?: string | null;
+  /** The case's priority, noted while online. */
+  priority?: number;
 }
+
+/** Whether an interview copy still holds something the server has not got. */
+export const hasUnsent = (l: LocalInterview) => l.seq > l.acked || !!l.start || !!l.submit;
 
 export interface LocalInterview {
   id: string;
@@ -290,6 +297,33 @@ export class InterviewStore {
   async removeCase(id: string): Promise<void> {
     const tx = this.db.transaction('cases', 'readwrite');
     tx.objectStore('cases').delete(id);
+    await done(tx);
+  }
+
+  /** Every case on this device, whatever its project. */
+  async allCases(): Promise<DeviceCase[]> {
+    const tx = this.db.transaction('cases', 'readonly');
+    return (await req(tx.objectStore('cases').getAll())) as DeviceCase[];
+  }
+
+  /**
+   * Forgets everything kept for offline work (cases with their personal data, questionnaires,
+   * interview copies, sync times), keeping only this device's id. Refuses, changing nothing,
+   * while an interview still holds something unsent: that is never thrown away.
+   */
+  async clearAll(): Promise<void> {
+    const stores = ['interviews', 'outbox', 'versions', 'cases', 'meta'];
+    const tx = this.db.transaction(stores, 'readwrite');
+    const all = (await req(tx.objectStore('interviews').getAll())) as LocalInterview[];
+    if (all.some(hasUnsent)) {
+      tx.abort();
+      await done(tx).catch(() => undefined);
+      throw new DeviceError('UNSENT_ON_DEVICE', 'Interviews on this device are not sent yet');
+    }
+    const meta = tx.objectStore('meta');
+    const deviceId = (await req(meta.get('deviceId'))) as string | undefined;
+    for (const name of stores) tx.objectStore(name).clear();
+    if (deviceId) meta.put(deviceId, 'deviceId');
     await done(tx);
   }
 

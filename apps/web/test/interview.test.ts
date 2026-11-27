@@ -257,6 +257,43 @@ describe('offline work', () => {
     expect(bodies[1]!.interviews[0]!.start).toBeUndefined();
     store.close();
   });
+
+  it('clears the offline data, keeping the device id, but never an interview not yet sent', async () => {
+    const store = await freshStore();
+    const device = await store.deviceId();
+    await store.putVersion({ id: 'v1', version: 1, compiled: {} });
+    await store.putCase({
+      caseId: 'c1',
+      projectId: 'p',
+      projectName: 'P',
+      externalId: 'HH1',
+      context: { case: { name: 'Ana' } },
+      questionnaireVersionId: 'v1',
+      interviewId: 'i1',
+      status: 'started',
+      disposition: null,
+      problem: null,
+      downloadedAt: '2026-10-12T10:00:00.000Z',
+      capi: { gps: 'off', gpsNotice: '' },
+      dueAt: '2026-10-15T10:00:00.000Z',
+      priority: 2,
+    });
+    await store.setMeta('lastSync:p', '2026-10-12T11:00:00.000Z');
+    await store.record('i1', [answer('A', 1)], snap(1));
+    await expect(store.clearAll()).rejects.toMatchObject({ code: 'UNSENT_ON_DEVICE' });
+    // Nothing changed.
+    expect(await store.allCases()).toHaveLength(1);
+    expect((await store.pending('i1')).length).toBe(1);
+    // Once sent, it can go.
+    await store.acknowledge('i1', 1);
+    await store.clearAll();
+    expect(await store.allCases()).toEqual([]);
+    expect(await store.all()).toEqual([]);
+    expect(await store.getVersion('v1')).toBeNull();
+    expect(await store.getMeta('lastSync:p')).toBeNull();
+    expect(await store.deviceId()).toBe(device);
+    store.close();
+  });
 });
 
 describe('interview clock', () => {
