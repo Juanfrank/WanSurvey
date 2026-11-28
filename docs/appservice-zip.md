@@ -101,8 +101,9 @@ removed), so a client cannot pass as another by sending that header. A refused c
 - `NODE_ENV`: `production` turns on the production checks (Blob Storage required, HSTS).
 - `INITIAL_ADMIN_USER`: the UPN of the first administrator, for a new installation (`docs/sso-entra.md`).
 - `PASSWORD_LOGIN`, `ENTRA_*` (tenant, client, secret and `ENTRA_REDIRECT_URI`): sign-in (`docs/sso-entra.md`).
-- `SINGLE_TENANT`: `true` for an installation of one organisation; a database with several then
-  stops the start (`docs/single-tenant.md`).
+- `SINGLE_TENANT`: `true` for an installation of one organisation; with several in the database it
+  serves one and closes the others, and `SINGLE_TENANT_ORG` (slug or id) chooses which, else the
+  oldest (`docs/single-tenant.md`).
 - `MAILER`, `SMTP_URL`, `MAIL_FROM`: e-mail; `console` writes it to the log instead.
 - `EXPORT_STORAGE`, `AZURE_STORAGE_ACCOUNT_NAME`, `AZURE_STORAGE_CONTAINER`, `AZURE_CLIENT_ID`: export
   files in Blob Storage (account and container come together), reached with the managed identity

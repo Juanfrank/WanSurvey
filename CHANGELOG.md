@@ -76,9 +76,21 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   `GET /auth/methods` and `GET /auth/me` (`singleTenant`) and leaves out the account menu's
   organisation picker, the waiting page's other organisations and the Organisation page's "Whole
   installation" block (its analysis refresh joins the organisation's cards). A new installation serves its first organisation once it is made
-  (`INITIAL_ADMIN_USER`; `db:seed` makes `demo` alone); a database with several organisations
-  stops the start, saying so. See [`docs/single-tenant.md`](docs/single-tenant.md). **Upgrade**:
-  nothing to do; the new setting is in the App Service templates and `.env.example`.
+  (`INITIAL_ADMIN_USER`; `db:seed` makes `demo` alone). See
+  [`docs/single-tenant.md`](docs/single-tenant.md). **Upgrade**: nothing to do; the new settings
+  are in the App Service templates and `.env.example`.
+  - **A database with several organisations** no longer stops the start: the API and the worker
+    serve one, named by `SINGLE_TENANT_ORG` (slug or id; one the database lacks stops the start),
+    else the oldest by creation, with a warning in the start log. Every other organisation is
+    closed while the mode is on: its people cannot sign in (password or Microsoft, the callback
+    included; no lock notice or reset e-mail), its sessions and API keys answer 401, its
+    web-survey (personal and open), feedback and share links answer as unknown links (404), mail
+    provider events and SMS replies for it are ignored (except an opt-out, which is still put on
+    its suppression list), and the worker sends none of its e-mail or
+    SMS waves and reminders, webhooks or web notifications and runs none of its scheduled or queued
+    jobs (expiry, figures, retention and purges). Its data is kept untouched; nothing is stored
+    about the closure, so without `SINGLE_TENANT` everything opens again with nothing done by hand,
+    the waiting mail and jobs included.
 - **Less scrolling on lists and project pages** (first part): shared building blocks for every
   screen, described in [`docs/ui-patterns.md`](docs/ui-patterns.md): a filter bar (the search in
   view, the other filters in a panel that floats over the list behind a "Filters · N" button,

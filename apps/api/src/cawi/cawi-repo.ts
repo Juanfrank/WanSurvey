@@ -294,6 +294,8 @@ export interface CawiTx extends InterviewsTx {
 
 export interface CawiRepo {
   inTenant<T>(tenantId: string, fn: (t: CawiTx) => Promise<T>): Promise<T>;
+  /** Only to record a person's opt-out, even in a closed organisation (single-tenant mode). */
+  inTenantForOptOut<T>(tenantId: string, fn: (t: CawiTx) => Promise<T>): Promise<T>;
   /** The organisation of a respondent's token, then the work in it; `found` is null if unknown. */
   ofToken<T>(
     hash: string,
@@ -980,6 +982,10 @@ export class MssqlCawiRepo implements CawiRepo {
 
   inTenant<T>(tenantId: string, fn: (t: CawiTx) => Promise<T>) {
     return this.engine.sql.withTenant(tenantId, (tx) => fn(this.view(tx, tenantId)));
+  }
+
+  inTenantForOptOut<T>(tenantId: string, fn: (t: CawiTx) => Promise<T>) {
+    return this.engine.sql.withTenantForOptOut(tenantId, (tx) => fn(this.view(tx, tenantId)));
   }
 
   ofToken<T>(

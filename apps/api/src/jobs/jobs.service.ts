@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
@@ -10,6 +11,7 @@ import { Queue, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import { closeThrottleStorage } from '../common/throttle.js';
 import { CONFIG, type AppConfig } from '../config.js';
+import { Engine } from '../db/engine.js';
 import { PROCESS_ROLE, type ProcessRole } from './role.js';
 
 /** Which part of the system this process is (M1). */
@@ -99,6 +101,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(PROCESS_ROLE) private readonly role: ProcessRole,
+    @Optional() private readonly engine?: Engine,
   ) {
     this.light = new Lanes(config.JOB_CONCURRENCY);
     this.heavy = new Lanes(config.HEAVY_JOB_CONCURRENCY);
@@ -183,11 +186,26 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     this.waiting.set(key, fire);
   }
 
+  /**
+   * A job of an organisation this process does not open (single-tenant mode: a closed one) is
+   * set aside: it ends without running and without failing (BullMQ then drops it). What it was
+   * for stays in the database, and every job with an organisation is rebuilt from there once the
+   * organisation is open: an export or a scan batch still queued is offered again by the sweeper
+   * (`jobs.sweep`), and the figures by the nightly recompute (`stats.nightly`).
+   */
+  private async closed(name: string, data: Record<string, unknown>): Promise<boolean> {
+    const t = data.tenantId;
+    if (!this.engine || typeof t !== 'string' || (await this.engine.opens(t))) return false;
+    this.logger.debug(`Job ${name} set aside: its organisation is closed in this installation`);
+    return true;
+  }
+
   /** Runs a job now in this process (inline mode, tests, and the worker). */
   async run(name: string, data: Record<string, unknown>): Promise<unknown> {
     const handler = this.handlers.get(name);
     if (!handler) throw new Error(`No handler for job ${name}`);
     try {
+      if (await this.closed(name, data)) return undefined;
       return await handler(data);
     } catch (e) {
       this.logger.error(`Job ${name} failed: ${(e as Error).message}`);
@@ -222,6 +240,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   private async attempt(name: string, data: Record<string, unknown>) {
     const handler = this.handlers.get(name);
     if (!handler) throw new Error(`No handler for job ${name}`);
+    if (await this.closed(name, data)) return undefined;
     return handler(data);
   }
 

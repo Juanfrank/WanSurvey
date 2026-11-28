@@ -242,13 +242,23 @@ const Env = z.object({
    * there may be several is hidden and refused: choosing or switching the organisation (those
    * routes answer 404), the organisation in the sign-in and the Microsoft start (always the one),
    * and the "Installation" block of the Organisation page (its settings join the organisation's).
-   * With no organisation yet, the first is made as always (INITIAL_ADMIN_USER or the seed); a
-   * database with more than one stops the start (docs/single-tenant.md). Default 'false'.
+   * With no organisation yet, the first is made as always (INITIAL_ADMIN_USER or the seed). With
+   * several, one is served (SINGLE_TENANT_ORG, or the oldest) and every other is closed: sign-in,
+   * sessions, keys, public links and the worker's jobs (docs/single-tenant.md). Default 'false'.
    */
   SINGLE_TENANT: z
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /**
+   * With SINGLE_TENANT=true and several organisations in the database: the one served, by slug or
+   * id. Unset: the oldest (by creation), with a warning at the start. One the database does not
+   * have stops the start. Ignored without SINGLE_TENANT.
+   */
+  SINGLE_TENANT_ORG: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().trim().toLowerCase().max(450).optional(),
+  ),
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),

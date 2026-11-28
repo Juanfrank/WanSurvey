@@ -101,7 +101,9 @@ Seeded accounts log in with their e-mail only, for example `project.manager@demo
 
 An installation for **one organisation** sets `SINGLE_TENANT=true`: choosing and switching
 organisations, and the "whole installation" settings, are hidden and refused, and the seed makes
-`demo` alone. See [`docs/single-tenant.md`](docs/single-tenant.md).
+`demo` alone. On a database with several organisations it serves one (`SINGLE_TENANT_ORG`, or the
+oldest) and closes every door of the others until the setting is removed. See
+[`docs/single-tenant.md`](docs/single-tenant.md).
 
 ## Checks
 

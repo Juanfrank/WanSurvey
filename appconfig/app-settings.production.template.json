@@ -160,6 +160,11 @@
     "slotSetting": false
   },
   {
+    "name": "SINGLE_TENANT_ORG",
+    "value": "<OPTIONAL — only with SINGLE_TENANT=true and several organisations in the database: the slug or id of the one served (unset: the oldest); one the database lacks stops the start>",
+    "slotSetting": false
+  },
+  {
     "name": "SESSION_IDLE_MINUTES",
     "value": "60",
     "slotSetting": false

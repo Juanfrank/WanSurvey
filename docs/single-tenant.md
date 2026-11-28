@@ -6,30 +6,71 @@ settings, `apps/api/.env`): what exists only because there may be several organi
 hidden in the web app and refused by the API. It is a deployment setting, read when the API and the
 worker start: nobody can change it from the interface. Without it (or with `false`) nothing changes.
 
-| Setting         | Value                       |
-| --------------- | --------------------------- |
-| `SINGLE_TENANT` | `true` or `false` (default) |
+| Setting             | Value                                                                    |
+| ------------------- | ------------------------------------------------------------------------ |
+| `SINGLE_TENANT`     | `true` or `false` (default)                                              |
+| `SINGLE_TENANT_ORG` | the slug or id of the organisation served, when the database has several |
 
 ## Which organisation
 
 The API finds the organisation when it starts (the worker too):
 
 - **None yet** (a new installation): it starts, and serves the first organisation as soon as it
-  exists, and keeps serving that one. The first is made as always: `INITIAL_ADMIN_USER`
-  (`docs/sso-entra.md`), which only ever makes one, on a database with no organisation; or, in
-  development, `pnpm db:seed`, which with `SINGLE_TENANT=true` in its environment makes `demo`
-  alone (no `demo2`) and refuses a database that already has an organisation.
+  exists, and keeps serving that one (with `SINGLE_TENANT_ORG`, only once the one it names
+  exists). The first is made as always: `INITIAL_ADMIN_USER` (`docs/sso-entra.md`), which only
+  ever makes one, on a database with no organisation; or, in development, `pnpm db:seed`, which
+  with `SINGLE_TENANT=true` in its environment makes `demo` alone (no `demo2`) and refuses a
+  database that already has an organisation.
 - **One**: that one.
-- **More than one**: the start **fails** with
-  `SINGLE_TENANT=true, but the database has N organisations: the mode serves one; turn it off (SINGLE_TENANT=false) or keep a single organisation in the database`.
-  The mode does not pick one: the others would keep running behind its back (their web-survey
-  links, e-mail waves, webhooks, share links and jobs do not go through a sign-in), so a database
-  of several organisations stays in the default mode.
+- **More than one**: it starts and serves **one**; every other is **closed** (below).
+  - `SINGLE_TENANT_ORG` names it, by slug (`acme`) or id, in any case. If the database has no
+    organisation with that slug or id the start **fails**, since it is a setting to fix:
+    `SINGLE_TENANT_ORG=acme, but the database has no organisation with that slug or id; set it to the slug or id of an existing organisation, or leave it unset to serve the oldest`.
+  - Without it, the **oldest** (by creation date) is served, and the start log warns:
+    `Single-tenant mode: the database has 2 organisations; 1 other is closed (sign-in, sessions, API keys, links and jobs) while the mode is on; their data is kept. SINGLE_TENANT_ORG is not set: serving the oldest, acme (…); set SINGLE_TENANT_ORG to the slug or id of the one to serve`.
 
 If a second organisation is made while the API runs (a script, the seed run without the setting),
-the running processes keep serving the first and never open the second (its sessions and API keys
-are refused); the next start refuses the database. If two appear at once after a start on an empty
-database, requests answer **503** `SINGLE_TENANT_AMBIGUOUS` with the same message until it is fixed.
+the running processes keep serving the first and the second is closed. If organisations appear
+after a start on an empty database but none is the one `SINGLE_TENANT_ORG` names, requests answer
+**503** `SINGLE_TENANT_ORG` with the same message until it exists or the setting is fixed.
+
+## The other organisations are closed
+
+With the mode on, the organisations other than the one served are **closed**: nothing reaches them
+and nothing leaves from them. Their **data is not deleted or changed**: it is only out of reach while
+the mode is on (the one exception is a person's opt-out, below). Nothing about it is stored: it is worked out at each start from the settings, so
+removing `SINGLE_TENANT` (or pointing `SINGLE_TENANT_ORG` at another one) opens them again at the next
+start, with nothing to do by hand. The database is fenced in the API and the worker alike: the
+lookups and lists that work across organisations leave the closed ones out, and opening a closed one
+in any other way answers as if it did not exist (**404**).
+
+Public answers about a closed organisation are the ones a link or account that never existed gets,
+so nothing tells that it is there:
+
+| Door                                                                                           | For a closed organisation                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sign-in with a password                                                                        | an account that is not a member of the served organisation is no account here: "Invalid e-mail or password" (401) whether the password is right or not, without counting failures, locking the account or e-mailing a lock notice |
+| Password reset (`/auth/password/forgot`, `/reset`), invitation to join (`/invitations/accept`) | no e-mail for such an account; its reset link and an invitation of a closed organisation are "Invalid or expired link"                                                                                                            |
+| Microsoft sign-in (start and callback)                                                         | the start always opens the served one; a callback for a closed one (a sign-in started before) fails as a stale sign-in (`invalid_state`) and records nothing                                                                      |
+| Sessions already open                                                                          | 401 `SESSION_EXPIRED`                                                                                                                                                                                                             |
+| API keys of the integration (`/ext`, `Authorization: Bearer`)                                  | 401 `INVALID_API_KEY`                                                                                                                                                                                                             |
+| Personal web-survey links (`/s/…`), their logo, sync and submit, tracking and unsubscribe      | 404 "Link not found", as an unknown link                                                                                                                                                                                          |
+| Open web-survey links (`/o/…`)                                                                 | 404, as an unknown link                                                                                                                                                                                                           |
+| Feedback links (`/f/…`)                                                                        | 404, as an unknown link                                                                                                                                                                                                           |
+| Share links of the summary (`/share/…`)                                                        | 404 `LINK_EXPIRED`, as an unknown link                                                                                                                                                                                            |
+| Mail provider events (`/webhooks/mail`) and SMS replies (`/webhooks/sms`)                      | ignored, except an opt-out: an SMS stop word, a hard bounce or a complaint still puts the address on that organisation's suppression list, so nobody who opted out is written to once it opens again                              |
+| E-mail and SMS waves, reminders                                                                | not sent: they wait, untouched, in the database                                                                                                                                                                                   |
+| Outgoing webhooks, web notifications (push)                                                    | not delivered: they wait in the outbox                                                                                                                                                                                            |
+| Scheduled jobs: case expiry, figures, quality risk, retention and purges, encryption of data   | do not run for them (nothing of theirs is purged or changed)                                                                                                                                                                      |
+| Jobs already queued for them (an export, figures to refresh, a scan)                           | set aside without running or failing; the work stays in the database for when they open                                                                                                                                           |
+
+The **analysis model** (`docs/bi.md`) is read straight from the database by its own reader login and
+covers every organisation by design; while the others are closed their data does not change, so its
+refresh rewrites the same rows for them. Restrict that login in the database if the others' rows must
+not be read either.
+
+When the mode is turned off, the waiting mail, webhooks and jobs go out at the next run of the
+worker, the links work again and their people sign in as before.
 
 ## What is hidden and refused
 
@@ -44,7 +85,6 @@ use them, and nobody can.
 | `POST /api/v1/auth/login` with `tenant` (slug or id)                               | `tenant` is ignored: the session is always in the one organisation; someone who is not a member of it gets the usual "Invalid e-mail or password"                  |
 | `GET /api/v1/auth/me`, login answer: `tenants`                                     | only the one organisation                                                                                                                                          |
 | Microsoft sign-in: the organisation found from `?org=` or from the e-mail's domain | always the one; the sign-in page does not ask for the e-mail first (`microsoftNeedsEmail: false`). The organisation's allowed domains still decide who may come in |
-| A session or API key of another organisation in the database                       | 401 (`SESSION_EXPIRED`, `INVALID_API_KEY`)                                                                                                                         |
 | Account menu: the **Organisation** picker                                          | hidden                                                                                                                                                             |
 | Waiting page (no role yet): "You also belong to" other organisations               | hidden                                                                                                                                                             |
 | Organisation page: the **Whole installation** block                                | hidden; its one setting (the analysis model's refresh) joins the organisation's own cards, since the installation is the organisation                              |

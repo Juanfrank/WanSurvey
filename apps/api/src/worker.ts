@@ -29,7 +29,17 @@ const app = await NestFactory.createApplicationContext(AppModule.register({ role
 });
 app.useLogger(app.get(Logger));
 app.enableShutdownHooks();
-await app.init();
+try {
+  await app.init();
+} catch (e) {
+  // SINGLE_TENANT cannot tell which organisation to serve: a setting to change, not a wait.
+  if (e instanceof Error && e.name === 'SingleTenantError') {
+    console.error(`Invalid configuration: ${e.message}`);
+    await app.close().catch(() => undefined);
+    process.exit(1);
+  }
+  throw e;
+}
 
 // Health for hosts that expect every container to answer HTTP (Azure App Service).
 if (config.WORKER_HEALTH_PORT) {

@@ -497,14 +497,15 @@ export class CawiService implements OnModuleInit {
 
   /**
    * A reply from a respondent, handed over by the provider: a stop word puts the number on the
-   * list of those never written to again, in every organisation that wrote to it.
+   * list of those never written to again, in every organisation that wrote to it: closed ones
+   * too (single-tenant mode), so the opt-out holds once they open again.
    */
   async smsInbound(body: { from: string; text: string }) {
     const from = body.from.replace(/[\s()-]/g, '');
     if (!isOptOut(body.text) || !isE164(from)) return { optedOut: 0 };
     let n = 0;
-    for (const tenantId of await this.engine.tenantsInvitedAt(from)) {
-      await this.repo.inTenant(tenantId, async (t) => {
+    for (const tenantId of await this.engine.tenantsInvitedAt(from, { evenClosed: true })) {
+      await this.repo.inTenantForOptOut(tenantId, async (t) => {
         await t.suppress(from, 'unsubscribe');
         n++;
       });
@@ -929,8 +930,20 @@ export class CawiService implements OnModuleInit {
   async webhook(body: z.infer<typeof WebhookBody>) {
     let applied = 0;
     for (const ev of body.events) {
-      const tenantId = await this.engine.invitationTenant(ev.invitationId);
+      const tenantId = await this.engine.invitationTenant(ev.invitationId, { evenClosed: true });
       if (!tenantId) continue;
+      if (!(await this.engine.opens(tenantId))) {
+        // A closed organisation (single-tenant mode): only an opt-out is kept (a hard bounce or a
+        // complaint), so it holds once the organisation opens again; nothing else is recorded.
+        if (ev.type === 'delivered' || (ev.type === 'bounce' && ev.bounceType !== 'hard')) continue;
+        await this.repo.inTenantForOptOut(tenantId, async (t) => {
+          const inv = await t.lockInvitation(ev.invitationId);
+          if (!inv) return;
+          await this.suppress(t, inv.email, ev.type === 'complaint' ? 'complaint' : 'hard_bounce');
+          applied++;
+        });
+        continue;
+      }
       await this.repo.inTenant(tenantId, async (t) => {
         const inv = await t.lockInvitation(ev.invitationId);
         if (!inv) return;

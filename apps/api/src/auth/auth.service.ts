@@ -111,6 +111,17 @@ export class AuthService {
   }
 
   /**
+   * Single-tenant mode: an account with no membership (of any status) in the served organisation
+   * is, here, no account at all: no sign-in, no lock or its notice, no reset e-mail. Accounts are
+   * global, but one only of closed organisations must not be reached through this installation.
+   */
+  private async reachable(userId: string): Promise<boolean> {
+    if (!this.tenancy.single) return true;
+    // Fenced: lists only the served organisation.
+    return (await this.repo.userTenants(userId, true)).length > 0;
+  }
+
+  /**
    * Accounts are global; a session belongs to one organisation. Without `tenant`, the
    * organisation used last (or the only one) is opened.
    */
@@ -118,7 +129,8 @@ export class AuthService {
     input: { email: string; password: string; tenant?: string },
     client: ClientInfo,
   ): Promise<LoginResult> {
-    const user = await this.repo.userByEmail(input.email);
+    const found = await this.repo.userByEmail(input.email);
+    const user = found && (await this.reachable(found.id)) ? found : null;
     // A locked account is not tried, so guesses during the lock tell nothing; it answers as a
     // wrong password would, after the same work (an address without an account never locks,
     // so any other answer would tell that one has). Its owner hears of the lock by e-mail.
@@ -587,7 +599,7 @@ export class AuthService {
 
   async forgotPassword(input: { email: string }, client: ClientInfo) {
     const user = await this.repo.userByEmail(input.email);
-    if (!user || user.status !== 'active') return;
+    if (!user || user.status !== 'active' || !(await this.reachable(user.id))) return;
     const token = await this.repo.inUser(user.id, async (t) => {
       const raw = await t.issueToken({
         tenantId: null,
@@ -615,6 +627,8 @@ export class AuthService {
   /** A new password ends every session of the account, in every organisation. */
   async resetPassword(input: { token: string; password: string }, client: ClientInfo) {
     const token = await this.peekToken(input.token, 'password_reset');
+    if (!(await this.reachable(token.userId)))
+      throw new BadRequestException('Invalid or expired link');
     const passwordHash = await hashPassword(input.password);
     await this.repo.inUser(token.userId, async (t) => {
       if (!(await t.useToken(input.token)))

@@ -154,7 +154,7 @@ export class SsoService {
    */
   async signedInUser(cookie: unknown): Promise<string | null> {
     const parsed = parseSessionCookie(cookie);
-    if (!parsed) return null;
+    if (!parsed || !(await this.tenancy.allows(parsed.tenantId))) return null;
     return this.repo.inTenant(parsed.tenantId, (t) =>
       t.passwordSessionUser(sha256Hex(parsed.token), new Date()),
     );
@@ -170,6 +170,9 @@ export class SsoService {
     client: ClientInfo,
     signedInUser: () => Promise<string | null> = async () => null,
   ): Promise<{ cookie: string; csrfToken: string; mfaState: string; returnTo: string }> {
+    // A sign-in started for an organisation this installation keeps closed (single-tenant mode,
+    // a state cookie from before) ends as a stale one, saying nothing of that organisation.
+    if (!(await this.tenancy.allows(st.tenantId))) throw new SsoError('invalid_state');
     const fail = (c: string) => new SsoError(c, st.tenantId);
     const config = await this.configs.forTenant(st.tenantId);
     if (
@@ -253,7 +256,9 @@ export class SsoService {
       !config.fromDeployment &&
       (await signedInUser()) !== existingId
     ) {
-      const elsewhere = (await this.repo.userTenants(existingId, true)).filter(
+      // Every membership, closed organisations included (single-tenant mode): one hidden here
+      // must not let a new identity into an account it would reach once the mode is off.
+      const elsewhere = (await this.repo.userTenants(existingId, true, true)).filter(
         (t) => t.id !== st.tenantId,
       );
       if (elsewhere.length) throw fail('link_required');
@@ -424,7 +429,8 @@ export class SsoService {
   }
 
   async recordFailure(tenantId: string | null, code: string, client: ClientInfo) {
-    if (!tenantId) return;
+    // A closed organisation (single-tenant mode) records nothing: its data is left as it was.
+    if (!tenantId || !(await this.tenancy.allows(tenantId))) return;
     await this.repo.inTenant(tenantId, (t) =>
       t.audit({ action: 'auth.sso_failed', details: { code }, ...client }),
     );

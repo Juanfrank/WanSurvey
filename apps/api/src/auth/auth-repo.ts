@@ -166,7 +166,12 @@ export interface AuthRepo {
   lockedUntil(userId: string): Promise<Date | null>;
   failed(userId: string, max: number, lockSeconds: number): Promise<Date | null>;
   succeeded(userId: string): Promise<void>;
-  userTenants(userId: string, includeInactive?: boolean): Promise<UserTenant[]>;
+  /** `evenClosed`: closed organisations too (single-tenant mode), for security checks only. */
+  userTenants(
+    userId: string,
+    includeInactive?: boolean,
+    evenClosed?: boolean,
+  ): Promise<UserTenant[]>;
   /** The account an external identity is linked to, in any organisation. */
   identityUser(issuer: string, subject: string): Promise<string | null>;
   /** Who a live token belongs to, without using it (the link carries only the token). */
@@ -485,8 +490,8 @@ export class MssqlAuthRepo implements AuthRepo {
   succeeded(userId: string) {
     return this.db.accountSucceeded(userId);
   }
-  userTenants(userId: string, includeInactive = false) {
-    return this.db.userTenants(userId, includeInactive);
+  userTenants(userId: string, includeInactive = false, evenClosed = false) {
+    return this.db.userTenants(userId, includeInactive, evenClosed);
   }
 
   async contactOf(userId: string) {
