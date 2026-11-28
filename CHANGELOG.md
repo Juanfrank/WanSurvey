@@ -34,6 +34,22 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     by the rules; share out the free cases) sit on the right; assigning, unassigning and
     withdrawing the ticked cases is in a bar at the bottom; each case takes one line; the note on
     hidden personal data is a footnote under the table.
+  - **Questionnaire designer**: the breadcrumb, with the questionnaire's name as the title, is
+    on the top row beside the account; the name, language, save state, Undo, Redo and Publish
+    are one row; Design / Settings, the open one's topics (those that do not fit under "More
+    ▾") and a small "Distribution →" link are another, so the editor starts near the top. The
+    outline's keyboard shortcuts fold behind "ⓘ Keyboard shortcuts", the routing map's help is
+    an ⓘ, a version's "Download JSON" and "Retire" are in its "⋯", and an option's Exclusive,
+    Other (specify) and Fixed position are a line of three named toggles instead of three
+    stacked checkboxes.
+  - **Questionnaires tab**: the modes are one line ("CATI · CAPI · CAWI · PAPI"), the table no
+    longer overflows (headers on one line, a questionnaire's successor under its state, the
+    actions a "⋯"), and "+ New questionnaire" opens the create form in a side panel instead of
+    a form always open under the list.
+  - **Preview and printed slips**: the preview's questionnaire and its checks fold into one line
+    with the counts, and mode, language, date and full quotas are one slim bar, with "as the
+    interviewer sees it" beside the tabs, so the interview starts near the top. The slips page
+    puts "← Back" and its title on the top row and its controls in one bar.
   - **Fieldwork screens**: the interview, the review of an interview, My device and the print
     page put their breadcrumb, with the case (or the page) as the title, on the top row beside
     the account; the interview's timers, language and "Saved" are one slim line instead of a

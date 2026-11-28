@@ -55,6 +55,11 @@ export function PageHeader({
   actions?: ReactNode;
   /** Left out of the printout (a page that is printed, like the paper forms). */
   noPrint?: boolean;
+  /**
+   * Kept for callers that ask for one line: the breadcrumb is always on one line now (its
+   * steps shrink with an ellipsis instead of wrapping).
+   */
+  nowrap?: boolean;
 }) {
   const { t } = useTranslation();
   const slot = useContext(HeaderSlotContext);

@@ -54,6 +54,29 @@ export async function gotoTab(page: Page, name: string) {
 }
 
 /**
+ * Opens a topic of the questionnaire designer (Form, Routing, Preview… under Design; General,
+ * Quotas… under Settings) by its name, wherever it is: in the row beside Design / Settings or,
+ * when the row is narrow, under its "More ▾". A count after the name (Routing 2) is allowed.
+ */
+export async function designerTab(page: Page, name: string) {
+  const tabs = page.getByRole('tablist', {
+    name: /^(Design sections|Settings topics|Secciones del diseño|Temas de los ajustes)$/,
+  });
+  await expect(tabs.getByRole('tab').first()).toBeVisible();
+  const named = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\d*$`);
+  const tab = tabs.getByRole('tab', { name: named });
+  if (!(await tab.count())) {
+    const row = page.getByTestId('designer-tabs-row');
+    await row.getByRole('button', { name: /^(More sections|Más secciones)$/ }).click();
+    await page
+      .getByRole('menu', { name: /^(More sections|Más secciones)$/ })
+      .getByRole('menuitem', { name, exact: true })
+      .click();
+  } else await tab.click();
+  await expect(tabs.getByRole('tab', { name: named })).toHaveAttribute('aria-selected', 'true');
+}
+
+/**
  * Opens a list's Filters panel (FilterBar: the selects and quick filters are behind the
  * "Filters" button), if it is closed. `scope`: where the list is, when the page has several.
  */

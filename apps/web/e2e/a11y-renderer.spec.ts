@@ -9,6 +9,8 @@ async function openAllTypes(page: Page, mode: 'CAWI' | 'CAPI') {
   await login(page);
   await page.getByRole('link', { name: 'Open the preview' }).click();
   await expect(page.getByRole('heading', { name: 'Questionnaire preview' })).toBeVisible();
+  // The sample picker is in the folded "Questionnaire: …" line.
+  await page.getByTestId('preview-source').locator('summary').first().click();
   await page
     .locator('select', { has: page.locator('option[value="all-types"]') })
     .selectOption('all-types');

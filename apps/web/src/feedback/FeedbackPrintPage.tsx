@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { QrCode } from '../papi/QrCode.js';
-import { Button } from '../routes/ui.js';
+import { Button, PageHeader } from '../routes/ui.js';
 import { Face } from './Faces.js';
 import type { FeedbackItem } from '@wansurvey/schema/feedback';
 import type { TFunction } from 'i18next';
@@ -46,19 +46,29 @@ export function FeedbackPrintPage() {
   const small = perPage === 8;
   return (
     <div className="flex flex-col gap-6" data-testid="feedback-print">
-      <div className="no-print flex flex-wrap items-end gap-3">
-        <Link
-          to="/projects/$projectId"
-          params={{ projectId }}
-          search={{ tab: 'questionnaires' }}
-          className="text-sm text-slate-600 hover:underline"
-        >
-          ← {t('feedback.back')}
-        </Link>
-        <h1 className="text-2xl font-bold">{t('feedback.print')}</h1>
-        {p ? <span className="text-sm text-slate-700">{p.name}</span> : null}
-        <label className="flex flex-col gap-1 text-sm">
-          <span>{t('feedback.perPage')}</span>
+      {/* "← Back", the title and the Likert's name on the account's row. */}
+      <PageHeader
+        noPrint
+        icon={
+          <Link
+            to="/projects/$projectId"
+            params={{ projectId }}
+            search={{ tab: 'questionnaires' }}
+            className="text-sm text-slate-600 hover:underline"
+          >
+            ← {t('feedback.back')}
+          </Link>
+        }
+        title={t('feedback.print')}
+        aside={p ? <span className="text-sm text-slate-700">{p.name}</span> : null}
+      />
+      {/* The controls in one bar, each label beside its control. */}
+      <div
+        className="no-print flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-card"
+        data-testid="slips-controls"
+      >
+        <label className="flex items-center gap-2">
+          <span className="font-medium">{t('feedback.perPage')}</span>
           <select
             className="rounded-md border border-slate-300 bg-white px-2 py-1"
             value={perPage}
@@ -74,8 +84,8 @@ export function FeedbackPrintPage() {
         {items
           .filter((it) => it.param && (it.type === 'single' || it.type === 'yesno'))
           .map((it) => (
-            <label key={it.id} className="flex flex-col gap-1 text-sm">
-              <span>
+            <label key={it.id} className="flex min-w-0 items-center gap-2">
+              <span className="font-medium">
                 {t('feedback.presetOnSlips')}: {text(it.text)}
               </span>
               <select
@@ -98,7 +108,13 @@ export function FeedbackPrintPage() {
               </select>
             </label>
           ))}
-        <Button type="button" onClick={() => window.print()} disabled={!p}>
+        <Button
+          type="button"
+          size="sm"
+          className="ml-auto"
+          onClick={() => window.print()}
+          disabled={!p}
+        >
           {t('feedback.printNow')}
         </Button>
       </div>

@@ -38,6 +38,7 @@ test('the information notice is part of the questionnaire: added from the design
 
   // A new questionnaire: the button adds the standard pair at the start.
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
+  await page.getByRole('button', { name: 'New questionnaire', exact: true }).click();
   await page.getByLabel('Questionnaire name').fill('Con aviso');
   await page.getByTestId('new-q-modes').getByRole('checkbox', { name: /^CAPI/ }).check();
   await page.getByRole('button', { name: 'Create and open' }).click();

@@ -57,6 +57,10 @@ export interface OverflowTab {
   rarely?: boolean;
   /** Called on a click on the tab (or on its entry in "More"), besides selecting it. */
   onClick?: () => void;
+  /** Shown after the label in the row (a count); in "More" only the label is shown. */
+  badge?: ReactNode;
+  /** The entry's text in "More", when it differs from the label (it carries the badge's count). */
+  menuLabel?: string;
 }
 
 /** The gap between two tabs (gap-1). */
@@ -92,6 +96,7 @@ export function OverflowTabList({
   value,
   onSelect,
   end,
+  sub = false,
 }: {
   label: string;
   items: OverflowTab[];
@@ -102,7 +107,10 @@ export function OverflowTabList({
    * Under 640 px they get a row of their own above the tabs.
    */
   end?: ReactNode;
+  /** Second level: soft pills (subTabCls), without the line under the row. */
+  sub?: boolean;
 }) {
+  const cls = sub ? subTabCls : tabCls;
   const { t } = useTranslation();
   const wrap = useRef<HTMLDivElement>(null);
   /** The part of the row the tabs have (all of it but `end`). */
@@ -166,8 +174,11 @@ export function OverflowTabList({
   const hidden = items.filter((x) => !shown.includes(x));
 
   const row = (
-    <div ref={wrap} className="relative flex min-w-0 items-end gap-x-3 border-b border-slate-200">
-      <div ref={room} className="flex min-w-0 flex-1 items-end gap-x-1">
+    <div
+      ref={wrap}
+      className={`relative flex min-w-0 gap-x-3 ${sub ? 'flex-1 items-center' : 'items-end border-b border-slate-200'}`}
+    >
+      <div ref={room} className={`flex min-w-0 flex-1 gap-x-1 ${sub ? 'items-center' : 'items-end'}`}>
         <Tabs.List
           aria-label={label}
           className={`flex min-w-0 gap-1 ${narrow ? 'overflow-x-auto' : ''}`}
@@ -177,10 +188,11 @@ export function OverflowTabList({
             <Tabs.Trigger
               key={x.value}
               value={x.value}
-              className={`${tabCls} whitespace-nowrap`}
+              className={`${cls} whitespace-nowrap`}
               onClick={x.onClick}
             >
               {x.label}
+              {x.badge}
             </Tabs.Trigger>
           ))}
         </Tabs.List>
@@ -188,11 +200,15 @@ export function OverflowTabList({
           <MoreMenu
             label={t('ui.moreSections')}
             unstyled
-            className="-mb-px inline-flex flex-none items-center gap-1 whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy aria-expanded:text-navy"
+            className={
+              sub
+                ? 'inline-flex flex-none items-center gap-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 aria-expanded:text-navy'
+                : '-mb-px inline-flex flex-none items-center gap-1 whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy aria-expanded:text-navy'
+            }
             entries={hidden.map((x) => ({
               type: 'item' as const,
               id: x.value,
-              label: x.label,
+              label: x.menuLabel ?? x.label,
               onSelect: () => {
                 x.onClick?.();
                 onSelect(x.value);
@@ -220,11 +236,12 @@ export function OverflowTabList({
         className="pointer-events-none invisible absolute left-0 top-0 flex h-0 w-max overflow-hidden whitespace-nowrap"
       >
         {items.map((x) => (
-          <span key={x.value} className={`${tabCls} flex-none font-semibold`}>
+          <span key={x.value} className={`${cls} flex-none font-semibold`}>
             {x.label}
+            {x.badge}
           </span>
         ))}
-        <span className={`${tabCls} flex-none`}>{t('ui.more')} ▾</span>
+        <span className={`${cls} flex-none`}>{t('ui.more')} ▾</span>
       </div>
     </div>
   );

@@ -3,15 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { buildModel, compile, type CompiledQuestionnaire } from '@wansurvey/logic';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { DiagnosticsPanel, ScenariosPanel } from '../preview/panels.js';
 import { PreviewWorkbench } from '../preview/PreviewPage.js';
 import { usePreview } from '../preview/usePreview.js';
 import { ListIcon } from '../routes/icons.js';
+import { MoreMenu } from '../routes/MoreMenu.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button, Card, Drawer } from '../routes/ui.js';
-import { SubTabBar, TabBar } from '../routes/tabs.js';
+import { OverflowTabList, tabCls } from '../routes/tabs.js';
+import { PageHeader } from '../routes/PageHeader.js';
 import { TypeEnvContext } from './context.js';
 import { Dialog } from './Dialog.js';
 import {
@@ -99,6 +102,8 @@ export function DesignerPage() {
   const [selected, setSelected] = useState(SETTINGS_ID);
   const [renameTick, setRenameTick] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  // Where the open tab's topics go: in the row of Design / Settings.
+  const [subSlot, setSubSlot] = useState<HTMLElement | null>(null);
   const [message, setMessage] = useState('');
   const [notice, setNotice] = useState('');
   const [libraryAt, setLibraryAt] = useState<{ after: string | null; inside: boolean } | null>(
@@ -239,23 +244,29 @@ export function DesignerPage() {
           <SourceLanguageContext.Provider value={draft.defaultLanguage ?? null}>
             <FoldHintsContext.Provider value={true}>
               <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
-                {/* As tall as the account pill beside it, so the name row starts below it. */}
-                <nav
-                  aria-label={t('designer.breadcrumb')}
-                  className="text-sm text-slate-600 min-[900px]:min-h-10"
-                >
-                  <Link to="/projects" className="hover:underline">
-                    {t('designer.projects')}
-                  </Link>{' '}
-                  /{' '}
-                  <Link
-                    to="/projects/$projectId"
-                    params={{ projectId }}
-                    className="hover:underline"
-                  >
-                    {project.data?.name ?? t('designer.project')}
-                  </Link>
-                </nav>
+                {/* The breadcrumb, with the questionnaire's name as the h1, beside the account. */}
+                <PageHeader
+                  nowrap
+                  parents={[
+                    <Link key="all" to="/projects" className="hover:underline">
+                      {t('designer.projects')}
+                    </Link>,
+                    <Link
+                      key="p"
+                      to="/projects/$projectId"
+                      params={{ projectId }}
+                      title={project.data?.name}
+                      className="hover:underline"
+                    >
+                      {project.data?.name ?? t('designer.project')}
+                    </Link>,
+                  ]}
+                  title={
+                    <span className="truncate" title={d.name}>
+                      {d.name || t('designer.untitled')}
+                    </span>
+                  }
+                />
                 {qState && qState !== 'active' ? (
                   <p
                     role="status"
@@ -268,34 +279,35 @@ export function DesignerPage() {
                 {/* One toolbar on every tab, kept at the top while scrolling: the name, then the
                 language, save state, undo, redo and publish as one group on the right. */}
                 <div
-                  className="sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-2 py-2"
+                  className="sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-2 py-1"
                   data-testid="designer-toolbar"
                 >
-                  <h1 className="sr-only">{d.name}</h1>
-                  <label className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-[14rem]">
+                  <label className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-[6rem]">
                     <span className="sr-only">{t('designer.name')}</span>
                     <input
-                      className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-2xl font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-lg font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       value={d.name}
                       readOnly={!canEdit}
                       onChange={(e) => d.rename(e.target.value)}
                     />
                   </label>
-                  <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+                  <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                     {draft.languages.length > 1 ? (
-                      <label className="flex items-center gap-2 text-sm">
-                        <span>{t('designer.contentLanguage')}</span>
+                      <label
+                        className="flex items-center gap-2 text-sm"
+                        title={t('designer.contentLanguage')}
+                      >
+                        <span className="sr-only">{t('designer.contentLanguage')}</span>
                         <select
                           className="rounded-md border border-slate-300 bg-white px-2 py-1"
                           value={lang}
                           onChange={(e) => setEditLang(e.target.value)}
                         >
+                          {/* Codes only, to keep the row short: while translating, each text
+                          shows the default language's original beside it. */}
                           {draft.languages.map((l) => (
                             <option key={l} value={l}>
                               {l}
-                              {l === draft.defaultLanguage
-                                ? ` (${t('designer.settings.default')})`
-                                : ''}
                             </option>
                           ))}
                         </select>
@@ -304,21 +316,26 @@ export function DesignerPage() {
                     <SaveStatus status={d.status} />
                     {canEdit ? (
                       <>
+                        {/* Undo and redo as two arrows, named and titled (Ctrl+Z, Ctrl+Y). */}
                         <button
                           type="button"
-                          className={smallBtn}
+                          className={`${smallBtn} px-2`}
                           disabled={!d.canUndo}
                           onClick={d.undo}
+                          aria-label={t('designer.undo')}
+                          title={`${t('designer.undo')} (Ctrl+Z)`}
                         >
-                          {t('designer.undo')}
+                          <span aria-hidden="true">↶</span>
                         </button>
                         <button
                           type="button"
-                          className={smallBtn}
+                          className={`${smallBtn} px-2`}
                           disabled={!d.canRedo}
                           onClick={d.redo}
+                          aria-label={t('designer.redo')}
+                          title={`${t('designer.redo')} (Ctrl+Y)`}
                         >
-                          {t('designer.redo')}
+                          <span aria-hidden="true">↷</span>
                         </button>
                       </>
                     ) : null}
@@ -379,50 +396,69 @@ export function DesignerPage() {
                   onValueChange={(v) => go(v as Top)}
                   className="flex flex-col gap-4"
                 >
-                  <TabBar
-                    label={t('designer.top.label')}
-                    items={[
-                      { value: 'design', label: t('designer.top.design') },
-                      { value: 'settings', label: t('designer.top.settings') },
-                    ]}
-                  />
-                  {distributionSub ? (
-                    <p className="-mt-2 text-right text-sm">
+                  {/* One row: Design / Settings, the open one's topics (moved in from below,
+                  the ones that do not fit in "More") and the link to the distribution. */}
+                  <div
+                    className="flex min-w-0 items-center gap-x-2 border-b border-slate-200"
+                    data-testid="designer-tabs-row"
+                  >
+                    <Tabs.List
+                      aria-label={t('designer.top.label')}
+                      className="flex flex-none gap-1 self-end"
+                    >
+                      {TOPS.map((x) => (
+                        <Tabs.Trigger key={x} value={x} className={`${tabCls} whitespace-nowrap`}>
+                          {t(`designer.top.${x}`)}
+                        </Tabs.Trigger>
+                      ))}
+                    </Tabs.List>
+                    <span aria-hidden="true" className="h-5 w-px flex-none bg-slate-300" />
+                    <div ref={setSubSlot} className="flex min-w-0 flex-1 py-1" />
+                    {distributionSub ? (
                       <Link
                         to="/projects/$projectId"
                         params={{ projectId }}
                         search={{ tab: distributionSub, q: qid }}
-                        className="font-medium text-indigo-ink-700 hover:underline"
+                        title={t('designer.top.distributionHint')}
+                        className="flex-none whitespace-nowrap py-1 text-xs font-medium text-indigo-ink-700 hover:underline"
                         data-testid="designer-distribution-link"
                       >
                         {t('designer.top.distributionLink')}
                       </Link>
-                    </p>
-                  ) : null}
+                    ) : null}
+                  </div>
                   <Tabs.Content value="design">
                     <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
-                      <SubTabBar
-                        label={t('designer.designSections')}
-                        items={[
-                          { value: 'design', label: t('designer.tab.form') },
-                          {
-                            value: 'routing',
-                            label: (
-                              <>
-                                {t('designer.tab.routing')}
-                                {errorCount ? (
-                                  <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
-                                    {errorCount}
-                                  </span>
-                                ) : null}
-                              </>
-                            ),
-                          },
-                          { value: 'preview', label: t('designer.tab.preview') },
-                          { value: 'scenarios', label: t('designer.tab.scenarios') },
-                          { value: 'versions', label: t('designer.tab.versions') },
-                        ]}
-                      />
+                      {subSlot
+                        ? createPortal(
+                            <OverflowTabList
+                              sub
+                              label={t('designer.designSections')}
+                              value={tab}
+                              onSelect={setTab}
+                              items={[
+                                { value: 'design', label: t('designer.tab.form') },
+                                {
+                                  value: 'routing',
+                                  label: t('designer.tab.routing'),
+                                  // Under "More", the count goes with the name.
+                                  menuLabel: errorCount
+                                    ? `${t('designer.tab.routing')} (${errorCount})`
+                                    : undefined,
+                                  badge: errorCount ? (
+                                    <span className="ml-1.5 rounded bg-red-100 px-1.5 text-xs text-red-ink-900">
+                                      {errorCount}
+                                    </span>
+                                  ) : null,
+                                },
+                                { value: 'preview', label: t('designer.tab.preview') },
+                                { value: 'scenarios', label: t('designer.tab.scenarios') },
+                                { value: 'versions', label: t('designer.tab.versions') },
+                              ]}
+                            />,
+                            subSlot,
+                          )
+                        : null}
 
                       <Tabs.Content
                         value="design"
@@ -600,13 +636,22 @@ export function DesignerPage() {
                       onValueChange={(v) => go('settings', v)}
                       className="flex flex-col gap-4"
                     >
-                      <SubTabBar
-                        label={t('designer.settingsSections')}
-                        items={SETTINGS_PARTS.map((x) => ({
-                          value: x,
-                          label: x === 'modes' ? t('designer.modes') : t(`designer.settings.${x}`),
-                        }))}
-                      />
+                      {subSlot
+                        ? createPortal(
+                            <OverflowTabList
+                              sub
+                              label={t('designer.settingsSections')}
+                              value={settingsPart}
+                              onSelect={(v) => go('settings', v)}
+                              items={SETTINGS_PARTS.map((x) => ({
+                                value: x,
+                                label:
+                                  x === 'modes' ? t('designer.modes') : t(`designer.settings.${x}`),
+                              }))}
+                            />,
+                            subSlot,
+                          )
+                        : null}
                       <Tabs.Content value={settingsPart}>
                         <Card>
                           <h2 className="sr-only">
@@ -1069,25 +1114,35 @@ function VersionsPanel({
                 </td>
                 <td>{v.hasMapping ? t('designer.versions.yes') : '—'}</td>
                 <td className="whitespace-nowrap text-right">
-                  <button type="button" className={smallBtn} onClick={() => setViewing(v.version)}>
-                    {t('designer.versions.download')}
-                  </button>{' '}
-                  {canPublish && v.status === 'published' ? (
-                    <button
-                      type="button"
-                      className={smallBtn}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            t('designer.versions.confirmRetire', { version: v.version }),
-                          )
-                        )
-                          retire.mutate(v.version);
-                      }}
-                    >
-                      {t('designer.versions.retire')}
-                    </button>
-                  ) : null}
+                  {/* Download and retire behind the row's "⋯". */}
+                  <MoreMenu
+                    label={t('designer.versions.actions', { version: v.version })}
+                    entries={[
+                      {
+                        type: 'item',
+                        id: 'download',
+                        label: t('designer.versions.download'),
+                        onSelect: () => setViewing(v.version),
+                      },
+                      ...(canPublish && v.status === 'published'
+                        ? [
+                            {
+                              type: 'item' as const,
+                              id: 'retire',
+                              label: t('designer.versions.retire'),
+                              onSelect: () => {
+                                if (
+                                  window.confirm(
+                                    t('designer.versions.confirmRetire', { version: v.version }),
+                                  )
+                                )
+                                  retire.mutate(v.version);
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
                 </td>
               </tr>
             ))}

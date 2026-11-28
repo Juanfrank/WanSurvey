@@ -162,6 +162,7 @@ const en = {
     contextHelp:
       'Sample data, respondent and interviewer used by pipes and logic: {"case": {…}, "respondent": {…}, "interviewer": {…}}',
     quotasFull: 'Quota cells treated as full',
+    quotasShort: 'Full quotas:',
     reset: 'Restart interview',
     tabs: { interview: 'Interview', compare: 'Compare modes', answers: 'Answers' },
     asSeen: {
@@ -387,6 +388,7 @@ const es: Catalogue = {
     contextHelp:
       'Datos de muestra, encuestado y entrevistador usados por los textos variables y la lógica: {"case": {…}, "respondent": {…}, "interviewer": {…}}',
     quotasFull: 'Celdas de cuota tratadas como llenas',
+    quotasShort: 'Cuotas llenas:',
     reset: 'Reiniciar entrevista',
     tabs: { interview: 'Entrevista', compare: 'Comparar modos', answers: 'Respuestas' },
     asSeen: {
