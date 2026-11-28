@@ -57,7 +57,8 @@ header out of a printout.
 `OverflowTabList` replaces a wrapping `Tabs.List` of first-level tabs. Mark the seldom used tabs
 `rarely: true` (on a project: People and Project settings): they live in "More ▾" unless open. The
 last tabs that do not fit go there too; the open tab is always in the row. Under 640 px the row
-scrolls sideways.
+scrolls sideways. `sub` gives second-level pills (the questionnaire designer's topics, in the
+row of Design / Settings), and an item's `badge` (a count) shows after its label in the row.
 
 ```tsx
 <OverflowTabList
@@ -199,6 +200,8 @@ only, a warning) stay in view, small.
 - `gotoTab(page, 'Project settings')`: opens a project tab from the row or from "More".
   Use it for every first-level project tab that may be under "More" (People, Project settings),
   and in loops over tabs.
+- `designerTab(page, 'Versions')`: opens a topic of the questionnaire designer (under Design or
+  Settings) from the row or from its "More".
 - `openFilters(page)` / `closeFilters(page)`: open the Filters panel before using a filter
   control, and close it before clicking rows it may cover.
 

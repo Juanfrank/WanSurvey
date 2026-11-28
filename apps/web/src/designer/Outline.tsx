@@ -657,9 +657,25 @@ export function Outline({
           })}
         </ul>
       </div>
-      <p id="outline-keys" className="text-xs text-slate-600">
+      {/* The keys behind a small "Keyboard shortcuts" disclosure; the tree is still described
+      by them (the sr-only copy). */}
+      <details className="group text-xs text-slate-600" data-testid="outline-shortcuts">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded hover:text-slate-800 [&::-webkit-details-marker]:hidden">
+          <span
+            aria-hidden="true"
+            className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border border-slate-500 font-serif text-[10px] font-bold italic leading-none text-slate-700"
+          >
+            i
+          </span>
+          {t('designer.outline.shortcuts')}
+        </summary>
+        <p aria-hidden="true" className="mt-1">
+          {readOnly ? t('designer.outline.keysReadOnly') : t('designer.outline.keys')}
+        </p>
+      </details>
+      <span id="outline-keys" className="sr-only">
         {readOnly ? t('designer.outline.keysReadOnly') : t('designer.outline.keys')}
-      </p>
+      </span>
     </div>
   );
 }

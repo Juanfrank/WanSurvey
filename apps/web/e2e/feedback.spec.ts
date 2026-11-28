@@ -16,6 +16,7 @@ test('a face link records the answer; slips print; results count every channel',
 
   // A Likert is created like any questionnaire, as another format.
   const name = `Ventanilla ${Date.now()}`;
+  await page.getByRole('button', { name: 'New questionnaire', exact: true }).click();
   await page
     .getByTestId('new-format')
     .getByRole('radio', { name: /Likert/ })

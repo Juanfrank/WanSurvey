@@ -132,6 +132,8 @@ test('the preview flags questionnaire problems and runs saved scenarios', async 
     'passed',
   );
 
+  // The source and its checks are folded into one line above the interview.
+  await page.getByTestId('preview-source').locator('summary').first().click();
   await page.locator('summary', { hasText: 'Paste JSON' }).click();
   await page.getByLabel('Paste JSON').fill(
     JSON.stringify({
@@ -158,6 +160,7 @@ test('the preview flags questionnaire problems and runs saved scenarios', async 
     }),
   );
   await page.getByRole('button', { name: 'Load', exact: true }).click();
-  await expect(page.getByText('1 error blocks publishing')).toBeVisible();
+  const checks = page.getByRole('region', { name: 'Checks' });
+  await expect(checks.getByText('1 error blocks publishing')).toBeVisible();
   await expect(page.getByText('Unknown variable NOPE')).toBeVisible();
 });

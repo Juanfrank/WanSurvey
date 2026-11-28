@@ -73,15 +73,16 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   );
 
   // 2. The questionnaire, built with the mouse.
+  await page.getByRole('button', { name: 'Nuevo cuestionario', exact: true }).click();
   await page.getByLabel('Nombre del cuestionario').fill('Satisfacción con servicios');
   // No mode is chosen for you: this one is fielded in all four, as before.
   const modes = page.getByTestId('new-q-modes');
   for (const m of ['CATI', 'CAPI', 'CAWI', 'PAPI'])
     await modes.getByRole('checkbox', { name: new RegExp(`^${m}`) }).check();
   await page.getByRole('button', { name: 'Crear y abrir' }).click();
-  // Its id comes from the name, as the exports will show it (Ajustes del cuestionario → General).
+  // Its id comes from the name, as the exports will show it (Ajustes → General).
   const sections = page.getByRole('tablist', { name: 'Secciones del cuestionario' });
-  await sections.getByRole('tab', { name: 'Ajustes del cuestionario', exact: true }).click();
+  await sections.getByRole('tab', { name: 'Ajustes', exact: true }).click();
   await expect(page.getByLabel('Id del cuestionario')).toHaveValue('SATISFACCION_CON_SERVICIOS');
   await sections.getByRole('tab', { name: 'Diseño', exact: true }).click();
   const outline = page.getByRole('tree', { name: 'Esquema' });

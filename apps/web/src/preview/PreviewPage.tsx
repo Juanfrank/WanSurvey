@@ -27,85 +27,127 @@ export function PreviewPage() {
   const q = p.loaded.questionnaire;
   const scenarios = useLocalScenarios(q?.id ?? '');
   const sampleId = p.source.kind === 'sample' ? p.source.id : '';
+  const sourceTitle =
+    p.source.kind === 'sample'
+      ? (SAMPLES.find((x) => x.id === sampleId)?.title ?? '')
+      : p.source.kind === 'json'
+        ? p.source.name
+        : '';
+  const errors = p.loaded.diagnostics.filter((d) => d.severity === 'error').length;
+  const warnings = p.loaded.diagnostics.length - errors;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t('preview.title')} />
 
-      <Card className="no-print flex flex-col gap-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
-            <span className="font-medium">{t('preview.sample')}</span>
-            <select
-              className={selectCls}
-              value={sampleId}
-              onChange={(e) =>
-                e.target.value && p.setSource({ kind: 'sample', id: e.target.value })
-              }
-            >
-              {p.source.kind === 'json' ? <option value="">{p.source.name}</option> : null}
-              {SAMPLES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="cursor-pointer rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
-            {t('preview.openFile')}
-            <input
-              type="file"
-              accept="application/json,.json"
-              className="sr-only"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (file) p.setSource({ kind: 'json', text: await file.text(), name: file.name });
-                e.target.value = '';
-              }}
-            />
-          </label>
-        </div>
-        <details>
-          <summary className="cursor-pointer text-sm font-medium">{t('preview.paste')}</summary>
-          <div className="mt-2 flex flex-col gap-2">
-            <label className="sr-only" htmlFor="paste-json">
-              {t('preview.paste')}
+      {/* The questionnaire (sample, file or pasted JSON) and its checks, folded into one line
+      with the counts, so the interview starts near the top. */}
+      <details
+        className="no-print group rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-card"
+        data-testid="preview-source"
+      >
+        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 text-sm [&::-webkit-details-marker]:hidden">
+          <span aria-hidden="true" className="text-xs text-slate-500 group-open:rotate-90">
+            ▶
+          </span>
+          <span className="font-medium">{t('preview.source')}:</span>
+          <span className="min-w-0 truncate">{sourceTitle}</span>
+          {q ? (
+            <>
+              <span aria-hidden="true" className="text-slate-400">
+                ·
+              </span>
+              {errors ? (
+                <span className="font-medium text-red-ink-800">
+                  {t('preview.errorsCount', { count: errors })}
+                </span>
+              ) : null}
+              {warnings ? (
+                <span className="text-amber-ink-900">
+                  {t('preview.warningsCount', { count: warnings })}
+                </span>
+              ) : null}
+              {!errors && !warnings ? (
+                <span className="text-emerald-ink-800">{t('preview.noIssues')}</span>
+              ) : null}
+            </>
+          ) : null}
+        </summary>
+        <div className="mt-3 flex flex-col gap-4 pb-2">
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
+              <span className="font-medium">{t('preview.sample')}</span>
+              <select
+                className={selectCls}
+                value={sampleId}
+                onChange={(e) =>
+                  e.target.value && p.setSource({ kind: 'sample', id: e.target.value })
+                }
+              >
+                {p.source.kind === 'json' ? <option value="">{p.source.name}</option> : null}
+                {SAMPLES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}
+                  </option>
+                ))}
+              </select>
             </label>
-            <textarea
-              id="paste-json"
-              className="h-40 rounded-md border border-slate-300 p-2 font-mono text-xs"
-              value={paste}
-              onChange={(e) => setPaste(e.target.value)}
-            />
-            <button
-              type="button"
-              className="self-start rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-              onClick={() => p.setSource({ kind: 'json', text: paste, name: 'pasted.json' })}
-            >
-              {t('preview.load')}
-            </button>
+            <label className="cursor-pointer rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+              {t('preview.openFile')}
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) p.setSource({ kind: 'json', text: await file.text(), name: file.name });
+                  e.target.value = '';
+                }}
+              />
+            </label>
           </div>
-        </details>
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">{t('preview.paste')}</summary>
+            <div className="mt-2 flex flex-col gap-2">
+              <label className="sr-only" htmlFor="paste-json">
+                {t('preview.paste')}
+              </label>
+              <textarea
+                id="paste-json"
+                className="h-40 rounded-md border border-slate-300 p-2 font-mono text-xs"
+                value={paste}
+                onChange={(e) => setPaste(e.target.value)}
+              />
+              <button
+                type="button"
+                className="self-start rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+                onClick={() => p.setSource({ kind: 'json', text: paste, name: 'pasted.json' })}
+              >
+                {t('preview.load')}
+              </button>
+            </div>
+          </details>
 
-        {p.loaded.jsonError ? (
-          <p role="alert" className="text-sm text-red-ink-800">
-            {t('preview.invalidJson', { error: p.loaded.jsonError })}
-          </p>
-        ) : null}
-        {p.loaded.schemaIssues.length ? (
-          <div role="alert" className="text-sm text-red-ink-800">
-            <p className="font-medium">{t('preview.schemaErrors')}</p>
-            <ul className="list-disc pl-5">
-              {p.loaded.schemaIssues.slice(0, 20).map((s, i) => (
-                <li key={i} className="font-mono">
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {q ? <DiagnosticsPanel diagnostics={p.loaded.diagnostics} /> : null}
-      </Card>
+          {q ? <DiagnosticsPanel diagnostics={p.loaded.diagnostics} /> : null}
+        </div>
+      </details>
+      {p.loaded.jsonError ? (
+        <p role="alert" className="no-print text-sm text-red-ink-800">
+          {t('preview.invalidJson', { error: p.loaded.jsonError })}
+        </p>
+      ) : null}
+      {p.loaded.schemaIssues.length ? (
+        <div role="alert" className="no-print text-sm text-red-ink-800">
+          <p className="font-medium">{t('preview.schemaErrors')}</p>
+          <ul className="list-disc pl-5">
+            {p.loaded.schemaIssues.slice(0, 20).map((s, i) => (
+              <li key={i} className="font-mono">
+                {s}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {q && p.loaded.compiled && p.session ? (
         <PreviewWorkbench p={p} scenarios={scenarios} />
@@ -131,6 +173,7 @@ export function PreviewWorkbench({
   const [contextError, setContextError] = useState<string | null>(null);
   // As the field sees it (the interviewer's or respondent's screen), or the bare test runner.
   const [asSeen, setAsSeen] = useState(true);
+  const [view, setView] = useState('interview');
   const q = p.loaded.questionnaire;
   // Only the questionnaire's modes (Q1); switch to one of them if the current mode is not.
   const modes = q?.modes?.length ? q.modes : MODES;
@@ -142,8 +185,12 @@ export function PreviewWorkbench({
   if (!q || !p.loaded.compiled || !p.session) return null;
   return (
     <>
-      <Card className="no-print flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1 text-sm">
+      {/* Mode, language, date and full quotas in one slim bar above the interview. */}
+      <div
+        className="no-print flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-card"
+        data-testid="preview-controls"
+      >
+        <label className="flex items-center gap-2">
           <span className="font-medium">{t('preview.mode')}</span>
           <select
             className={selectCls}
@@ -158,7 +205,7 @@ export function PreviewWorkbench({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex items-center gap-2">
           <span className="font-medium">{t('preview.language')}</span>
           <select
             className={selectCls}
@@ -172,7 +219,7 @@ export function PreviewWorkbench({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex items-center gap-2">
           <span className="font-medium">{t('preview.today')}</span>
           <input
             type="date"
@@ -182,37 +229,35 @@ export function PreviewWorkbench({
           />
         </label>
         {q.quotas.length ? (
-          <fieldset className="text-sm">
-            <legend className="font-medium">{t('preview.quotasFull')}</legend>
-            <div className="flex flex-wrap gap-3 pt-1">
-              {q.quotas.map((quota) => (
-                <label key={quota.id} className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={p.options.quotasFull.includes(quota.id)}
-                    onChange={(e) =>
-                      p.update({
-                        quotasFull: e.target.checked
-                          ? [...p.options.quotasFull, quota.id]
-                          : p.options.quotasFull.filter((x) => x !== quota.id),
-                      })
-                    }
-                  />
-                  {quota.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <div
+            role="group"
+            aria-label={t('preview.quotasFull')}
+            title={t('preview.quotasFull')}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1"
+          >
+            <span aria-hidden="true" className="font-medium">
+              {t('preview.quotasShort')}
+            </span>
+            {q.quotas.map((quota) => (
+              <label key={quota.id} className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={p.options.quotasFull.includes(quota.id)}
+                  onChange={(e) =>
+                    p.update({
+                      quotasFull: e.target.checked
+                        ? [...p.options.quotasFull, quota.id]
+                        : p.options.quotasFull.filter((x) => x !== quota.id),
+                    })
+                  }
+                />
+                {quota.name}
+              </label>
+            ))}
+          </div>
         ) : null}
-        <button
-          type="button"
-          className="ml-auto rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-          onClick={p.reset}
-        >
-          {t('preview.reset')}
-        </button>
-        <details className="w-full">
-          <summary className="cursor-pointer text-sm font-medium">{t('preview.context')}</summary>
+        <details className="group open:basis-full">
+          <summary className="cursor-pointer font-medium">{t('preview.context')}</summary>
           <p className="mt-1 text-xs text-slate-600">{t('preview.contextHelp')}</p>
           <label className="sr-only" htmlFor="context-json">
             {t('preview.context')}
@@ -235,36 +280,55 @@ export function PreviewWorkbench({
           />
           {contextError ? <p className="text-xs text-red-ink-800">{contextError}</p> : null}
         </details>
-      </Card>
+        <button
+          type="button"
+          className="ml-auto rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50"
+          onClick={p.reset}
+        >
+          {t('preview.reset')}
+        </button>
+      </div>
 
       {/* The interview gets the full width (as the field sees it); the tracer sits beside it
           only when there is room for both. */}
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <Tabs.Root defaultValue="interview" className="flex min-w-0 flex-col gap-4">
-          <Tabs.List
-            aria-label={t('preview.title')}
-            className="no-print flex flex-wrap gap-1 border-b border-slate-200"
-          >
-            {(['interview', 'compare', 'answers'] as const).map((tab) => (
-              <Tabs.Trigger
-                key={tab}
-                value={tab}
-                className="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-ink-700"
+        <Tabs.Root value={view} onValueChange={setView} className="flex min-w-0 flex-col gap-4">
+          <div className="no-print flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-slate-200">
+            <Tabs.List aria-label={t('preview.title')} className="flex flex-wrap gap-1">
+              {(['interview', 'compare', 'answers'] as const).map((tab) => (
+                <Tabs.Trigger
+                  key={tab}
+                  value={tab}
+                  className="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-ink-700"
+                >
+                  {t(`preview.tabs.${tab}`)}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+            {view !== 'interview' ? null : p.options.mode === 'PAPI' ? (
+              <button
+                type="button"
+                className="mb-1.5 ml-auto rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
+                onClick={() => window.print()}
               >
-                {t(`preview.tabs.${tab}`)}
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
+                {t('preview.printPaper')}
+              </button>
+            ) : (
+              <label className="mb-2 ml-auto flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={asSeen}
+                  onChange={(e) => setAsSeen(e.target.checked)}
+                />
+                {p.options.mode === 'CAWI'
+                  ? t('preview.asSeen.toggleRespondent')
+                  : t('preview.asSeen.toggleInterviewer')}
+              </label>
+            )}
+          </div>
           <Tabs.Content value="interview" className="focus:outline-none">
             {p.options.mode === 'PAPI' ? (
               <div className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  className="no-print self-end rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-                  onClick={() => window.print()}
-                >
-                  {t('preview.printPaper')}
-                </button>
                 <div className="rounded-lg border border-slate-200 shadow-sm print:border-0 print:shadow-none">
                   <PaperForm
                     compiled={p.loaded.compiled}
@@ -275,16 +339,6 @@ export function PreviewWorkbench({
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                <label className="no-print flex items-center gap-2 self-end text-sm">
-                  <input
-                    type="checkbox"
-                    checked={asSeen}
-                    onChange={(e) => setAsSeen(e.target.checked)}
-                  />
-                  {p.options.mode === 'CAWI'
-                    ? t('preview.asSeen.toggleRespondent')
-                    : t('preview.asSeen.toggleInterviewer')}
-                </label>
                 {asSeen ? (
                   <AsSeenFrame
                     session={p.session}

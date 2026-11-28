@@ -11,7 +11,7 @@ import { PageHeader } from '../routes/PageHeader.js';
 import { api, ApiError } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field, FileInput, QueryState } from '../routes/ui.js';
+import { Button, Card, Drawer, ErrorText, Field, FileInput, QueryState } from '../routes/ui.js';
 import { ProjectCases, type CasesSub } from '../cases/ProjectCases.js';
 import {
   FeedbackFields,
@@ -545,6 +545,8 @@ function QuestionnairesSection({
     queryKey: ['questionnaires', projectId],
     queryFn: () => api<QuestionnaireRow[]>(`/projects/${projectId}/questionnaires`),
   });
+  // The new questionnaire's form, in a side panel opened by "+ New questionnaire".
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [kind, setKind] = useState<SourceKind>('blank');
   const [sample, setSample] = useState(SAMPLES[0]!.id);
@@ -584,6 +586,7 @@ function QuestionnairesSection({
       }),
     onSuccess: async (p) => {
       setName('');
+      setCreating(false);
       setDraft({ question: '', faces: 3, askComment: true });
       await qc.invalidateQueries({ queryKey: ['feedback', projectId] });
       onPanel({ kind: 'feedbackDesign', name: p.name, point: p });
@@ -664,7 +667,22 @@ function QuestionnairesSection({
   return (
     <div className="flex flex-col gap-6">
       <Card>
-        <h2 className="mb-3 text-lg font-semibold">{t('designer.questionnaires')}</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">{t('designer.questionnaires')}</h2>
+          {canEdit ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setError(null);
+                setCreating(true);
+              }}
+            >
+              <span aria-hidden="true">+ </span>
+              {t('designer.create.title')}
+            </Button>
+          ) : null}
+        </div>
         <p role="status" aria-live="polite" className="mb-2 text-sm text-slate-700 empty:hidden">
           {status}
         </p>
@@ -672,7 +690,7 @@ function QuestionnairesSection({
           <div className="overflow-x-auto">
             <table className="w-full text-sm" data-testid="questionnaires">
               <thead>
-                <tr className="text-left text-xs text-slate-600">
+                <tr className="text-left align-bottom text-xs text-slate-600 [&>th]:pr-4">
                   <th scope="col" className="py-1">
                     {t('designer.name')}
                   </th>
@@ -692,7 +710,8 @@ function QuestionnairesSection({
                       <Link
                         to="/projects/$projectId/questionnaires/$qid"
                         params={{ projectId, qid: q.id }}
-                        className="font-medium text-indigo-ink-700 hover:underline"
+                        title={q.name}
+                        className="block max-w-[14rem] truncate font-medium text-indigo-ink-700 hover:underline"
                       >
                         {q.name}
                       </Link>
@@ -703,7 +722,7 @@ function QuestionnairesSection({
                     <td className="font-mono">
                       {q.latestVersion ? `v${q.latestVersion.version}` : '—'}
                     </td>
-                    <td data-testid="q-state">
+                    <td data-testid="q-state" className="min-w-[12rem] whitespace-normal">
                       {q.state !== 'active' ? (
                         <span
                           className={`mr-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -719,7 +738,7 @@ function QuestionnairesSection({
                         ? t(`designer.versions.${q.latestVersion.status}`)
                         : t('designer.unpublished')}
                       {q.state === 'completed' && q.successorId ? (
-                        <span className="ml-1 text-xs text-slate-600">
+                        <span className="block text-xs text-slate-600">
                           →{' '}
                           {t('designer.qActions.continuesIn', {
                             name: list.data?.find((x) => x.id === q.successorId)?.name ?? '…',
@@ -731,14 +750,15 @@ function QuestionnairesSection({
                     <td className="text-right">
                       <button
                         type="button"
-                        className="rounded-md border border-slate-300 bg-white whitespace-nowrap px-2.5 py-1 text-sm hover:bg-slate-50"
+                        className={rowMenuBtn}
                         aria-haspopup="menu"
                         aria-expanded={menuFor?.q.id === q.id}
                         aria-label={t('designer.qActions.menu', { name: q.name })}
+                        title={t('designer.qActions.menu', { name: q.name })}
                         onClick={(e) => setMenuFor({ q, at: below(e.currentTarget) })}
                         data-testid="q-actions"
                       >
-                        {t('designer.qActions.label')} ▾
+                        <span aria-hidden="true">⋯</span>
                       </button>
                     </td>
                   </tr>
@@ -750,7 +770,8 @@ function QuestionnairesSection({
                       <td className="py-2">
                         <button
                           type="button"
-                          className="text-left font-medium text-indigo-ink-700 hover:underline"
+                          title={p.name}
+                          className="block max-w-[14rem] truncate text-left font-medium text-indigo-ink-700 hover:underline"
                           onClick={() =>
                             onPanel({ kind: 'feedbackDesign', name: p.name, point: p })
                           }
@@ -762,7 +783,7 @@ function QuestionnairesSection({
                         <ModeChips modes={['LIKERT']} />
                       </td>
                       <td className="font-mono">v{p.version}</td>
-                      <td>
+                      <td className="min-w-[12rem] whitespace-normal">
                         {p.active ? t('feedback.active') : t('feedback.inactive')} ·{' '}
                         {t('feedback.answers', { count: total })}
                         {total ? ` · ${t('feedback.satisfied', { pct: pct(satisfied(p)) })}` : ''}
@@ -771,13 +792,14 @@ function QuestionnairesSection({
                       <td className="text-right">
                         <button
                           type="button"
-                          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm hover:bg-slate-50"
+                          className={rowMenuBtn}
                           aria-haspopup="menu"
                           aria-expanded={fbMenu?.p.id === p.id}
                           aria-label={t('designer.qActions.menu', { name: p.name })}
+                          title={t('designer.qActions.menu', { name: p.name })}
                           onClick={(e) => setFbMenu({ p, at: below(e.currentTarget) })}
                         >
-                          {t('designer.qActions.label')} ▾
+                          <span aria-hidden="true">⋯</span>
                         </button>
                       </td>
                     </tr>
@@ -817,11 +839,33 @@ function QuestionnairesSection({
           />
         ) : null}
       </Card>
-      {canEdit ? (
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold">{t('designer.create.title')}</h2>
+      {canEdit && creating ? (
+        <Drawer
+          wide
+          title={t('designer.create.title')}
+          onClose={() => {
+            // Closed without creating: the next one starts from a blank form.
+            setCreating(false);
+            setName('');
+            setKind('blank');
+            setJson(null);
+            setModes(null);
+            setFormat('questionnaire');
+            setDraft({ question: '', faces: 3, askComment: true });
+          }}
+          footer={
+            <Button
+              type="submit"
+              form="new-q-form"
+              disabled={create.isPending || createFeedback.isPending}
+            >
+              {format === 'feedback' ? t('feedback.add') : t('designer.create.submit')}
+            </Button>
+          }
+        >
           <form
-            className="flex max-w-4xl flex-col gap-4"
+            id="new-q-form"
+            className="flex flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
               setError(null);
@@ -961,29 +1005,29 @@ function QuestionnairesSection({
               </>
             )}
             <ErrorText>{error}</ErrorText>
-            <div>
-              <Button type="submit" disabled={create.isPending || createFeedback.isPending}>
-                {format === 'feedback' ? t('feedback.add') : t('designer.create.submit')}
-              </Button>
-            </div>
           </form>
-        </Card>
+        </Drawer>
       ) : null}
     </div>
   );
 }
 
-/** The modes of a questionnaire as small labels, with their names for screen readers. */
+/** The row's "⋯" (its actions menu). */
+const rowMenuBtn =
+  'inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-base leading-none hover:bg-slate-50';
+
+/** The modes of a questionnaire on one line, with their names for screen readers. */
 export function ModeChips({ modes }: { modes: readonly string[] }) {
   const { t } = useTranslation();
   return (
-    <span className="flex flex-wrap gap-1" data-testid="mode-chips">
-      {modes.map((m) => (
-        <span
-          key={m}
-          title={t(`designer.modeNames.${m}`)}
-          className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-ink-800"
-        >
+    <span
+      className="inline-block whitespace-nowrap rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-ink-800"
+      title={modes.map((m) => t(`designer.modeNames.${m}`)).join(' · ')}
+      data-testid="mode-chips"
+    >
+      {modes.map((m, i) => (
+        <span key={m}>
+          {i ? <span aria-hidden="true"> · </span> : null}
           {m}
           <span className="sr-only"> ({t(`designer.modeNames.${m}`)})</span>
         </span>

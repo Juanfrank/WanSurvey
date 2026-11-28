@@ -56,9 +56,11 @@ export const designerEn = {
   top: {
     label: 'Questionnaire sections',
     design: 'Design',
-    distributionLink: 'Web and paper distribution, in the project →',
+    distributionLink: 'Distribution →',
+    distributionHint: 'Web and paper distribution, in the project',
     settings: 'Settings',
   },
+  untitled: 'Untitled questionnaire',
   designSections: 'Design sections',
   settingsSections: 'Settings topics',
   emptyEditor: 'Add a section to start.',
@@ -142,6 +144,7 @@ export const designerEn = {
     errors_other: '{{count}} errors',
     keys: '↑↓ move · →← open/close · Alt+↑↓ reorder · Alt+→← indent/outdent · Insert add · Shift+F10 menu · Delete remove · Ctrl+D duplicate · F2 rename · Enter edit · Ctrl+Z undo · or drag rows',
     keysReadOnly: '↑↓ move · →← open/close · Enter view',
+    shortcuts: 'Keyboard shortcuts',
   },
   kind: {
     section: 'Section',
@@ -434,6 +437,7 @@ export const designerEn = {
     exclusive: 'Exclusive',
     otherSpecify: 'Other, specify',
     fixedPosition: 'Fixed position',
+    flagN: '{{flag}}: option {{n}}',
     up: 'Move option {{n}} up',
     down: 'Move option {{n}} down',
     remove: 'Remove option {{n}}',
@@ -875,6 +879,7 @@ export const designerEn = {
     confirmRetire:
       'Retire version {{version}}? New interviews will not use it; existing ones are kept.',
     download: 'Download JSON',
+    actions: 'Actions for version {{version}}',
   },
 };
 
@@ -933,9 +938,11 @@ export const designerEs: DesignerCatalogue = {
   top: {
     label: 'Secciones del cuestionario',
     design: 'Diseño',
-    distributionLink: 'Distribución web y en papel, en el proyecto →',
-    settings: 'Ajustes del cuestionario',
+    distributionLink: 'Distribución →',
+    distributionHint: 'Distribución web y en papel, en el proyecto',
+    settings: 'Ajustes',
   },
+  untitled: 'Cuestionario sin nombre',
   designSections: 'Secciones del diseño',
   settingsSections: 'Temas de los ajustes',
   emptyEditor: 'Agregue una sección para empezar.',
@@ -1020,6 +1027,7 @@ export const designerEs: DesignerCatalogue = {
     errors_other: '{{count}} errores',
     keys: '↑↓ mover · →← abrir/cerrar · Alt+↑↓ reordenar · Alt+→← sangrar/quitar sangría · Insert agregar · Mayús+F10 menú · Supr eliminar · Ctrl+D duplicar · F2 renombrar · Enter editar · Ctrl+Z deshacer · o arrastre las filas',
     keysReadOnly: '↑↓ mover · →← abrir/cerrar · Enter ver',
+    shortcuts: 'Atajos de teclado',
   },
   kind: {
     section: 'Sección',
@@ -1322,6 +1330,7 @@ export const designerEs: DesignerCatalogue = {
     exclusive: 'Exclusiva',
     otherSpecify: 'Otro, especifique',
     fixedPosition: 'Posición fija',
+    flagN: '{{flag}}: opción {{n}}',
     up: 'Subir la opción {{n}}',
     down: 'Bajar la opción {{n}}',
     remove: 'Quitar la opción {{n}}',
@@ -1764,5 +1773,6 @@ export const designerEs: DesignerCatalogue = {
     confirmRetire:
       '¿Retirar la versión {{version}}? Las entrevistas nuevas no la usarán; las existentes se conservan.',
     download: 'Descargar JSON',
+    actions: 'Acciones de la versión {{version}}',
   },
 };

@@ -41,6 +41,7 @@ export function PageHeader({
   aside,
   actions,
   noPrint = false,
+  nowrap = false,
 }: {
   /** The `h1`'s content. */
   title: ReactNode;
@@ -56,6 +57,11 @@ export function PageHeader({
   actions?: ReactNode;
   /** Left out of the printout (a page that is printed, like the paper forms). */
   noPrint?: boolean;
+  /**
+   * The breadcrumb stays on one line: its steps shrink with an ellipsis (their full text in
+   * `title`) instead of wrapping, for a narrow row (the designer beside its outline).
+   */
+  nowrap?: boolean;
 }) {
   const { t } = useTranslation();
   const slot = useContext(HeaderSlotContext);
@@ -72,9 +78,14 @@ export function PageHeader({
   );
   const body = parents?.length ? (
     <nav aria-label={t('ui.breadcrumb')} className="min-w-0 text-sm text-slate-600">
-      <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+      <ol
+        className={`flex min-w-0 items-center gap-x-1.5 gap-y-1 ${nowrap ? 'whitespace-nowrap' : 'flex-wrap'}`}
+      >
         {parents.map((p, i) => (
-          <li key={i} className="flex items-center gap-1.5">
+          <li
+            key={i}
+            className={`flex items-center gap-1.5 ${nowrap ? 'min-w-[3.5rem] shrink-[4] [&>*:first-child]:min-w-0 [&>*:first-child]:truncate' : ''}`}
+          >
             {p}
             <span aria-hidden="true">/</span>
           </li>

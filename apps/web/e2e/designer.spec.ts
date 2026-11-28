@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from './fixtures.js';
-import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import { designerTab, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const outlineItem = (page: Page, name: string) =>
   page.getByRole('treeitem').filter({ has: page.locator(`span.font-mono:text-is("${name}")`) });
@@ -8,7 +8,7 @@ const outlineItem = (page: Page, name: string) =>
 /** A topic of the questionnaire's Settings tab. */
 async function openSettings(page: Page, topic: string) {
   await page.getByRole('tab', { name: 'Settings', exact: true }).click();
-  await page.getByRole('tab', { name: topic, exact: true }).click();
+  await designerTab(page, topic);
 }
 /** Back to the form editor with its outline. */
 const toDesign = (page: Page) => page.getByRole('tab', { name: 'Design', exact: true }).click();
@@ -35,6 +35,7 @@ async function newQuestionnaire(
   await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Household questionnaire' })).toBeVisible();
+  await page.getByRole('button', { name: 'New questionnaire', exact: true }).click();
   await page.getByLabel('Questionnaire name').fill(name);
   // A mixed-mode design is a decision: nothing is ticked to begin with, and ticking several
   // modes warns about mode effects.
@@ -140,7 +141,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expect(page.getByRole('treeitem').nth(1)).toContainText('A_WORK');
 
   // Preview: A_WORK = No ends the interview without A_HOURS.
-  await page.getByRole('tab', { name: 'Preview' }).click();
+  await designerTab(page, 'Preview');
   await page.locator('[data-qkey="A_WORK"]').focus();
   await page.keyboard.type('2');
   await page.keyboard.press('Enter');
@@ -161,7 +162,7 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expect(page.getByTestId('versions').locator('[data-version="1"]')).toContainText('In use');
 
   // Change code 2 to 3: v2 needs a mapping for the old answers.
-  await page.getByRole('tab', { name: 'Form' }).click();
+  await designerTab(page, 'Form');
   await outlineItem(page, 'A_WORK').click();
   await page.getByLabel('Code of option 2').fill('3');
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
@@ -190,13 +191,13 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expectAccessible(page);
 
   // Drag A_HOURS above A_WORK in the outline; the comparison with v2 shows the move.
-  await page.getByRole('tab', { name: 'Form' }).click();
+  await designerTab(page, 'Form');
   await outlineItem(page, 'A_HOURS').dragTo(outlineItem(page, 'A_WORK'), {
     targetPosition: { x: 20, y: 2 },
   });
   await expect(page.getByRole('treeitem').nth(1)).toContainText('A_HOURS');
   await saved(page);
-  await page.getByRole('tab', { name: 'Versions' }).click();
+  await designerTab(page, 'Versions');
   await compare.getByLabel('Compare').selectOption({ label: 'v2' });
   await expect(compare.getByTestId('compare-summary')).toHaveText(
     '0 added · 0 removed · 0 edited · 1 moved',
@@ -371,7 +372,7 @@ test('a failing saved scenario blocks publishing', async ({ page }) => {
   await saved(page);
 
   // Save a run where "No" skips the name.
-  await page.getByRole('tab', { name: 'Preview' }).click();
+  await designerTab(page, 'Preview');
   await page.locator('[data-qkey="A1"]').focus();
   await page.keyboard.type('2');
   await page.keyboard.press('Enter');
@@ -381,7 +382,7 @@ test('a failing saved scenario blocks publishing', async ({ page }) => {
   await expect(page.getByTestId('scenarios')).toContainText('No skips the name');
 
   // Remove the show-if: the scenario now fails and publishing is blocked.
-  await page.getByRole('tab', { name: 'Form' }).click();
+  await designerTab(page, 'Form');
   await outlineItem(page, 'A2').click();
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
   await page.getByRole('button', { name: 'Remove condition 1' }).first().click();
@@ -561,7 +562,7 @@ test('the routing map, outline arcs and nested condition builder on the househol
   await shot(page, 'designer-outline-arcs');
 
   // Routing map.
-  await page.getByRole('tab', { name: 'Routing' }).click();
+  await designerTab(page, 'Routing');
   const map = page.getByTestId('routing-map');
   await expect(map).toContainText('Skips to');
   // A skip to the end reads as part of the sentence, in lower case.

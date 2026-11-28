@@ -9,6 +9,13 @@ type Row = { code: Code; label: LocalizedText } & Partial<
   Pick<AnswerOption, 'exclusive' | 'otherSpecify' | 'fixedPosition'>
 >;
 
+/** The flags of an option and the sign on their toggle. */
+const FLAGS = [
+  ['exclusive', '⊘'],
+  ['otherSpecify', '✎'],
+  ['fixedPosition', '⇥'],
+] as const;
+
 function nextCode(rows: Row[]): Code {
   const nums = rows.map((r) => r.code).filter((c): c is number => typeof c === 'number');
   return nums.length ? Math.max(...nums.filter((n) => n >= 0), 0) + 1 : rows.length + 1;
@@ -161,17 +168,32 @@ export function OptionsEditor({
                 ))}
                 {flags ? (
                   <td className="py-1 pr-2">
-                    <div className="flex flex-col gap-0.5 whitespace-nowrap text-xs">
-                      {(['exclusive', 'otherSpecify', 'fixedPosition'] as const).map((f) => (
-                        <label key={f} className="flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={!!r[f]}
-                            onChange={(e) => set(i, { [f]: e.target.checked || undefined })}
-                          />
-                          {t(`designer.opt.${f}`)}
-                        </label>
-                      ))}
+                    {/* One line of toggles (an icon each, named and titled), not three
+                    checkboxes stacked under each other. */}
+                    <div className="flex gap-1 whitespace-nowrap" data-testid="option-flags">
+                      {FLAGS.map(([f, icon]) => {
+                        const name = t('designer.opt.flagN', {
+                          flag: t(`designer.opt.${f}`),
+                          n: i + 1,
+                        });
+                        return (
+                          <button
+                            key={f}
+                            type="button"
+                            aria-pressed={!!r[f]}
+                            aria-label={name}
+                            title={name}
+                            className={`flex size-8 items-center justify-center rounded-md border text-sm ${
+                              r[f]
+                                ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-ink-700'
+                                : 'border-slate-200 text-slate-600 hover:border-slate-400'
+                            }`}
+                            onClick={() => set(i, { [f]: r[f] ? undefined : true })}
+                          >
+                            <span aria-hidden="true">{icon}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </td>
                 ) : null}

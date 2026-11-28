@@ -1,6 +1,6 @@
 import { expect, overlaysSettled, test } from './fixtures.js';
 import { totp } from '../../api/dist/common/crypto.js';
-import { login } from './helpers.js';
+import { designerTab, login } from './helpers.js';
 
 /**
  * Dialogs that no other flow opens. Each one is checked with axe while it is open (the fixture
@@ -112,7 +112,7 @@ test('the logic check of the designer opens as a dialog, accessible, and closes 
   await page.getByRole('tab', { name: 'Questionnaires', exact: true }).click();
   await page.getByRole('link', { name: 'Household questionnaire' }).click();
   await expect(page.getByRole('tree', { name: 'Outline' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Routing' }).click();
+  await designerTab(page, 'Routing');
   const check = page.getByRole('button', { name: 'Check the logic' });
   await check.click();
   const popover = page.getByTestId('logic-check');

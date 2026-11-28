@@ -2,6 +2,7 @@ import { YES_NO_OPTIONS, type RoutingNode } from '@wansurvey/logic';
 import { pick } from '@wansurvey/renderer';
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { InfoTip } from '../cases/samplingControls.js';
 import { inputCls } from './fields.js';
 import { iconKeyOf, KindIcon } from './kinds.js';
 import { isSection, locate, type Draft } from './tree.js';
@@ -169,8 +170,14 @@ export function RoutingMap({
           {t('designer.routing.onlyLogic')}
         </label>
         <Legend />
+        {/* How to read the map, behind an (i) instead of a paragraph above it. */}
+        <InfoTip
+          id="routing-help"
+          term={t('designer.routing.title')}
+          text={t('designer.routing.help')}
+          align="start"
+        />
       </div>
-      <p className="text-xs text-slate-600">{t('designer.routing.help')}</p>
       <div className="relative" style={{ paddingRight: gutter }}>
         <ol
           ref={listRef}
