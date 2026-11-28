@@ -380,7 +380,9 @@ export function TableScroll({
         aria-label={label}
         tabIndex={scrolls ? 0 : undefined}
         data-scrolls={scrolls || undefined}
-        className="overflow-x-auto rounded-[inherit]"
+        // `relative`: what is laid out absolutely inside (screen-reader text) scrolls with it
+        // instead of widening the page.
+        className="relative overflow-x-auto rounded-[inherit]"
       >
         {children}
       </div>

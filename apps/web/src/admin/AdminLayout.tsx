@@ -148,28 +148,28 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
   const tiles = candidates.filter((x): x is Tile => !!x);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <PageHeader title={t('app.admin')} />
       {tiles.length ? (
-        <section aria-labelledby="admin-attention" className="flex flex-col gap-3">
-          <h2 id="admin-attention" className="text-lg font-semibold">
+        <section aria-labelledby="admin-attention" className="flex flex-col gap-2">
+          <h2 id="admin-attention" className="text-base font-semibold">
             {t('admin.home.attention')}
           </h2>
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="admin-attention">
+          <ul className="grid gap-3 sm:grid-cols-2" data-testid="admin-attention">
             {tiles.map((tile) => (
               <li key={tile.key} data-tile={tile.key} data-count={tile.n}>
                 <Link
                   to={tile.to}
                   // Users opens with the matching filter on, so the list shows these people.
                   search={tile.search}
-                  className="flex h-full flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 shadow-card hover:border-indigo-600"
+                  className="flex h-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-card hover:border-indigo-600"
                 >
                   <span
-                    className={`text-3xl font-bold ${tile.n ? 'text-amber-ink-800' : 'text-slate-700'}`}
+                    className={`text-2xl font-bold tabular-nums ${tile.n ? 'text-amber-ink-800' : 'text-slate-700'}`}
                   >
                     {tile.n}
                   </span>
-                  <span className="text-sm text-slate-700">
+                  <span className="text-sm leading-snug text-slate-700">
                     {t(`admin.home.tiles.${tile.key}`, { count: tile.n, days: KEY_WARNING_DAYS })}
                   </span>
                 </Link>
@@ -178,15 +178,15 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
           </ul>
         </section>
       ) : null}
-      <div className="grid items-start gap-6 lg:grid-cols-3">
+      <div className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {ADMIN_GROUPS.map((group) => {
           const list = sections.filter((s) => s.group === group);
           return list.length ? (
-            <Card key={group}>
-              <h2 id={`admin-home-${group}`} className="mb-3 text-lg font-semibold">
+            <Card key={group} className="p-4!">
+              <h2 id={`admin-home-${group}`} className="mb-2 text-base font-semibold">
                 {t(`admin.groups.${group}`)}
               </h2>
-              <ul aria-labelledby={`admin-home-${group}`} className="flex flex-col gap-2">
+              <ul aria-labelledby={`admin-home-${group}`} className="flex flex-col gap-1.5">
                 {list.map((s) => (
                   <li key={s.to}>
                     <Link to={s.to} className="font-medium text-indigo-ink-700 hover:underline">

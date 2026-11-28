@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { CheckField, Hint, inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { Button, Card, ErrorText, Field, PageHeader } from '../routes/ui.js';
 import type { RolesView } from './permissions.js';
 import { useFacts } from '../routes/InfoPages.js';
@@ -52,6 +53,19 @@ const zones = (): string[] => {
   return intl.supportedValuesOf?.('timeZone') ?? ['UTC'];
 };
 
+/** A card's heading, with what it is about behind an (i) beside it. */
+function CardTitle({ id, title, info }: { id: string; title: string; info?: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      {info ? <InfoTip id={id} term={title} text={info} /> : null}
+    </div>
+  );
+}
+
+/** The cards of the page, packed in columns so a short card leaves no hole under it. */
+const CARDS = 'gap-5 xl:columns-2 [&>*]:mb-5 [&>*]:break-inside-avoid';
+
 /** A confirmation, by key so it follows a change of language. */
 function Saved({ text }: { text: string | null }) {
   const { t } = useTranslation();
@@ -78,28 +92,41 @@ export function OrganisationPage() {
     enabled: !!me.data,
   });
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={t('admin.organisation')} />
-      <p className="max-w-3xl text-slate-600">{t('admin.org.intro')}</p>
-      <div className="grid items-start gap-6 xl:grid-cols-2">
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={t('admin.organisation')}
+        aside={
+          <InfoTip
+            id="org-intro"
+            term={t('admin.organisation')}
+            text={t('admin.org.intro')}
+            align="start"
+          />
+        }
+      />
+      <div className={CARDS}>
         {tenant.data ? <General tenant={tenant.data} /> : <div aria-busy="true" />}
         {tenant.data ? <Appearance tenant={tenant.data} /> : null}
+        <DataProtection />
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
         {tenant.data ? <TwoFactorPolicy tenant={tenant.data} /> : null}
-        <DataProtection />
       </div>
       {/* Settings of the whole installation, apart from this organisation's own. */}
       <section
         aria-labelledby="org-installation"
-        className="flex flex-col gap-4 border-t border-slate-200 pt-6"
+        className="flex flex-col gap-3 border-t border-slate-200 pt-4"
       >
-        <div>
+        <div className="flex items-center gap-1">
           <h2 id="org-installation" className="text-xl font-semibold">
             {t('admin.org.installation.title')}
           </h2>
-          <p className="max-w-3xl text-slate-600">{t('admin.org.installation.intro')}</p>
+          <InfoTip
+            id="org-installation-info"
+            term={t('admin.org.installation.title')}
+            text={t('admin.org.installation.intro')}
+          />
         </div>
-        <div className="grid items-start gap-6 xl:grid-cols-2">
+        <div className={CARDS}>
           <BiFrequency />
         </div>
       </section>
@@ -116,17 +143,19 @@ function DataProtection() {
   const facts = useFacts();
   const f = facts.data;
   return (
-    <Card className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">{t('admin.org.dp.title')}</h2>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+    <Card className="flex flex-col gap-3 p-5!">
+      <CardTitle
+        id="org-dp"
+        title={t('admin.org.dp.title')}
+        info={`${t('admin.org.dp.where')} ${t('admin.org.dp.how')} ${t('admin.org.dp.policy')}.`}
+      />
+      <dl className="flex flex-col text-sm">
         <dt className="font-medium text-slate-700">{t('admin.org.dp.controller')}</dt>
-        <dd>{f?.organisation ?? t('admin.org.dp.notSet')}</dd>
+        <dd className="mb-2">{f?.organisation ?? t('admin.org.dp.notSet')}</dd>
         <dt className="font-medium text-slate-700">{t('admin.org.dp.contact')}</dt>
         <dd>{f?.privacyContact ?? t('admin.org.dp.notSet')}</dd>
       </dl>
-      <p className="text-sm text-slate-600">{t('admin.org.dp.where')}</p>
-      <p className="text-sm text-slate-600">
-        {t('admin.org.dp.how')}{' '}
+      <p className="text-sm">
         <Link to="/privacy" className="font-medium text-indigo-ink-700 hover:underline">
           {t('admin.org.dp.policy')}
         </Link>
@@ -169,9 +198,9 @@ function General({ tenant }: { tenant: Tenant }) {
   });
   useEffect(() => setSaved(null), [name, language, zone]);
   return (
-    <Card>
+    <Card className="p-5!">
       <form
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (name.trim()) save.mutate();
@@ -278,19 +307,20 @@ function SsoEditor({ sso }: { sso: Sso }) {
     },
   });
   return (
-    <Card>
+    <Card className="p-5!">
       <form
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(null);
           save.mutate();
         }}
       >
-        <h2 className="text-lg font-semibold">{t('admin.org.sso')}</h2>
-        <p className="-mt-2 text-sm text-slate-600">
-          {t(managed ? 'admin.org.ssoManaged' : 'admin.org.ssoIntro')}
-        </p>
+        <CardTitle
+          id="org-sso"
+          title={t('admin.org.sso')}
+          info={t(managed ? 'admin.org.ssoManaged' : 'admin.org.ssoIntro')}
+        />
         <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-slate-700">{t('admin.org.redirectUri')}</span>
           <code className="break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-800">
@@ -424,9 +454,9 @@ function TwoFactorPolicy({ tenant }: { tenant: Tenant }) {
     ].filter(Boolean);
   };
   return (
-    <Card>
+    <Card className="p-5!">
       <form
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-3"
         data-testid="org-2fa"
         onSubmit={(e) => {
           e.preventDefault();
@@ -434,8 +464,11 @@ function TwoFactorPolicy({ tenant }: { tenant: Tenant }) {
           save.mutate();
         }}
       >
-        <h2 className="text-lg font-semibold">{t('admin.org.security.title')}</h2>
-        <p className="-mt-2 text-sm text-slate-600">{t('admin.org.security.intro')}</p>
+        <CardTitle
+          id="org-2fa-info"
+          title={t('admin.org.security.title')}
+          info={t('admin.org.security.intro')}
+        />
         <ul className="flex flex-col gap-1 text-sm text-slate-700">
           {ROLES_REQUIRING_2FA.map((r) => (
             <li key={r}>
@@ -500,16 +533,20 @@ function Appearance({ tenant }: { tenant: Tenant }) {
   useEffect(() => setSaved(null), [def, accent]);
   const swatch = (a: Accent) => accentTokens(a, 'light')['indigo-600'] ?? '#0050dd';
   return (
-    <Card>
+    <Card className="p-5!">
       <form
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-3"
         data-testid="org-appearance"
         onSubmit={(e) => {
           e.preventDefault();
           save.mutate();
         }}
       >
-        <h2 className="text-lg font-semibold">{t('admin.org.appearance.title')}</h2>
+        <CardTitle
+          id="org-appearance-info"
+          title={t('admin.org.appearance.title')}
+          info={t('admin.org.appearance.hint')}
+        />
         <label className="flex max-w-xs flex-col gap-1">
           <span className="text-sm font-medium text-slate-700">
             {t('admin.org.appearance.theme')}
@@ -551,7 +588,6 @@ function Appearance({ tenant }: { tenant: Tenant }) {
               </label>
             ))}
           </div>
-          <Hint>{t('admin.org.appearance.hint')}</Hint>
         </fieldset>
         {save.isError ? <ErrorText>{t('admin.org.appearance.error')}</ErrorText> : null}
         <div className="flex items-center gap-3">
@@ -611,17 +647,16 @@ function BiFrequency() {
     ? new Date(setting.data.lastRunAt).toLocaleString(i18n.language)
     : null;
   return (
-    <Card>
+    <Card className="p-5!">
       <form
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(null);
           save.mutate();
         }}
       >
-        <h2 className="text-lg font-semibold">{t('admin.org.bi.title')}</h2>
-        <p className="text-sm text-slate-600">{t('admin.org.bi.intro')}</p>
+        <CardTitle id="org-bi" title={t('admin.org.bi.title')} info={t('admin.org.bi.intro')} />
         <div className="flex flex-col gap-1">
           <label htmlFor="bi-frequency" className="text-sm font-medium text-slate-700">
             {t('admin.org.bi.frequency')}

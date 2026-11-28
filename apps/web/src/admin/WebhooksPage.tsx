@@ -1,11 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, QueryState, PageHeader } from '../routes/ui.js';
+import { InfoTip } from '../cases/samplingControls.js';
+import {
+  Button,
+  Card,
+  Drawer,
+  ErrorText,
+  MoreMenu,
+  QueryState,
+  PageHeader,
+  TableScroll,
+} from '../routes/ui.js';
 
 const EVENTS = [
   'interview.submitted',
@@ -68,18 +78,25 @@ export function WebhooksPage() {
       : t('admin.webhooksPage.allProjects');
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title={t('admin.webhooks')}
+        aside={
+          <InfoTip
+            id="webhooks-intro"
+            term={t('admin.webhooks')}
+            text={t('admin.webhooksPage.intro')}
+            align="start"
+          />
+        }
         actions={
           canManage ? (
             <Button onClick={() => setCreating(true)}>{t('admin.webhooksPage.add')}</Button>
           ) : null
         }
       />
-      <p className="max-w-3xl text-slate-600">{t('admin.webhooksPage.intro')}</p>
       {canManage ? null : (
-        <p className="-mt-3 text-sm text-slate-600">{t('admin.webhooksPage.readOnly')}</p>
+        <p className="text-sm text-slate-600">{t('admin.webhooksPage.readOnly')}</p>
       )}
       {act.isError ? <ErrorText>{t('admin.webhooksPage.error')}</ErrorText> : null}
       <QueryState query={list}>{null}</QueryState>
@@ -88,91 +105,135 @@ export function WebhooksPage() {
           <p className="text-slate-600">{t('admin.webhooksPage.none')}</p>
         </Card>
       ) : null}
-      <ul className="flex flex-col gap-4">
-        {(list.data ?? []).map((e) => (
-          <li key={e.id} data-webhook={e.url}>
-            <Card className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="break-all font-mono text-sm font-semibold">{e.url}</div>
-                  <div className="text-sm text-slate-600">
-                    {e.events.map((v) => t(`admin.webhooksPage.events.${v}`)).join(', ')} ·{' '}
-                    {projectName(e.projectId)}
-                  </div>
-                  <div className="text-sm">
-                    {e.enabled
-                      ? t('admin.webhooksPage.on')
-                      : `${t('admin.webhooksPage.off')}${e.disabledReason ? `: ${e.disabledReason}` : ''}`}
-                    {' · '}
-                    {t('admin.webhooksPage.lastWeek', {
-                      ok: e.lastWeek.delivered ?? 0,
-                      waiting: e.lastWeek.pending ?? 0,
-                      failed: e.lastWeek.failed ?? 0,
-                    })}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {canManage ? (
-                    <>
-                      <button
-                        type="button"
-                        className={smallBtn}
-                        onClick={() =>
-                          act.mutate({
-                            path: `/webhooks/${e.id}`,
-                            method: 'PATCH',
-                            body: { enabled: !e.enabled },
-                          })
-                        }
-                      >
-                        {e.enabled
-                          ? t('admin.webhooksPage.disable')
-                          : t('admin.webhooksPage.enable')}
-                      </button>
-                      <button
-                        type="button"
-                        className={smallBtn}
-                        onClick={() =>
-                          act.mutate({ path: `/webhooks/${e.id}/test`, method: 'POST' })
-                        }
-                      >
-                        {t('admin.webhooksPage.test')}
-                      </button>
-                    </>
-                  ) : null}
-                  <button type="button" className={smallBtn} onClick={() => setLog(e)}>
-                    {t('admin.webhooksPage.deliveries')}
-                  </button>
-                  {canManage ? (
-                    <>
-                      <button
-                        type="button"
-                        className={smallBtn}
-                        onClick={() => {
-                          if (window.confirm(t('admin.webhooksPage.confirmRotate')))
-                            act.mutate({ path: `/webhooks/${e.id}/rotate-secret`, method: 'POST' });
-                        }}
-                      >
-                        {t('admin.webhooksPage.rotate')}
-                      </button>
-                      <button
-                        type="button"
-                        className={smallBtn}
-                        onClick={() => {
-                          if (window.confirm(t('admin.webhooksPage.confirmDelete')))
-                            act.mutate({ path: `/webhooks/${e.id}`, method: 'DELETE' });
-                        }}
-                      >
-                        {t('admin.webhooksPage.remove')}
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              </div>
-            </Card>
-          </li>
-        ))}
-      </ul>
+      {list.data?.length ? (
+        <Card className="p-4!">
+          <TableScroll label={t('admin.webhooks')}>
+            <table className="w-full text-left text-sm [&_td]:whitespace-nowrap">
+              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4 font-semibold">{t('admin.webhooksPage.url')}</th>
+                  <th className="py-2 pr-4 font-semibold">{t('admin.webhooksPage.eventsLabel')}</th>
+                  <th className="py-2 pr-4 font-semibold">{t('admin.webhooksPage.project')}</th>
+                  <th className="py-2 pr-4 font-semibold">{t('admin.webhooksPage.state')}</th>
+                  <th className="py-2 pr-4 font-semibold">
+                    {t('admin.webhooksPage.lastWeekHead')}
+                  </th>
+                  <th className="py-2">
+                    <span className="sr-only">{t('admin.webhooksPage.actions')}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.data.map((e) => {
+                  const week = t('admin.webhooksPage.lastWeek', {
+                    ok: e.lastWeek.delivered ?? 0,
+                    waiting: e.lastWeek.pending ?? 0,
+                    failed: e.lastWeek.failed ?? 0,
+                  });
+                  const state = e.enabled
+                    ? t('admin.webhooksPage.on')
+                    : `${t('admin.webhooksPage.off')}${e.disabledReason ? `: ${e.disabledReason}` : ''}`;
+                  return (
+                    <tr key={e.id} data-webhook={e.url} className="border-b border-slate-100">
+                      <td className="py-1.5 pr-4 font-mono" title={e.url}>
+                        <span className="block max-w-[22rem] truncate">{e.url}</span>
+                      </td>
+                      <td className="py-1.5 pr-4">
+                        <ul className="flex gap-1">
+                          {e.events.map((v) => (
+                            <li
+                              key={v}
+                              title={t(`admin.webhooksPage.events.${v}`)}
+                              className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                            >
+                              <span aria-hidden="true">
+                                {t(`admin.webhooksPage.eventShort.${v}`)}
+                              </span>
+                              <span className="sr-only">{t(`admin.webhooksPage.events.${v}`)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td className="py-1.5 pr-4">{projectName(e.projectId)}</td>
+                      <td className="py-1.5 pr-4" title={state}>
+                        <span className="block max-w-[14rem] truncate">{state}</span>
+                      </td>
+                      <td className="py-1.5 pr-4 tabular-nums" title={week}>
+                        <span aria-hidden="true">
+                          <span className="text-emerald-ink-800">{e.lastWeek.delivered ?? 0}</span>
+                          {' · '}
+                          <span>{e.lastWeek.pending ?? 0}</span>
+                          {' · '}
+                          <span className={e.lastWeek.failed ? 'text-red-ink-800' : ''}>
+                            {e.lastWeek.failed ?? 0}
+                          </span>
+                        </span>
+                        <span className="sr-only">{week}</span>
+                      </td>
+                      <td className="py-1 text-right">
+                        <span className="inline-flex items-center gap-2">
+                          <button type="button" className={smallBtn} onClick={() => setLog(e)}>
+                            {t('admin.webhooksPage.deliveries')}
+                          </button>
+                          {canManage ? (
+                            <MoreMenu
+                              label={t('admin.webhooksPage.actionsFor', { url: e.url })}
+                              entries={[
+                                {
+                                  type: 'item',
+                                  id: 'toggle',
+                                  label: e.enabled
+                                    ? t('admin.webhooksPage.disable')
+                                    : t('admin.webhooksPage.enable'),
+                                  onSelect: () =>
+                                    act.mutate({
+                                      path: `/webhooks/${e.id}`,
+                                      method: 'PATCH',
+                                      body: { enabled: !e.enabled },
+                                    }),
+                                },
+                                {
+                                  type: 'item',
+                                  id: 'test',
+                                  label: t('admin.webhooksPage.test'),
+                                  onSelect: () =>
+                                    act.mutate({ path: `/webhooks/${e.id}/test`, method: 'POST' }),
+                                },
+                                {
+                                  type: 'item',
+                                  id: 'rotate',
+                                  label: t('admin.webhooksPage.rotate'),
+                                  onSelect: () => {
+                                    if (window.confirm(t('admin.webhooksPage.confirmRotate')))
+                                      act.mutate({
+                                        path: `/webhooks/${e.id}/rotate-secret`,
+                                        method: 'POST',
+                                      });
+                                  },
+                                },
+                                { type: 'separator' },
+                                {
+                                  type: 'item',
+                                  id: 'delete',
+                                  label: t('admin.webhooksPage.remove'),
+                                  onSelect: () => {
+                                    if (window.confirm(t('admin.webhooksPage.confirmDelete')))
+                                      act.mutate({ path: `/webhooks/${e.id}`, method: 'DELETE' });
+                                  },
+                                },
+                              ]}
+                            />
+                          ) : null}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableScroll>
+        </Card>
+      ) : null}
       {creating ? (
         <NewDialog
           projects={projects.data ?? []}
@@ -226,9 +287,24 @@ function NewDialog({
   });
   const toggle = (v: string) =>
     setEvents((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
+  const formId = useId();
   return (
-    <Dialog title={t('admin.webhooksPage.add')} onClose={onClose}>
+    <Drawer
+      title={t('admin.webhooksPage.add')}
+      onClose={onClose}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('admin.webhooksPage.cancel')}
+          </Button>
+          <Button type="submit" form={formId} disabled={!events.length || create.isPending}>
+            {t('admin.webhooksPage.create')}
+          </Button>
+        </>
+      }
+    >
       <form
+        id={formId}
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
@@ -272,16 +348,8 @@ function NewDialog({
           </select>
         </label>
         {create.isError ? <ErrorText>{t('admin.webhooksPage.error')}</ErrorText> : null}
-        <div className="flex gap-3">
-          <Button type="submit" disabled={!events.length || create.isPending}>
-            {t('admin.webhooksPage.create')}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            {t('admin.webhooksPage.cancel')}
-          </Button>
-        </div>
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 

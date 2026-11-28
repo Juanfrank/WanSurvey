@@ -13,10 +13,22 @@ import { api, ApiError } from '../api.js';
 import { permKey, type RolesView } from '../admin/permissions.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls } from '../designer/fields.js';
-import { below, Menu, type MenuEntry } from '../designer/Menu.js';
 import { dateTime } from '../format.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field, PageHeader } from '../routes/ui.js';
+import { InfoTip } from '../cases/samplingControls.js';
+import {
+  Button,
+  Card,
+  Drawer,
+  ErrorText,
+  Field,
+  FilterBar,
+  MoreMenu,
+  PageHeader,
+  TableScroll,
+  type ActiveFilter,
+  type MenuEntry,
+} from '../routes/ui.js';
 import { RoleGuide } from './RoleGuide.js';
 import { matchesGrants, redundantRows } from './roles.js';
 
@@ -111,10 +123,15 @@ export function TeamPage() {
   const twoStep: TwoStepFilter = (TWO_STEP as readonly string[]).includes(search.twoStep ?? '')
     ? (search.twoStep as TwoStepFilter)
     : '';
+  // From the address as it is when it runs, so removing both chips at once keeps neither.
   const setFilter = (k: 'status' | 'twoStep', v: string) =>
     void navigate({
       to: '/admin/users',
-      search: { status: status || undefined, twoStep: twoStep || undefined, [k]: v || undefined },
+      search: (prev: { status?: string; twoStep?: string }) => ({
+        status: prev.status || undefined,
+        twoStep: prev.twoStep || undefined,
+        [k]: v || undefined,
+      }),
       replace: true,
     });
   const [query, setQuery] = useState('');
@@ -123,7 +140,6 @@ export function TeamPage() {
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
   const [leaving, setLeaving] = useState<Member | null>(null);
-  const [menu, setMenu] = useState<{ m: Member; at: { x: number; y: number } } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -238,19 +254,67 @@ export function TeamPage() {
         },
   ];
 
+  const chips: ActiveFilter[] = [
+    ...(status
+      ? [
+          {
+            id: 'status',
+            label: t('team.statusFilter'),
+            value: t(`team.status.${status}`),
+            onRemove: () => setFilter('status', ''),
+          },
+        ]
+      : []),
+    ...(twoStep
+      ? [
+          {
+            id: 'twoStep',
+            label: t('team.twoStepFilter'),
+            value: t(`team.twoStep.${twoStep}`),
+            onRemove: () => setFilter('twoStep', ''),
+          },
+        ]
+      : []),
+    ...(roleFilter
+      ? [
+          {
+            id: 'role',
+            label: t('team.roleFilter'),
+            value: t(`team.roleNames.${roleFilter}`),
+            onRemove: () => setRoleFilter(''),
+          },
+        ]
+      : []),
+    ...(projectFilter
+      ? [
+          {
+            id: 'project',
+            label: t('team.projectFilter'),
+            value: projectName.get(projectFilter) ?? '…',
+            onRemove: () => setProjectFilter(''),
+          },
+        ]
+      : []),
+  ];
+  const scope = (g: Grant) =>
+    g.projectId
+      ? t('team.inProject', { project: projectName.get(g.projectId) ?? '…' })
+      : t('team.wholeOrg');
+  const grantText = (g: Grant) => `${t(`team.roleNames.${g.role}`)} · ${scope(g)}`;
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title={t('team.title')}
+        aside={
+          <InfoTip id="team-intro" term={t('team.title')} text={t('team.intro')} align="start" />
+        }
         actions={
           canManage ? (
             <Button onClick={() => setInviting(true)}>{t('team.invite.open')}</Button>
           ) : null
         }
       />
-      <p className="max-w-3xl text-slate-600">
-        {t('team.intro')} {canManage ? '' : t('team.readOnly')}
-      </p>
       {notice ? (
         <p
           role="status"
@@ -287,17 +351,12 @@ export function TeamPage() {
           errorText={errorText}
         />
       ) : null}
-      <Card>
-        <div className="mb-4 flex flex-wrap items-end gap-3">
-          <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">{t('team.search')}</span>
-            <input
-              type="search"
-              className={inputCls}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
+      <Card className="flex flex-col gap-3 p-4!">
+        <FilterBar
+          search={{ value: query, onChange: setQuery, label: t('team.search') }}
+          active={chips}
+          count={t('team.count', { count: shown.length })}
+        >
           <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">{t('team.statusFilter')}</span>
             <select
@@ -360,11 +419,8 @@ export function TeamPage() {
               ))}
             </select>
           </label>
-          <p className="pb-2 text-sm text-slate-600" role="status">
-            {t('team.count', { count: shown.length })}
-          </p>
-        </div>
-        <div className="overflow-x-auto">
+        </FilterBar>
+        <TableScroll label={t('team.title')}>
           <table className="w-full text-left text-sm" data-testid="team">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -372,105 +428,115 @@ export function TeamPage() {
                 <th className="px-2 py-2 font-semibold">{t('team.columns.roles')}</th>
                 <th className="px-2 py-2 text-right font-semibold">{t('team.columns.cases')}</th>
                 <th className="px-2 py-2 font-semibold">{t('team.columns.status')}</th>
-                <th className="px-2 py-2 font-semibold">{t('team.columns.security')}</th>
+                <th
+                  className="whitespace-nowrap px-2 py-2 font-semibold"
+                  title={t('team.columns.security')}
+                >
+                  <span aria-hidden="true">{t('team.columns.securityShort')}</span>
+                  <span className="sr-only">{t('team.columns.security')}</span>
+                </th>
                 <th className="px-2 py-2">
                   <span className="sr-only">{t('designer.qActions.label')}</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((m) => (
-                <tr
-                  key={m.id}
-                  className="border-b border-slate-100 align-top"
-                  data-member={m.email}
-                  data-status={statusOf(m)}
-                >
-                  <td className="px-2 py-2.5">
-                    <div className="font-medium">
-                      {m.name}
-                      {m.id === me.data?.user.id ? (
-                        <span className="ml-1 font-normal text-slate-500">({t('team.you')})</span>
+              {shown.map((m) => {
+                // Two roles in view, one per line; the others behind "+n", named in full.
+                const first = m.memberships.slice(0, 2);
+                const rest = m.memberships.slice(2);
+                return (
+                  <tr
+                    key={m.id}
+                    className="border-b border-slate-100 align-top"
+                    data-member={m.email}
+                    data-status={statusOf(m)}
+                  >
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      <div className="font-medium">
+                        {m.name}
+                        {m.id === me.data?.user.id ? (
+                          <span className="ml-1 font-normal text-slate-500">({t('team.you')})</span>
+                        ) : null}
+                        {m.idCode ? (
+                          <span className="ml-2 font-mono text-xs font-normal text-slate-500">
+                            {m.idCode}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="max-w-[16rem] truncate text-slate-600" title={m.email}>
+                        {m.email}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {m.memberships.length ? (
+                        <ul
+                          className={`flex flex-col ${m.status === 'deactivated' ? 'text-slate-500 line-through decoration-slate-400' : ''}`}
+                        >
+                          {first.map((g, i) => (
+                            <li key={i} className="flex items-center whitespace-nowrap">
+                              <span className="max-w-[15rem] truncate" title={grantText(g)}>
+                                <span className="font-medium">{t(`team.roleNames.${g.role}`)}</span>{' '}
+                                <span className="text-slate-600">· {scope(g)}</span>
+                              </span>
+                              {i === 1 && rest.length ? (
+                                <span
+                                  className="ml-1.5 flex-none rounded-full bg-slate-100 px-1.5 text-xs font-semibold text-slate-700"
+                                  title={rest.map(grantText).join('\n')}
+                                >
+                                  <span aria-hidden="true">+{rest.length}</span>
+                                  <span className="sr-only">{rest.map(grantText).join(', ')}</span>
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="whitespace-nowrap text-slate-500">
+                          {t('team.noRoles')}
+                        </span>
+                      )}
+                      {m.awaitingRole && manageable(m) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="ml-2 whitespace-nowrap"
+                          aria-label={t('team.assignRoleFor', { name: m.name })}
+                          onClick={() => setEditing(m)}
+                        >
+                          {t('team.assignRole')}
+                        </Button>
                       ) : null}
-                    </div>
-                    <div className="text-slate-600">{m.email}</div>
-                    {m.idCode ? (
-                      <div className="font-mono text-xs text-slate-500">{m.idCode}</div>
-                    ) : null}
-                  </td>
-                  <td className="px-2 py-2.5">
-                    {m.memberships.length ? (
-                      <ul
-                        className={`flex flex-col gap-0.5 ${m.status === 'deactivated' ? 'text-slate-500 line-through decoration-slate-400' : ''}`}
-                      >
-                        {m.memberships.map((g, i) => (
-                          <li key={i}>
-                            <span className="font-medium">{t(`team.roleNames.${g.role}`)}</span>{' '}
-                            <span className="text-slate-600">
-                              ·{' '}
-                              {g.projectId
-                                ? t('team.inProject', {
-                                    project: projectName.get(g.projectId) ?? '…',
-                                  })
-                                : t('team.wholeOrg')}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span className="text-slate-500">{t('team.noRoles')}</span>
-                    )}
-                    {m.status === 'deactivated' && m.memberships.length ? (
-                      <div className="mt-0.5 text-xs text-slate-600">{t('team.rolesInactive')}</div>
-                    ) : null}
-                    {m.awaitingRole && manageable(m) ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="mt-1 whitespace-nowrap"
-                        aria-label={t('team.assignRoleFor', { name: m.name })}
-                        onClick={() => setEditing(m)}
-                      >
-                        {t('team.assignRole')}
-                      </Button>
-                    ) : null}
-                  </td>
-                  <td className="px-2 py-2.5 text-right tabular-nums" data-testid="open-cases">
-                    <OpenCases member={m} />
-                  </td>
-                  <td className="px-2 py-2.5">
-                    <StatusChip status={statusOf(m)} />
-                  </td>
-                  <td className="px-2 py-2.5">
-                    {m.totpEnabled ? t('team.totpOn') : t('team.totpOff')}
-                  </td>
-                  <td className="px-2 py-2.5 text-right">
-                    {manageable(m) ? (
-                      <button
-                        type="button"
-                        className="whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-1 text-sm hover:border-indigo-600"
-                        aria-haspopup="menu"
-                        aria-expanded={menu?.m.id === m.id}
-                        aria-label={t('team.actions', { name: m.name })}
-                        onClick={(e) => setMenu({ m, at: below(e.currentTarget) })}
-                      >
-                        {t('designer.qActions.label')} ▾
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums" data-testid="open-cases">
+                      <OpenCases member={m} />
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      <StatusChip status={statusOf(m)} />
+                      {m.status === 'deactivated' && m.memberships.length ? (
+                        <div className="mt-0.5 text-xs text-slate-600">
+                          {t('team.rolesInactive')}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      {m.totpEnabled ? t('team.totpOn') : t('team.totpOff')}
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      {manageable(m) ? (
+                        <MoreMenu
+                          label={t('team.actions', { name: m.name })}
+                          entries={entriesFor(m)}
+                        />
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-        </div>
-        {menu ? (
-          <Menu
-            label={t('team.actions', { name: menu.m.name })}
-            entries={entriesFor(menu.m)}
-            at={menu.at}
-            onClose={() => setMenu(null)}
-          />
-        ) : null}
+        </TableScroll>
+        {canManage ? null : <p className="text-xs text-slate-600">{t('team.readOnly')}</p>}
       </Card>
       {leaving ? (
         <DeactivateDialog
@@ -837,9 +903,24 @@ function InviteForm({
     name.trim() &&
     grants.length &&
     reasonOk;
+  const formId = useId();
   return (
-    <Dialog title={t('team.invite.title')} onClose={onCancel} wide>
+    <Drawer
+      title={t('team.invite.title')}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            {t('team.invite.cancel')}
+          </Button>
+          <Button type="submit" form={formId} disabled={!ok || invite.isPending}>
+            {t('team.invite.send')}
+          </Button>
+        </>
+      }
+    >
       <form
+        id={formId}
         className="flex flex-col gap-4"
         aria-label={t('team.invite.title')}
         onSubmit={(e) => {
@@ -847,8 +928,8 @@ function InviteForm({
           if (ok) invite.mutate();
         }}
       >
-        <p className="-mt-2 text-sm text-slate-600">{t('team.invite.help')}</p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <p className="text-sm text-slate-600">{t('team.invite.help')}</p>
+        <div className="grid gap-3">
           <Field
             id="invite-email"
             label={t('team.invite.email')}
@@ -893,16 +974,8 @@ function InviteForm({
         />
         <ExternalReason opens={opens} reason={reason} onReason={setReason} />
         {invite.isError ? <ErrorText>{errorText(invite.error)}</ErrorText> : null}
-        <div className="flex gap-2">
-          <Button type="submit" disabled={!ok || invite.isPending}>
-            {t('team.invite.send')}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            {t('team.invite.cancel')}
-          </Button>
-        </div>
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 

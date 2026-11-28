@@ -52,12 +52,26 @@ export function Layer({
  * (`cases.sampling.tips.<id>`). The explanation is the button's description for screen readers.
  * The target is 24 x 24 px (WCAG 2.5.8) around a 16 px glyph; the bubble stays open while the
  * pointer is over it and Escape closes it wherever the pointer is (WCAG 1.4.13).
+ *
+ * Elsewhere, `text` gives the explanation itself (a page's introduction beside its title, the
+ * help of a card beside its heading): `<InfoTip id="users" term={t('team.title')} text={…} />`.
+ * `align="start"` opens the bubble from the (i) to the right, for an (i) near the left edge.
  */
-export function InfoTip({ id, term }: { id: string; term: string }) {
+export function InfoTip({
+  id,
+  term,
+  text,
+  align = 'center',
+}: {
+  id: string;
+  term: string;
+  text?: ReactNode;
+  align?: 'center' | 'start';
+}) {
   const { t } = useTranslation();
   const tipId = useId();
   const [open, setOpen] = useState(false);
-  const std = t(`cases.sampling.tips.${id}.std`, { defaultValue: '' });
+  const std = text ? '' : t(`cases.sampling.tips.${id}.std`, { defaultValue: '' });
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -99,10 +113,10 @@ export function InfoTip({ id, term }: { id: string; term: string }) {
         role="tooltip"
         id={tipId}
         hidden={!open}
-        className="absolute left-1/2 top-full z-30 w-72 max-w-[80vw] -translate-x-1/2 pt-1"
+        className={`absolute top-full z-30 w-72 max-w-[80vw] pt-1 ${align === 'start' ? '-left-2' : 'left-1/2 -translate-x-1/2'}`}
       >
         <span className="block rounded-lg border border-slate-200 bg-white p-3 text-left text-sm font-normal not-italic leading-relaxed text-slate-700 shadow-lg">
-          <span className="block">{t(`cases.sampling.tips.${id}.text`)}</span>
+          <span className="block">{text ?? t(`cases.sampling.tips.${id}.text`)}</span>
           {std ? (
             <span className="mt-1.5 block">
               <strong className="font-semibold text-slate-900">

@@ -178,6 +178,20 @@ disclosure); important warnings stay as they are.
 Inside `FoldHintsContext` (the designer sets it), every `Hint` longer than 90 characters folds
 the same way.
 
+## Long help: an ⓘ
+
+A page's introduction, or the help of a card, goes behind an ⓘ beside its title instead of a
+paragraph above the content: `InfoTip` (`cases/samplingControls.tsx`) with `text`. Beside a
+page title, pass it as `PageHeader`'s `aside` with `align="start"`. Notices that matter (read
+only, a warning) stay in view, small.
+
+```tsx
+<PageHeader
+  title={t('team.title')}
+  aside={<InfoTip id="team-intro" term={t('team.title')} text={t('team.intro')} align="start" />}
+/>
+```
+
 ## End-to-end tests
 
 `e2e/helpers.ts` has:
