@@ -593,6 +593,52 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **Behaviour change — exports leave personal data out unless asked for.** `POST
+/projects/:id/exports` (data files of every format and the codebook) now defaults to
+  `personalData: "exclude"`, as the app already did. Answers marked personal go into the file
+  only with `personalData: "include"`, and only for someone with the permission to see personal
+  data (`pii.view`) in the project; without it the request is refused with `403
+PERSONAL_DATA_FORBIDDEN` instead of being quietly answered with less than it asked for. The
+  integration API takes the same parameter on `GET /ext/v1/projects/:id/cases`: `exclude` (the
+  default) is accepted and `include` answers `403 PERSONAL_DATA_FORBIDDEN`, since no key holds
+  the permission (personal sample fields stay masked). Webhooks carry identifiers and statuses
+  only, as before. **Upgrade**: a script or integration that relied on the old default must send
+  `"personalData": "include"` (as a person with `pii.view`) to keep personal answers in its
+  files. Documented in [`docs/integration-api.md`](docs/integration-api.md) and the OpenAPI body.
+- **Behaviour change — two-step verification for every password sign-in.** Every account that
+  signs in with a password must use two-step verification (an authenticator app): whoever has
+  not set it up is asked to at the next sign-in, before anything else, whatever the role.
+  Signing in with Microsoft never asks for it (the directory applies its own MFA), owners
+  included; someone who set up the code still enters it when Microsoft does not report MFA.
+  The per-role policy of the Organisation page is gone, since every role is covered: the card
+  now says the rule and how many people still have to set it up, and a `PATCH /tenant` with
+  `settings.twoFactorRoles` is refused (a stored list is ignored). The administration home's
+  count and the Users filter "Must set it up (signs in with a password)" count active people
+  who may sign in with a password and have no authenticator app (the people list gives
+  `twoStepRequired` and `hasPassword`; `GET /auth/methods` gives `passwordTwoStep`). New
+  setting `PASSWORD_2FA_REQUIRED` (default `true`): `false` asks it only of owners and
+  administrators, for local demos and the end-to-end and API tests, and is refused when
+  `NODE_ENV=production`. **Upgrade**: people without an authenticator app who sign in with a
+  password are asked to set one up at their next sign-in; tell them before deploying.
+- **Behaviour change — interviews carry only the personal data the questionnaire uses.** The
+  interviewer's screen (CATI, CAPI and paper entry) no longer lists the case's personal data
+  ("Show case details" keeps the sections, the sample fields that are not personal and the
+  answers): a personal field reaches the interview only where the questionnaire uses it, in a
+  text, an introduction, a script, a prefill or a condition (`¿Hablo con
+{{case.first_name}}?`; `{{respondent.firstName}}` needs the first-name field), worked out
+  from the questionnaire version's references. The API sends nothing else personal to the
+  interview, nor to the device's offline copy: unused personal fields are left out (not
+  masked) and contacts no longer travel with the interview; an interview started before this
+  is sent minimised as well.
+  - **Telephone**: the calls screen shows a case's numbers by their last digits ("••4321"); the
+    Call button's `tel:` link hands the whole number to the phone, and the case's personal
+    fields show only in the scripts that pipe them.
+  - **Face to face**: Project settings → Modes → Face to face has "Needed to reach the household": the
+    personal sample fields (the address, a reference) and the case's addresses ticked there
+    are shown apart, under "To reach the household", in face-to-face interviews and kept in the
+    tablet's copy, even where the questionnaire does not show them. Nothing is ticked by
+    default: an address reaches the tablet only if the project marks it.
+
 - **Long help behind an ⓘ on cases, web links, scans and the device** (fourth visual audit):
   - A case's personal data says "Confidential data · your view is recorded" on one line; why
     they show and how to treat them are behind its ⓘ, said once (also on the calls screen).

@@ -68,6 +68,17 @@ describe('startup checks', () => {
     ).toBe('https://x.example.org/api/auth/entra/callback');
   });
 
+  it('two-step verification for every password: on by default, relaxed only outside production', () => {
+    expect(loadConfig(prod).PASSWORD_2FA_REQUIRED).toBe(true);
+    expect(loadConfig(base).PASSWORD_2FA_REQUIRED).toBe(true);
+    expect(loadConfig({ ...base, PASSWORD_2FA_REQUIRED: 'false' }).PASSWORD_2FA_REQUIRED).toBe(
+      false,
+    );
+    expect(() => loadConfig({ ...prod, PASSWORD_2FA_REQUIRED: 'false' })).toThrow(
+      /PASSWORD_2FA_REQUIRED: must not be false in production/,
+    );
+  });
+
   it('refuses an example secret in production', () => {
     expect(() => loadConfig({ ...prod, MAIL_WEBHOOK_SECRET: 'change-me-to-a-long-value' })).toThrow(
       /MAIL_WEBHOOK_SECRET: still has an example value/,

@@ -59,8 +59,16 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await start.getByRole('button', { name: 'Start interview' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(`Case ${caseId}`) })).toBeVisible();
 
-  // Consent text, consent yes, age 40: by keyboard.
+  // Personal data only where the questionnaire puts it: the consent text greets the person by
+  // name; the case details list no name, surname or contacts.
   await onQuestion(page, 'A0_CONSENT_TEXT');
+  await expect(question(page, 'A0_CONSENT_TEXT')).toContainText(/Hola [^,•{]+, estamos/);
+  const side = page.getByRole('complementary', { name: 'Case details' });
+  await expect(side.getByTestId('sample-data')).toContainText('City');
+  await expect(side.getByTestId('sample-data')).not.toContainText(/First name|Last name/);
+  await expect(side.getByRole('heading', { name: 'Contacts' })).toHaveCount(0);
+  await shot(page, 'v2-interview-minimal-personal-data', { fullPage: false });
+  // Consent text, consent yes, age 40: by keyboard.
   await page.keyboard.press('Enter');
   await onQuestion(page, 'A1');
   await page.keyboard.type('1');

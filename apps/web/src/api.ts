@@ -151,6 +151,8 @@ export interface AuthMethods {
   microsoftNeedsEmail: boolean;
   /** The installation serves one organisation (SINGLE_TENANT); also in `Me` once signed in. */
   singleTenant?: boolean;
+  /** Who must use two-step verification with a password; `admins` only in development and tests. */
+  passwordTwoStep?: 'everyone' | 'admins';
 }
 
 /** Multipart upload (sample files); same cookies and CSRF header as `api`. */

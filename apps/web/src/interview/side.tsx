@@ -112,33 +112,42 @@ export function SampleData({
   );
 }
 
-/** How to reach the person; phone and email named in the interface language. */
-export function Contacts({
-  contacts,
+/**
+ * Face to face, what the project marks as needed to reach the household (an address field of
+ * the sample, the case's addresses). No other personal data is listed: the questionnaire shows
+ * what it needs where it needs it.
+ */
+export function FieldworkData({
+  data,
+  addresses,
   headingId,
 }: {
-  contacts: { type: string; value: string; label: string | null }[];
+  data: Record<string, unknown>;
+  addresses: { value: string; label: string | null }[];
   headingId?: string;
 }) {
   const { t } = useTranslation();
   return (
-    <section aria-labelledby={headingId}>
+    <section aria-labelledby={headingId} data-testid="fieldwork-data">
       <h2 id={headingId} className="mb-1 font-semibold">
-        {t('interview.contacts')}
+        {t('interview.fieldwork')}
       </h2>
-      <ul>
-        {contacts.map((c, i) => (
-          <li key={i}>
-            <span className="text-slate-600">
-              {t(`interview.contactType.${(c.label ?? c.type).toLowerCase()}`, {
-                defaultValue: c.label ?? c.type,
-              })}
-              :
-            </span>{' '}
-            {c.value}
-          </li>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+        {Object.entries(data).map(([k, v]) => (
+          <div key={k} className="contents">
+            <Term label={fieldLabel(t, k)} code={k} />
+            <dd className="min-w-0 break-words">
+              {v === null || v === undefined ? '—' : String(v)}
+            </dd>
+          </div>
         ))}
-      </ul>
+        {addresses.map((a, i) => (
+          <div key={`address-${i}`} className="contents">
+            <dt className="min-w-0 text-slate-700">{a.label ?? t('interview.address')}</dt>
+            <dd className="min-w-0 break-words">{a.value}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }

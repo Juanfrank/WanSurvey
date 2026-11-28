@@ -102,3 +102,19 @@ export function nextEligible(
   const top = [...counts].sort((a, b) => b[1] - a[1])[0];
   return { reason: top?.[0] ?? 'empty' };
 }
+
+/**
+ * A number as the caller reads it: its last four digits only ("••4321"). The whole number goes
+ * to the phone through the dial link (`telLink`), not to the screen.
+ */
+export const lastDigits = (v: string) => `••${v.replace(/\D/g, '').slice(-4)}`;
+
+/**
+ * The `tel:` link (RFC 3966) that hands a number to the phone: its digits and leading `+`, and an
+ * extension written after it ("x12", "ext. 12", "anexo 12") as `;ext=12`.
+ */
+export function telLink(value: string): string {
+  const m = /^(.*?)(?:\s*(?:x|ext\.?|extension|anexo|anx\.?)\s*(\d+))?\s*$/i.exec(value)!;
+  const number = m[1]!.replace(/[^\d+]/g, '');
+  return `tel:${number}${m[2] ? `;ext=${m[2]}` : ''}`;
+}

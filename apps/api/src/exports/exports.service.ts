@@ -58,10 +58,16 @@ export const ExportBody = DataFilter.extend({
   /** CSV: the codebook (variables and coded values) alongside the data, all in a ZIP. */
   codebook: z.boolean().optional(),
   /**
-   * Answers marked personal: in the file (for people allowed to see personal data), or left out.
-   * The app asks to leave them out unless chosen; the API keeps including them by default.
+   * Answers marked personal: left out unless asked for with `include`, which needs the
+   * permission to see personal data (`pii.view`) in the project; without it the request is
+   * refused (403 `PERSONAL_DATA_FORBIDDEN`), not quietly changed. Same for the codebook.
    */
-  personalData: z.enum(['include', 'exclude']).default('include'),
+  personalData: z
+    .enum(['include', 'exclude'])
+    .default('exclude')
+    .describe(
+      'Answers marked personal: left out by default. `include` needs the permission to see personal data (pii.view) in the project, otherwise 403 PERSONAL_DATA_FORBIDDEN.',
+    ),
   language: z
     .string()
     .regex(/^[a-z]{2,3}(-[A-Za-z]{2,4})?$/)
@@ -253,18 +259,21 @@ export class ExportsService implements OnModuleInit {
   }
 
   async request(t: ExportsTx, ctx: AuthContext, projectId: string, body: ExportBody) {
+    // Personal answers only when asked for, and only for people allowed to see them: a request
+    // for them without the permission is refused rather than answered with less than it says.
+    const personal = body.personalData === 'include';
+    if (personal && !can(ctx.memberships, 'pii.view', projectId))
+      throw new ForbiddenException({
+        code: 'PERSONAL_DATA_FORBIDDEN',
+        message: 'Exporting personal data needs the permission to see personal data',
+      });
     const qid = body.questionnaireId ?? (await this.datasets.questionnaires(t, projectId))[0]?.id;
     if (!qid) throw new NotFoundException({ code: 'NO_DATA', message: 'Nothing published yet' });
     const row = await t.createExport({
       projectId,
       questionnaireId: qid,
       requestedBy: ctx.userId,
-      // Answers marked personal go only to people allowed to see personal data.
-      options: {
-        ...body,
-        questionnaireId: qid,
-        personal: body.personalData === 'include' && can(ctx.memberships, 'pii.view', projectId),
-      },
+      options: { ...body, questionnaireId: qid, personal },
     });
     await t.audit(
       this.audit.fromContext(ctx, {

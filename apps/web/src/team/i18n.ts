@@ -16,7 +16,7 @@ export const teamEn = {
   twoStep: {
     any: 'Any',
     off: 'Without two-step verification',
-    required: 'Required by their role, not set up',
+    required: 'Must set it up (signs in with a password)',
   },
   activity: 'See their activity',
   count_one: '{{count}} user',
@@ -180,7 +180,7 @@ export const teamEs: typeof teamEn = {
   twoStep: {
     any: 'Cualquiera',
     off: 'Sin verificación en dos pasos',
-    required: 'Exigida por su rol y sin activar',
+    required: 'Debe activarla (entra con contraseña)',
   },
   activity: 'Ver su actividad',
   count_one: '{{count}} usuario',

@@ -63,8 +63,10 @@ export class AuthController {
 
   /**
    * The web app's public configuration: what the sign-in page offers (the password form, and
-   * whether Microsoft needs the e-mail to find the organisation) and whether the installation
-   * serves a single organisation (SINGLE_TENANT: the web app hides what is about several).
+   * whether Microsoft needs the e-mail to find the organisation), whether the installation
+   * serves a single organisation (SINGLE_TENANT: the web app hides what is about several), and
+   * who must use two-step verification with a password (`everyone`, or only owners and
+   * administrators where the server relaxes it for development and tests).
    */
   @Public()
   @Get('methods')
@@ -74,6 +76,7 @@ export class AuthController {
       // With one organisation there is nothing to find from the e-mail's domain.
       microsoftNeedsEmail: !this.tenancy.single,
       singleTenant: this.tenancy.single,
+      passwordTwoStep: this.config.PASSWORD_2FA_REQUIRED ? 'everyone' : 'admins',
     };
   }
 

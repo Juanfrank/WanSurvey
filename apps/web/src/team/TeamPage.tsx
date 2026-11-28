@@ -1,11 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  externalAccessOpened,
-  ROLE_RANK,
-  ROLES,
-  rolesRequiring2fa,
-  type Role,
-} from '@wansurvey/schema';
+import { externalAccessOpened, ROLE_RANK, ROLES, type Role } from '@wansurvey/schema';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -48,6 +42,8 @@ interface Member {
   idCode: string | null;
   memberships: Grant[];
   awaitingRole: boolean;
+  /** May sign in with a password, so must set up two-step verification (from the API). */
+  twoStepRequired?: boolean;
   /** Open cases per project; `onDevice` of them are checked out to a device. */
   workload: {
     projectId: string;
@@ -74,7 +70,7 @@ interface ProjectRow {
 type StatusFilter = '' | 'active' | 'invited' | 'deactivated' | 'awaiting';
 const STATUSES = ['active', 'invited', 'awaiting', 'deactivated'] as const;
 
-/** Two-step sign-in: not set up at all, or not set up although their role requires it. */
+/** Two-step sign-in: not set up at all, or not set up although they sign in with a password. */
 type TwoStepFilter = '' | 'off' | 'required';
 const TWO_STEP = ['off', 'required'] as const;
 
@@ -108,12 +104,6 @@ export function TeamPage() {
     () => new Map((projects.data ?? []).map((p) => [p.id, p.name])),
     [projects.data],
   );
-  const tenant = useQuery({
-    queryKey: ['tenant', me.data?.tenantId],
-    queryFn: () => api<{ settings?: unknown }>('/tenant'),
-    enabled: !!me.data,
-  });
-  const required = rolesRequiring2fa(tenant.data?.settings);
   // Status and two-step filters live in the address: the administration overview links here
   // with one already on.
   const search = useSearch({ strict: false }) as { status?: string; twoStep?: string };
@@ -183,10 +173,7 @@ export function TeamPage() {
   const statusOf = (m: Member): StatusFilter => (m.awaitingRole ? 'awaiting' : m.status);
   // Active people only: an invitation or a deactivated account has nothing to set up yet.
   const twoStepOf = (m: Member, f: TwoStepFilter) =>
-    !f ||
-    (m.status === 'active' &&
-      !m.totpEnabled &&
-      (f === 'off' || m.memberships.some((g) => required.includes(g.role))));
+    !f || (m.status === 'active' && !m.totpEnabled && (f === 'off' || !!m.twoStepRequired));
   const q = query.trim().toLowerCase();
   const shown = (members.data ?? []).filter(
     (m) =>

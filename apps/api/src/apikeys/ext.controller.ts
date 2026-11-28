@@ -26,6 +26,24 @@ const Page = z.object({
   limit: z.coerce.number().int().min(1).max(1000).default(200),
 });
 
+/**
+ * Personal data, as in the app's exports: left out by default. A key never holds the
+ * permission to see personal data, so asking for it is refused rather than quietly ignored.
+ */
+const PersonalData = z
+  .enum(['include', 'exclude'])
+  .default('exclude')
+  .describe(
+    'Personal data: `exclude` (the default); `include` is refused (403), keys never hold it.',
+  );
+function noPersonalData(v: 'include' | 'exclude') {
+  if (v === 'include')
+    throw new ForbiddenException({
+      code: 'PERSONAL_DATA_FORBIDDEN',
+      message: 'Personal data is not available through an API key',
+    });
+}
+
 const encode = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
 function decode<T>(cursor: string | undefined, valid: (v: unknown) => v is T): T | undefined {
   if (!cursor) return undefined;
@@ -48,7 +66,9 @@ const json = <T>(text: string | null, fallback: T): T =>
 /**
  * The integration API, version 1 (ADR 0001): read only, authenticated by a key (`Authorization:
  * Bearer wsk_…`), inside the key's organisation and, when it has one, its project. The shapes
- * here are a contract: they only grow. Personal data never leaves through a key.
+ * here are a contract: they only grow. Personal data never leaves through a key: no key holds
+ * the permission to see it, so `personalData=include` is refused (403) and personal sample
+ * fields are always masked.
  */
 @ApiTags('integration')
 @ExtApi()
@@ -117,9 +137,14 @@ export class ExtController {
   cases(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Query(new ZodPipe(Page.extend({ status: z.string().max(40).optional() })))
-    q: z.infer<typeof Page> & { status?: string },
+    @Query(
+      new ZodPipe(
+        Page.extend({ status: z.string().max(40).optional(), personalData: PersonalData }),
+      ),
+    )
+    q: z.infer<typeof Page> & { status?: string; personalData: 'include' | 'exclude' },
   ) {
+    noPersonalData(q.personalData);
     const after = decode(q.after, isIdCursor);
     return this.engine.sql.withTenant(ctx.tenantId, async (tx) => {
       await this.project(tx, ctx, projectId);

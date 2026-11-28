@@ -11,7 +11,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
-import { rolesRequiring2fa, ROLE_PERMISSIONS, type Permission, type Role } from '@wansurvey/schema';
+import { ROLE_PERMISSIONS, twoStepRequired, type Permission } from '@wansurvey/schema';
 import { AuditService, type AuditEntry } from '../audit/audit.service.js';
 import type { AuthContext, MfaMethod } from '../common/auth-context.js';
 import {
@@ -291,10 +291,13 @@ export class AuthService {
       lastTenantId?: string | null;
     },
   ) {
-    const roles = opts.roles ?? (await t.roles(userId));
-    // Owners and administrators always; other roles when the organisation's policy says so.
-    const required = rolesRequiring2fa(await t.settings());
-    const needs2fa = roles.some((r) => required.includes(r as Role));
+    // A password sign-in needs a second factor (every account; only owners and administrators
+    // where the server relaxes it for development and tests). Microsoft's sign-in does not: the
+    // directory applies its own MFA. Someone who set up TOTP still enters it ('pending').
+    const everyone = this.config.PASSWORD_2FA_REQUIRED;
+    const needs2fa =
+      opts.authMethod === 'password' &&
+      (everyone || twoStepRequired(opts.roles ?? (await t.roles(userId)), everyone));
     const mfaState: AuthContext['mfaState'] = opts.mfaVerifiedBy
       ? 'ok'
       : opts.totpEnabled

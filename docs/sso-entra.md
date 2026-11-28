@@ -79,7 +79,7 @@ PUT /api/v1/tenant/sso
 - Owners and admins get an e-mail, and `GET /api/v1/users` shows the person with `awaitingRole: true`.
 - Once an admin assigns a role, access works immediately; no new sign-in is needed.
 
-**Two-factor authentication.** If the ID token's `amr` claim contains `mfa`, WanSurvey does not ask for its own TOTP code. Otherwise its usual rules apply: enrolled users enter a code, and owners and admins must enrol. Use Entra Conditional Access to require MFA for the WanSurvey app.
+**Two-factor authentication.** If the ID token's `amr` claim contains `mfa`, WanSurvey does not ask for its own TOTP code. Otherwise an enrolled user enters the code; nobody who signs in with Microsoft is asked to enrol (only password sign-ins must, every account). Use Entra Conditional Access to require MFA for the WanSurvey app.
 
 ## 4. The deployment's directory, and Microsoft only (production)
 

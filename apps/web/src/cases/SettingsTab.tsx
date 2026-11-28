@@ -69,6 +69,10 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
   const [form, setForm] = useState<ProjectSettings>(project.settings);
   const [message, setMessage] = useNote();
   const sampleFields = useSampleFields(project.id);
+  // Personal sample fields, which a project may mark as needed to reach the household.
+  const personalFields = Array.isArray(sampleFields.data)
+    ? sampleFields.data.filter((f) => f.pii)
+    : [];
   useEffect(() => setForm(project.settings), [project.settings]);
   const save = useMutation({
     mutationFn: () =>
@@ -383,6 +387,58 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                         setForm({ ...form, capi: { ...form.capi, gpsNotice: e.target.value } })
                       }
                     />
+                  </label>
+                </fieldset>
+                <fieldset className="flex flex-col gap-1.5" data-testid="fieldwork-fields">
+                  <legend className="mb-1 font-medium">{t('cases.settings.fieldworkTitle')}</legend>
+                  <FoldedHelp className="max-w-prose">
+                    {t('cases.settings.fieldworkHelp')}
+                  </FoldedHelp>
+                  {personalFields.map((f) => {
+                    const chosen = form.capi.fieldworkFields ?? [];
+                    return (
+                      <label key={f.name} className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={chosen.includes(f.name)}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              capi: {
+                                ...form.capi,
+                                fieldworkFields: e.target.checked
+                                  ? [...chosen, f.name]
+                                  : chosen.filter((x) => x !== f.name),
+                              },
+                            })
+                          }
+                        />
+                        <span>
+                          {f.label ?? f.name}
+                          {f.label ? (
+                            <span className="ml-1 font-mono text-xs text-slate-500">{f.name}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {Array.isArray(sampleFields.data) && !personalFields.length ? (
+                    <p className="text-slate-600">{t('cases.settings.fieldworkNone')}</p>
+                  ) : null}
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={!!form.capi.fieldworkAddress}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          capi: { ...form.capi, fieldworkAddress: e.target.checked },
+                        })
+                      }
+                    />
+                    {t('cases.settings.fieldworkAddress')}
                   </label>
                 </fieldset>
                 <fieldset className="flex flex-col gap-2" data-testid="audio-settings">

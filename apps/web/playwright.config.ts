@@ -28,6 +28,10 @@ function apiEnv(): Record<string, string> {
     DISPATCH_INTERVAL_MS: '1000',
     MAIL_WEBHOOK_SECRET: 'e2e-webhook-secret-0123456789',
     REDIS_URL: redisUrl,
+    // The demo people sign in with a password many times in a run: two-step verification is
+    // asked only of owners and administrators here (refused in production; API tests cover
+    // the rule for everyone).
+    PASSWORD_2FA_REQUIRED: 'false',
   };
 }
 

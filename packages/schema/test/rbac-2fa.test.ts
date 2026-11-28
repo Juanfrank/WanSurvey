@@ -1,21 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { rolesRequiring2fa, TwoFactorRoles } from '../src/index.js';
+import { twoStepRequired } from '../src/index.js';
 
-describe('two-step policy', () => {
-  it('always keeps owners and administrators and adds the organisation’s roles', () => {
-    expect(rolesRequiring2fa(undefined)).toEqual(['owner', 'admin']);
-    expect(rolesRequiring2fa({ twoFactorRoles: ['supervisor', 'nobody', 'supervisor'] })).toEqual([
-      'owner',
-      'admin',
-      'supervisor',
-    ]);
-    expect(rolesRequiring2fa({ twoFactorRoles: 'interviewer' })).toEqual(['owner', 'admin']);
+describe('two-step verification for password sign-in', () => {
+  it('is required of every role', () => {
+    for (const roles of [[], ['interviewer'], ['client_viewer'], ['owner']])
+      expect(twoStepRequired(roles, true)).toBe(true);
   });
 
-  it('accepts only the roles that are not always required', () => {
-    expect(TwoFactorRoles.safeParse(['interviewer', 'project_manager']).success).toBe(true);
-    expect(TwoFactorRoles.safeParse(['owner']).success).toBe(false);
-    expect(TwoFactorRoles.safeParse(['admin']).success).toBe(false);
-    expect(TwoFactorRoles.safeParse(['supervisor', 'supervisor']).success).toBe(false);
+  it('falls back to owners and administrators only where the server relaxes it', () => {
+    expect(twoStepRequired(['owner'], false)).toBe(true);
+    expect(twoStepRequired(['interviewer', 'admin'], false)).toBe(true);
+    expect(twoStepRequired(['supervisor', 'interviewer'], false)).toBe(false);
+    expect(twoStepRequired([], false)).toBe(false);
   });
 });

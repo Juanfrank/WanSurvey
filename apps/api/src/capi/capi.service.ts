@@ -156,13 +156,13 @@ export class CapiService implements OnModuleInit {
           versions.set(v!.id, v!);
         }
       }
-      const context = await this.runtime.caseContext(
-        t,
-        ctx,
-        projectId,
-        c,
-        settings.revealToInterviewers,
-      );
+      // Minimised for the version the device will interview with (kept in its offline copy).
+      const versionId = interview?.questionnaireVersionId ?? latest!.id;
+      const context = await this.runtime.caseContext(t, ctx, projectId, c, settings, {
+        versionId,
+        compiled: versions.get(versionId)?.compiled ?? latest?.compiled,
+        mode: 'CAPI',
+      });
       out.push({
         caseId: c.id,
         externalId: c.externalId,
@@ -285,13 +285,11 @@ export class CapiService implements OnModuleInit {
     if (closed) return closed;
     if (!fieldedIn(v.compiled as CompiledQuestionnaire, 'CAPI')) return 'MODE_NOT_IN_QUESTIONNAIRE';
     const settings = await this.cases.settings(t, c.projectId);
-    const context = await this.runtime.caseContext(
-      t,
-      ctx,
-      c.projectId,
-      c,
-      settings.revealToInterviewers,
-    );
+    const context = await this.runtime.caseContext(t, ctx, c.projectId, c, settings, {
+      versionId: v.id,
+      compiled: v.compiled,
+      mode: 'CAPI',
+    });
     const row = await t.insertInterview({
       id: item.id,
       projectId: c.projectId,

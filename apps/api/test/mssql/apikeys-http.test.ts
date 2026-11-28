@@ -123,6 +123,20 @@ describe.skipIf(!configured)('SQL Server: integration API keys', () => {
     expect(c1.sample.name).not.toBe('Rosa Quispe');
     expect(c1.sample.region).toBe('Norte');
     expect(JSON.stringify(cases.body)).not.toContain('Quispe');
+    // Personal data is left out by default, and a key cannot ask for it.
+    const asked = await http()
+      .get(`/api/v1/ext/v1/projects/${projectA}/cases`)
+      .query({ personalData: 'include' })
+      .set(bearer(body.key));
+    expect(asked.status).toBe(403);
+    expect(asked.body.code).toBe('PERSONAL_DATA_FORBIDDEN');
+    expect(JSON.stringify(asked.body)).not.toContain('Quispe');
+    const lean = await http()
+      .get(`/api/v1/ext/v1/projects/${projectA}/cases`)
+      .query({ personalData: 'exclude' })
+      .set(bearer(body.key));
+    expect(lean.status).toBe(200);
+    expect(JSON.stringify(lean.body)).not.toContain('Quispe');
     const first = await http()
       .get(`/api/v1/ext/v1/projects/${projectA}/cases`)
       .query({ limit: 1 })

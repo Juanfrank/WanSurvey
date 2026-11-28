@@ -4,22 +4,17 @@ import {
   FORMAT_LOCALES,
   THEME_DEFAULTS,
   accentTokens,
-  OPTIONAL_2FA_ROLES,
   orgTheme,
-  rolesRequiring2fa,
-  ROLES_REQUIRING_2FA,
   type Accent,
-  type Role,
   type ThemeDefault,
 } from '@wansurvey/schema';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, type Me } from '../api.js';
+import { api, type AuthMethods, type Me } from '../api.js';
 import { CheckField, Hint, inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { InfoTip } from '../cases/samplingControls.js';
 import { Button, Card, ErrorText, Field, PageHeader } from '../routes/ui.js';
-import type { RolesView } from './permissions.js';
 import { useFacts } from '../routes/InfoPages.js';
 import { Link } from '@tanstack/react-router';
 import { locale, setFormatLocale } from '../format.js';
@@ -27,7 +22,7 @@ import { locale, setFormatLocale } from '../format.js';
 interface Tenant {
   id: string;
   name: string;
-  settings: { defaultLanguage?: string; defaultTimezone?: string; twoFactorRoles?: string[] };
+  settings: { defaultLanguage?: string; defaultTimezone?: string };
   branding?: unknown;
   /** How dates and numbers are written (BCP 47); null follows the language. */
   formatLocale?: string | null;
@@ -117,7 +112,7 @@ export function OrganisationPage() {
         {tenant.data ? <Appearance tenant={tenant.data} /> : null}
         <DataProtection />
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
-        {tenant.data ? <TwoFactorPolicy tenant={tenant.data} /> : null}
+        <TwoFactorPolicy />
         {singleTenant ? <BiFrequency /> : null}
       </div>
       {/* Settings of the whole installation, apart from this organisation's own. */}
@@ -540,91 +535,50 @@ function SsoEditor({ sso }: { sso: Sso }) {
 }
 
 /**
- * Which roles must use two-step verification. Owners and administrators always do; the
- * organisation adds others, and each role says whether it sees personal data or exports data,
- * the usual reasons to require it.
+ * Two-step verification, for information: every account that signs in with a password must use
+ * it (there is no per-role choice any more), and Microsoft sign-in brings its own MFA. Says how
+ * many people still have to set it up, with a link to them in Users.
  */
-function TwoFactorPolicy({ tenant }: { tenant: Tenant }) {
+function TwoFactorPolicy() {
   const { t } = useTranslation();
-  const qc = useQueryClient();
   const me = useMe();
-  const roles = useQuery({
-    queryKey: ['tenant-roles', me.data?.tenantId],
-    queryFn: () => api<RolesView>('/tenant/roles'),
-    enabled: !!me.data,
+  const canUsers = !!me.data?.permissions.includes('users.read');
+  const methods = useQuery({
+    queryKey: ['auth-methods'],
+    queryFn: () => api<AuthMethods>('/auth/methods'),
   });
-  const [chosen, setChosen] = useState<Role[]>(() =>
-    rolesRequiring2fa(tenant.settings).filter((r) => !ROLES_REQUIRING_2FA.includes(r)),
-  );
-  const [saved, setSaved] = useState<string | null>(null);
-  const save = useMutation({
-    mutationFn: () =>
-      api('/tenant', { method: 'PATCH', body: { settings: { twoFactorRoles: chosen } } }),
-    onSuccess: async () => {
-      setSaved('admin.org.security.saved');
-      await qc.invalidateQueries({ queryKey: ['tenant'] });
-    },
+  const people = useQuery({
+    queryKey: ['team', me.data?.tenantId],
+    queryFn: () =>
+      api<{ status: string; totpEnabled: boolean; twoStepRequired?: boolean }[]>('/users'),
+    enabled: canUsers,
   });
-  const roleName = (r: string) => t(`team.roleNames.${r}`);
-  const notes = (r: Role) => {
-    const perms = roles.data?.roles.find((x) => x.role === r)?.permissions ?? [];
-    return [
-      perms.includes('pii.view') ? t('admin.org.security.personalData') : null,
-      perms.includes('exports.run') ? t('admin.org.security.exports') : null,
-    ].filter(Boolean);
-  };
+  const pending = (people.data ?? []).filter(
+    (m) => m.status === 'active' && m.twoStepRequired && !m.totpEnabled,
+  ).length;
   return (
     <Card className="p-5!">
-      <form
-        className="flex flex-col gap-3"
-        data-testid="org-2fa"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSaved(null);
-          save.mutate();
-        }}
-      >
+      <section className="flex flex-col gap-2 text-sm text-slate-700" data-testid="org-2fa">
         <CardTitle
           id="org-2fa-info"
           title={t('admin.org.security.title')}
           info={t('admin.org.security.intro')}
         />
-        <ul className="flex flex-col gap-1 text-sm text-slate-700">
-          {ROLES_REQUIRING_2FA.map((r) => (
-            <li key={r}>
-              <CheckField
-                label={`${roleName(r)} (${t('admin.org.security.always')})`}
-                checked
-                disabled
-                onChange={() => undefined}
-              />
-            </li>
-          ))}
-          {OPTIONAL_2FA_ROLES.map((r) => {
-            const extra = notes(r);
-            return (
-              <li key={r}>
-                <CheckField
-                  label={roleName(r)}
-                  hint={extra.length ? extra.join(', ') : undefined}
-                  checked={chosen.includes(r)}
-                  onChange={(on) => {
-                    setSaved(null);
-                    setChosen((c) => (on ? [...c, r] : c.filter((x) => x !== r)));
-                  }}
-                />
-              </li>
-            );
-          })}
-        </ul>
-        {save.isError ? <ErrorText>{t('admin.org.error')}</ErrorText> : null}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={save.isPending}>
-            {t('admin.org.security.save')}
-          </Button>
-          <Saved text={saved} />
-        </div>
-      </form>
+        <p>{t('admin.org.security.password')}</p>
+        <p>{t('admin.org.security.microsoft')}</p>
+        {methods.data?.passwordTwoStep === 'admins' ? (
+          <p className="text-amber-ink-800">{t('admin.org.security.relaxed')}</p>
+        ) : null}
+        {people.data ? (
+          <Link
+            to="/admin/users"
+            search={{ twoStep: 'required' }}
+            className="self-start text-indigo-700 underline"
+          >
+            {t('admin.org.security.pending', { count: pending })}
+          </Link>
+        ) : null}
+      </section>
     </Card>
   );
 }

@@ -15,7 +15,7 @@ import { Button, MoreMenu, PageHeader } from '../routes/ui.js';
 import { useMedia } from '../routes/SideDrawer.js';
 import { api } from '../api.js';
 import type { ReviewComment } from '../review/ReviewPage.js';
-import { ago, AnswersSoFar, Contacts, SampleData } from './side.js';
+import { ago, AnswersSoFar, FieldworkData, SampleData } from './side.js';
 import { useInterview, type SaveState } from './useInterview.js';
 import { chosenFormatLocale } from '../format.js';
 
@@ -137,7 +137,21 @@ export function InterviewPage() {
     .map((e) => ({ key: e.key, value: session.getAnswer(e.key) }))
     .filter((a) => a.value !== null && a.value !== undefined);
   const visited = new Set(session.state().visited);
-  const caseData = payload.context.case ?? {};
+  // The case's data on screen leaves out the personal fields: the questionnaire shows those
+  // where it puts them ("¿Hablo con {{case.first_name}}?"). Face to face, what the project marks
+  // as needed to reach the household is listed apart.
+  const hidden = new Set([
+    ...(payload.context.personal ?? []),
+    ...(payload.context.fieldwork ?? []),
+  ]);
+  const caseData = Object.fromEntries(
+    Object.entries(payload.context.case ?? {}).filter(([k]) => !hidden.has(k)),
+  );
+  const fieldworkData = Object.fromEntries(
+    (payload.context.fieldwork ?? []).map((k) => [k, payload.context.case?.[k]]),
+  );
+  // Beside the case, a name only when it is not personal data: a personal name shows where the
+  // questionnaire puts it, not in the header.
   const name = ['first_name', 'last_name', 'nombre', 'apellido', 'name']
     .map((k) => caseData[k])
     .filter((v) => typeof v === 'string' && v && v !== MASK)
@@ -478,10 +492,14 @@ export function InterviewPage() {
                 })}
               </ol>
             </section>
-            <SampleData session={session} data={caseData} headingId="iv-sample" />
-            {payload.context.contacts?.length ? (
-              <Contacts contacts={payload.context.contacts} headingId="iv-contacts" />
+            {Object.keys(fieldworkData).length || payload.context.addresses?.length ? (
+              <FieldworkData
+                data={fieldworkData}
+                addresses={payload.context.addresses ?? []}
+                headingId="iv-fieldwork"
+              />
             ) : null}
+            <SampleData session={session} data={caseData} headingId="iv-sample" />
             <AnswersSoFar session={session} headingId="iv-answers" />
           </aside>
         ) : null}
