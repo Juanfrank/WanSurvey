@@ -1,4 +1,3 @@
-import { sql } from 'kysely';
 import { uuidv7 } from 'uuidv7';
 import { enqueueFromAudit } from '../webhooks/outbox.js';
 import { instant } from '../db/mssql/instant.js';
@@ -51,16 +50,15 @@ function filtered(tx: MssqlTx, f: Omit<AuditFilter, 'limit' | 'before'>): Q {
   if (f.targetId) r = r.where('target_id', '=', f.targetId);
   if (f.from) r = r.where('at', '>=', instant(f.from));
   if (f.to) r = r.where('at', '<=', instant(f.to));
+  // The computed columns of 0031 (lower case, indexed): one index seek per column.
   if (f.projectId) {
     const p = f.projectId.toLowerCase();
-    r = r.where(
-      sql<boolean>`(LOWER(target_id) = ${p} OR LOWER(JSON_VALUE(details, '$.projectId')) = ${p})`,
-    );
+    r = r.where((eb) => eb.or([eb('target_ref', '=', p), eb('project_ref', '=', p)]));
   }
   if (f.caseRef) {
     const c = f.caseRef.toLowerCase();
-    r = r.where(
-      sql<boolean>`(LOWER(target_id) = ${c} OR LOWER(JSON_VALUE(details, '$.caseId')) = ${c} OR LOWER(JSON_VALUE(details, '$.externalId')) = ${c})`,
+    r = r.where((eb) =>
+      eb.or([eb('target_ref', '=', c), eb('case_ref', '=', c), eb('case_external_ref', '=', c)]),
     );
   }
   return r;

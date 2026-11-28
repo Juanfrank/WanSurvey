@@ -88,10 +88,50 @@ describe.skipIf(!ADMIN || !APP)('SQL Server: audit log', () => {
     expect(await list({ from: new Date(Date.now() + 60_000) })).toHaveLength(0);
   });
 
+  it('keeps the project and case of each entry in indexed columns, in lower case', async () => {
+    const project = randomUUID().toUpperCase();
+    await write(a.id, {
+      action: 'interview.corrected',
+      targetType: 'interview',
+      targetId: 'I-1',
+      details: { projectId: project, caseId: 'C-1', externalId: 'HH0004' },
+    });
+    const db = createOwnerDb<Record<string, never>>(ADMIN!, { max: 1 });
+    try {
+      const { rows } = await sql<Record<string, string | null>>`
+        SELECT target_ref, project_ref, case_ref, case_external_ref FROM audit_log
+        WHERE action = 'interview.corrected' AND tenant_id = ${a.id}`.execute(db);
+      expect(rows).toEqual([
+        {
+          target_ref: 'i-1',
+          project_ref: project.toLowerCase(),
+          case_ref: 'c-1',
+          case_external_ref: 'hh0004',
+        },
+      ]);
+      const { rows: indexes } = await sql<{ name: string }>`
+        SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.audit_log')
+          AND name LIKE 'audit[_]%ref[_]idx' ORDER BY name`.execute(db);
+      expect(indexes.map((i) => i.name)).toEqual([
+        'audit_case_external_ref_idx',
+        'audit_case_ref_idx',
+        'audit_project_ref_idx',
+        'audit_target_ref_idx',
+      ]);
+    } finally {
+      await db.destroy();
+    }
+    const list = (f: Partial<Parameters<AuditStore['list']>[1]>) =>
+      app.withTenant(a.id, (tx) => store.list(tx, { limit: 100, ...f }));
+    expect(await list({ projectId: project })).toHaveLength(1);
+    expect(await list({ caseRef: 'hh0004' })).toHaveLength(1);
+    expect(await list({ caseRef: 'C-1' })).toHaveLength(1);
+  });
+
   it('is seen only by its organisation, and is append-only', async () => {
     await write(b.id, { action: 'auth.login' });
     expect(await app.withTenant(b.id, (tx) => store.list(tx, { limit: 100 }))).toHaveLength(1);
-    expect(await app.withTenant(a.id, (tx) => store.list(tx, { limit: 100 }))).toHaveLength(3);
+    expect(await app.withTenant(a.id, (tx) => store.list(tx, { limit: 100 }))).toHaveLength(4);
     // Writing for another organisation is refused by the policy.
     await expect(
       write(b.id, { action: 'auth.login' }).then(() =>

@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ROLE_RANK, ROLES, type Role } from '@wansurvey/schema';
-import { Link } from '@tanstack/react-router';
+import {
+  externalAccessOpened,
+  ROLE_RANK,
+  ROLES,
+  rolesRequiring2fa,
+  type Role,
+} from '@wansurvey/schema';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
-import type { RolesView } from '../admin/permissions.js';
+import { permKey, type RolesView } from '../admin/permissions.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls } from '../designer/fields.js';
 import { below, Menu, type MenuEntry } from '../designer/Menu.js';
@@ -53,6 +59,11 @@ interface ProjectRow {
 }
 
 type StatusFilter = '' | 'active' | 'invited' | 'deactivated' | 'awaiting';
+const STATUSES = ['active', 'invited', 'awaiting', 'deactivated'] as const;
+
+/** Two-step sign-in: not set up at all, or not set up although their role requires it. */
+type TwoStepFilter = '' | 'off' | 'required';
+const TWO_STEP = ['off', 'required'] as const;
 
 /** The highest organisation-wide rank among some grants (project roles do not count). */
 const rankOf = (grants: { role: string; projectId: string | null }[]) =>
@@ -84,8 +95,29 @@ export function TeamPage() {
     () => new Map((projects.data ?? []).map((p) => [p.id, p.name])),
     [projects.data],
   );
+  const tenant = useQuery({
+    queryKey: ['tenant', me.data?.tenantId],
+    queryFn: () => api<{ settings?: unknown }>('/tenant'),
+    enabled: !!me.data,
+  });
+  const required = rolesRequiring2fa(tenant.data?.settings);
+  // Status and two-step filters live in the address: the administration overview links here
+  // with one already on.
+  const search = useSearch({ strict: false }) as { status?: string; twoStep?: string };
+  const navigate = useNavigate();
+  const status: StatusFilter = (STATUSES as readonly string[]).includes(search.status ?? '')
+    ? (search.status as StatusFilter)
+    : '';
+  const twoStep: TwoStepFilter = (TWO_STEP as readonly string[]).includes(search.twoStep ?? '')
+    ? (search.twoStep as TwoStepFilter)
+    : '';
+  const setFilter = (k: 'status' | 'twoStep', v: string) =>
+    void navigate({
+      to: '/admin/users',
+      search: { status: status || undefined, twoStep: twoStep || undefined, [k]: v || undefined },
+      replace: true,
+    });
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('');
   const [roleFilter, setRoleFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [inviting, setInviting] = useState(false);
@@ -101,7 +133,9 @@ export function TeamPage() {
       ? t('team.errors.CONFLICT')
       : e instanceof ApiError && e.status === 403
         ? t('team.errors.FORBIDDEN')
-        : t('team.errors.generic');
+        : e instanceof ApiError && e.code === 'REASON_REQUIRED'
+          ? t('team.projectPeople.reasonRequired')
+          : t('team.errors.generic');
   const refresh = () => qc.invalidateQueries({ queryKey: ['team'] });
   const act = useMutation({
     mutationFn: async ({ m, action }: { m: Member; action: string }) => {
@@ -130,13 +164,21 @@ export function TeamPage() {
   });
 
   const statusOf = (m: Member): StatusFilter => (m.awaitingRole ? 'awaiting' : m.status);
+  // Active people only: an invitation or a deactivated account has nothing to set up yet.
+  const twoStepOf = (m: Member, f: TwoStepFilter) =>
+    !f ||
+    (m.status === 'active' &&
+      !m.totpEnabled &&
+      (f === 'off' || m.memberships.some((g) => required.includes(g.role))));
   const q = query.trim().toLowerCase();
   const shown = (members.data ?? []).filter(
     (m) =>
       (!q || m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)) &&
       (!status || statusOf(m) === status) &&
+      twoStepOf(m, twoStep) &&
       matchesGrants(m.memberships, roleFilter, projectFilter),
   );
+  const canSeeActivity = !!me.data?.permissions.includes('audit.read');
   const manageable = (m: Member) =>
     canManage &&
     m.id !== me.data?.user.id &&
@@ -167,6 +209,16 @@ export function TeamPage() {
             id: 'logout',
             label: t('team.forceLogout'),
             onSelect: () => act.mutate({ m, action: 'force-logout' }),
+          },
+        ]
+      : []),
+    ...(canSeeActivity
+      ? [
+          {
+            type: 'item' as const,
+            id: 'activity',
+            label: t('team.activity'),
+            onSelect: () => void navigate({ to: '/admin/audit', search: { actor: m.id } }),
           },
         ]
       : []),
@@ -245,15 +297,15 @@ export function TeamPage() {
               onChange={(e) => setQuery(e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">{t('team.statusFilter')}</span>
             <select
               className={inputCls}
               value={status}
-              onChange={(e) => setStatus(e.target.value as StatusFilter)}
+              onChange={(e) => setFilter('status', e.target.value)}
             >
               <option value="">{t('team.allStatuses')}</option>
-              {(['active', 'invited', 'awaiting', 'deactivated'] as const).map((s) => (
+              {STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {t(`team.status.${s}`)} (
                   {(members.data ?? []).filter((m) => statusOf(m) === s).length})
@@ -261,7 +313,23 @@ export function TeamPage() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-700">{t('team.twoStepFilter')}</span>
+            <select
+              className={inputCls}
+              value={twoStep}
+              onChange={(e) => setFilter('twoStep', e.target.value)}
+            >
+              <option value="">{t('team.twoStep.any')}</option>
+              {TWO_STEP.map((f) => (
+                <option key={f} value={f}>
+                  {t(`team.twoStep.${f}`)} (
+                  {(members.data ?? []).filter((m) => twoStepOf(m, f)).length})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">{t('team.roleFilter')}</span>
             <select
               className={inputCls}
@@ -276,7 +344,7 @@ export function TeamPage() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">{t('team.projectFilter')}</span>
             <select
               className={inputCls}
@@ -586,13 +654,19 @@ function RolesEditor({
         </Link>
       ) : null}
       {value.map((g, i) => (
-        <div key={i} className="flex flex-wrap items-start gap-2" data-testid="role-row">
+        <div
+          key={i}
+          className="flex flex-wrap items-end gap-x-2 gap-y-1 rounded-md border border-slate-200 px-3 py-2"
+          data-testid="role-row"
+        >
+          {/* A short label above each field; what the role does goes under the whole row. */}
           <label className="flex min-w-48 flex-1 flex-col gap-1 text-sm">
-            <span className="sr-only">{t('team.roles.role', { n: i + 1 })}</span>
+            <span className="font-medium text-slate-700">{t('team.roles.roleLabel')}</span>
             <select
               className={inputCls}
               value={g.role}
               aria-label={t('team.roles.role', { n: i + 1 })}
+              aria-describedby={`${id}-hint-${i}`}
               onChange={(e) => set(i, { role: e.target.value as Role })}
             >
               {/* A role the person already has stays listed even above one's own rank. */}
@@ -602,10 +676,9 @@ function RolesEditor({
                 </option>
               ))}
             </select>
-            <span className="text-xs text-slate-600">{t(`team.roleHints.${g.role}`)}</span>
           </label>
           <label className="flex min-w-48 flex-1 flex-col gap-1 text-sm">
-            <span className="sr-only">{t('team.roles.scope', { n: i + 1 })}</span>
+            <span className="font-medium text-slate-700">{t('team.roles.scopeLabel')}</span>
             <select
               className={inputCls}
               value={g.projectId ?? ''}
@@ -622,12 +695,15 @@ function RolesEditor({
           </label>
           <button
             type="button"
-            className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm hover:border-red-600"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:border-red-600"
             aria-label={t('team.roles.remove', { n: i + 1 })}
             onClick={() => onChange(value.filter((_, j) => j !== i))}
           >
             ✕
           </button>
+          <p id={`${id}-hint-${i}`} className="basis-full text-xs text-slate-600">
+            {t(`team.roleHints.${g.role}`)}
+          </p>
           {redundant[i] != null ? (
             <p className="basis-full text-sm text-amber-ink-800" data-testid="redundant-row">
               {t('team.roles.redundant', {
@@ -662,6 +738,62 @@ function RolesEditor({
   );
 }
 
+/**
+ * What the new roles open to someone of the client organisation (interviews, recordings,
+ * personal data), by this organisation's permissions: the server asks for a reason then.
+ */
+function useExternalOpens(before: readonly Grant[], after: readonly Grant[]): string[] {
+  const me = useMe();
+  const view = useQuery({
+    queryKey: ['tenant-roles', me.data?.tenantId],
+    queryFn: () => api<RolesView>('/tenant/roles'),
+    enabled: !!me.data,
+    staleTime: 60_000,
+  });
+  if (!view.data) return [];
+  const matrix = Object.fromEntries(view.data.roles.map((r) => [r.role, r.permissions]));
+  return externalAccessOpened(before, after, matrix);
+}
+
+/** The warning and the reason asked before giving an external client such access. */
+function ExternalReason({
+  opens,
+  reason,
+  onReason,
+}: {
+  opens: readonly string[];
+  reason: string;
+  onReason(v: string): void;
+}) {
+  const { t } = useTranslation();
+  if (!opens.length) return null;
+  return (
+    <div
+      role="alert"
+      className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-ink-900"
+      data-testid="external-warning"
+    >
+      <p className="font-medium">{t('team.projectPeople.externalWarning')}</p>
+      <ul className="ml-5 list-disc">
+        {opens.map((p) => (
+          <li key={p}>{t(permKey(p))}</li>
+        ))}
+      </ul>
+      <label className="flex flex-col gap-1 font-medium text-slate-800">
+        {t('team.projectPeople.reason')}
+        <textarea
+          className={`${inputCls} min-h-[3rem] font-normal`}
+          required
+          minLength={3}
+          maxLength={500}
+          value={reason}
+          onChange={(e) => onReason(e.target.value)}
+        />
+      </label>
+    </div>
+  );
+}
+
 function InviteForm({
   grantable,
   projects,
@@ -681,6 +813,9 @@ function InviteForm({
   const [firstName, setFirstName] = useState('');
   const [idCode, setIdCode] = useState('');
   const [grants, setGrants] = useState<Grant[]>([{ role: 'interviewer', projectId: null }]);
+  const [reason, setReason] = useState('');
+  const opens = useExternalOpens([], grants);
+  const reasonOk = !opens.length || reason.trim().length >= 3;
   const invite = useMutation({
     mutationFn: () =>
       api('/users/invite', {
@@ -691,11 +826,16 @@ function InviteForm({
           ...(firstName.trim() ? { firstName: firstName.trim() } : {}),
           ...(idCode.trim() ? { idCode: idCode.trim() } : {}),
           memberships: grants,
+          ...(opens.length ? { reason: reason.trim() } : {}),
         },
       }),
     onSuccess: () => onInvited(email.trim()),
   });
-  const ok = /^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$/.test(email.trim()) && name.trim() && grants.length;
+  const ok =
+    /^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$/.test(email.trim()) &&
+    name.trim() &&
+    grants.length &&
+    reasonOk;
   return (
     <Dialog title={t('team.invite.title')} onClose={onCancel} wide>
       <form
@@ -750,6 +890,7 @@ function InviteForm({
           grantable={grantable}
           projects={projects}
         />
+        <ExternalReason opens={opens} reason={reason} onReason={setReason} />
         {invite.isError ? <ErrorText>{errorText(invite.error)}</ErrorText> : null}
         <div className="flex gap-2">
           <Button type="submit" disabled={!ok || invite.isPending}>
@@ -781,9 +922,14 @@ function RolesDialog({
 }) {
   const { t } = useTranslation();
   const [grants, setGrants] = useState<Grant[]>(member.memberships);
+  const [reason, setReason] = useState('');
+  const opens = useExternalOpens(member.memberships, grants);
   const save = useMutation({
     mutationFn: () =>
-      api(`/users/${member.id}/memberships`, { method: 'PUT', body: { memberships: grants } }),
+      api(`/users/${member.id}/memberships`, {
+        method: 'PUT',
+        body: { memberships: grants, ...(opens.length ? { reason: reason.trim() } : {}) },
+      }),
     onSuccess: onSaved,
   });
   return (
@@ -795,12 +941,18 @@ function RolesDialog({
           grantable={grantable}
           projects={projects}
         />
+        <ExternalReason opens={opens} reason={reason} onReason={setReason} />
         {save.isError ? <ErrorText>{errorText(save.error)}</ErrorText> : null}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             {t('team.invite.cancel')}
           </Button>
-          <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>
+          <Button
+            type="button"
+            disabled={opens.length > 0 && reason.trim().length < 3}
+            busy={save.isPending}
+            onClick={() => save.mutate()}
+          >
             {t('team.roles.save')}
           </Button>
         </div>

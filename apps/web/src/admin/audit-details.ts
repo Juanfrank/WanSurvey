@@ -43,6 +43,8 @@ export function formatValue(v: unknown, c: DescribeContext, key?: string): strin
     if (ISO.test(v) && !Number.isNaN(Date.parse(v))) return c.date(new Date(v));
     if (key === 'role' || key === 'roles') return roleLabel(c.t, v);
     if (key === 'action' || key === 'actions') return actionLabel(c.t, v);
+    // What a role opened to an external client: permission codes, in words.
+    if (key === 'opens') return c.t(permKey(v), { defaultValue: v });
     if (WORD.test(v)) return c.t(`admin.log.values.${v}`, { defaultValue: v });
     return v;
   }

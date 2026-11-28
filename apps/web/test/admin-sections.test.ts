@@ -16,9 +16,11 @@ describe('administration menu', () => {
     );
   });
 
-  it('shows administrators the API keys, read only, but not the webhooks', () => {
+  it('shows administrators the API keys and the webhooks, read only', () => {
     expect(keys(adminMenuFor(ROLE_PERMISSIONS.admin))).toContain('apiKeys');
-    expect(keys(adminMenuFor(ROLE_PERMISSIONS.admin))).not.toContain('webhooks');
+    expect(keys(adminMenuFor(ROLE_PERMISSIONS.admin))).toContain('webhooks');
+    // Nobody without the activity log or the keys' permission.
+    expect(keys(adminSectionsFor(ROLE_PERMISSIONS.project_manager))).not.toContain('webhooks');
   });
 
   it('leaves out of the menu what project managers and supervisors only look at', () => {

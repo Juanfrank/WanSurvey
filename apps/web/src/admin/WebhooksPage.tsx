@@ -38,6 +38,8 @@ export function WebhooksPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const me = useMe();
+  // Who reads the activity log sees the webhooks, read only.
+  const canManage = !!me.data?.permissions.includes('apikeys.manage');
   const list = useQuery({
     queryKey: ['webhooks', me.data?.tenantId],
     queryFn: () => api<Endpoint[]>('/webhooks'),
@@ -69,9 +71,14 @@ export function WebhooksPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <h1 className="text-2xl font-bold">{t('admin.webhooks')}</h1>
-        <Button onClick={() => setCreating(true)}>{t('admin.webhooksPage.add')}</Button>
+        {canManage ? (
+          <Button onClick={() => setCreating(true)}>{t('admin.webhooksPage.add')}</Button>
+        ) : null}
       </div>
       <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.webhooksPage.intro')}</p>
+      {canManage ? null : (
+        <p className="-mt-3 text-sm text-slate-600">{t('admin.webhooksPage.readOnly')}</p>
+      )}
       {act.isError ? <ErrorText>{t('admin.webhooksPage.error')}</ErrorText> : null}
       <QueryState query={list}>{null}</QueryState>
       {list.data && list.data.length === 0 ? (
@@ -103,49 +110,61 @@ export function WebhooksPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    onClick={() =>
-                      act.mutate({
-                        path: `/webhooks/${e.id}`,
-                        method: 'PATCH',
-                        body: { enabled: !e.enabled },
-                      })
-                    }
-                  >
-                    {e.enabled ? t('admin.webhooksPage.disable') : t('admin.webhooksPage.enable')}
-                  </button>
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    onClick={() => act.mutate({ path: `/webhooks/${e.id}/test`, method: 'POST' })}
-                  >
-                    {t('admin.webhooksPage.test')}
-                  </button>
+                  {canManage ? (
+                    <>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        onClick={() =>
+                          act.mutate({
+                            path: `/webhooks/${e.id}`,
+                            method: 'PATCH',
+                            body: { enabled: !e.enabled },
+                          })
+                        }
+                      >
+                        {e.enabled
+                          ? t('admin.webhooksPage.disable')
+                          : t('admin.webhooksPage.enable')}
+                      </button>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        onClick={() =>
+                          act.mutate({ path: `/webhooks/${e.id}/test`, method: 'POST' })
+                        }
+                      >
+                        {t('admin.webhooksPage.test')}
+                      </button>
+                    </>
+                  ) : null}
                   <button type="button" className={smallBtn} onClick={() => setLog(e)}>
                     {t('admin.webhooksPage.deliveries')}
                   </button>
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    onClick={() => {
-                      if (window.confirm(t('admin.webhooksPage.confirmRotate')))
-                        act.mutate({ path: `/webhooks/${e.id}/rotate-secret`, method: 'POST' });
-                    }}
-                  >
-                    {t('admin.webhooksPage.rotate')}
-                  </button>
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    onClick={() => {
-                      if (window.confirm(t('admin.webhooksPage.confirmDelete')))
-                        act.mutate({ path: `/webhooks/${e.id}`, method: 'DELETE' });
-                    }}
-                  >
-                    {t('admin.webhooksPage.remove')}
-                  </button>
+                  {canManage ? (
+                    <>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        onClick={() => {
+                          if (window.confirm(t('admin.webhooksPage.confirmRotate')))
+                            act.mutate({ path: `/webhooks/${e.id}/rotate-secret`, method: 'POST' });
+                        }}
+                      >
+                        {t('admin.webhooksPage.rotate')}
+                      </button>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        onClick={() => {
+                          if (window.confirm(t('admin.webhooksPage.confirmDelete')))
+                            act.mutate({ path: `/webhooks/${e.id}`, method: 'DELETE' });
+                        }}
+                      >
+                        {t('admin.webhooksPage.remove')}
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </Card>
@@ -177,7 +196,7 @@ export function WebhooksPage() {
           </div>
         </Dialog>
       ) : null}
-      {log ? <LogDialog endpoint={log} onClose={() => setLog(null)} /> : null}
+      {log ? <LogDialog endpoint={log} canManage={canManage} onClose={() => setLog(null)} /> : null}
     </div>
   );
 }
@@ -264,7 +283,15 @@ function NewDialog({
   );
 }
 
-function LogDialog({ endpoint, onClose }: { endpoint: Endpoint; onClose(): void }) {
+function LogDialog({
+  endpoint,
+  canManage,
+  onClose,
+}: {
+  endpoint: Endpoint;
+  canManage: boolean;
+  onClose(): void;
+}) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const q = useQuery({
@@ -305,9 +332,11 @@ function LogDialog({ endpoint, onClose }: { endpoint: Endpoint; onClose(): void 
                 </td>
                 <td className="py-2 pr-3">{d.attempt}</td>
                 <td className="py-2">
-                  <button type="button" className={smallBtn} onClick={() => again.mutate(d.id)}>
-                    {t('admin.webhooksPage.redeliver')}
-                  </button>
+                  {canManage ? (
+                    <button type="button" className={smallBtn} onClick={() => again.mutate(d.id)}>
+                      {t('admin.webhooksPage.redeliver')}
+                    </button>
+                  ) : null}
                 </td>
               </tr>
             ))}

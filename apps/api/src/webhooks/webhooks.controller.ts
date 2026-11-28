@@ -28,14 +28,17 @@ const Patch_ = z.strictObject({
   enabled: z.boolean().optional(),
 });
 
-/** Webhook endpoints of the organisation, for whoever manages the integrations. */
+/**
+ * Webhook endpoints of the organisation, for whoever manages the integrations. Who reads the
+ * activity log also sees them and their deliveries, read only (as the API keys).
+ */
 @ApiTags('webhooks')
 @Controller('webhooks')
 export class WebhooksController {
   constructor(private readonly svc: WebhooksService) {}
 
   @Get()
-  @RequirePermission('apikeys.manage')
+  @RequirePermission(['apikeys.manage', 'audit.read'])
   list(@Auth() ctx: AuthContext) {
     return this.svc.list(ctx);
   }
@@ -79,7 +82,7 @@ export class WebhooksController {
   }
 
   @Get(':id/deliveries')
-  @RequirePermission('apikeys.manage')
+  @RequirePermission(['apikeys.manage', 'audit.read'])
   deliveries(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.deliveries(ctx, id);
   }

@@ -50,6 +50,20 @@ describe('activity log in words', () => {
     expect(reviewer?.value).toMatch(/− /);
   });
 
+  it('names what a role opened to an external client, and whose cases were moved', () => {
+    const rows = describeDetails(
+      'user.role_changed',
+      { external: true, opens: ['interviews.read_all', 'audio.listen'], reason: 'Auditoría' },
+      c,
+    );
+    expect(rows.find((r) => r.label === 'Da acceso a')?.value).toBe(
+      'Ver todas las entrevistas, Escuchar las grabaciones de entrevistas',
+    );
+    expect(
+      describeDetails('cases.assigned', { to: ANA, from: { [ANA]: 3 }, count: 3 }, c),
+    ).toContainEqual({ label: 'De', value: 'Ana Pérez: 3' });
+  });
+
   it('says when a role change changed nothing', () => {
     expect(
       describeDetails('tenant.roles_updated', { before: {}, after: {} }, c).map((r) => r.value),

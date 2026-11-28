@@ -14,8 +14,16 @@ const InviteBody = z.object({
   idCode: z.string().max(50).optional(),
   languages: z.array(z.string().max(16)).max(20).optional(),
   memberships: z.array(Grant).min(1).max(50),
+  reason: z.string().trim().min(3).max(500).optional(),
 });
-const MembershipsBody = z.object({ memberships: z.array(Grant).max(50) });
+/**
+ * `reason` is asked when an external client is given a role that opens interviews, recordings
+ * or personal data (as on the project's people page).
+ */
+const MembershipsBody = z.object({
+  memberships: z.array(Grant).max(50),
+  reason: z.string().trim().min(3).max(500).optional(),
+});
 
 @ApiTags('users')
 @Controller('users')
@@ -46,7 +54,7 @@ export class UsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(MembershipsBody)) body: z.infer<typeof MembershipsBody>,
   ) {
-    return this.users.setMemberships(ctx, id, body.memberships);
+    return this.users.setMemberships(ctx, id, body.memberships, body.reason);
   }
 
   @Post(':id/deactivate')
