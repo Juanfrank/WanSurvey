@@ -1,3 +1,4 @@
+import { CLOSED_PROJECT_STATUSES } from '@wansurvey/schema';
 import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
@@ -288,7 +289,10 @@ export class CawiStore {
   ): Promise<{ invitation: InvitationRow; kind: 'invitation' | 'reminder' }[]> {
     const now = v.now.toISOString();
     const free = sql`(i.lease_until IS NULL OR i.lease_until < ${now})`;
-    const active = sql`EXISTS (SELECT 1 FROM questionnaires q WHERE q.id = i.questionnaire_id AND q.state = 'active')`;
+    // Nothing goes out for a disabled questionnaire, nor for a closed or archived project.
+    const active = sql`EXISTS (SELECT 1 FROM questionnaires q WHERE q.id = i.questionnaire_id AND q.state = 'active')
+      AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = i.project_id
+        AND p.status IN (${sql.join([...CLOSED_PROJECT_STATUSES])}))`;
     // A revoked or expired link is not sent, nor reminded of.
     const live = sql`i.revoked_at IS NULL AND (i.expires_at IS NULL OR i.expires_at > ${now})`;
     const queued = await sql<{ id: string }>`

@@ -296,3 +296,72 @@ export const ROLE_RANK: Record<Role, number> = {
   interviewer: 40,
   client_viewer: 10,
 };
+
+// ─── Closed projects ─────────────────────────────────────────────────────────────────
+
+/** Project statuses in which fieldwork is over: nothing is started, sent, assigned or claimed. */
+export const CLOSED_PROJECT_STATUSES = ['closed', 'archived'] as const;
+
+/** Whether fieldwork is over in a project of this status. */
+export const isClosedStatus = (status: string | null | undefined): boolean =>
+  (CLOSED_PROJECT_STATUSES as readonly string[]).includes(status ?? '');
+
+/** The permission of whoever runs a project: it alone reopens a project, a case or an interview. */
+export const MANAGE_PROJECT: Permission = 'projects.update';
+
+/**
+ * The permissions of fieldwork: doing, handing out, reviewing and correcting interviews. A role
+ * that holds one of them is a field role: it no longer reaches a closed project.
+ */
+export const FIELD_PERMISSIONS: readonly Permission[] = [
+  'interviews.conduct',
+  'dataentry.key',
+  'cases.read_assigned',
+  'cases.assign',
+  'interviews.review',
+  'interviews.approve',
+  'interviews.correct',
+];
+
+/**
+ * Whether a role, by what it allows, still reaches a project once it is closed: whoever runs the
+ * project (`projects.update`: owners, administrators, project managers) and the roles that only
+ * read or analyse (client viewers). Field roles (interviewers, supervisors, reviewers, and any
+ * customised role holding a fieldwork permission) do not; their grants stay, and reopening the
+ * project gives the access back.
+ */
+export const staysWhenClosed = (permissions: readonly Permission[]): boolean =>
+  permissions.includes(MANAGE_PROJECT) || !permissions.some((p) => FIELD_PERMISSIONS.includes(p));
+
+/** A grant as the session holds it; `exceptProjects`: closed projects it no longer reaches. */
+export interface ProjectGrant {
+  role: Role;
+  projectId: string | null;
+  permissions?: readonly Permission[];
+  exceptProjects?: readonly string[];
+}
+
+/**
+ * The grants that apply once closed projects are taken into account: a field role's grant in a
+ * closed project is left out, and an organisation-wide one stops at the closed projects (listed
+ * in `exceptProjects`). Nothing is deleted: the person's roles are as they were.
+ */
+export function withoutClosedProjects<G extends ProjectGrant>(
+  grants: readonly G[],
+  closed: readonly string[],
+  matrix: RoleMatrix = ROLE_PERMISSIONS,
+): G[] {
+  if (!closed.length) return [...grants];
+  const shut = new Set(closed.map((id) => id.toLowerCase()));
+  return grants.flatMap((g) => {
+    if (staysWhenClosed(g.permissions ?? matrix[g.role] ?? [])) return [g];
+    if (g.projectId !== null) return shut.has(g.projectId.toLowerCase()) ? [] : [g];
+    return [{ ...g, exceptProjects: [...shut] }];
+  });
+}
+
+/** Whether a grant reaches a project (`null`: organisation-wide only). */
+export const grantReaches = (g: ProjectGrant, projectId: string | null): boolean =>
+  g.projectId === null
+    ? !(projectId && g.exceptProjects?.includes(projectId.toLowerCase()))
+    : projectId !== null && g.projectId.toLowerCase() === projectId.toLowerCase();

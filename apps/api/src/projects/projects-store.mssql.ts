@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
+import { isClosedStatus } from '@wansurvey/schema';
 import type { MssqlTx } from '../db/mssql/database.js';
+import { instant } from '../db/mssql/instant.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
 
 /**
@@ -42,6 +44,10 @@ export interface Closeout {
   activeShareLinks: number;
   /** People with a role in this project only (organisation-wide roles are not counted). */
   projectMembers: number;
+  /** Cases downloaded to a device (offline work), not yet given back. */
+  casesOnDevices: number;
+  /** The roles that reach this project (its own and the organisation-wide ones), per person. */
+  grants: { userId: string; role: string; projectId: string | null }[];
 }
 
 export class ProjectsStore {
@@ -178,6 +184,15 @@ export class ProjectsStore {
         ...(v.name !== undefined ? { name: v.name } : {}),
         ...(v.code !== undefined ? { code: v.code } : {}),
         ...(v.status !== undefined ? { status: v.status } : {}),
+        // Closing keeps the first moment fieldwork stopped (archiving a closed project, or
+        // restoring it to closed, does not move it); reopening clears it.
+        ...(v.status !== undefined
+          ? {
+              closed_at: isClosedStatus(v.status)
+                ? (current.closed_at ?? instant(new Date()))
+                : null,
+            }
+          : {}),
         ...(v.modesEnabled !== undefined ? { modes_enabled: JSON.stringify(v.modesEnabled) } : {}),
         ...(v.timezone !== undefined ? { timezone: v.timezone } : {}),
         ...(v.languages !== undefined ? { languages: JSON.stringify(v.languages) } : {}),
@@ -205,9 +220,26 @@ export class ProjectsStore {
         (SELECT COUNT(*) FROM share_links WHERE project_id = ${projectId} AND revoked_at IS NULL
           AND (expires_at IS NULL OR expires_at > SYSDATETIMEOFFSET())) AS activeShareLinks,
         (SELECT COUNT(DISTINCT user_id) FROM memberships
-          WHERE project_id = ${projectId}) AS projectMembers`.execute(tx);
+          WHERE project_id = ${projectId}) AS projectMembers,
+        (SELECT COUNT(*) FROM cases WHERE project_id = ${projectId}
+          AND checked_out_device IS NOT NULL) AS casesOnDevices`.execute(tx);
     const row = r.rows[0]!;
-    return { ...row, lastExportAt: row.lastExportAt ? new Date(row.lastExportAt) : null };
+    // Active members only: someone deactivated reaches nothing anyway.
+    const grants = await sql<{ user_id: string; role: string; project_id: string | null }>`
+      SELECT g.user_id, g.role, g.project_id FROM memberships g
+      JOIN tenant_members m ON m.user_id = g.user_id AND m.tenant_id = g.tenant_id
+      WHERE (g.project_id = ${projectId} OR g.project_id IS NULL) AND m.status = 'active'`.execute(
+      tx,
+    );
+    return {
+      ...row,
+      lastExportAt: row.lastExportAt ? new Date(row.lastExportAt) : null,
+      grants: grants.rows.map((g) => ({
+        userId: g.user_id.toLowerCase(),
+        role: g.role,
+        projectId: g.project_id?.toLowerCase() ?? null,
+      })),
+    };
   }
 
   // ─── Logo ─────────────────────────────────────────────────────────────────────────

@@ -327,6 +327,86 @@ export class InterviewStore {
     await done(tx);
   }
 
+  /**
+   * The projects this device holds something of: downloaded cases, or interview copies.
+   */
+  async projectsHeld(): Promise<string[]> {
+    const tx = this.db.transaction(['cases', 'interviews'], 'readonly');
+    const cases = (await req(tx.objectStore('cases').getAll())) as DeviceCase[];
+    const all = (await req(tx.objectStore('interviews').getAll())) as LocalInterview[];
+    return [
+      ...new Set([
+        ...cases.map((c) => c.projectId),
+        ...all.flatMap((l) => (l.meta?.projectId ? [l.meta.projectId] : [])),
+      ]),
+    ];
+  }
+
+  /**
+   * Forgets everything this device keeps of one project (its cases with their personal data,
+   * its interview copies, the questionnaires nothing else uses, its sync time), for a project
+   * that was closed. Refuses, changing nothing, while one of its interviews still holds
+   * something unsent: that is never thrown away. Resolves to what was removed.
+   */
+  async purgeProject(projectId: string): Promise<{ cases: number; interviews: number }> {
+    const stores = ['interviews', 'outbox', 'versions', 'cases', 'meta'];
+    const tx = this.db.transaction(stores, 'readwrite');
+    const casesStore = tx.objectStore('cases');
+    const allCases = (await req(casesStore.getAll())) as DeviceCase[];
+    const all = (await req(tx.objectStore('interviews').getAll())) as LocalInterview[];
+    const mine = allCases.filter((c) => c.projectId === projectId);
+    const ofCases = new Set(mine.flatMap((c) => (c.interviewId ? [c.interviewId] : [])));
+    const copies = all.filter((l) => l.meta?.projectId === projectId || ofCases.has(l.id));
+    if (copies.some(hasUnsent)) {
+      tx.abort();
+      await done(tx).catch(() => undefined);
+      throw new DeviceError('UNSENT_ON_DEVICE', 'Interviews on this device are not sent yet');
+    }
+    for (const c of mine) casesStore.delete(c.caseId);
+    for (const l of copies) {
+      tx.objectStore('interviews').delete(l.id);
+      tx.objectStore('outbox').delete(
+        IDBKeyRange.bound([l.id, 0], [l.id, Number.MAX_SAFE_INTEGER]),
+      );
+    }
+    // Questionnaires still needed by another project's cases or interviews stay.
+    const gone = new Set(copies.map((l) => l.id));
+    const used = new Set([
+      ...allCases.filter((c) => c.projectId !== projectId).map((c) => c.questionnaireVersionId),
+      ...all
+        .filter((l) => !gone.has(l.id))
+        .flatMap((l) => (l.meta ? [l.meta.questionnaireVersionId] : [])),
+    ]);
+    const versions = tx.objectStore('versions');
+    const keys = (await req(versions.getAllKeys())) as string[];
+    const ownVersions = new Set([
+      ...mine.map((c) => c.questionnaireVersionId),
+      ...copies.flatMap((l) => (l.meta ? [l.meta.questionnaireVersionId] : [])),
+    ]);
+    for (const k of keys) if (ownVersions.has(k) && !used.has(k)) versions.delete(k);
+    tx.objectStore('meta').delete(`lastSync:${projectId}`);
+    await done(tx);
+    return { cases: mine.length, interviews: copies.length };
+  }
+
+  async deleteMeta(key: string): Promise<void> {
+    const tx = this.db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').delete(key);
+    await done(tx);
+  }
+
+  /** Every meta value whose key starts with `prefix`, by key. */
+  async metaWith<T>(prefix: string): Promise<Record<string, T>> {
+    const tx = this.db.transaction('meta', 'readonly');
+    const store = tx.objectStore('meta');
+    const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`);
+    const [keys, values] = await Promise.all([
+      req(store.getAllKeys(range)) as Promise<string[]>,
+      req(store.getAll(range)) as Promise<T[]>,
+    ]);
+    return Object.fromEntries(keys.map((k, i) => [k.slice(prefix.length), values[i]!]));
+  }
+
   /** The device's meta values (last sync time…). */
   async getMeta<T>(key: string): Promise<T | null> {
     const tx = this.db.transaction('meta', 'readonly');

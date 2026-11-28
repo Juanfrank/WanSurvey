@@ -202,7 +202,8 @@ export const analysisEn = {
       backToDraft: 'Back to draft',
     },
     confirm: {
-      close: 'Close {{name}}? Fieldwork is considered over.',
+      close:
+        'Close {{name}}? Fieldwork stops, web links stop opening the survey and field roles stop seeing the project (reopening gives it back).',
       archive: 'Archive {{name}}? It leaves everyone’s menu.',
     },
     checklist: 'Before closing',
@@ -222,6 +223,29 @@ export const analysisEn = {
     projectMembers_one: '{{count}} person has access to this project only (see People)',
     projectMembers_other: '{{count}} people have access to this project only (see People)',
     changed: 'Status changed to “{{status}}”.',
+    casesOnDevices_one:
+      '{{count}} case is on an interviewer’s device: what was done on it before closing is still received when the device syncs',
+    casesOnDevices_other:
+      '{{count}} cases are on interviewers’ devices: what was done on them before closing is still received when the devices sync',
+    fieldPeople_one:
+      '{{count}} person with a field role (interviewer, supervisor, reviewer) stops seeing the project',
+    fieldPeople_other:
+      '{{count}} people with field roles (interviewers, supervisors, reviewers) stop seeing the project',
+    effects: {
+      title: 'What closing does',
+      fieldwork:
+        'Fieldwork stops: no interview is started or sent any more (face to face, telephone, paper), and no case is assigned or taken.',
+      web: 'Web survey links stop opening the survey: respondents see that it is closed. No invitation or reminder goes out.',
+      access:
+        'Field roles stop seeing the project. Their roles are kept: reopening the project gives them access again, with their cases as they were.',
+      devices:
+        'Devices send what was done before the close, then remove the project’s cases and answers; what cannot be sent stays on the device.',
+      stays:
+        'Whoever runs the project, administrators and client viewers keep access, for analysis and exports.',
+    },
+    closedSince: 'Closed on {{date}}. Fieldwork is over and field roles do not see the project.',
+    reopenHelp:
+      'Reopening opens fieldwork again and gives field roles back their access, with their cases and assignments as they were.',
   },
   metrics: {
     title: 'Interviewer metrics',
@@ -631,7 +655,8 @@ export const analysisEs: typeof analysisEn = {
       backToDraft: 'Volver a borrador',
     },
     confirm: {
-      close: '¿Cerrar {{name}}? Se da por terminado el trabajo de campo.',
+      close:
+        '¿Cerrar {{name}}? Se detiene el trabajo de campo, los enlaces web dejan de abrir la encuesta y los roles de campo dejan de ver el proyecto (al reabrir lo recuperan).',
       archive: '¿Archivar {{name}}? Sale del menú de todos.',
     },
     checklist: 'Antes de cerrar',
@@ -650,6 +675,30 @@ export const analysisEs: typeof analysisEn = {
     projectMembers_one: '{{count}} persona tiene acceso solo a este proyecto (ver Personas)',
     projectMembers_other: '{{count}} personas tienen acceso solo a este proyecto (ver Personas)',
     changed: 'Estado cambiado a «{{status}}».',
+    casesOnDevices_one:
+      '{{count}} caso está en el dispositivo de un encuestador: lo hecho en él antes del cierre se recibe igual cuando el dispositivo sincronice',
+    casesOnDevices_other:
+      '{{count}} casos están en dispositivos de encuestadores: lo hecho en ellos antes del cierre se recibe igual cuando los dispositivos sincronicen',
+    fieldPeople_one:
+      '{{count}} persona con un rol de campo (encuestador, supervisor, revisor) deja de ver el proyecto',
+    fieldPeople_other:
+      '{{count}} personas con roles de campo (encuestadores, supervisores, revisores) dejan de ver el proyecto',
+    effects: {
+      title: 'Qué pasa al cerrar',
+      fieldwork:
+        'Se detiene el trabajo de campo: no se inician ni se envían más entrevistas (presenciales, telefónicas o en papel) y no se asignan ni se toman casos.',
+      web: 'Los enlaces de la encuesta web dejan de abrirla: quien responde ve que está cerrada. No salen más invitaciones ni recordatorios.',
+      access:
+        'Los roles de campo dejan de ver el proyecto. Sus roles se conservan: si se reabre el proyecto, recuperan el acceso con sus casos como estaban.',
+      devices:
+        'Los dispositivos envían lo hecho antes del cierre y luego borran los casos y respuestas del proyecto; lo que no se pueda enviar se queda en el dispositivo.',
+      stays:
+        'Quien administra el proyecto, los administradores y los clientes de solo lectura conservan el acceso, para análisis y exportaciones.',
+    },
+    closedSince:
+      'Cerrado el {{date}}. El trabajo de campo terminó y los roles de campo no ven el proyecto.',
+    reopenHelp:
+      'Reabrir vuelve a abrir el trabajo de campo y devuelve el acceso a los roles de campo, con sus casos y asignaciones como estaban.',
   },
   metrics: {
     title: 'Métricas de encuestadores',

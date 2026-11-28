@@ -1222,6 +1222,8 @@ interface CaseDetail extends CaseRow {
   maxAttempts?: number;
   /** Closed after its last call attempt, and the caller may give it a new round. */
   canReopenAttempts?: boolean;
+  /** An expired case may be reopened by the caller (whoever runs the project). */
+  canReopen?: boolean;
 }
 
 /** Where the case comes from in the sample (S1), and its substitute by the plan's rule. */
@@ -1657,8 +1659,7 @@ function CaseDrawer({
               >
                 {t('cases.detail.save')}
               </button>
-              {c.status === 'finalised' &&
-              (c.disposition === 'EXPIRED' || c.disposition === 'FIELDWORK_CLOSED') ? (
+              {c.canReopen ? (
                 <button
                   type="button"
                   className={smallBtn}

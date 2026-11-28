@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { MANAGE_PROJECT } from '@wansurvey/schema';
 import { z } from 'zod';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
@@ -35,6 +36,10 @@ const REVIEW_OR_OWN = [
   'dataentry.key',
 ] as const;
 const CODING = ['interviews.correct', 'interviews.review'] as const;
+/** Moving an interview: reviewers, and whoever runs the project (to reopen an approved one). */
+const MOVE = [...REVIEW, MANAGE_PROJECT] as const;
+/** Reading one: as `REVIEW_OR_OWN`, and whoever runs the project. */
+const READ_ONE = [...REVIEW_OR_OWN, MANAGE_PROJECT] as const;
 const Variable = z
   .string()
   .regex(/^[A-Za-z_][\w]*$/)
@@ -74,14 +79,14 @@ export class ReviewController {
   }
 
   @Get('review/interviews/:id')
-  @RequirePermission(REVIEW_OR_OWN, { anyProject: true })
+  @RequirePermission(READ_ONE, { anyProject: true })
   detail(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.repo.inTenant(ctx.tenantId, (t) => this.review.detail(t, ctx, id));
   }
 
   @Post('review/interviews/:id/transition')
   @HttpCode(200)
-  @RequirePermission(REVIEW, { anyProject: true })
+  @RequirePermission(MOVE, { anyProject: true })
   @ApiBody({ schema: z.toJSONSchema(TransitionBody) as object })
   transition(
     @Auth() ctx: AuthContext,

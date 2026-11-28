@@ -1,6 +1,12 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { roleHasPermission, type Permission, type Role } from '@wansurvey/schema';
+import {
+  roleHasPermission,
+  type Permission,
+  type Role,
+  grantReaches,
+  type ProjectGrant,
+} from '@wansurvey/schema';
 import { Fragment, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProjectLogo } from './ProjectLogo.js';
@@ -71,7 +77,7 @@ export function canIn(me: Me | undefined, permission: Permission, projectId: str
       (m.permissions
         ? m.permissions.includes(permission)
         : roleHasPermission(m.role as Role, permission)) &&
-      (m.projectId === null || m.projectId === projectId),
+      grantReaches(m as ProjectGrant, projectId),
   );
 }
 
@@ -98,7 +104,7 @@ function worksCases(me: Me | undefined, projectId: string) {
     (m) =>
       m.role !== 'owner' &&
       m.role !== 'admin' &&
-      (m.projectId === null || m.projectId === projectId) &&
+      grantReaches(m as ProjectGrant, projectId) &&
       (['interviews.conduct', 'dataentry.key'] as const).some((p) =>
         m.permissions ? m.permissions.includes(p) : roleHasPermission(m.role as Role, p),
       ),

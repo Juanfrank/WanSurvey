@@ -13,6 +13,7 @@ import { setOrgTheme } from '../org-theme.js';
 import { setFormatLocale } from '../format.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
 import { confirmSignOut } from '../device/leave.js';
+import { sweepClosedProjects } from '../interview/device.js';
 
 const ME_KEY = 'wansurvey.me';
 
@@ -91,6 +92,18 @@ export function AppLayout() {
 
   // The organisation's regional format of dates and numbers, before any page renders one.
   if (me.data) setFormatLocale(me.data.formatLocale);
+
+  // A project closed while this device held some of its work: sent, then cleared (once per
+  // organisation opened, and when the connection comes back).
+  const ready = me.data?.access.state === 'ok' ? me.data.tenantId : null;
+  useEffect(() => {
+    if (!ready) return;
+    const sweep = () => void sweepClosedProjects();
+    sweep();
+    window.addEventListener('online', sweep);
+    return () => window.removeEventListener('online', sweep);
+  }, [ready]);
+
   // The organisation's default theme and accent, for people who have not chosen their own.
   const theme = me.data?.theme;
   useEffect(() => {

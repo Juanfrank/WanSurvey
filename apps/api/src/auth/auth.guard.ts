@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -10,11 +11,14 @@ import { Reflector } from '@nestjs/core';
 import type { ApiKeyScope, Permission } from '@wansurvey/schema';
 import { ApiKeysService } from '../apikeys/api-keys.service.js';
 import {
+  AFTER_CLOSE,
   ALLOW_PENDING_MFA,
   can,
+  FIELDWORK,
   EXT_API,
   EXT_SCOPE,
   IS_PUBLIC,
+  isClosed,
   REQUIRED_PERMISSION,
   type AuthContext,
   type AuthedRequest,
@@ -23,7 +27,7 @@ import {
 import { CSRF_HEADER, SESSION_COOKIE } from '../common/cookies.js';
 import { safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
-import { AUTH_REPO, grantsOf, type AuthRepo } from './auth-repo.js';
+import { AUTH_REPO, grantsOf, heldGrantsOf, type AuthRepo } from './auth-repo.js';
 import { isUuid } from '../db/common.js';
 import { Tenancy } from '../tenants/tenancy.js';
 
@@ -101,12 +105,31 @@ export class AuthGuard implements CanActivate {
         ? requirement.permission
         : [requirement.permission as Permission];
       const scope = requirement.anyProject ? 'any' : (projectId ?? null);
-      if (!wanted.some((p) => can(auth.memberships, p, scope))) {
+      // Sending back work done before the project closed: with the roles held then.
+      const afterClose = this.reflector.getAllAndOverride<boolean>(AFTER_CLOSE, targets);
+      const grants = afterClose ? (auth.heldGrants ?? auth.memberships) : auth.memberships;
+      if (!wanted.some((p) => can(grants, p, scope))) {
+        // A field role in a project that has been closed: said as such, not as a missing role.
+        const held = auth.heldGrants ?? [];
+        if (projectId && isClosed(auth, projectId) && wanted.some((p) => can(held, p, projectId)))
+          throw new ForbiddenException({
+            code: 'PROJECT_CLOSED',
+            message: 'This project is closed',
+          });
         throw new ForbiddenException({
           code: 'FORBIDDEN',
           message: 'You do not have permission to do this',
         });
       }
+      if (
+        projectId &&
+        this.reflector.getAllAndOverride<boolean>(FIELDWORK, targets) &&
+        isClosed(auth, projectId)
+      )
+        throw new ConflictException({
+          code: 'PROJECT_CLOSED',
+          message: 'This project is closed: fieldwork is over',
+        });
     }
     return true;
   }
@@ -166,6 +189,10 @@ export class AuthGuard implements CanActivate {
       sessionId: session.id,
       email: session.email,
       memberships: grantsOf(session),
+      heldGrants: heldGrantsOf(session),
+      closedProjects: new Map(
+        (session.closedProjects ?? []).map((p) => [p.id.toLowerCase(), p.closedAt] as const),
+      ),
       mfaState: session.mfaState as AuthContext['mfaState'],
       mfaMethod: session.mfaMethod as AuthContext['mfaMethod'],
       authMethod: session.authMethod as AuthContext['authMethod'],

@@ -15,16 +15,23 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { caseExpiryHours, MODES } from '@wansurvey/schema';
+import { caseExpiryHours, MANAGE_PROJECT, MODES } from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
+import {
+  Auth,
+  FieldWork,
+  RequirePermission,
+  can,
+  isClosed,
+  type AuthContext,
+} from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CASES_REPO, type CaseQuery, type CasesRepo, type CasesTx } from './cases-repo.js';
 import { compileRule, maskContact, maskSample, ruleError } from './case-logic.js';
 import { deal, fairWeights, productivity, quotas, type Output } from './distribute.js';
 import { daysBetween, windowsIn, type Frequency } from '../metrics/goal-periods.js';
-import { CasesService } from './cases.service.js';
+import { assertFieldOpen, CasesService } from './cases.service.js';
 import { words } from './pii.js';
 import { dayBounds, localDay } from '../stats/zoned-day.js';
 
@@ -302,6 +309,7 @@ export class CasesController {
           )
         : [];
       const free = !c.assignedTo && c.status === 'fresh';
+      const manager = can(ctx.memberships, MANAGE_PROJECT, projectId);
       // The sample keeps its history: the case this one substitutes, and its own substitute.
       const original = c.substituteFor ? await t.caseRef(c.substituteFor) : null;
       const substitute = await t.substituteOf(projectId, caseId);
@@ -328,12 +336,16 @@ export class CasesController {
           (c.assignedTo === ctx.userId || can(ctx.memberships, 'cases.assign', projectId)),
         canForceRelease: !!c.checkedOutAt && can(ctx.memberships, 'cases.assign', projectId),
         // Phone attempts: how many the project allows, and whether a case closed after the last
-        // one may be given a new round (by whoever edits or assigns cases).
+        // one may be given a new round (by whoever runs the project, while fieldwork goes on).
         maxAttempts: settings.cati.maxAttempts,
         canReopenAttempts:
-          exhausted(c, settings.cati.maxAttempts) &&
-          (can(ctx.memberships, 'cases.edit', projectId) ||
-            can(ctx.memberships, 'cases.assign', projectId)),
+          exhausted(c, settings.cati.maxAttempts) && manager && !isClosed(ctx, projectId),
+        // An expired case (or one closed with its questionnaire) reopened as a fresh one: the same.
+        canReopen:
+          c.status === 'finalised' &&
+          (c.disposition === 'EXPIRED' || c.disposition === 'FIELDWORK_CLOSED') &&
+          manager &&
+          !isClosed(ctx, projectId),
       };
     });
   }
@@ -388,6 +400,13 @@ export class CasesController {
         body.status === 'fresh' &&
         before.status === 'finalised' &&
         (before.disposition === 'EXPIRED' || before.disposition === 'FIELDWORK_CLOSED');
+      // Reopening a case is for whoever runs the project, and only while fieldwork goes on.
+      if (reopen && !can(ctx.memberships, MANAGE_PROJECT, projectId))
+        throw new ForbiddenException({
+          code: 'FORBIDDEN',
+          message: 'Only whoever runs the project reopens a case',
+        });
+      if (reopen) assertFieldOpen(ctx, projectId);
       if (
         body.status &&
         !reopen &&
@@ -455,8 +474,9 @@ export class CasesController {
    * history; the event and the audit entry keep how many there were.
    */
   @Post('cases/:caseId/reopen-attempts')
+  @FieldWork()
   @HttpCode(200)
-  @RequirePermission(['cases.edit', 'cases.assign'], PERM)
+  @RequirePermission(MANAGE_PROJECT, PERM)
   reopenAttempts(
     @Auth() ctx: AuthContext,
     @Param('projectId', ParseUUIDPipe) projectId: string,
@@ -505,6 +525,7 @@ export class CasesController {
 
   /** Pool mode: take an unassigned case. 409 `ALREADY_TAKEN` when someone was quicker. */
   @Post('cases/:caseId/claim')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission('cases.read_assigned', PERM)
   claim(
@@ -552,6 +573,7 @@ export class CasesController {
 
   /** Assign or unassign a list of cases, or every case matching a filter. */
   @Post('cases/assign')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission('cases.assign', PERM)
   @ApiBody({ schema: z.toJSONSchema(AssignBody) as object })
@@ -654,6 +676,7 @@ export class CasesController {
    * productivity. Cases being interviewed or finished stay where they are.
    */
   @Post('cases/distribute')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission('cases.assign', PERM)
   @ApiBody({ schema: z.toJSONSchema(DistributeBody, { io: 'input' }) as object })

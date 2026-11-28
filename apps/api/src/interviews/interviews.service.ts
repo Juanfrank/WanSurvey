@@ -22,7 +22,7 @@ import {
 import { AuditService } from '../audit/audit.service.js';
 import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
-import type { AuthContext } from '../common/auth-context.js';
+import { isClosed, type AuthContext } from '../common/auth-context.js';
 import { checkPaperMeta } from '../papi/paper-meta.js';
 import { closedCode } from '../questionnaires/state.js';
 import { type CaseFull, type InterviewRow, type InterviewsTx } from './interviews-repo.js';
@@ -121,6 +121,12 @@ export class InterviewsService {
     opts: { entryPass?: number | undefined } = {},
   ): Promise<InterviewRow> {
     const t = tx;
+    // Fieldwork is over in a closed project: no interview starts there, in any mode.
+    if (isClosed(ctx, projectId))
+      throw new ConflictException({
+        code: 'PROJECT_CLOSED',
+        message: 'This project is closed: fieldwork is over',
+      });
     const settings = await this.cases.settings(t, projectId);
     // A call or a visit needs the project's declared basis for that channel.
     const channel = contactChannelOf(body.mode);

@@ -52,7 +52,14 @@ const hasState = (s: unknown): s is Partial<InterviewState> =>
  * respondent can stop and come back with the same link, on any device.
  */
 export type ClosedReason =
-  'notFound' | 'closed' | 'unavailable' | 'ended' | 'failed' | 'linkExpired' | 'linkRevoked';
+  | 'notFound'
+  | 'closed'
+  | 'unavailable'
+  | 'ended'
+  | 'failed'
+  | 'linkExpired'
+  | 'linkRevoked'
+  | 'projectClosed';
 
 /** Why a survey cannot be opened, in the respondent's words. */
 export function closedReason(e: unknown): ClosedReason {
@@ -67,12 +74,18 @@ export function closedReason(e: unknown): ClosedReason {
         ? 'linkExpired'
         : e.code === 'LINK_REVOKED'
           ? 'linkRevoked'
-          : 'closed';
+          : e.code === 'PROJECT_CLOSED'
+            ? 'projectClosed'
+            : 'closed';
 }
 
-/** The link was withdrawn or expired while the survey was open: said as when it is opened. */
+/**
+ * The link was withdrawn or expired, or the project closed, while the survey was open: said as
+ * when it is opened.
+ */
 const linkClosed = (e: unknown): ClosedReason | null =>
-  e instanceof ApiError && (e.code === 'LINK_EXPIRED' || e.code === 'LINK_REVOKED')
+  e instanceof ApiError &&
+  (e.code === 'LINK_EXPIRED' || e.code === 'LINK_REVOKED' || e.code === 'PROJECT_CLOSED')
     ? closedReason(e)
     : null;
 

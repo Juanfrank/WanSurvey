@@ -1,6 +1,6 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
+import { AfterClose, Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { HOME_REPO, type HomeRepo } from './home-repo.js';
 import { homeParts, homeProjects } from './home.js';
 
@@ -20,6 +20,8 @@ export class HomeController {
   constructor(@Inject(HOME_REPO) private readonly repo: HomeRepo) {}
 
   @Get()
+  // Someone whose projects are all closed gets an empty list, not a refusal.
+  @AfterClose()
   @RequirePermission('projects.read', { anyProject: true })
   summary(@Auth() ctx: AuthContext) {
     const m = ctx.memberships;

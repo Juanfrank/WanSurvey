@@ -124,7 +124,14 @@ const lower = (e: string) => e.trim().toLowerCase();
  * the interview runtime, reached with a link token instead of a sign-in.
  */
 /** A personal link withdrawn by the project, or past its end date, no longer opens the survey. */
-function assertLinkOpens(inv: { revokedAt: Date | null; expiresAt: Date | null }) {
+function assertLinkOpens(inv: {
+  revokedAt: Date | null;
+  expiresAt: Date | null;
+  projectClosed?: boolean;
+}) {
+  // The project was closed: fieldwork is over, no answer is taken any more.
+  if (inv.projectClosed)
+    throw new GoneException({ code: 'PROJECT_CLOSED', message: 'This survey is closed' });
   if (inv.revokedAt)
     throw new GoneException({ code: 'LINK_REVOKED', message: 'This link was withdrawn' });
   if (inv.expiresAt && inv.expiresAt.getTime() <= Date.now())
@@ -1229,6 +1236,8 @@ export class CawiService implements OnModuleInit {
       if (!found) throw new NotFoundException('Link not found');
       // The link, its questionnaire's state and latest version, in one query.
       const l = (await tx.openLinkTarget(found.id))!;
+      if (l.projectClosed)
+        throw new GoneException({ code: 'PROJECT_CLOSED', message: 'This survey is closed' });
       // A completed questionnaire's link goes on with its continuation.
       const { questionnaireId, version } = await this.startTarget(
         tx,

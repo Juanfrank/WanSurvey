@@ -161,8 +161,9 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
   }
 });
 
-test('a supervisor sees the attempts used against the limit and reopens an exhausted case', async ({
+test('a supervisor sees the attempts used against the limit; whoever runs the project reopens an exhausted case', async ({
   page,
+  browser,
 }) => {
   const db = connectDb();
   // A held case of the project, closed here as a non-contact after its last allowed attempt.
@@ -182,14 +183,25 @@ test('a supervisor sees the attempts used against the limit and reopens an exhau
       `update cases set status = 'finalised', disposition = 'NON_CONTACT', attempts = ? where id = ?`,
       [max, c!.id],
     );
-    await openProject(page, 'supervisor@demo.wansurvey.test');
-    await page.getByRole('tab', { name: 'Cases', exact: true }).click();
-    await page.getByLabel('Search id or sample data').fill(id);
-    await page.getByRole('button', { name: `Open case ${id}`, exact: true }).click();
-    const drawer = page.getByRole('dialog', { name: `Case ${id}` });
-    await expect(drawer.getByTestId('case-attempts')).toHaveText(
-      `${max} attempts of ${max} allowed`,
-    );
+    const openCase = async (p: Page, email: string) => {
+      await openProject(p, email);
+      await p.getByRole('tab', { name: 'Cases', exact: true }).click();
+      await p.getByLabel('Search id or sample data').fill(id);
+      await p.getByRole('button', { name: `Open case ${id}`, exact: true }).click();
+      const d = p.getByRole('dialog', { name: `Case ${id}` });
+      await expect(d.getByTestId('case-attempts')).toHaveText(`${max} attempts of ${max} allowed`);
+      return d;
+    };
+    // The supervisor sees the limit reached, but reopening is not theirs to do.
+    const other = await browser.newContext();
+    try {
+      const supPage = await other.newPage();
+      const supDrawer = await openCase(supPage, 'supervisor@demo.wansurvey.test');
+      await expect(supDrawer.getByRole('button', { name: /^Reopen with/ })).toHaveCount(0);
+    } finally {
+      await other.close();
+    }
+    const drawer = await openCase(page, PM);
     const reopen = drawer.getByRole('button', { name: `Reopen with ${max} new attempts` });
     await expect(reopen).toBeVisible();
     await shot(page, 'v2-cati-exhausted-case', { fullPage: false });

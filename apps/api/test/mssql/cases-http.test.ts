@@ -721,13 +721,19 @@ describe.skipIf(!configured)('SQL Server: cases over HTTP', () => {
     const i2 = ppl.body.find((p: { userId: string }) => p.userId === interviewer2.id);
     expect(i2).toMatchObject({ overdue: 0, callbacks: 0, completesToday: 0 });
 
-    // The exhausted case: the supervisor sees the limit and gives it a new round.
-    const detail = await supervisor.agent.get(`${url}/${ids[3]}`);
+    // The exhausted case: whoever runs the project sees the limit and gives it a new round; a
+    // supervisor sees the limit but is not offered the reopening, nor allowed it.
+    const detail = await pm.agent.get(`${url}/${ids[3]}`);
     expect(detail.body).toMatchObject({ attempts: 2, maxAttempts: 2, canReopenAttempts: true });
-    expect((await supervisor.agent.get(`${url}/${ids[0]}`)).body.canReopenAttempts).toBe(false);
+    expect((await supervisor.agent.get(`${url}/${ids[3]}`)).body).toMatchObject({
+      maxAttempts: 2,
+      canReopenAttempts: false,
+    });
+    expect((await pm.agent.get(`${url}/${ids[0]}`)).body.canReopenAttempts).toBe(false);
     expect((await post(interviewerS, `${url}/${ids[0]}/reopen-attempts`)).status).toBe(403);
-    expect((await post(supervisor, `${url}/${ids[0]}/reopen-attempts`)).status).toBe(400);
-    const re = await post(supervisor, `${url}/${ids[3]}/reopen-attempts`);
+    expect((await post(supervisor, `${url}/${ids[3]}/reopen-attempts`)).status).toBe(403);
+    expect((await post(pm, `${url}/${ids[0]}/reopen-attempts`)).status).toBe(400);
+    const re = await post(pm, `${url}/${ids[3]}/reopen-attempts`);
     expect(re.status, JSON.stringify(re.body)).toBe(200);
     const [after] = await rows(
       sql`SELECT status, disposition, attempts, assigned_to FROM cases WHERE id = ${ids[3]!}`,
@@ -741,7 +747,7 @@ describe.skipIf(!configured)('SQL Server: cases over HTTP', () => {
       reopened: 'attempts',
       previousAttempts: 2,
     });
-    expect((await post(supervisor, `${url}/${ids[3]}/reopen-attempts`)).status).toBe(400);
+    expect((await post(pm, `${url}/${ids[3]}/reopen-attempts`)).status).toBe(400);
     // Its deadline counts from the reopening, and its calls keep it out of "not tried yet".
     expect(await ext(supervisor, { quick: 'overdue' })).toEqual(['F0']);
     expect(await ext(supervisor, { quick: 'no_attempt' })).toEqual(['F2']);

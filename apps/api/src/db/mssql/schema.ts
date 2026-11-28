@@ -122,6 +122,7 @@ export interface MssqlSchema {
     languages: JsonText;
     settings: JsonText;
     logo_updated_at: InstantOrNull;
+    closed_at: InstantOrNull;
     created_at: Instant;
   };
   memberships: {

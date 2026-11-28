@@ -10,7 +10,13 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
-import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
+import {
+  AfterClose,
+  FieldWork,
+  Auth,
+  RequirePermission,
+  type AuthContext,
+} from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { INTERVIEWS_REPO, type InterviewsRepo } from '../interviews/interviews-repo.js';
 import { CapiService, CheckinBody, CheckoutBody } from './capi.service.js';
@@ -28,6 +34,7 @@ export class CapiController {
 
   /** Downloads cases to this device for offline work. Cases that cannot be taken are listed. */
   @Post('projects/:projectId/capi/checkout')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission('interviews.conduct', PERM)
   @ApiBody({ schema: z.toJSONSchema(CheckoutBody) as object })
@@ -41,6 +48,7 @@ export class CapiController {
 
   /** Gives cases back from this device. */
   @Post('projects/:projectId/capi/checkin')
+  @AfterClose()
   @HttpCode(200)
   @RequirePermission('interviews.conduct', PERM)
   @ApiBody({ schema: z.toJSONSchema(CheckinBody) as object })

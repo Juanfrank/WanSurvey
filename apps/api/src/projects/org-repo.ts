@@ -41,6 +41,8 @@ export interface ProjectView {
   languages: string[];
   settings: unknown;
   logoUpdatedAt: Date | null;
+  /** When it was closed (or archived without being closed first); null while open. */
+  closedAt?: Date | null;
   createdAt: Date;
 }
 
@@ -117,6 +119,7 @@ const toProject = (p: ProjectRow): ProjectView => ({
   languages: p.languages,
   settings: p.settings,
   logoUpdatedAt: p.logo_updated_at,
+  closedAt: p.closed_at,
   createdAt: p.created_at,
 });
 

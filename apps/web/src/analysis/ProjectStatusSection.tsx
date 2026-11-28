@@ -34,6 +34,11 @@ interface Closeout {
   lastExportAt: string | null;
   activeShareLinks: number;
   projectMembers: number;
+  /** Cases downloaded to devices and not given back. */
+  casesOnDevices?: number;
+  /** People whose only roles here are field roles: they stop seeing the project once closed. */
+  fieldPeople?: number;
+  closedAt?: string | null;
 }
 
 /**
@@ -111,8 +116,28 @@ export function ProjectStatusSection({ project }: { project: Project }) {
           text: t('analysis.lifecycle.projectMembers', { count: c.projectMembers }),
           open: c.projectMembers > 0,
         },
+        // What closing changes for people and devices: said before, so it is no surprise.
+        ...(status === 'active' && c.fieldPeople
+          ? [
+              {
+                key: 'fieldPeople',
+                text: t('analysis.lifecycle.fieldPeople', { count: c.fieldPeople }),
+                open: true,
+              },
+            ]
+          : []),
+        ...(c.casesOnDevices
+          ? [
+              {
+                key: 'casesOnDevices',
+                text: t('analysis.lifecycle.casesOnDevices', { count: c.casesOnDevices }),
+                open: true,
+              },
+            ]
+          : []),
       ]
     : [];
+  const closed = status === 'closed' || status === 'archived';
 
   return (
     <section
@@ -127,6 +152,31 @@ export function ProjectStatusSection({ project }: { project: Project }) {
       <p className="font-medium" data-testid="project-status-current">
         {t('analysis.lifecycle.current', { status: t(`analysis.lifecycle.states.${status}`) })}
       </p>
+      {closed ? (
+        <div className="flex flex-col gap-1" data-testid="project-closed-note">
+          {c?.closedAt ? (
+            <p>{t('analysis.lifecycle.closedSince', { date: date(c.closedAt) })}</p>
+          ) : null}
+          {status === 'closed' ? (
+            <p className="text-slate-600">{t('analysis.lifecycle.reopenHelp')}</p>
+          ) : null}
+        </div>
+      ) : null}
+      {status === 'active' ? (
+        <div
+          className="flex flex-col gap-1 rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2"
+          data-testid="close-effects"
+        >
+          <h4 className="font-medium">{t('analysis.lifecycle.effects.title')}</h4>
+          <ul className="list-disc pl-5 text-sm">
+            {(['fieldwork', 'web', 'access', 'devices', 'stays'] as const).map((k) => (
+              <li key={k} data-effect={k}>
+                {t(`analysis.lifecycle.effects.${k}`)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         {MOVES[status].map((m, i) => (
           <Button

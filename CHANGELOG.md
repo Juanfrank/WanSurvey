@@ -30,6 +30,27 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   it on `PATCH /tenant` (`tenant.manage`; `null` goes back to the language) and gives it to
   everyone of the organisation in `GET /auth/me` and to respondents with their link.
   **Upgrade**: migration `0034_format_locale.sql` adds `tenants.format_locale` (nullable).
+- **Closing a project stops fieldwork and withdraws field access.** Once a project is closed (or
+  archived) no interview is started or sent any more, face to face, by telephone or on paper,
+  not even by an administrator; cases are neither assigned nor taken; web links show a
+  "this survey has closed" page and no invitation or reminder goes out. Interviewers,
+  supervisors, reviewers (and customised roles with a fieldwork permission) stop seeing the
+  project; whoever runs it, administrators and client viewers keep it for analysis and exports.
+  Roles are not deleted: reopening the project gives the access back with cases and assignments
+  as they were. The checklist before closing says all this, and how many people lose access and
+  how many cases are still on devices. **Upgrade**: migration `0035_project_closed_at.sql` adds
+  `projects.closed_at` (projects already closed take the date of their last closing in the
+  activity log).
+- **Devices clear a closed project.** When a device syncs (on "My device", or when the app is
+  opened) and its project is closed, it first
+  sends everything waiting, then gives the cases back and removes the project's cases, answers
+  and questionnaires from the device. Interviews started before the close are still received
+  after it; anything the server no longer takes (started after the close) is never removed: it
+  stays on the device and "My device" says so, so the project can be reopened to receive it.
+- **Reopening is for whoever runs the project.** "Reopen with N new attempts", reopening an
+  expired case and reopening an approved interview (now "Reopen the review") need the project's
+  management permission (`projects.update`), in the API and in the interface; supervisors no
+  longer see these buttons.
 - The designer names the questionnaire once: the breadcrumb ends in its name, edited in place as the page's title, and the toolbar under it keeps only the language, save state, undo, redo and publish. With nothing chosen in the outline the editor says "Choose an item in the outline to edit it."; "Add a section to start." is left for an empty questionnaire. The questionnaire preview has a breadcrumb back to Home, and its scenario-name field no longer cuts its placeholder short on a phone. The feedback links (one per face, the e-mail code, the iframe and the printed QR) add `r=`, `embed=1` and fixed answers to a query the link already has instead of starting a second `?`.
 - The option cards of the sampling plan show their description on one line (all of it in the ⓘ), the personal-columns note of an import folds to one line, and a page title keeps its ⓘ close so its buttons fit on the account row.
 - **Review queue**: a search by case id (the API's queue takes `q`, part of the case id), and the

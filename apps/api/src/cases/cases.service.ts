@@ -14,7 +14,7 @@ import {
 } from '@wansurvey/schema';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
-import { can } from '../common/auth-context.js';
+import { can, isClosed } from '../common/auth-context.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import type { ProjectView } from '../projects/org-repo.js';
 import { maskSample } from './case-logic.js';
@@ -32,6 +32,15 @@ export function chunks<T>(xs: T[], n = BATCH): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
   return out;
+}
+
+/** Cases are neither handed out nor taken in a closed project: fieldwork is over (409). */
+export function assertFieldOpen(ctx: AuthContext, projectId: string) {
+  if (isClosed(ctx, projectId))
+    throw new ConflictException({
+      code: 'PROJECT_CLOSED',
+      message: 'This project is closed: fieldwork is over',
+    });
 }
 
 @Injectable()
@@ -157,6 +166,7 @@ export class CasesService {
     only: { statuses?: string[]; unassigned?: boolean; holder?: string } = {},
     from?: Record<string, number>,
   ): Promise<number> {
+    if (userId) assertFieldOpen(ctx, projectId);
     if (userId) await this.assertAssignee(tx, projectId, userId);
     const changed = await tx.assign(projectId, caseIds, userId, only);
     if (from) for (const c of changed) if (c.from) from[c.from] = (from[c.from] ?? 0) + 1;
@@ -361,6 +371,7 @@ export class CasesService {
    * simultaneous claims safe: only one finds the case still free.
    */
   async claim(tx: CasesTx, ctx: AuthContext, projectId: string, caseId: string) {
+    assertFieldOpen(ctx, projectId);
     const settings = await this.settings(tx, projectId);
     if (settings.assignmentMode !== 'pool')
       throw new BadRequestException({

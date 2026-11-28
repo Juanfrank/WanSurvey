@@ -19,7 +19,7 @@ import {
 import { z } from 'zod';
 import { CasesService } from '../cases/cases.service.js';
 import { RegistryService } from '../registry/registry.service.js';
-import type { AuthContext } from '../common/auth-context.js';
+import { isClosed, type AuthContext } from '../common/auth-context.js';
 import type { CaseFull, InterviewRow } from '../interviews/interviews-repo.js';
 import { InterviewsService } from '../interviews/interviews.service.js';
 import { CATI_REPO, type AttemptRow, type CatiRepo, type CatiTx } from './cati-repo.js';
@@ -435,6 +435,12 @@ export class CatiService implements OnModuleInit {
    */
   async outcome(t: CatiTx, ctx: AuthContext, attemptId: string, body: OutcomeBody) {
     const a = await this.ownAttempt(t, ctx, attemptId);
+    // A call left open when the project closed is given back (release), not recorded.
+    if (isClosed(ctx, a.projectId))
+      throw new ConflictException({
+        code: 'PROJECT_CLOSED',
+        message: 'This project is closed: fieldwork is over',
+      });
     const c = await t.lockCaseById(a.caseId);
     if (!c) throw new NotFoundException('Case not found');
     const now = new Date();

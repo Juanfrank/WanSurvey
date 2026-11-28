@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { roleMatrix, type Role } from '@wansurvey/schema';
+import { roleMatrix, withoutClosedProjects, type Role } from '@wansurvey/schema';
 import type { AuditEntry } from '../audit/audit.service.js';
 import { AuditStore } from '../audit/audit-store.mssql.js';
 import { PeopleStore } from '../users/people-store.mssql.js';
@@ -57,6 +57,8 @@ export interface LoadedSession {
   memberStatus: string;
   rolePermissions: unknown;
   grants: { role: string; projectId: string | null }[];
+  /** The organisation's closed or archived projects (absent: none known). */
+  closedProjects?: { id: string; closedAt: Date | null }[];
 }
 
 /** What password, second-factor and one-time-token flows read of an account. */
@@ -554,8 +556,8 @@ export class MssqlAuthRepo implements AuthRepo {
 
 export const AUTH_REPO = Symbol('AUTH_REPO');
 
-/** The grants of a loaded session as the guard turns them into an `AuthContext`. */
-export function grantsOf(s: LoadedSession): AuthContext['memberships'] {
+/** Every grant of a loaded session as the person holds it, closed projects included. */
+export function heldGrantsOf(s: LoadedSession): AuthContext['memberships'] {
   const matrix = roleMatrix(s.rolePermissions as never);
   return (
     s.grants
@@ -566,6 +568,17 @@ export function grantsOf(s: LoadedSession): AuthContext['memberships'] {
         projectId: g.projectId,
         permissions: matrix[g.role as Role],
       }))
+  );
+}
+
+/**
+ * The grants of a loaded session as the guard turns them into an `AuthContext`: field roles
+ * stop at the closed projects (`withoutClosedProjects`).
+ */
+export function grantsOf(s: LoadedSession): AuthContext['memberships'] {
+  return withoutClosedProjects(
+    heldGrantsOf(s),
+    (s.closedProjects ?? []).map((p) => p.id),
   );
 }
 

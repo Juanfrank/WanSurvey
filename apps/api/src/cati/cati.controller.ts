@@ -15,7 +15,14 @@ import {
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
+import {
+  AfterClose,
+  FieldWork,
+  Auth,
+  RequirePermission,
+  can,
+  type AuthContext,
+} from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CATI_REPO, type CatiRepo } from './cati-repo.js';
 import { CatiService, NextBody, OutcomeBody } from './cati.service.js';
@@ -39,6 +46,7 @@ export class CatiController {
    * reason in `x-queue-reason` (and the next callback time) when nothing can be called now.
    */
   @Post('projects/:projectId/cati/next')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission(CONDUCT, PERM)
   @ApiBody({ schema: z.toJSONSchema(NextBody) as object })
@@ -91,6 +99,7 @@ export class CatiController {
 
   /** Records what happened on a call; answered starts the telephone interview. */
   @Post('cati/attempts/:id/outcome')
+  @AfterClose()
   @HttpCode(200)
   @RequirePermission(CONDUCT, { anyProject: true })
   @ApiBody({ schema: z.toJSONSchema(OutcomeBody, { io: 'input' }) as object })
@@ -104,6 +113,7 @@ export class CatiController {
 
   /** Gives the case back without calling (not counted as an attempt). */
   @Post('cati/attempts/:id/release')
+  @AfterClose()
   @HttpCode(200)
   @RequirePermission(CONDUCT, { anyProject: true })
   release(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
@@ -132,6 +142,7 @@ export class CatiController {
 
   /** Makes a callback the next case this caller is served, even before it is due. */
   @Post('projects/:projectId/cati/callbacks/:caseId/pin')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission(CONDUCT, PERM)
   pin(
@@ -144,6 +155,7 @@ export class CatiController {
 
   /** Takes it off again. */
   @Delete('projects/:projectId/cati/callbacks/:caseId/pin')
+  @FieldWork()
   @RequirePermission(CONDUCT, PERM)
   unpin(
     @Auth() ctx: AuthContext,
