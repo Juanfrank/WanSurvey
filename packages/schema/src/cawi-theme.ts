@@ -61,6 +61,17 @@ export function mixed(hex: string, other: 'white' | 'black', pct: number): strin
   return fromOklab([0, 1, 2].map((i) => a[i]! * w + b[i]! * (1 - w)) as [number, number, number]);
 }
 
+/**
+ * `color-mix(in oklab, a pct%, b)` as a #rrggbb colour: what the stylesheet draws for a
+ * translucent colour on another (e.g. `bg-sidebar-fg/10` on the side panel is `mixedWith(fg,
+ * panel, 10)`).
+ */
+export function mixedWith(a: string, b: string, pct: number): string {
+  const [x, y] = [toOklab(a), toOklab(b)];
+  const w = pct / 100;
+  return fromOklab([0, 1, 2].map((i) => x[i]! * w + y[i]! * (1 - w)) as [number, number, number]);
+}
+
 /** Text on fills of the colour: white unless the colour is too light for it. */
 export const onFillOf = (p: string) => (contrast(p, '#ffffff') >= 4.5 ? '#ffffff' : '#0b1530');
 

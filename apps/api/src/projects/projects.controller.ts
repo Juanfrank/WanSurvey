@@ -57,19 +57,9 @@ import {
 import { DisplayName, ZodPipe } from '../common/zod.js';
 import { ruleProblem } from '../cases/cleaning.js';
 import { ORG_REPO, type OrgRepo } from './org-repo.js';
+import { imageType } from '../common/image-type.js';
 
 const LOGO_MAX = 512 * 1024;
-
-/** The image type from its first bytes (the file name and declared type are not trusted). */
-export function imageType(b: Buffer): string | null {
-  if (b.length < 12) return null;
-  if (b[0] === 0x89 && b.toString('ascii', 1, 4) === 'PNG') return 'image/png';
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
-  if (b.toString('ascii', 0, 4) === 'GIF8') return 'image/gif';
-  if (b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP')
-    return 'image/webp';
-  return null;
-}
 
 const ProjectFields = z.object({
   name: DisplayName,

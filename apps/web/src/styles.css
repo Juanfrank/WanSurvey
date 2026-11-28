@@ -162,6 +162,14 @@
   --color-on-fill: #ffffff;
   --color-navy-fill: #0a2e7a;
 
+  /* The side panel's text and the "Survey" of the logo on it; the accent marks the open section
+     (the main colour unless the organisation chose one), with its own text colour. An
+     organisation's theme can replace them (packages/schema/src/theme.ts). */
+  --color-sidebar-fg: #ffffff;
+  --color-sidebar-brand: #9cbcf5;
+  --color-accent: var(--color-indigo-600);
+  --color-on-accent: var(--color-on-fill);
+
   /* Focus outline: at least 3:1 on the page and on cards in each theme (white on the navy
      side panel, below). */
   --color-focus: #0050dd;
@@ -303,7 +311,7 @@
     outline-offset: 2px;
   }
   .bg-navy-fill :focus-visible {
-    outline-color: #ffffff;
+    outline-color: var(--color-sidebar-fg);
   }
 }
 

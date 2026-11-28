@@ -25,7 +25,17 @@ export interface MssqlSchema {
     role_permissions: JsonText;
     /** Regional format (BCP 47); null follows the language. */
     format_locale: string | null;
+    /** The organisation logo's description (alt text); null without a logo. */
+    logo_alt: string | null;
+    logo_updated_at: InstantOrNull;
     created_at: Instant;
+  };
+  /** The organisation's logo image (one per organisation). */
+  tenant_logos: {
+    tenant_id: string;
+    content_type: string;
+    image: Buffer;
+    updated_at: Instant;
   };
   users: {
     id: string;

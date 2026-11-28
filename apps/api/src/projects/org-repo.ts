@@ -27,6 +27,8 @@ export interface TenantView {
   rolePermissions: Record<string, unknown>;
   /** Regional format of dates and numbers (BCP 47); null follows the language. */
   formatLocale: string | null;
+  /** The organisation's logo: its description and when it changed (null without a logo). */
+  logo: { alt: string; updatedAt: Date } | null;
   createdAt: Date;
 }
 
@@ -73,7 +75,12 @@ export interface OrgTx {
     branding?: Record<string, unknown>;
     settings?: Record<string, unknown>;
     formatLocale?: string | null;
+    logoAlt?: string;
   }): Promise<TenantView | null>;
+  /** Sets the organisation's logo (already checked) and its description. */
+  setTenantLogo(v: { contentType: string; image: Buffer; alt: string }): Promise<TenantView | null>;
+  tenantLogo(): Promise<{ contentType: string; image: Buffer } | null>;
+  removeTenantLogo(): Promise<TenantView | null>;
   /** Replaces the organisation's changes to what each role may do; returns what was there. */
   setRolePermissions(kept: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** Every project by name, or only the ones given. */
@@ -105,6 +112,7 @@ const toTenant = (t: TenantRow): TenantView => ({
   branding: t.branding,
   rolePermissions: t.role_permissions,
   formatLocale: t.format_locale,
+  logo: t.logo_updated_at ? { alt: t.logo_alt ?? '', updatedAt: t.logo_updated_at } : null,
   createdAt: t.created_at,
 });
 
@@ -141,9 +149,24 @@ class MssqlOrgTx implements OrgTx {
     branding?: Record<string, unknown>;
     settings?: Record<string, unknown>;
     formatLocale?: string | null;
+    logoAlt?: string;
   }) {
     const t = await this.projectsStore.updateTenant(this.tx, this.tenantId, v);
     return t && toTenant(t);
+  }
+
+  async setTenantLogo(v: { contentType: string; image: Buffer; alt: string }) {
+    await this.projectsStore.setTenantLogo(this.tx, { tenantId: this.tenantId, ...v });
+    return this.tenant();
+  }
+
+  tenantLogo() {
+    return this.projectsStore.tenantLogo(this.tx, this.tenantId);
+  }
+
+  async removeTenantLogo() {
+    await this.projectsStore.removeTenantLogo(this.tx, this.tenantId);
+    return this.tenant();
   }
 
   setRolePermissions(kept: Record<string, unknown>) {

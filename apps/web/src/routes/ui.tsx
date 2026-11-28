@@ -12,7 +12,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import { localiseError } from '../i18n-messages.js';
 import { CloseIcon } from './icons.js';
-import { LogoMark, LogoName } from './Logo.js';
+import { LogoMark, LogoName, OrgLogoImage, WithWanSurvey } from './Logo.js';
+import { useOrgLook } from './orgLook.js';
+import { appLogoPlace } from '@wansurvey/schema';
 
 /**
  * Layout patterns for lists and forms, each in its own file (see docs/ui-patterns.md):
@@ -267,14 +269,36 @@ export function InfoLinks({ className = '' }: { className?: string }) {
   );
 }
 
+/**
+ * The logo above the sign-in pages. With several organisations the page cannot know which one
+ * the person belongs to, so it is WanSurvey's. In an installation for one organisation it is that
+ * organisation's, with WanSurvey small under it (or beside WanSurvey's, if the organisation keeps
+ * WanSurvey as the main logo).
+ */
+function AuthBrand() {
+  const look = useOrgLook();
+  const logo = look?.logo ?? null;
+  if (logo && appLogoPlace(look?.theme, true) === 'sub')
+    return (
+      <div className="mb-6 flex flex-col items-center gap-2" data-testid="auth-brand">
+        <OrgLogoImage logo={logo} className="h-16 max-w-[16rem]" />
+        <WithWanSurvey />
+      </div>
+    );
+  return (
+    <p className="mb-6 flex items-center justify-center gap-3 text-3xl" data-testid="auth-brand">
+      <LogoMark className="h-11 w-11" />
+      <LogoName />
+      {logo ? <OrgLogoImage logo={logo} className="ml-1 h-11 max-w-[8rem]" /> : null}
+    </p>
+  );
+}
+
 export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
-        <p className="mb-6 flex items-center justify-center gap-3 text-3xl">
-          <LogoMark className="h-11 w-11" />
-          <LogoName />
-        </p>
+        <AuthBrand />
         <Card>
           <h1 className="mb-4 text-xl font-bold">{title}</h1>
           {children}
