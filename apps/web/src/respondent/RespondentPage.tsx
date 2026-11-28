@@ -49,7 +49,8 @@ const hasState = (s: unknown): s is Partial<InterviewState> =>
  * one question per page on phones; every change is kept on the device and sent at once, so a
  * respondent can stop and come back with the same link, on any device.
  */
-export type ClosedReason = 'notFound' | 'closed' | 'unavailable' | 'ended' | 'failed';
+export type ClosedReason =
+  'notFound' | 'closed' | 'unavailable' | 'ended' | 'failed' | 'linkExpired' | 'linkRevoked';
 
 /** Why a survey cannot be opened, in the respondent's words. */
 export function closedReason(e: unknown): ClosedReason {
@@ -60,8 +61,18 @@ export function closedReason(e: unknown): ClosedReason {
     ? 'unavailable'
     : e.code === 'QUESTIONNAIRE_COMPLETED'
       ? 'ended'
-      : 'closed';
+      : e.code === 'LINK_EXPIRED'
+        ? 'linkExpired'
+        : e.code === 'LINK_REVOKED'
+          ? 'linkRevoked'
+          : 'closed';
 }
+
+/** The link was withdrawn or expired while the survey was open: said as when it is opened. */
+const linkClosed = (e: unknown): ClosedReason | null =>
+  e instanceof ApiError && (e.code === 'LINK_EXPIRED' || e.code === 'LINK_REVOKED')
+    ? closedReason(e)
+    : null;
 
 export function RespondentPage({ token }: { token: string }) {
   const [payload, setPayload] = useState<RespondentPayload | null>(null);
@@ -186,8 +197,10 @@ export function RespondentPage({ token }: { token: string }) {
         pending = !!local && local.seq > local.acked;
       }
       setSave(pending ? 'offline' : 'saved');
-    } catch {
-      setSave('offline');
+    } catch (e) {
+      const closed = linkClosed(e);
+      if (closed) setError(closed);
+      else setSave('offline');
     }
   }, [payload]);
 
@@ -286,6 +299,7 @@ export function RespondentPage({ token }: { token: string }) {
       setPhase('done');
     } catch (e) {
       if (e instanceof ApiError && e.code === 'SUBMITTED') setPhase('done');
+      else if (linkClosed(e)) setError(linkClosed(e));
       else {
         setProblem(t.sendFailed);
         setPhase('answering');

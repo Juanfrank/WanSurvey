@@ -107,14 +107,23 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
   await expectAccessible(page);
 });
 
-test('a links-only wave makes a personal link per case, ready to download', async ({ page }) => {
+test('a links-only wave makes a personal link per case, ready to download', async ({
+  page,
+  browser,
+}) => {
   await openProject(page);
   await questionnaireAction(page, 'Web survey');
   await page.getByLabel('Name', { exact: true }).fill('Enlaces región 3');
   await page.getByLabel('Only cases where (optional)').fill('case.region == 3 and case.age >= 45');
   await page.getByRole('radio', { name: /Personal links only/ }).check();
   await expect(page.getByLabel('Reminders after (days)')).toBeHidden();
+  // The links can be given an end date (each one can be changed later).
+  const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  await page.getByLabel('Links expire on (optional)').fill(inAMonth);
   await page.getByRole('button', { name: 'Create outreach' }).click();
+  await expect(
+    page.locator('[data-wave="Enlaces región 3"]').getByTestId('wave-expiry'),
+  ).toContainText(inAMonth);
   await page.getByRole('button', { name: 'Make the links of Enlaces región 3' }).click();
   await expect(page.getByTestId('waves-message')).toContainText(/\d+ personal links? made/);
   const links = page.getByTestId('wave-links');
@@ -138,4 +147,26 @@ test('a links-only wave makes a personal link per case, ready to download', asyn
   ]);
   expect(file.suggestedFilename()).toMatch(/^Enlaces.*\.csv$/);
   await shot(page, 'cawi-personal-links');
+
+  // Each link has its end date, which can be changed, and can be revoked on its own.
+  const second = links.locator('[data-link]').nth(1);
+  const id = (await second.getAttribute('data-link'))!;
+  await expect(second.getByLabel(`Expiry date of the link of ${id}`)).toHaveValue(inAMonth);
+  await second.getByRole('button', { name: `Show the link of ${id}` }).click();
+  const url = (await second.locator('td').nth(1).innerText()).replace(/\?.*$/, '').trim();
+  page.once('dialog', (d) => void d.accept());
+  await second.getByRole('button', { name: `Revoke the link of ${id}` }).click();
+  await expect(links.getByTestId('links-note')).toContainText(`The link of ${id} was revoked.`);
+  await expect(second).toContainText('Revoked');
+  await expect(second.getByRole('button', { name: `Revoke the link of ${id}` })).toBeDisabled();
+  await shot(page, 'v2-cawi-links-expiry-revoke');
+  await expectAccessible(page);
+
+  // Whoever opens the revoked link is told so, in the survey's language.
+  const phone = await browser.newContext({ storageState: undefined });
+  const r = await phone.newPage();
+  await r.goto(url);
+  await expect(r.getByRole('alert')).toContainText(/fue anulado|was withdrawn/);
+  await shot(r, 'v2-respondent-link-revoked');
+  await phone.close();
 });

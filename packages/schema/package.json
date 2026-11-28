@@ -21,6 +21,10 @@
     "./constants": {
       "types": "./dist/constants.d.ts",
       "default": "./dist/constants.js"
+    },
+    "./cawi-theme": {
+      "types": "./dist/cawi-theme.d.ts",
+      "default": "./dist/cawi-theme.js"
     }
   },
   "files": [

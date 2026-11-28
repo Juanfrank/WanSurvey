@@ -96,6 +96,14 @@ describe.skipIf(!configured)('SQL Server: project logo and the web survey style'
       .set('x-csrf-token', pm.csrf)
       .send({ settings: { cawi: { theme: { primary: 'red' } } } });
     expect(bad.status).toBe(400);
+    // A light main colour: white text on its buttons and its coloured text would be unreadable.
+    const pale = await pm.agent
+      .patch(base())
+      .set('x-csrf-token', pm.csrf)
+      .send({ settings: { cawi: { theme: { primary: '#ffe600' } } } });
+    expect(pale.status).toBe(400);
+    expect(pale.body).toMatchObject({ code: 'THEME_CONTRAST' });
+    expect(pale.body.problems.length).toBeGreaterThan(0);
 
     const link = await pm.agent
       .put(`${base()}/open-link`)

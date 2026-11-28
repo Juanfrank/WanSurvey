@@ -128,12 +128,14 @@ export function NumberField({
   onChange,
   integer,
   hint,
+  error,
 }: {
   label: ReactNode;
   value: number | undefined;
   onChange(v: number | undefined): void;
   integer?: boolean;
   hint?: ReactNode;
+  error?: string;
 }) {
   const id = useId();
   const [text, setText] = useState(value === undefined ? '' : String(value));
@@ -150,7 +152,11 @@ export function NumberField({
         inputMode={integer ? 'numeric' : 'decimal'}
         className={inputCls}
         value={text}
-        aria-describedby={hint ? `${id}-hint` : undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={
+          [hint ? `${id}-hint` : '', error ? `${id}-err` : ''].filter(Boolean).join(' ') ||
+          undefined
+        }
         onChange={(e) => {
           const v = e.target.value.trim();
           setText(e.target.value);
@@ -162,6 +168,7 @@ export function NumberField({
         }}
       />
       {hint ? <Hint id={`${id}-hint`}>{hint}</Hint> : null}
+      <FieldError id={`${id}-err`}>{error}</FieldError>
     </div>
   );
 }

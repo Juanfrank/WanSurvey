@@ -425,6 +425,11 @@ export function SettingsEditor({
                       integer
                       value={q.target ?? undefined}
                       onChange={(target) => update({ target: target ?? null })}
+                      error={
+                        q.target != null && q.target > q.max
+                          ? t('designer.settings.quotaTargetOverMax', { max: q.max })
+                          : undefined
+                      }
                     />
                     <SelectField
                       label={t('designer.settings.quotaDisposition', { n: i + 1 })}

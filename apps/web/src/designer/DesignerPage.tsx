@@ -12,8 +12,6 @@ import { ListIcon } from '../routes/icons.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button, Card } from '../routes/ui.js';
 import { SubTabBar, TabBar } from '../routes/tabs.js';
-import { CawiTab } from '../cawi/CawiTab.js';
-import { PaperTab } from '../papi/PaperTab.js';
 import { TypeEnvContext } from './context.js';
 import { Dialog } from './Dialog.js';
 import { EditingLanguageContext, smallBtn, SourceLanguageContext } from './fields.js';
@@ -36,7 +34,7 @@ import { caseVariables, nodeName, variablesOf, type SampleField } from './vars.j
 import { localiseDiagnostic } from '../i18n-messages.js';
 import { dateTime, timeOnly } from '../format.js';
 
-const TOPS = ['design', 'distribution', 'settings'] as const;
+const TOPS = ['design', 'settings'] as const;
 type Top = (typeof TOPS)[number];
 const DESIGN_SUBS = ['design', 'routing', 'preview', 'scenarios', 'versions'] as const;
 type DesignSub = (typeof DESIGN_SUBS)[number];
@@ -44,8 +42,9 @@ const has = <T extends string>(list: readonly T[], v: string | undefined): v is 
   !!v && (list as readonly string[]).includes(v);
 
 /**
- * A questionnaire in tabs on two levels: Design (form, flow, preview, scenarios, versions),
- * Distribution (web survey, paper forms) and Settings (by topic). The place is in the address.
+ * A questionnaire in tabs on two levels: Design (form, flow, preview, scenarios, versions) and
+ * Settings (by topic). The place is in the address. Its web survey and paper forms are in the
+ * project's Distribution tab, linked from here.
  */
 export function DesignerPage() {
   const { projectId, qid } = useParams({ strict: false }) as { projectId: string; qid: string };
@@ -77,6 +76,21 @@ export function DesignerPage() {
   const canReviewForms = useCan('interviews.review', projectId);
   const canCasesAll = useCan('cases.read_all', projectId);
   const canPaper = canKey || canReviewForms || canCasesAll;
+  // The distribution used to be a tab here; old addresses go to the project's Distribution tab.
+  useEffect(() => {
+    if (search.tab !== 'distribution') return;
+    void navigate({
+      to: '/projects/$projectId',
+      params: { projectId },
+      search: {
+        tab: search.sub === 'paper' ? 'paper' : 'web',
+        q: qid,
+        ...(search.notice ? { notice: search.notice } : {}),
+      },
+      replace: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the address asks for it
+  }, [search.tab]);
   const [selected, setSelected] = useState(SETTINGS_ID);
   const [renameTick, setRenameTick] = useState(0);
   const [publishing, setPublishing] = useState(false);
@@ -175,6 +189,15 @@ export function DesignerPage() {
 
   if (d.error) return <p role="alert">{t('designer.loadFailed')}</p>;
   if (!draft || !d.doc) return <p aria-busy="true">{t('designer.loading')}</p>;
+
+  // Its web survey or paper forms, in the project's Distribution tab, for who works on them.
+  const modes = draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI'];
+  const distributionSub =
+    canWeb && modes.includes('CAWI')
+      ? 'web'
+      : canPaper && modes.includes('PAPI')
+        ? 'paper'
+        : undefined;
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const mod = e.ctrlKey || e.metaKey;
@@ -346,12 +369,22 @@ export function DesignerPage() {
                   label={t('designer.top.label')}
                   items={[
                     { value: 'design', label: t('designer.top.design') },
-                    ...(canWeb || canPaper
-                      ? [{ value: 'distribution', label: t('designer.top.distribution') }]
-                      : []),
                     { value: 'settings', label: t('designer.top.settings') },
                   ]}
                 />
+                {distributionSub ? (
+                  <p className="-mt-2 text-right text-sm">
+                    <Link
+                      to="/projects/$projectId"
+                      params={{ projectId }}
+                      search={{ tab: distributionSub, q: qid }}
+                      className="font-medium text-indigo-ink-700 hover:underline"
+                      data-testid="designer-distribution-link"
+                    >
+                      {t('designer.top.distributionLink')}
+                    </Link>
+                  </p>
+                ) : null}
                 <Tabs.Content value="design">
                   <Tabs.Root value={tab} onValueChange={setTab} className="flex flex-col gap-4">
                     <SubTabBar
@@ -439,6 +472,9 @@ export function DesignerPage() {
                                 : undefined
                             }
                           />
+                          <ItemProblems
+                            diagnostics={d.diagnostics.filter((x) => x.itemId === selected)}
+                          />
                           <fieldset disabled={!canEdit} className="min-w-0">
                             {selected === SETTINGS_ID ? (
                               <p className="text-sm text-slate-600">{t('designer.emptyEditor')}</p>
@@ -511,21 +547,6 @@ export function DesignerPage() {
                       />
                     </Tabs.Content>
                   </Tabs.Root>
-                </Tabs.Content>
-                <Tabs.Content value="distribution">
-                  <Distribution
-                    projectId={projectId}
-                    qid={qid}
-                    sub={search.sub}
-                    notice={search.notice}
-                    web={
-                      canWeb && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('CAWI')
-                    }
-                    paper={
-                      canPaper && (draft.modes ?? ['CAPI', 'CATI', 'CAWI', 'PAPI']).includes('PAPI')
-                    }
-                    onSub={(sub) => go('distribution', sub)}
-                  />
                 </Tabs.Content>
                 <Tabs.Content value="settings">
                   <Tabs.Root
@@ -709,6 +730,42 @@ function EditorHeader({
         <span aria-hidden>›</span>
       </button>
     </div>
+  );
+}
+
+/**
+ * The checks' errors and warnings for the selected item, above its fields, so a warning such as a
+ * text variable that may come blank is seen where it is fixed. Not a live region: it changes as
+ * one types.
+ */
+function ItemProblems({ diagnostics }: { diagnostics: DraftApi['diagnostics'] }) {
+  const { t } = useTranslation();
+  if (!diagnostics.length) return null;
+  const errors = diagnostics.some((x) => x.severity === 'error');
+  return (
+    <section
+      aria-label={t('designer.itemProblems')}
+      data-testid="item-problems"
+      className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+        errors ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'
+      }`}
+    >
+      <h3 className="mb-1 font-semibold text-slate-800">{t('designer.itemProblems')}</h3>
+      <ul className="flex flex-col gap-0.5">
+        {diagnostics.map((x, i) => (
+          <li
+            key={i}
+            className={x.severity === 'error' ? 'text-red-ink-800' : 'text-amber-ink-900'}
+          >
+            <span aria-hidden>{x.severity === 'error' ? '✕ ' : '! '}</span>
+            <span className="sr-only">
+              {t(x.severity === 'error' ? 'designer.problemError' : 'designer.problemWarning')}
+            </span>
+            {localiseDiagnostic(t, x)}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -986,43 +1043,5 @@ function VersionsPanel({
         <ComparePanel projectId={projectId} qid={qid} versions={versions.data} draft={draft} />
       </div>
     </Card>
-  );
-}
-
-/** Where the questionnaire goes out: its web survey and its paper forms. */
-function Distribution({
-  projectId,
-  qid,
-  sub,
-  notice,
-  web,
-  paper,
-  onSub,
-}: {
-  projectId: string;
-  qid: string;
-  sub?: string;
-  notice?: string;
-  web: boolean;
-  paper: boolean;
-  onSub(sub: string): void;
-}) {
-  const { t } = useTranslation();
-  const subs = [...(web ? ['web'] : []), ...(paper ? ['paper'] : [])];
-  const current = sub && subs.includes(sub) ? sub : subs[0];
-  if (!current) return <Card>{t('designer.distribution.none')}</Card>;
-  return (
-    <Tabs.Root value={current} onValueChange={onSub} className="flex flex-col gap-4">
-      <SubTabBar
-        label={t('designer.distribution.label')}
-        items={subs.map((x) => ({ value: x, label: t(`designer.distribution.${x}`) }))}
-      />
-      <Tabs.Content value="web">
-        <CawiTab projectId={projectId} questionnaireId={qid} />
-      </Tabs.Content>
-      <Tabs.Content value="paper">
-        <PaperTab projectId={projectId} questionnaireId={qid} notice={notice} />
-      </Tabs.Content>
-    </Tabs.Root>
   );
 }

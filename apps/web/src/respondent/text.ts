@@ -10,6 +10,10 @@ export const TEXT = {
     unavailable: 'Esta encuesta no está disponible por ahora.',
     ended: 'Esta encuesta finalizó. ¡Gracias por su interés!',
     failed: 'No se pudo abrir la encuesta. Inténtelo de nuevo en unos minutos.',
+    linkExpired:
+      'Este enlace venció y ya no abre la encuesta. Si aún desea responder, pida un enlace nuevo a quien se lo envió.',
+    linkRevoked:
+      'Este enlace fue anulado y ya no abre la encuesta. Si aún desea responder, pida un enlace nuevo a quien se lo envió.',
     saving: 'Guardando…',
     saved: 'Respuestas guardadas',
     offline: 'Sin conexión: sus respuestas se guardan en este dispositivo.',
@@ -35,6 +39,10 @@ export const TEXT = {
     unavailable: 'This survey is not available at the moment.',
     ended: 'This survey has ended. Thank you for your interest!',
     failed: 'The survey could not be opened. Please try again in a few minutes.',
+    linkExpired:
+      'This link has expired and no longer opens the survey. If you still want to answer, ask whoever sent it for a new one.',
+    linkRevoked:
+      'This link was withdrawn and no longer opens the survey. If you still want to answer, ask whoever sent it for a new one.',
     saving: 'Saving…',
     saved: 'Answers saved',
     offline: 'No connection: your answers are kept on this device.',

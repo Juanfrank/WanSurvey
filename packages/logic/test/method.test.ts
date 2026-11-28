@@ -380,3 +380,76 @@ describe('item order (item 153)', () => {
     expect(s.pathKeys().join(',')).toBe(s.getAnswer('S1_ORDER'));
   });
 });
+
+describe('personal data before the information notice (item 138c)', () => {
+  const notice = { ...static_('NOTICE', 'We are…'), role: 'consent' } as ContainerItem;
+
+  it('flags personal questions and personal insertions placed before the notice', () => {
+    const qq = q([
+      static_('HELLO', 'Hi {{case.first_name}}, in {{case.city | default:"your city"}}'),
+      yesno('EMAIL_OK', { personal: true }),
+      notice,
+      yesno('PHONE_OK', { personal: true }),
+      static_('LATER', 'Thanks {{case.first_name}}'),
+    ]);
+    const pipes = diag(qq, 'personal_pipe_before_notice');
+    expect(pipes).toHaveLength(1);
+    expect(pipes[0]).toMatchObject({
+      itemId: 'HELLO',
+      field: 'text',
+      msg: { params: { fields: 'case.first_name, case.city' } },
+    });
+    const questions = diag(qq, 'personal_before_notice');
+    expect(questions.map((d) => d.itemId)).toEqual(['EMAIL_OK']);
+    expect(analyze(qq).canPublish).toBe(true);
+  });
+
+  it('a notice that greets by name shows personal data before it is read', () => {
+    const qq = q([
+      { ...static_('NOTICE', 'Hi {{respondent.firstName}}, we are…'), role: 'consent' },
+      yesno('A', { personal: true }),
+    ] as ContainerItem[]);
+    expect(diag(qq, 'personal_pipe_before_notice').map((d) => d.itemId)).toEqual(['NOTICE']);
+    expect(diag(qq, 'personal_before_notice')).toHaveLength(0);
+  });
+
+  it('wording for the interviewer or for other modes is not shown to whoever opens the link', () => {
+    const qq = q([
+      yesno('INTRO', {
+        variants: {
+          CATI: {
+            text: en('Am I speaking with {{case.first_name}}?'),
+            interviewerInstruction: en('Ask for {{case.first_name}}'),
+          },
+        },
+      }),
+      { ...static_('NOTICE', 'We are…'), role: 'consent' } as ContainerItem,
+    ]);
+    expect(diag(qq, 'personal_pipe_before_notice')).toHaveLength(0);
+  });
+
+  it('says nothing without a notice', () => {
+    const qq = q([static_('HELLO', 'Hi {{case.first_name}}'), yesno('A', { personal: true })]);
+    expect(diag(qq, 'personal_before_notice')).toHaveLength(0);
+    expect(diag(qq, 'personal_pipe_before_notice')).toHaveLength(0);
+  });
+});
+
+describe('quota target and maximum (item 100)', () => {
+  const quota = (max: number, target?: number | null) =>
+    q([single('A')], {
+      quotas: [{ id: 'q1', name: 'Women', when: 'A == 1', max, target }],
+    } as never);
+
+  it('a target above the maximum is an error', () => {
+    const found = diag(quota(100, 120), 'quota_target_over_max');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      severity: 'error',
+      field: 'quotas.q1.target',
+      msg: { params: { name: 'Women', target: 120, max: 100 } },
+    });
+    expect(diag(quota(100, 100), 'quota_target_over_max')).toHaveLength(0);
+    expect(diag(quota(100, null), 'quota_target_over_max')).toHaveLength(0);
+  });
+});

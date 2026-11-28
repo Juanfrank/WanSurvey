@@ -19,6 +19,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Personal web links expire and can be revoked** (migration `0031_cawi_link_expiry`): an
+  outreach can give its links an end date, each link can get its own, and "Revoke" withdraws one
+  (both logged). An expired or revoked link tells the respondent so and is no longer sent or
+  reminded of. The designer's checks, the editor and the API also gained: options and grid rows
+  without a label marked beside their field, the selected item's checks listed above its fields,
+  a quota target above its maximum refused, personal data shown or asked before the information
+  notice warned about, and a web survey style with unreadable colours refused by the API too
+  (`THEME_CONTRAST`). The questionnaire's Distribution tab became a link to the project's one; the
+  item inspector's parts are a segmented control; the routing map says "skips to the end of the
+  questionnaire"; the mode comparison preview uses the preview's seed.
 - **Rotation and randomisation of a section's or block's items**: in the editor, "Order of the
   items" shuffles or rotates them per interview (seeded by the interview, so every device and the
   server see the same order); items can be kept in place in the definition (`itemOrder.fixed`), and an optional
