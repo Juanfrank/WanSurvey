@@ -336,3 +336,22 @@ describe('PageHeader', () => {
     expect(screen.getByRole('button', { name: 'Invite' })).toBeTruthy();
   });
 });
+
+describe('InfoTip', () => {
+  it('stays open when clicked with the pointer after hovering, and toggles with the keyboard', async () => {
+    const { InfoTip } = await import('../src/cases/samplingControls.js');
+    const user = userEvent.setup();
+    render(<InfoTip id="x" term="Quotas" text="What a quota is." />);
+    const button = screen.getByRole('button');
+    await user.hover(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    await user.click(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    await user.keyboard('{Enter}');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    await user.keyboard('{Enter}');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    await user.unhover(button);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+});

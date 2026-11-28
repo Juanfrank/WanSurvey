@@ -98,7 +98,11 @@ export function InfoTip({
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setOpen((o) => !o);
+          // A pointer click comes after hover and focus have already opened it: keep it open
+          // (toggling would close it at once). Enter or Space (detail 0) toggles; Escape,
+          // leaving or moving the focus away closes it.
+          if (e.detail > 0) setOpen(true);
+          else setOpen((o) => !o);
         }}
       >
         <span
