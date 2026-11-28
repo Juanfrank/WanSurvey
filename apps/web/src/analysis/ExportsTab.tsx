@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
@@ -19,6 +18,8 @@ interface ExportOptions {
   rosters?: 'wide' | 'long';
   paradata?: boolean;
   approvedOnly?: boolean;
+  /** CSV: the codebook alongside, in a ZIP. */
+  codebook?: boolean;
   personalData?: 'include' | 'exclude';
   questionnaireId?: string;
   mode?: string;
@@ -54,6 +55,7 @@ export function ExportsTab({ projectId }: { projectId: string }) {
   const [labels, setLabels] = useState<'codes' | 'labels'>('codes');
   const [rosters, setRosters] = useState<'wide' | 'long'>('wide');
   const [paradata, setParadata] = useState(false);
+  const [withBook, setWithBook] = useState(false);
   // Personal answers stay out of the file unless chosen (data minimisation).
   const [personalData, setPersonalData] = useState<'include' | 'exclude'>('exclude');
   const [filters, setFilters] = useState<DataFilters>({});
@@ -108,7 +110,9 @@ export function ExportsTab({ projectId }: { projectId: string }) {
       o.personalData === 'exclude' ? t('analysis.exports.noPersonal') : null,
       o.format === 'xlsx' || o.format === 'sav' || o.format === 'dta'
         ? t('analysis.exports.withCodebook')
-        : null,
+        : o.format === 'csv' && o.codebook
+          ? t('analysis.exports.withCodebookZip')
+          : null,
     ]
       .filter(Boolean)
       .join(' · ');
@@ -133,24 +137,8 @@ export function ExportsTab({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col gap-6 text-sm" data-testid="exports">
       <Card className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">{t('analysis.exports.title')}</h2>
-          {/* The results as a report: the printable summary, saved as PDF from the browser. */}
-          <Link
-            to="/projects/$projectId/summary"
-            params={{ projectId }}
-            search={{
-              ...(filters.questionnaireId ? { questionnaireId: filters.questionnaireId } : {}),
-              ...(filters.mode ? { mode: filters.mode } : {}),
-              ...(filters.from ? { from: filters.from } : {}),
-              ...(filters.to ? { to: filters.to } : {}),
-              ...(filters.approvedOnly ? { approvedOnly: true } : {}),
-            }}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium hover:bg-slate-50"
-          >
-            {t('analysis.exports.summaryPdf')}
-          </Link>
-        </div>
+        {/* The printable summary (PDF) is in Results, with the links for clients. */}
+        <h2 className="text-lg font-semibold">{t('analysis.exports.title')}</h2>
         <form
           className="flex flex-col gap-4"
           onSubmit={(e) => {
@@ -160,6 +148,7 @@ export function ExportsTab({ projectId }: { projectId: string }) {
               labels,
               rosters,
               paradata,
+              ...(format === 'csv' && withBook ? { codebook: true } : {}),
               personalData: pii ? personalData : 'exclude',
               approvedOnly: !!filters.approvedOnly,
               ...(filters.questionnaireId ? { questionnaireId: filters.questionnaireId } : {}),
@@ -200,6 +189,16 @@ export function ExportsTab({ projectId }: { projectId: string }) {
               t(`analysis.exports.rosterOptions.${v}`),
             )}
           </fieldset>
+          {format === 'csv' ? (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={withBook}
+                onChange={(e) => setWithBook(e.target.checked)}
+              />
+              {t('analysis.exports.codebookZip')}
+            </label>
+          ) : null}
           <label className="flex items-center gap-2">
             <input
               type="checkbox"

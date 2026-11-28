@@ -60,11 +60,18 @@ test('home shows a project manager the projects with their fieldwork', async ({ 
   const table = page.getByTestId('home-portfolio');
   await expect(table.getByRole('columnheader', { name: 'Unassigned' })).toBeVisible();
   await expect(table.getByRole('row', { name: /Household Survey 2026/ })).toBeVisible();
+  // Each project's fieldwork dates and its last interview activity.
+  await expect(table.getByRole('columnheader', { name: 'Fieldwork' })).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: 'Last activity' })).toBeVisible();
+  await expect(
+    table.getByRole('row', { name: /Household Survey 2026/ }).getByTestId('home-last-activity'),
+  ).not.toHaveText('None yet');
   // The preview stays a secondary link for those who design questionnaires.
   await expect(page.getByRole('link', { name: 'Open the preview' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'My day' })).toHaveCount(0);
   await expectAccessible(page);
   await shot(page, 'home-project-manager');
+  await shot(page, 'v2-home-portfolio');
 });
 
 test('home shows an interviewer their day and not the preview', async ({ page }) => {

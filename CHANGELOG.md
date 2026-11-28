@@ -27,6 +27,17 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   and main actions in view; a case closed after its last call attempt shows the attempts against
   the limit and can be reopened with a new round (`POST /projects/:id/cases/:caseId/reopen-attempts`,
   recorded in its history and the audit log).
+- **Supervision shortcuts and filters**: in Metrics, an interviewer's name opens the review queue
+  on their interviews (`?tab=review&interviewer=…`; the queue also takes `?result=`), the project
+  page follows such links without a reload, a team filter ranks one crew or shift at a time
+  (`teamId` on `GET /projects/:id/metrics/interviewers`, which now lists the teams), and "Project
+  settings → Goals" is a link. The review screen has a full breadcrumb (Projects / project /
+  Supervision / case).
+- **Crosstab in Excel** next to the CSV download, with the same cells and filters; a CSV export
+  can carry its codebook (variables and values as CSV) in a ZIP (`codebook: true`).
+- **Home portfolio**: fieldwork dates and the last interview activity of each project.
+- **Retention on the project overview**: the personal data period and what happens when it ends,
+  or a warning when there is none, with tonight's count for who configures the project.
 - **Rotation and randomisation of a section's or block's items**: in the editor, "Order of the
   items" shuffles or rotates them per interview (seeded by the interview, so every device and the
   server see the same order); items can be kept in place in the definition (`itemOrder.fixed`), and an optional
@@ -342,6 +353,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **One place for the results summary**: the printable summary (PDF) opens from Results only; the
+  duplicate button in Exports is gone (the client links were already only in Results).
 - **«Completar» is now «Cerrar trabajo de campo» (Close fieldwork)** in a questionnaire's actions, its
   dialog, its state and its banner: the action closes data collection, it does not finish the design.
 - **The account menu has a row of its own** at the top of every page, instead of floating over the
@@ -439,6 +452,7 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- `approvedOnly=false` in the address of the topline, crosstab and summary was read as true.
 - **New projects take the organisation's time zone and language** (Administration > Organisation): the
   new-project form showed and sent the browser's zone (often UTC) and always Spanish.
 - **A callback's date and time are written out in full** below the picker (in the interface language and

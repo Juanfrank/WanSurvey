@@ -15,7 +15,13 @@ interface ProjectRow {
   code: string;
   status: string;
   modesEnabled?: string[];
-  settings?: { fieldwork?: { targetCompletes?: number | null } };
+  settings?: {
+    fieldwork?: {
+      targetCompletes?: number | null;
+      startsOn?: string | null;
+      endsOn?: string | null;
+    };
+  };
 }
 
 /** `GET /home`: per project, only the parts the caller's roles allow. */
@@ -28,6 +34,8 @@ export interface HomeSummary {
       unassigned: number;
       callbacksDue: number;
       activeNow: number;
+      /** When an interview of the project last changed. */
+      lastActivityAt?: string | null;
     } | null;
     review: { toReview: number; tooFast: number } | null;
     mine: {
@@ -432,7 +440,7 @@ function Portfolio({
   teamGoal: (projectId: string) => Goal | undefined;
   seesCases: (projectId: string) => boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tab = (p: ProjectRow, to: string, value: number) => (
     <Link
       to="/projects/$projectId"
@@ -444,6 +452,9 @@ function Portfolio({
     </Link>
   );
   const th = 'px-3 py-2 text-right font-medium';
+  /** A planned fieldwork date (a calendar day), written short in the reader's language. */
+  const day = (d: string) =>
+    new Date(`${d}T12:00:00`).toLocaleDateString(i18n.language, { dateStyle: 'medium' });
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm" data-testid="home-portfolio">
@@ -451,6 +462,9 @@ function Portfolio({
           <tr>
             <th scope="col" className="px-3 py-2 text-left font-medium">
               {t('home.portfolio.project')}
+            </th>
+            <th scope="col" className="px-3 py-2 text-left font-medium">
+              {t('home.portfolio.fieldwork')}
             </th>
             <th scope="col" className={th}>
               {t('home.portfolio.progress')}
@@ -470,6 +484,9 @@ function Portfolio({
             <th scope="col" className={th}>
               {t('home.portfolio.activeNow')}
             </th>
+            <th scope="col" className="px-3 py-2 text-left font-medium">
+              {t('home.portfolio.lastActivity')}
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -478,6 +495,7 @@ function Portfolio({
             const f = s?.field;
             const target = p.settings?.fieldwork?.targetCompletes ?? null;
             const goal = teamGoal(p.id);
+            const { startsOn, endsOn } = p.settings?.fieldwork ?? {};
             return (
               <tr key={p.id}>
                 <td className="px-3 py-2">
@@ -485,6 +503,14 @@ function Portfolio({
                   <span className="font-mono text-xs text-slate-500">
                     {p.code} · {t(`app.projectStatus.${p.status}`, { defaultValue: p.status })}
                   </span>
+                </td>
+                <td className="whitespace-nowrap px-3 py-2" data-testid="home-fieldwork">
+                  {startsOn || endsOn
+                    ? t('home.portfolio.dates', {
+                        from: startsOn ? day(startsOn) : '…',
+                        to: endsOn ? day(endsOn) : '…',
+                      })
+                    : t('home.portfolio.noDates')}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {f ? (
@@ -540,6 +566,13 @@ function Portfolio({
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {f ? tab(p, 'dashboard', f.activeNow) : '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2" data-testid="home-last-activity">
+                  {f
+                    ? f.lastActivityAt
+                      ? dateTime(f.lastActivityAt)
+                      : t('home.portfolio.never')
+                    : '—'}
                 </td>
               </tr>
             );

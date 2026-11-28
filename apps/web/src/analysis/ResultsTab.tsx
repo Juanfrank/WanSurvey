@@ -314,35 +314,78 @@ export function CrosstabTable({ x, lang }: { x: Crosstab; lang: string }) {
     low,
   );
   const star = (n: number) => (low(n) ? <span aria-hidden="true">*</span> : null);
-  const download = () => {
-    // Quoted, and a leading = + - @ neutralised so a spreadsheet does not run it as a formula.
-    const cell = (v: string) => `"${(/^[=+\-@]/.test(v) ? `'${v}` : v).replace(/"/g, '""')}"`;
+  /**
+   * The table as rows: the counts with their totals and bases, then the percentages chosen
+   * (with one decimal: text for the CSV, numbers for Excel).
+   */
+  const sheet = (pct: (v: number) => string | number): (string | number | null)[][] => {
     const cols = x.col.categories.map((c) => c.label);
-    const lines: string[][] = [
+    return [
       [`${x.row.name} / ${x.col.name}`, ...cols, t('analysis.results.total')],
-      ...x.row.categories.map((r, i) => [
-        r.label,
-        ...x.counts[i]!.map(String),
-        String(x.rowTotals[i]),
-      ]),
-      [t('analysis.results.baseRow'), ...x.colTotals.map(String), String(x.total)],
+      ...x.row.categories.map((r, i) => [r.label, ...x.counts[i]!, x.rowTotals[i]!]),
+      [t('analysis.results.baseRow'), ...x.colTotals, x.total],
       [],
       [`% ${t(`analysis.results.pctKinds.${kind}`)}`, ...cols],
       ...x.row.categories.map((r, i) => [
         r.label,
-        ...pcts[i]!.map((v) => (v === null ? '' : v.toFixed(1))),
+        ...pcts[i]!.map((v) => (v === null ? null : pct(v))),
       ]),
     ];
-    const csv = '﻿' + lines.map((l) => l.map(cell).join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  };
+  const save = (data: BlobPart, type: string, ext: string) => {
+    const url = URL.createObjectURL(new Blob([data], { type }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `crosstab_${x.row.name}_${x.col.name}.csv`;
+    a.download = `crosstab_${x.row.name}_${x.col.name}.${ext}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     // Revoked once the browser has started the download.
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+  const download = () => {
+    // Quoted, and a leading = + - @ neutralised so a spreadsheet does not run it as a formula.
+    const cell = (v: string | number | null) => {
+      const s = v === null ? '' : String(v);
+      return `"${(/^[=+\-@]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
+    };
+    const rows = sheet((v) => v.toFixed(1));
+    save(
+      '﻿' + rows.map((l) => l.map(cell).join(',')).join('\r\n'),
+      'text/csv;charset=utf-8',
+      'csv',
+    );
+  };
+  const [xlsxBusy, setXlsxBusy] = useState(false);
+  const [xlsxError, setXlsxError] = useState<string | null>(null);
+  /**
+   * The same table in Excel, figures as numbers (text cells are never run as formulas there);
+   * the writer is loaded only when asked.
+   */
+  const downloadXlsx = async () => {
+    setXlsxBusy(true);
+    setXlsxError(null);
+    try {
+      const { writeXlsx } = await import('hucre/xlsx');
+      const bytes = await writeXlsx({
+        sheets: [
+          {
+            name: t('analysis.results.crosstabSheet').slice(0, 31),
+            rows: sheet((v) => Math.round(v * 10) / 10),
+            columns: [{ width: 28 }, ...x.col.categories.map(() => ({ width: 14 })), { width: 12 }],
+          },
+        ],
+      });
+      save(
+        new Uint8Array(bytes),
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'xlsx',
+      );
+    } catch (e) {
+      setXlsxError(localiseError(t, e));
+    } finally {
+      setXlsxBusy(false);
+    }
   };
   return (
     <div className="flex flex-col gap-2">
@@ -356,10 +399,22 @@ export function CrosstabTable({ x, lang }: { x: Crosstab; lang: string }) {
             </label>
           ))}
         </fieldset>
-        <button type="button" className={smallBtn} onClick={download}>
-          {t('analysis.results.downloadCsv')}
-        </button>
+        <span className="flex flex-wrap gap-2">
+          <button type="button" className={smallBtn} onClick={download}>
+            {t('analysis.results.downloadCsv')}
+          </button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            busy={xlsxBusy}
+            onClick={() => void downloadXlsx()}
+          >
+            {t('analysis.results.downloadXlsx')}
+          </Button>
+        </span>
       </div>
+      <ErrorText>{xlsxError}</ErrorText>
       <TableScroll label={`${x.row.name} × ${x.col.name}`}>
         <table className="min-w-full text-sm" data-testid="crosstab">
           <caption className="mb-1 text-left text-slate-600">

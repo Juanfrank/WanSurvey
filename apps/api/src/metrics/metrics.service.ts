@@ -16,6 +16,8 @@ export const MetricsQuery = z.object({
   from: Day.optional(),
   to: Day.optional(),
   mode: z.enum(['CATI', 'CAPI', 'CAWI', 'PAPI']).optional(),
+  /** Only the members of one team of the organisation, ranked among themselves. */
+  teamId: z.uuid().optional(),
 });
 export type MetricsQuery = z.infer<typeof MetricsQuery>;
 
@@ -109,7 +111,17 @@ export class MetricsService {
       const names = await t.userNames([...inputs.keys()]);
       for (const r of names) get(r.id, r.name);
     }
-    const rows = [...inputs.values()].map(interviewerMetrics);
-    return { team, interviewers: team ? rankTeam(rows) : rows };
+    let rows = [...inputs.values()].map(interviewerMetrics);
+    if (!team) return { team, interviewers: rows };
+    // The teams these interviewers belong to, to choose from; with one chosen, its members only,
+    // their outliers marked against each other.
+    const memberships = await t.teamsOf(rows.map((r) => r.interviewerId));
+    const teams = [...new Map(memberships.map((m) => [m.id, { id: m.id, name: m.name }])).values()];
+    if (q.teamId) {
+      const teamId = q.teamId.toLowerCase();
+      const members = new Set(memberships.filter((m) => m.id === teamId).map((m) => m.userId));
+      rows = rows.filter((r) => members.has(r.interviewerId));
+    }
+    return { team, teams, interviewers: rankTeam(rows) };
   }
 }

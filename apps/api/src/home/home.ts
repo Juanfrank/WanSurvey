@@ -11,6 +11,8 @@ export interface HomeProject {
     unassigned: number;
     callbacksDue: number;
     activeNow: number;
+    /** When an interview of the project last changed (started, saved, submitted, reviewed). */
+    lastActivityAt: string | null;
   } | null;
   /** The review queue: `interviews.review` or `interviews.approve`. */
   review: { toReview: number; tooFast: number } | null;
@@ -28,6 +30,7 @@ export interface HomeData {
   completes: { projectId: string; n: number }[];
   field: { projectId: string; cases: number; unassigned: number; callbacksDue: number }[];
   active: { projectId: string; n: number }[];
+  lastActivity: { projectId: string; at: Date }[];
   review: { projectId: string; toReview: number; tooFast: number }[];
   mine: {
     projectId: string;
@@ -67,6 +70,7 @@ export function homeProjects(m: MembershipGrant[], d: HomeData): HomeProject[] {
   const completes = by(d.completes);
   const field = by(d.field);
   const active = by(d.active);
+  const last = by(d.lastActivity);
   const review = by(d.review);
   const mine = by(d.mine);
   return [...ids]
@@ -85,6 +89,7 @@ export function homeProjects(m: MembershipGrant[], d: HomeData): HomeProject[] {
               unassigned: f?.unassigned ?? 0,
               callbacksDue: f?.callbacksDue ?? 0,
               activeNow: active.get(id)?.n ?? 0,
+              lastActivityAt: last.get(id) ? new Date(last.get(id)!.at).toISOString() : null,
             }
           : null,
         review: any(m, REVIEW, id)

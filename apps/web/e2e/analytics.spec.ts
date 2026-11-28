@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { connectDb } from './db.js';
 import { expect, test, type Page } from './fixtures.js';
 import { expectAccessible, login, PM, pickOrganisation, resultsSection, shot } from './helpers.js';
 
@@ -116,6 +118,17 @@ test('team metrics, topline, crosstab, summary and a client link', async ({ page
   await page.getByLabel('Mode').first().selectOption('');
   await shot(page, 'topline-crosstab');
   await expectAccessible(page);
+  // The same crosstab in Excel, beside the CSV.
+  const xlsx = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download Excel' }).click();
+  const book = await xlsx;
+  expect(book.suggestedFilename()).toBe('crosstab_A3_SEX_A4_MARITAL.xlsx');
+  expect(
+    readFileSync((await book.path())!)
+      .subarray(0, 2)
+      .toString(),
+  ).toBe('PK');
+  await shot(page, 'v2-crosstab-excel', { fullPage: false });
 
   // The printable summary, saved as PDF, carries the results.
   await page.getByRole('link', { name: 'Open the printable summary' }).click();
@@ -164,6 +177,8 @@ test('exports are built by the worker and download with the expected header', as
   const list = page.getByTestId('exports-list');
   await expect(list.locator('tr[data-status="done"]')).toHaveCount(2, { timeout: 30_000 });
   await expect(list).toContainText('SPSS (.sav)');
+  // The printable summary opens from Results only.
+  await expect(page.getByRole('link', { name: 'Results summary (PDF)' })).toHaveCount(0);
   await shot(page, 'exports-list');
   await expectAccessible(page);
 
@@ -195,4 +210,96 @@ test('exports are built by the worker and download with the expected header', as
   expect(sql).toMatch(/^-- WanSurvey/);
   expect(sql).toContain('from [dbo].bi_fact_respuesta r');
   expect(sql).toContain('as [A3_SEX]');
+
+  // A CSV with its codebook, both in a ZIP.
+  await page.getByLabel('Format').selectOption('csv');
+  await page
+    .getByLabel('Add the codebook (variables and coded values, as CSV) in a ZIP with the data')
+    .check();
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(list.locator('tr[data-status="done"]')).toHaveCount(4, { timeout: 30_000 });
+  const zipped = list.locator('tr', { hasText: 'with codebook (ZIP)' });
+  await expect(zipped).toHaveCount(1);
+  const zipDownload = page.waitForEvent('download');
+  await zipped.getByRole('link', { name: /Download/ }).click();
+  const zip = await zipDownload;
+  expect(zip.suggestedFilename()).toMatch(/\.zip$/);
+  const bytes = readFileSync((await zip.path())!);
+  expect(bytes.subarray(0, 2).toString()).toBe('PK');
+  expect(bytes.toString('utf8')).toContain('_codebook_variables.csv');
+  await shot(page, 'v2-exports-codebook-zip');
+});
+
+test('from metrics to one interviewer in the review queue, a team at a time, and to the goals', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  // A team of two interviewers of the organisation (removed at the end).
+  const db = connectDb();
+  const people = await db.all(
+    `select u.id, u.name, m.tenant_id from users u join tenant_members m on m.user_id = u.id
+     join tenants t on t.id = m.tenant_id
+     where t.slug = 'demo' and u.name in (N'Carlos Huamán', N'Demo interviewer')`,
+  );
+  expect(people).toHaveLength(2);
+  const tenantId = people[0]!.tenant_id as string;
+  const carlos = people.find((p) => p.name === 'Carlos Huamán')!.id as string;
+  const crewName = `Turno tarde ${Date.now() % 100000}`;
+  const crew = randomUUID();
+  await db.run(`insert into teams (id, tenant_id, name) values (?, ?, ?)`, [
+    crew,
+    tenantId,
+    crewName,
+  ]);
+  for (const p of people)
+    await db.run(`insert into team_members (team_id, user_id, tenant_id) values (?, ?, ?)`, [
+      crew,
+      p.id,
+      tenantId,
+    ]);
+
+  try {
+    await openProject(page, SUPERVISOR);
+    await resultsSection(page, 'Metrics');
+    const rows = page.getByTestId('metrics-row');
+    await expect(rows).toHaveCount(5);
+    await page
+      .getByRole('combobox', { name: 'Team', exact: true })
+      .selectOption({ label: crewName });
+    await expect(rows).toHaveCount(2);
+    await expect(rows.filter({ hasText: 'Carlos Huamán' })).toHaveCount(1);
+    // The goals are set in the settings, a link away.
+    await expect(page.getByRole('link', { name: 'Project settings → Goals' })).toBeVisible();
+    await shot(page, 'v2-metrics-team-filter');
+    await expectAccessible(page);
+
+    // The interviewer's name opens the review queue on their interviews.
+    await page
+      .getByRole('link', { name: 'Open the interviews of Carlos Huamán in the review queue' })
+      .click();
+    const sections = page.getByRole('tablist', { name: 'Supervision sections' });
+    await expect(sections.getByRole('tab', { name: 'Review queue', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('combobox', { name: 'Interviewer' })).toHaveValue(carlos);
+    await expect(page).toHaveURL(/interviewer=/);
+    const queue = page.getByTestId('review-queue').locator('tbody tr');
+    await expect(queue.first()).toBeVisible();
+    await expect(queue.filter({ hasNotText: 'Carlos Huamán' })).toHaveCount(0);
+    await shot(page, 'v2-review-queue-from-metrics');
+
+    // And from Metrics to the goals in the project settings.
+    await sections.getByRole('tab', { name: 'Metrics', exact: true }).click();
+    await page.getByRole('link', { name: 'Project settings → Goals' }).click();
+    // (A supervisor sets only the goals there: no list of topics.)
+    await expect(page.getByRole('tab', { name: 'Project settings', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('heading', { name: 'Goals', level: 2 })).toBeVisible();
+  } finally {
+    await db.run(`delete from teams where id = ?`, [crew]);
+    await db.end();
+  }
 });

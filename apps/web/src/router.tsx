@@ -214,8 +214,22 @@ const projectRoute = createRoute({
   component: lazyRouteComponent(() => import('./designer/ProjectPages.js'), 'ProjectPage'),
   validateSearch: (
     s: Record<string, unknown>,
-  ): { tab?: string; notice?: string; call?: string; q?: string; case?: string } => ({
+  ): {
+    tab?: string;
+    notice?: string;
+    call?: string;
+    q?: string;
+    case?: string;
+    interviewer?: string;
+    result?: string;
+    topic?: string;
+  } => ({
     ...(typeof s.tab === 'string' ? { tab: s.tab } : {}),
+    // The review queue filtered by interviewer and result (from Metrics, for one).
+    ...(typeof s.interviewer === 'string' ? { interviewer: s.interviewer } : {}),
+    ...(typeof s.result === 'string' ? { result: s.result } : {}),
+    // The settings topic to open (the goals, the privacy).
+    ...(typeof s.topic === 'string' ? { topic: s.topic } : {}),
     // The questionnaire whose cases, web surveys or paper forms are shown.
     ...(typeof s.q === 'string' ? { q: s.q } : {}),
     // The case open in the case list, so it can be linked to and Back closes it.

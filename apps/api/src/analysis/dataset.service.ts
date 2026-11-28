@@ -6,6 +6,15 @@ import { type AnalysisTx } from './analysis-repo.js';
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+/**
+ * A yes/no that may come from the address (`?approvedOnly=false`) or from JSON. `z.coerce.boolean`
+ * would read the text "false" as true (any non-empty string is), so the words are read as such.
+ */
+export const QueryFlag = z.union([
+  z.boolean(),
+  z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1'),
+]);
+
 /** Which interviews a topline, summary or export reads. */
 export const DataFilter = z.object({
   questionnaireId: z.uuid().optional(),
@@ -13,7 +22,7 @@ export const DataFilter = z.object({
   from: Day.optional(),
   to: Day.optional(),
   interviewerId: z.uuid().optional(),
-  approvedOnly: z.coerce.boolean().optional(),
+  approvedOnly: QueryFlag.optional(),
 });
 export type DataFilter = z.infer<typeof DataFilter>;
 

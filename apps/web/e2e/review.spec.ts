@@ -79,6 +79,12 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await queued.getByRole('button', { name: `Review ${caseId}` }).click();
   const screen = sup.getByTestId('review-screen');
   await expect(screen.locator('[data-qkey="A2_AGE"] [data-testid="answer"]')).toHaveText('15');
+  // Where the interview sits: Projects / the project / Supervision / the case.
+  const crumbs = sup.getByRole('navigation', { name: 'Breadcrumb' });
+  await expect(crumbs.getByRole('link', { name: 'Household Survey 2026' })).toBeVisible();
+  await expect(crumbs.getByRole('link', { name: 'Supervision' })).toBeVisible();
+  await expect(crumbs.locator('[aria-current="page"]')).toHaveText(`Case ${caseId}`);
+  await shot(sup, 'v2-review-breadcrumbs', { fullPage: false });
   await screen.getByRole('button', { name: 'Comment A2_AGE' }).click();
   await overlaysSettled(sup, 1);
   await sup.getByLabel('Comment', { exact: true }).fill('La cédula dice 16 años.');

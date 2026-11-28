@@ -233,6 +233,32 @@ describe.skipIf(!configured)(
         iUser.id,
       ]);
       expect((await get(client, `/projects/${project}/metrics/interviewers`)).status).toBe(403);
+      expect(team.body.teams).toEqual([]);
+      expect(own.body.teams).toBeUndefined();
+
+      // A team of the organisation: offered to choose from, and its members only once chosen.
+      const crew = randomUUID();
+      await sql`INSERT INTO teams (id, tenant_id, name) VALUES (${crew}, ${tenant.id}, 'Cuadrilla Sur')`.execute(
+        t.owner,
+      );
+      await sql`INSERT INTO team_members (team_id, user_id, tenant_id)
+        VALUES (${crew}, ${iUser.id}, ${tenant.id})`.execute(t.owner);
+      const withTeams = await get(sup, `/projects/${project}/metrics/interviewers`);
+      expect(withTeams.body.teams).toEqual([{ id: crew, name: 'Cuadrilla Sur' }]);
+      const ofTeam = await get(
+        sup,
+        `/projects/${project}/metrics/interviewers?teamId=${crew.toUpperCase()}`,
+      );
+      expect(
+        ofTeam.body.interviewers.map((r: { interviewerId: string }) => r.interviewerId),
+      ).toEqual([iUser.id]);
+      const empty = await get(
+        sup,
+        `/projects/${project}/metrics/interviewers?teamId=${randomUUID()}`,
+      );
+      expect(empty.status).toBe(200);
+      expect(empty.body.interviewers).toEqual([]);
+      await sql`DELETE FROM teams WHERE id = ${crew}`.execute(t.owner);
     });
 
     it('tabulates the data: topline, crosstab and filters', async () => {
@@ -251,6 +277,19 @@ describe.skipIf(!configured)(
       expect(age).toMatchObject({ kind: 'numeric', n: 2, mean: 40 });
       const media = top.body.items.find((i: { name: string }) => i.name === 'MEDIA');
       expect(media.rows.map((r: { count: number }) => r.count)).toEqual([2, 2]);
+
+      // `approvedOnly=false` in the address means all of them (the text "false" is not true).
+      const all = await get(client, `/projects/${project}/topline?approvedOnly=false`);
+      expect(all.status, JSON.stringify(all.body)).toBe(200);
+      expect(all.body.n).toBe(3);
+      const onlyApproved = await get(client, `/projects/${project}/topline?approvedOnly=true`);
+      expect(onlyApproved.body.n).toBe(top.body.approved);
+      const summaryAll = await get(client, `/projects/${project}/summary?approvedOnly=false`);
+      expect(summaryAll.body.filters.approvedOnly).toBe(false);
+      expect(summaryAll.body.kpis.completes).toBe(3);
+      expect((await get(client, `/projects/${project}/topline?approvedOnly=maybe`)).status).toBe(
+        400,
+      );
 
       const filtered = await get(client, `/projects/${project}/topline?where=ZONE:2`);
       expect(filtered.body.n).toBe(1);
@@ -331,6 +370,34 @@ describe.skipIf(!configured)(
         (e: { id: string }) => e.id === lean.body.id,
       );
       expect(leanRow).toMatchObject({ personal: false, downloads: { count: 0, last: null } });
+
+      // A CSV with its codebook: both in a ZIP (stored, so the names and texts read as they are).
+      const book = await post(pm, `/projects/${project}/exports`, {
+        format: 'csv',
+        codebook: true,
+      });
+      expect(book.status, JSON.stringify(book.body)).toBe(201);
+      await jobs.drain();
+      const zipped = await get(pm, `/projects/${project}/exports/${book.body.id}/file`)
+        .buffer(true)
+        .parse((res, cb) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => cb(null, Buffer.concat(chunks)));
+        });
+      expect(zipped.status).toBe(200);
+      expect(zipped.headers['content-disposition']).toMatch(/filename=".+\.zip"/);
+      const bytes = zipped.body as Buffer;
+      expect(bytes.subarray(0, 4).toString('latin1')).toBe('PK\x03\x04');
+      const inside = bytes.toString('utf8');
+      expect(inside).toMatch(/_codebook_variables\.csv/);
+      expect(inside).toMatch(/_codebook_values\.csv/);
+      expect(inside).toContain('table,name,label,type,measure');
+      expect(inside).toContain('interview_id,case_id,case_code,mode,status');
+      const bookRow = (await get(pm, `/projects/${project}/exports`)).body.find(
+        (e: { id: string }) => e.id === book.body.id,
+      );
+      expect(bookRow.options).toMatchObject({ format: 'csv', codebook: true });
     });
 
     it('shares a read-only summary by link until it is revoked', async () => {
