@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { expectAccessible, login } from './helpers.js';
+import { expectAccessible, login, previewSetup } from './helpers.js';
 
 /**
  * Every question type, as respondents see it, passes axe (contrast included) before and after
@@ -9,7 +9,9 @@ async function openAllTypes(page: Page, mode: 'CAWI' | 'CAPI') {
   await login(page);
   await page.getByRole('link', { name: 'Open the preview' }).click();
   await expect(page.getByRole('heading', { name: 'Questionnaire preview' })).toBeVisible();
-  // The sample picker is in the folded "Questionnaire: …" line.
+  // The sample picker is in the folded "Questionnaire: …" line (on a phone, inside the folded
+  // test set-up).
+  await previewSetup(page);
   await page.getByTestId('preview-source').locator('summary').first().click();
   await page
     .locator('select', { has: page.locator('option[value="all-types"]') })

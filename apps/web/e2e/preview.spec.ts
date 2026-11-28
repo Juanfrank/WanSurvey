@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { expectAccessible, login, shot } from './helpers.js';
+import { expectAccessible, login, previewSetup, shot } from './helpers.js';
 
 async function openPreview(page: Page) {
   await login(page);
@@ -97,8 +97,15 @@ test('respondents on a phone get one question per page; PAPI prints routing as i
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openPreview(page);
+  // On a phone the test's set-up is folded behind one line, so the question is on screen.
+  await expect(page.getByTestId('mode')).toBeHidden();
+  await expect(page.getByTestId('preview-source')).toBeHidden();
+  await previewSetup(page);
   await page.getByTestId('mode').selectOption('CAWI');
+  await previewSetup(page, false);
+  await expect(page.getByRole('button', { name: /^Set up the test/ })).toContainText('CAWI');
   await expect(page.locator('[data-qkey]')).toHaveCount(1);
+  await expect(page.locator('[data-qkey]')).toBeInViewport();
   // No sideways scrolling at phone width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await expect(page.locator('[data-qkey]')).toContainText(

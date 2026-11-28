@@ -4,6 +4,7 @@ import { connectDb } from './db.js';
 import {
   expectAccessible,
   login,
+  previewSetup,
   openAccount,
   PM,
   pickOrganisation,
@@ -75,9 +76,14 @@ test('a web respondent on a phone: keyboard only, 44 px targets, nothing sideway
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
   await page.getByRole('link', { name: 'Open the preview' }).click();
+  await previewSetup(page);
   await page.getByTestId('mode').selectOption('CAWI');
+  await previewSetup(page, false);
   const q = page.locator('[data-qkey]');
   await expect(q).toContainText('estamos realizando una encuesta');
+  // Folding the set-up left the focus on its button: start from the question, as a
+  // respondent's page does.
+  await q.focus();
 
   // Every control a respondent touches is at least 44 × 44 CSS pixels (WCAG 2.5.5).
   const small = async () =>

@@ -69,7 +69,9 @@ export function AsSeenFrame({
               <span className="size-2.5 rounded-full bg-emerald-400" />
             </div>
           ) : null}
-          <div className={narrow ? 'h-[720px] overflow-y-auto' : 'max-h-[760px] overflow-y-auto'}>
+          <div
+            className={narrow ? 'max-h-[720px] overflow-y-auto' : 'max-h-[760px] overflow-y-auto'}
+          >
             <Shell embedded title={title} status={t('preview.asSeen.saved')}>
               <InterviewRunner
                 key={`cawi-${device}`}

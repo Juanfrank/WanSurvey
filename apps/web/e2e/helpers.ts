@@ -192,3 +192,25 @@ export async function resultsSection(page: Page, section: 'Summary' | 'Dashboard
       .click();
   } else await gotoTab(page, 'Metrics');
 }
+
+/** Picks one of the selected item's actions behind "⋯" in the designer's editor header. */
+export async function itemAction(page: Page, id: string, action: string | RegExp) {
+  await page.getByRole('button', { name: `More actions for ${id}` }).click();
+  await page
+    .getByRole('menu', { name: `More actions for ${id}` })
+    .getByRole('menuitem', { name: action })
+    .click();
+}
+
+/**
+ * Opens (or folds back) the preview's test set-up (questionnaire, mode, language…): below
+ * 768 px it is folded behind "Set up the test"; wider, it is always open and this does nothing.
+ */
+export async function previewSetup(page: Page, open = true) {
+  const fold = page.getByRole('button', { name: /^Set up the test/ });
+  // The set-up is there once the questionnaire runs: the fold, or the open mode picker.
+  await expect(fold.or(page.getByTestId('mode')).first()).toBeVisible();
+  if (!(await fold.count())) return;
+  if ((await fold.getAttribute('aria-expanded')) !== String(open)) await fold.click();
+  await expect(fold).toHaveAttribute('aria-expanded', String(open));
+}

@@ -154,20 +154,43 @@ function CopyBox({ label, value, id }: { label: string; value: string; id: strin
   );
 }
 
+/** An attribute value or text in copied HTML, with quotes and markup characters escaped. */
+const escapeHtml = (v: string) =>
+  v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * The HTML pasted into an e-mail: a plain table of faces, each one a link. Plain HTML only (no
+ * React `className`, no classes: e-mail clients drop style sheets), its values escaped.
+ */
+export function feedbackEmailHtml(
+  point: Pick<FeedbackPoint, 'url' | 'faces'>,
+  labels: string[],
+): string {
+  const scores = Array.from({ length: point.faces }, (_, i) => i + 1);
+  return [
+    '<table role="presentation" cellpadding="6"><tr>',
+    ...scores.map((s) => {
+      const label = escapeHtml(labels[s - 1] ?? '');
+      return `  <td align="center"><a href="${escapeHtml(`${point.url}?r=${s}`)}" style="font-size:36px;text-decoration:none" title="${label}">${EMOJI[point.faces][s - 1]}</a><br><span style="font:12px sans-serif">${label}</span></td>`;
+    }),
+    '</tr></table>',
+  ].join('\n');
+}
+
+/** The HTML that puts the feedback page in a web page. */
+export function feedbackIframeHtml(
+  point: Pick<FeedbackPoint, 'url' | 'name' | 'askComment'>,
+): string {
+  return `<iframe src="${escapeHtml(`${point.url}?embed=1`)}" title="${escapeHtml(point.name)}" width="380" height="${point.askComment ? 320 : 190}" style="border:0"></iframe>`;
+}
+
 /** One link per face, and ready-made code for an e-mail and for a web page. */
 export function FeedbackLinks({ point }: { point: FeedbackPoint }) {
   const { t } = useTranslation();
   const scores = Array.from({ length: point.faces }, (_, i) => i + 1);
   const labels = t(`feedback.labels${point.faces}`, { returnObjects: true }) as string[];
-  const html = [
-    '<div className="overflow-x-auto"><table role="presentation" cellpadding="6"><tr>',
-    ...scores.map(
-      (s) =>
-        `  <td align="center"><a href="${point.url}?r=${s}" style="font-size:36px;text-decoration:none" title="${labels[s - 1]}">${EMOJI[point.faces][s - 1]}</a><br><span style="font:12px sans-serif">${labels[s - 1]}</span></td>`,
-    ),
-    '</tr></table></div>',
-  ].join('\n');
-  const iframe = `<iframe src="${point.url}?embed=1" title="${point.name}" width="380" height="${point.askComment ? 320 : 190}" style="border:0"></iframe>`;
+  const html = feedbackEmailHtml(point, labels);
+  const iframe = feedbackIframeHtml(point);
   return (
     <div className="flex flex-col gap-4 rounded-md bg-slate-50 p-3" data-testid="feedback-links">
       <p className="text-sm text-slate-600">{t('feedback.linksHelp')}</p>

@@ -2,7 +2,15 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { buildModel, compile, type CompiledQuestionnaire } from '@wansurvey/logic';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -112,6 +120,15 @@ export function DesignerPage() {
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const editorRef = useRef<HTMLElement>(null);
   const outline = useDrawer('ws.outline.pinned');
+  // The sticky toolbar's height (it wraps when narrow): the pinned outline sticks just under it.
+  const [toolbar, setToolbar] = useState<HTMLDivElement | null>(null);
+  const [toolbarH, setToolbarH] = useState(0);
+  useEffect(() => {
+    if (!toolbar || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setToolbarH(toolbar.offsetHeight));
+    ro.observe(toolbar);
+    return () => ro.disconnect();
+  }, [toolbar]);
   // Alt+O, anywhere on the Design tab: the outline (opens the drawer when it is not pinned,
   // closes it when open, and puts focus on the current row).
   useEffect(() => {
@@ -243,12 +260,23 @@ export function DesignerPage() {
         <EditingLanguageContext.Provider value={lang}>
           <SourceLanguageContext.Provider value={draft.defaultLanguage ?? null}>
             <FoldHintsContext.Provider value={true}>
-              <div className="flex flex-col gap-4" onKeyDown={onKeyDown}>
+              <div
+                className="flex flex-col gap-4"
+                onKeyDown={onKeyDown}
+                style={
+                  toolbarH ? ({ '--sticky-top': `${toolbarH + 8}px` } as CSSProperties) : undefined
+                }
+              >
                 {/* The breadcrumb, with the questionnaire's name as the h1, beside the account. */}
                 <PageHeader
                   nowrap
                   parents={[
-                    <Link key="all" to="/projects" className="hover:underline">
+                    <Link
+                      key="all"
+                      to="/projects"
+                      title={t('designer.projects')}
+                      className="hover:underline"
+                    >
                       {t('designer.projects')}
                     </Link>,
                     <Link
@@ -279,13 +307,16 @@ export function DesignerPage() {
                 {/* One toolbar on every tab, kept at the top while scrolling: the name, then the
                 language, save state, undo, redo and publish as one group on the right. */}
                 <div
-                  className="sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-2 py-1"
+                  ref={setToolbar}
+                  className="@container sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-2 py-1"
                   data-testid="designer-toolbar"
                 >
                   <label className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-[6rem]">
                     <span className="sr-only">{t('designer.name')}</span>
+                    {/* A long name is cut short with "…" (shown whole on pointing). */}
                     <input
-                      className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-lg font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      className="min-w-0 flex-1 truncate rounded-md border border-transparent px-2 py-1 text-lg font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      title={d.name}
                       value={d.name}
                       readOnly={!canEdit}
                       onChange={(e) => d.rename(e.target.value)}
@@ -462,10 +493,18 @@ export function DesignerPage() {
 
                       <Tabs.Content
                         value="design"
-                        className="grid grid-cols-[3rem_minmax(0,1fr)] gap-4 min-[900px]:grid-cols-1"
+                        className={`grid gap-4 ${
+                          outline.inline
+                            ? 'grid-cols-[22rem_minmax(0,1fr)]'
+                            : 'grid-cols-[3rem_minmax(0,1fr)] min-[900px]:grid-cols-1'
+                        }`}
                       >
+                        {/* Pinned, the outline is a column under the header and the toolbar,
+                        which keep the page's whole width (the breadcrumb and the name read in
+                        full); folded, it is the rail along the side panel. */}
                         <SideDrawer
                           id="designer-outline"
+                          column
                           drawer={outline}
                           side="left"
                           label={t('designer.outline.title')}
@@ -753,7 +792,7 @@ export function DesignerPage() {
 
 /**
  * The editor's title row: what is selected (icon, kind and name), with arrows at each end to
- * step to the previous or next row of the outline, and "Save to library" on the right.
+ * step to the previous or next row of the outline, and the item's other actions ("Save to library…") behind "⋯" on the right.
  */
 function EditorHeader({
   draft,
@@ -803,20 +842,36 @@ function EditorHeader({
       >
         <span aria-hidden>‹</span>
       </button>
-      <h2 className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
-        {node ? <KindIcon k={iconKeyOf(node)} className="size-5 text-indigo-ink-700" /> : null}
-        <span className="truncate">{kind}</span>
+      {/* The type and the code read whole: short of room, the code goes under the type
+          (and is only cut short when even its own line is too narrow). */}
+      <h2 className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 text-lg font-semibold">
+        <span className="flex min-w-0 max-w-full items-center gap-2">
+          {node ? (
+            <KindIcon k={iconKeyOf(node)} className="size-5 flex-none text-indigo-ink-700" />
+          ) : null}
+          <span className="truncate">{kind}</span>
+        </span>
         {node ? (
-          <span className="truncate font-mono text-base font-normal text-slate-500">
+          <span className="min-w-0 max-w-full truncate font-mono text-base font-normal text-slate-500">
             {nodeName(node)}
           </span>
         ) : null}
       </h2>
       {comments}
-      {onSave ? (
-        <button type="button" className={smallBtn} onClick={onSave}>
-          {t('designer.library.save')}
-        </button>
+      {/* The item's less used actions behind "⋯", so its type and code read in full. */}
+      {onSave && node ? (
+        <MoreMenu
+          label={t('designer.itemMore', { id: nodeName(node) })}
+          className="h-8 shrink-0"
+          entries={[
+            {
+              type: 'item',
+              id: 'save-library',
+              label: t('designer.outline.menuSaveLibrary'),
+              onSelect: onSave,
+            },
+          ]}
+        />
       ) : null}
       <button
         type="button"
@@ -987,9 +1042,22 @@ function SaveStatus({ status }: { status: DraftApi['status'] }) {
       : status === 'saved'
         ? 'text-emerald-ink-800'
         : 'text-slate-600';
+  const icon =
+    status === 'saved' ? '✓' : status === 'saving' ? '…' : status === 'dirty' ? '●' : '⚠';
+  const text = t(`designer.status.${status}`);
+  // In words when the toolbar has room; in a narrow one, a sign that keeps the words as its
+  // name (read by screen readers, shown on pointing).
   return (
-    <span className={`text-sm ${style}`} data-testid="save-status" data-status={status}>
-      {t(`designer.status.${status}`)}
+    <span
+      className={`text-sm ${style}`}
+      data-testid="save-status"
+      data-status={status}
+      title={text}
+    >
+      <span aria-hidden="true" className="inline-block w-4 text-center font-bold @2xl:hidden">
+        {icon}
+      </span>
+      <span className="sr-only @2xl:not-sr-only">{text}</span>
     </span>
   );
 }

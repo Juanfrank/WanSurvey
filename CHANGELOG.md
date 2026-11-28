@@ -135,6 +135,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     the questionnaire column shows only when a goal counts a single questionnaire, and Remove is
     a ✕. A centred dialog's buttons (`Dialog`'s `footer`) stay at its bottom while the body
     scrolls: the user's roles dialog uses it, so Cancel and Save roles are always in view.
+  - **Designer and preview (second audit)**: with the outline pinned, the breadcrumb and the
+    toolbar (name, save state, undo, redo, Publish) span the page's whole width above the
+    outline and the editor, as on Settings: the outline is a sticky column under them instead of
+    a pane over the whole height. A long questionnaire name ends in "…" (whole on pointing);
+    short of room, the breadcrumb's earlier steps fold to "…" before its last one, and the save
+    state becomes a sign that keeps its words as its name. "Save to library…" moved to the
+    item's "⋯" menu, so the editor's header shows the question type and code in full. In the
+    preview below 768 px, the questionnaire line and the mode, language, date, quotas, JSON and
+    restart controls fold behind "Set up the test ▸" (with the mode, language and checks in the
+    line), so the question is on the first screen; the phone frame is as tall as its content.
 
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the
@@ -625,6 +635,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- **Feedback links**: the HTML copied for an e-mail carried React's `className` attribute; it is
+  now a plain table, with its labels (and the web page embed's name) escaped.
 - **The waiting page speaks the interface's language**: "Your account is active, but no role has
   been assigned…" was always in English; it is now translated (Spanish too), with the
   organisation's name.

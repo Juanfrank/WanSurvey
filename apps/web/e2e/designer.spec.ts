@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from './fixtures.js';
-import { designerTab, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import {
+  designerTab,
+  expectAccessible,
+  itemAction,
+  login,
+  shot,
+  pickOrganisation,
+} from './helpers.js';
 
 const outlineItem = (page: Page, name: string) =>
   page.getByRole('treeitem').filter({ has: page.locator(`span.font-mono:text-is("${name}")`) });
@@ -499,14 +506,14 @@ test('reviewers comment, editors see who is here, and items go to and from the l
 
   // Save the question to the library, then insert it again: it gets a fresh name. With
   // errors (options without labels) it cannot be saved yet.
-  await pm.getByRole('button', { name: 'Save to library' }).click();
+  await itemAction(pm, 'A_CONSENT', 'Save to library…');
   const save = pm.getByRole('dialog', { name: /Save A_CONSENT to the question library/ });
   await expect(save.getByTestId('library-errors')).toBeVisible();
   await expect(save.getByRole('button', { name: 'Save to library' })).toBeDisabled();
   await save.getByRole('button', { name: 'Cancel' }).click();
   await pm.getByLabel('Label of option 1 (es)').fill('Sí');
   await pm.getByLabel('Label of option 2 (es)').fill('No');
-  await pm.getByRole('button', { name: 'Save to library' }).click();
+  await itemAction(pm, 'A_CONSENT', 'Save to library…');
   await expect(save.getByTestId('library-errors')).toHaveCount(0);
   await save.getByLabel('Name').fill('Consent question');
   await save.getByLabel('Tags (comma separated)').fill('consent, core');

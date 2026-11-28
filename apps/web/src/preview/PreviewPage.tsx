@@ -2,7 +2,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { InterviewRunner, PaperForm, pick, type PaperContext } from '@wansurvey/renderer';
 import { MODES, type Mode } from '@wansurvey/schema';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, PageHeader } from '../routes/ui.js';
 import {
@@ -16,6 +16,7 @@ import {
 } from './panels.js';
 import { usePreview } from './usePreview.js';
 import { AsSeenFrame } from './AsSeen.js';
+import { useMedia } from '../routes/SideDrawer.js';
 
 const selectCls = 'max-w-full rounded-md border border-slate-300 bg-white px-2 py-1.5';
 
@@ -24,6 +25,9 @@ export function PreviewPage() {
   const { t, i18n } = useTranslation();
   const p = usePreview();
   const [paste, setPaste] = useState('');
+  // Open or folded, kept across a change of source (the line moves in and out of the set-up).
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const q = p.loaded.questionnaire;
   const scenarios = useLocalScenarios(q?.id ?? '');
   const sampleId = p.source.kind === 'sample' ? p.source.id : '';
@@ -36,101 +40,109 @@ export function PreviewPage() {
   const errors = p.loaded.diagnostics.filter((d) => d.severity === 'error').length;
   const warnings = p.loaded.diagnostics.length - errors;
 
+  const runs = !!(q && p.loaded.compiled && p.session);
+
+  // The questionnaire (sample, file or pasted JSON) and its checks, folded into one line with
+  // the counts, so the interview starts near the top.
+  const source = (
+    <details
+      open={sourceOpen}
+      onToggle={(e) => setSourceOpen(e.currentTarget.open)}
+      className="no-print group rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-card"
+      data-testid="preview-source"
+    >
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 text-sm [&::-webkit-details-marker]:hidden">
+        <span aria-hidden="true" className="text-xs text-slate-500 group-open:rotate-90">
+          ▶
+        </span>
+        <span className="font-medium">{t('preview.source')}:</span>
+        <span className="min-w-0 truncate">{sourceTitle}</span>
+        {q ? (
+          <>
+            <span aria-hidden="true" className="text-slate-400">
+              ·
+            </span>
+            {errors ? (
+              <span className="font-medium text-red-ink-800">
+                {t('preview.errorsCount', { count: errors })}
+              </span>
+            ) : null}
+            {warnings ? (
+              <span className="text-amber-ink-900">
+                {t('preview.warningsCount', { count: warnings })}
+              </span>
+            ) : null}
+            {!errors && !warnings ? (
+              <span className="text-emerald-ink-800">{t('preview.noIssues')}</span>
+            ) : null}
+          </>
+        ) : null}
+      </summary>
+      <div className="mt-3 flex flex-col gap-4 pb-2">
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
+            <span className="font-medium">{t('preview.sample')}</span>
+            <select
+              className={selectCls}
+              value={sampleId}
+              onChange={(e) =>
+                e.target.value && p.setSource({ kind: 'sample', id: e.target.value })
+              }
+            >
+              {p.source.kind === 'json' ? <option value="">{p.source.name}</option> : null}
+              {SAMPLES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="cursor-pointer rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+            {t('preview.openFile')}
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) p.setSource({ kind: 'json', text: await file.text(), name: file.name });
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
+        <details open={pasteOpen} onToggle={(e) => setPasteOpen(e.currentTarget.open)}>
+          <summary className="cursor-pointer text-sm font-medium">{t('preview.paste')}</summary>
+          <div className="mt-2 flex flex-col gap-2">
+            <label className="sr-only" htmlFor="paste-json">
+              {t('preview.paste')}
+            </label>
+            <textarea
+              id="paste-json"
+              className="h-40 rounded-md border border-slate-300 p-2 font-mono text-xs"
+              value={paste}
+              onChange={(e) => setPaste(e.target.value)}
+            />
+            <button
+              type="button"
+              className="self-start rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+              onClick={() => p.setSource({ kind: 'json', text: paste, name: 'pasted.json' })}
+            >
+              {t('preview.load')}
+            </button>
+          </div>
+        </details>
+
+        {q ? <DiagnosticsPanel diagnostics={p.loaded.diagnostics} /> : null}
+      </div>
+    </details>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t('preview.title')} />
-
-      {/* The questionnaire (sample, file or pasted JSON) and its checks, folded into one line
-      with the counts, so the interview starts near the top. */}
-      <details
-        className="no-print group rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-card"
-        data-testid="preview-source"
-      >
-        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 text-sm [&::-webkit-details-marker]:hidden">
-          <span aria-hidden="true" className="text-xs text-slate-500 group-open:rotate-90">
-            ▶
-          </span>
-          <span className="font-medium">{t('preview.source')}:</span>
-          <span className="min-w-0 truncate">{sourceTitle}</span>
-          {q ? (
-            <>
-              <span aria-hidden="true" className="text-slate-400">
-                ·
-              </span>
-              {errors ? (
-                <span className="font-medium text-red-ink-800">
-                  {t('preview.errorsCount', { count: errors })}
-                </span>
-              ) : null}
-              {warnings ? (
-                <span className="text-amber-ink-900">
-                  {t('preview.warningsCount', { count: warnings })}
-                </span>
-              ) : null}
-              {!errors && !warnings ? (
-                <span className="text-emerald-ink-800">{t('preview.noIssues')}</span>
-              ) : null}
-            </>
-          ) : null}
-        </summary>
-        <div className="mt-3 flex flex-col gap-4 pb-2">
-          <div className="flex flex-wrap items-end gap-4">
-            <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
-              <span className="font-medium">{t('preview.sample')}</span>
-              <select
-                className={selectCls}
-                value={sampleId}
-                onChange={(e) =>
-                  e.target.value && p.setSource({ kind: 'sample', id: e.target.value })
-                }
-              >
-                {p.source.kind === 'json' ? <option value="">{p.source.name}</option> : null}
-                {SAMPLES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="cursor-pointer rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
-              {t('preview.openFile')}
-              <input
-                type="file"
-                accept="application/json,.json"
-                className="sr-only"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (file) p.setSource({ kind: 'json', text: await file.text(), name: file.name });
-                  e.target.value = '';
-                }}
-              />
-            </label>
-          </div>
-          <details>
-            <summary className="cursor-pointer text-sm font-medium">{t('preview.paste')}</summary>
-            <div className="mt-2 flex flex-col gap-2">
-              <label className="sr-only" htmlFor="paste-json">
-                {t('preview.paste')}
-              </label>
-              <textarea
-                id="paste-json"
-                className="h-40 rounded-md border border-slate-300 p-2 font-mono text-xs"
-                value={paste}
-                onChange={(e) => setPaste(e.target.value)}
-              />
-              <button
-                type="button"
-                className="self-start rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-                onClick={() => p.setSource({ kind: 'json', text: paste, name: 'pasted.json' })}
-              >
-                {t('preview.load')}
-              </button>
-            </div>
-          </details>
-
-          {q ? <DiagnosticsPanel diagnostics={p.loaded.diagnostics} /> : null}
-        </div>
-      </details>
+      {/* While the interview runs, the source goes with the test's set-up (folded on a phone). */}
+      {runs ? null : source}
       {p.loaded.jsonError ? (
         <p role="alert" className="no-print text-sm text-red-ink-800">
           {t('preview.invalidJson', { error: p.loaded.jsonError })}
@@ -149,9 +161,7 @@ export function PreviewPage() {
         </div>
       ) : null}
 
-      {q && p.loaded.compiled && p.session ? (
-        <PreviewWorkbench p={p} scenarios={scenarios} />
-      ) : null}
+      {runs ? <PreviewWorkbench p={p} scenarios={scenarios} setup={source} /> : null}
       <span hidden>{i18n.resolvedLanguage}</span>
     </div>
   );
@@ -164,11 +174,18 @@ export function PreviewPage() {
 export function PreviewWorkbench({
   p,
   scenarios,
+  setup,
 }: {
   p: ReturnType<typeof usePreview>;
   scenarios: ScenarioStore;
+  /** Shown before the controls, and folded with them on a narrow screen (the source line). */
+  setup?: ReactNode;
 }) {
   const { t } = useTranslation();
+  // Below 768 px the set-up (source, mode, language, date, quotas, JSON, restart) folds behind
+  // one "Set up the test" line, so the question is on the first screen.
+  const narrow = useMedia('(max-width: 767px)');
+  const [setupOpen, setSetupOpen] = useState(false);
   const [contextText, setContextText] = useState(() => JSON.stringify(p.options.context, null, 2));
   const [contextError, setContextError] = useState<string | null>(null);
   // As the field sees it (the interviewer's or respondent's screen), or the bare test runner.
@@ -183,8 +200,11 @@ export function PreviewWorkbench({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- switches mode only when it turns invalid
   }, [off]);
   if (!q || !p.loaded.compiled || !p.session) return null;
-  return (
+  const errors = p.loaded.diagnostics.filter((d) => d.severity === 'error').length;
+  const warnings = p.loaded.diagnostics.length - errors;
+  const controls = (
     <>
+      {setup}
       {/* Mode, language, date and full quotas in one slim bar above the interview. */}
       <div
         className="no-print flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-card"
@@ -288,6 +308,57 @@ export function PreviewWorkbench({
           {t('preview.reset')}
         </button>
       </div>
+    </>
+  );
+  return (
+    <>
+      {narrow ? (
+        <>
+          <button
+            type="button"
+            aria-expanded={setupOpen}
+            aria-controls="preview-setup"
+            onClick={() => setSetupOpen(!setupOpen)}
+            className="no-print flex min-h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-left text-sm shadow-card hover:bg-slate-50"
+            data-testid="preview-setup-toggle"
+          >
+            <span className="flex-none font-medium">{t('preview.setup')}</span>
+            <span
+              aria-hidden="true"
+              className={`flex-none text-xs text-slate-500 ${setupOpen ? 'rotate-90' : ''}`}
+            >
+              ▸
+            </span>
+            {/* What is set now, so it can stay folded: mode, language and the checks. */}
+            <span className="min-w-0 truncate text-slate-600">
+              {p.options.mode} · {p.options.language}
+              {errors ? (
+                <span className="text-red-ink-800">
+                  {' · '}
+                  {t('preview.errorsCount', { count: errors })}
+                </span>
+              ) : warnings ? (
+                <span className="text-amber-ink-900">
+                  {' · '}
+                  {t('preview.warningsCount', { count: warnings })}
+                </span>
+              ) : null}
+              {/* Test data that is not valid JSON is not used: said here too while folded. */}
+              {contextError ? (
+                <span className="text-red-ink-800">
+                  {' · '}
+                  {t('preview.contextInvalid')}
+                </span>
+              ) : null}
+            </span>
+          </button>
+          <div id="preview-setup" hidden={!setupOpen} className="flex flex-col gap-6">
+            {controls}
+          </div>
+        </>
+      ) : (
+        controls
+      )}
 
       {/* The interview gets the full width (as the field sees it); the tracer sits beside it
           only when there is room for both. */}

@@ -117,6 +117,7 @@ export function SideDrawer({
   className = '',
   float,
   docked = false,
+  column = false,
   children,
 }: {
   id: string;
@@ -141,6 +142,13 @@ export function SideDrawer({
    * below it.
    */
   docked?: boolean;
+  /**
+   * Pinned, the pane is a sticky column of the page's own grid (under the page's header and
+   * toolbar) instead of a column glued to the side panel over the whole height: the header
+   * keeps the page's full width. The caller's grid gives it its column (`width` is not used),
+   * and `--sticky-top` (default 4rem) says where it sticks: under the page's sticky toolbar.
+   */
+  column?: boolean;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -230,9 +238,21 @@ export function SideDrawer({
   const line = side === 'left' ? 'min-[900px]:border-r' : 'min-[900px]:border-l';
   useLayoutEffect(() => {
     const root = document.documentElement.style;
-    root.setProperty(`--pane-${side}`, inline ? width : float ? '0px' : '3rem');
+    root.setProperty(`--pane-${side}`, inline ? (column ? '0px' : width) : float ? '0px' : '3rem');
     return () => void root.removeProperty(`--pane-${side}`);
-  }, [side, inline, width, float]);
+  }, [side, inline, width, float, column]);
+
+  if (inline && column)
+    return (
+      <aside
+        id={id}
+        aria-label={label}
+        className={`sticky top-[var(--sticky-top,4rem)] flex max-h-[calc(100vh-var(--sticky-top,4rem)-1rem)] min-w-0 flex-col gap-1 self-start overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}
+      >
+        <div className="no-print flex justify-end">{pin}</div>
+        {children}
+      </aside>
+    );
 
   if (inline)
     return (

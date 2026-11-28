@@ -77,13 +77,15 @@ export function PageHeader({
   );
   const body = parents?.length ? (
     <nav aria-label={t('ui.breadcrumb')} className="min-w-0 text-sm text-slate-600">
-      {/* One line: the steps shrink (their text cut short) instead of wrapping; on a phone only
-          the title and the step after it (the top bar has the way back). */}
+      {/* One line: the steps shrink (their text cut short) instead of wrapping. The steps before
+          the title give way first, down to a bare "…" (named in full on pointing), so the last
+          one keeps its words; on a phone only the title and the step after it (the top bar has
+          the way back). */}
       <ol className="flex min-w-0 items-center gap-x-1.5">
         {parents.map((p, i) => (
           <li
             key={i}
-            className="flex min-w-0 max-w-[14rem] items-center gap-1.5 whitespace-nowrap max-sm:hidden [&>:first-child]:truncate"
+            className="flex min-w-[2.25rem] max-w-[14rem] shrink-[1000] items-center gap-1.5 whitespace-nowrap max-sm:hidden [&>:first-child]:min-w-[1em] [&>:first-child]:truncate"
           >
             {p}
             <span aria-hidden="true">/</span>
