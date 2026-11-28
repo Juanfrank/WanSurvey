@@ -9,6 +9,7 @@ import {
 } from '@wansurvey/schema';
 import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { InfoTip } from '../cases/samplingControls.js';
 import { ConditionBuilder, unknownNames } from './ConditionBuilder.js';
 import {
   FieldError,
@@ -163,17 +164,19 @@ export function LogicEditor({
         onChange={(showIf) => onPatch({ showIf })}
       />
 
-      <Group title={t('designer.logic.skips')}>
+      <Group
+        title={t('designer.logic.skips')}
+        // That the skipped answers are cleared is general help: behind the (i) of "Skips".
+        tip={
+          <InfoTip
+            id="skip-clears"
+            term={t('designer.logic.skips')}
+            text={t('designer.logic.skipClears')}
+            align="start"
+          />
+        }
+      >
         <Hint>{t('designer.logic.skipsHelp')}</Hint>
-        {skips.length ? (
-          <p
-            role="note"
-            data-testid="skip-clears"
-            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-ink-900"
-          >
-            {t('designer.logic.skipClears')}
-          </p>
-        ) : null}
         {skips.map((s, i) => (
           <div
             key={i}

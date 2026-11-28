@@ -182,9 +182,12 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expect(mapping).toContainText('lost code(s) 2');
   await mapping.getByLabel('Recode the old answers').check();
   await mapping.getByLabel('New code for 2').selectOption('3');
+  // The server checks the mapping again: until it answers, the problem of the choice before
+  // ("Choose what happens to A_WORK") is not shown and publishing waits.
+  await expect(dialog.getByRole('button', { name: 'Publish version 2' })).toBeEnabled();
+  await expect(mapping).not.toContainText('Choose what happens');
   await shot(page, 'designer-publish-mapping');
   await expectAccessible(page, 'dialog');
-  await expect(dialog.getByRole('button', { name: 'Publish version 2' })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Publish version 2' }).click();
   await expect(page.getByTestId('versions').locator('[data-version="2"]')).toContainText('Yes');
 

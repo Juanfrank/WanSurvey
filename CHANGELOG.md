@@ -533,6 +533,23 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **Users, administration, the designer's skips and the phone's interview bar** (fourth visual
+  audit, J2):
+  - Users: in the roles editor, "Add one row per role…" is behind an (i) beside "Roles"; in the
+    invitation, "They receive an e-mail… (valid 7 days)…" is one line cut short with an (i). When
+    a client's new role asks why (in Users or a project's People), the warning and its "Why do
+    they need it?" field scroll into view instead of staying under the dialog's footer.
+  - Administration on narrow screens (and at 200 % zoom): the section pills keep one line, as a
+    project's tabs; those that do not fit go under "More ▾" and the open one always shows. The
+    measuring of `OverflowTabList` is shared as `useOverflowFit` (`routes/tabs.tsx`).
+  - Designer › Logic: that skipped answers are cleared is behind the (i) of "Skips", not an amber
+    box under it.
+  - Interview on a phone or a tablet: the bar of actions has an opaque background with a line
+    above it from one side of the screen to the other, light or dark, so nothing shows through.
+  - A filter's chip is cut short at 18 rem (whole in its title), so the count keeps its line.
+  - Audit log: with nothing to show, the table says so in a row ("No entries match. Remove a
+    filter…").
+
 - **Fewer fixed paragraphs, a one-line interview bar on phones** (third visual audit, H2):
   - Webhooks, API keys and Teams: whoever may only look sees a compact "Read only" badge in the
     page header; who changes them is behind its (i), not in a paragraph under the title.
@@ -668,6 +685,10 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- **Publishing with a mapping**: just after choosing what happens to a variable's old answers,
+  the dialog still showed the last check's "Choose what happens to A_WORK" until the server
+  checked again. Problems of an older choice are now hidden, and "Publish" waits, until that
+  check answers.
 - **The side panel follows the window until a choice is saved**: a window that grew from a
   phone's width to a laptop's kept the compact panel of the phone, which then opened over the
   page under the pointer (the paper preview's title, mode and tabs were hidden behind it). With

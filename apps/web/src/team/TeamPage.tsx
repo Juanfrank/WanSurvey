@@ -10,9 +10,9 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
-import { permKey, type RolesView } from '../admin/permissions.js';
+import { type RolesView } from '../admin/permissions.js';
 import { Dialog } from '../designer/Dialog.js';
-import { inputCls } from '../designer/fields.js';
+import { FoldedHelp, inputCls } from '../designer/fields.js';
 import { dateTime } from '../format.js';
 import { useMe } from '../routes/AppLayout.js';
 import { InfoTip } from '../cases/samplingControls.js';
@@ -29,6 +29,7 @@ import {
   type ActiveFilter,
   type MenuEntry,
 } from '../routes/ui.js';
+import { ExternalReason } from './ExternalReason.js';
 import { RoleGuide } from './RoleGuide.js';
 import { matchesGrants, redundantRows } from './roles.js';
 
@@ -705,9 +706,23 @@ function RolesEditor({
   const set = (i: number, g: Partial<Grant>) =>
     onChange(value.map((x, j) => (j === i ? { ...x, ...g } : x)));
   return (
-    <fieldset className="flex flex-col gap-2" aria-describedby={`${id}-help`}>
-      <legend className="text-sm font-medium text-slate-700">{t('team.roles.title')}</legend>
-      <p id={`${id}-help`} className="text-sm text-slate-600">
+    <fieldset
+      className="flex flex-col gap-2"
+      // Named by the title alone, not by the (i) button beside it.
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-help`}
+    >
+      <legend className="flex items-center text-sm font-medium text-slate-700">
+        <span id={`${id}-title`}>{t('team.roles.title')}</span>
+        {/* How the rows work is general help: behind the (i), not a paragraph in the form. */}
+        <InfoTip
+          id="team-roles-help"
+          term={t('team.roles.title')}
+          text={`${t('team.roles.help')} ${t('team.roles.rankNote')}`}
+          align="start"
+        />
+      </legend>
+      <p id={`${id}-help`} className="sr-only">
         {t('team.roles.help')} {t('team.roles.rankNote')}
       </p>
       <RoleGuide roles={grantable} />
@@ -822,45 +837,6 @@ function useExternalOpens(before: readonly Grant[], after: readonly Grant[]): st
   return externalAccessOpened(before, after, matrix);
 }
 
-/** The warning and the reason asked before giving an external client such access. */
-function ExternalReason({
-  opens,
-  reason,
-  onReason,
-}: {
-  opens: readonly string[];
-  reason: string;
-  onReason(v: string): void;
-}) {
-  const { t } = useTranslation();
-  if (!opens.length) return null;
-  return (
-    <div
-      role="alert"
-      className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-ink-900"
-      data-testid="external-warning"
-    >
-      <p className="font-medium">{t('team.projectPeople.externalWarning')}</p>
-      <ul className="ml-5 list-disc">
-        {opens.map((p) => (
-          <li key={p}>{t(permKey(p))}</li>
-        ))}
-      </ul>
-      <label className="flex flex-col gap-1 font-medium text-slate-800">
-        {t('team.projectPeople.reason')}
-        <textarea
-          className={`${inputCls} min-h-[3rem] font-normal`}
-          required
-          minLength={3}
-          maxLength={500}
-          value={reason}
-          onChange={(e) => onReason(e.target.value)}
-        />
-      </label>
-    </div>
-  );
-}
-
 function InviteForm({
   grantable,
   projects,
@@ -928,7 +904,7 @@ function InviteForm({
           if (ok) invite.mutate();
         }}
       >
-        <p className="text-sm text-slate-600">{t('team.invite.help')}</p>
+        <FoldedHelp>{t('team.invite.help')}</FoldedHelp>
         <div className="grid gap-3">
           <Field
             id="invite-email"

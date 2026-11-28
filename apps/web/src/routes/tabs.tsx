@@ -113,66 +113,8 @@ export function OverflowTabList({
   const cls = sub ? subTabCls : tabCls;
   const { t } = useTranslation();
   const wrap = useRef<HTMLDivElement>(null);
-  /** The part of the row the tabs have (all of it but `end`). */
-  const room = useRef<HTMLDivElement>(null);
-  const measure = useRef<HTMLDivElement>(null);
-  const narrow = useMedia('(max-width: 639px)');
-  const [width, setWidth] = useState(Number.POSITIVE_INFINITY);
-  const [sizes, setSizes] = useState<number[]>([]);
-
-  useLayoutEffect(() => {
-    const el = room.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const on = () => setWidth(el.clientWidth || Number.POSITIVE_INFINITY);
-    on();
-    const ro = new ResizeObserver(on);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  // The width of every tab (and of "More", last), measured on a hidden copy of the row.
-  const labels = `${items.map((x) => x.label).join('\u0000')}\u0000${t('ui.more')}`;
-  useLayoutEffect(() => {
-    const el = measure.current;
-    if (!el) return;
-    const read = () => {
-      const next = [...el.children].map((c) => (c as HTMLElement).offsetWidth);
-      setSizes((s) => (s.length === next.length && s.every((v, i) => v === next[i]) ? s : next));
-    };
-    read();
-    // Again when the web font arrives or the text changes size (the copy's width follows).
-    let live = true;
-    void document.fonts?.ready.then(() => live && read());
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(read);
-    ro?.observe(el);
-    return () => {
-      live = false;
-      ro?.disconnect();
-    };
-  }, [labels]);
-
-  const kept = items.filter((x) => !x.rarely || x.value === value);
-  let shown = kept;
-  const known = sizes.length === items.length + 1 && sizes.every((s) => s > 0);
-  if (!narrow && known && Number.isFinite(width)) {
-    const w = (x: OverflowTab) => sizes[items.indexOf(x)]! + GAP;
-    const all = kept.reduce((a, x) => a + w(x), 0);
-    if (kept.length < items.length || all > width) {
-      // Room for "More", then the open tab, then the others in order while they fit.
-      let room = width - sizes[items.length]! - GAP;
-      const active = kept.find((x) => x.value === value);
-      if (active) room -= w(active);
-      const fit = new Set(active ? [active.value] : []);
-      for (const x of kept) {
-        if (x === active) continue;
-        if (w(x) > room) break;
-        room -= w(x);
-        fit.add(x.value);
-      }
-      shown = kept.filter((x) => fit.has(x.value));
-    }
-  }
-  const hidden = items.filter((x) => !shown.includes(x));
-
+  // `room` is the part of the row the tabs have (all of it but `end`).
+  const { room, measure, narrow, shown, hidden } = useOverflowFit(items, value, GAP);
   const row = (
     <div
       ref={wrap}
@@ -255,4 +197,84 @@ export function OverflowTabList({
       {row}
     </>
   );
+}
+
+/** What `useOverflowFit` needs of an entry of the row. */
+export interface FitItem {
+  value: string;
+  label: string;
+  rarely?: boolean;
+}
+
+/**
+ * The measuring behind `OverflowTabList`, for a row of other things (the administration's
+ * section links): which entries show in the row and which go in "More ▾".
+ *
+ * Put `room` on the part of the row the entries and "More" share (its width is what they have),
+ * and `measure` on a hidden copy of the row (`invisible absolute w-max`) holding one child per
+ * item, in order, styled as in the row, then one for "More ▾". `gap` is the gap between two
+ * entries, in pixels. Under 640 px (`narrow`) every entry but the `rarely` ones is shown: the
+ * row scrolls sideways there.
+ */
+export function useOverflowFit<T extends FitItem>(items: readonly T[], value: string, gap: number) {
+  const { t } = useTranslation();
+  const room = useRef<HTMLDivElement>(null);
+  const measure = useRef<HTMLDivElement>(null);
+  const narrow = useMedia('(max-width: 639px)');
+  const [width, setWidth] = useState(Number.POSITIVE_INFINITY);
+  const [sizes, setSizes] = useState<number[]>([]);
+
+  useLayoutEffect(() => {
+    const el = room.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const on = () => setWidth(el.clientWidth || Number.POSITIVE_INFINITY);
+    on();
+    const ro = new ResizeObserver(on);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // The width of every entry (and of "More", last), measured on a hidden copy of the row.
+  const labels = `${items.map((x) => x.label).join('\u0000')}\u0000${t('ui.more')}`;
+  useLayoutEffect(() => {
+    const el = measure.current;
+    if (!el) return;
+    const read = () => {
+      const next = [...el.children].map((c) => (c as HTMLElement).offsetWidth);
+      setSizes((s) => (s.length === next.length && s.every((v, i) => v === next[i]) ? s : next));
+    };
+    read();
+    // Again when the web font arrives or the text changes size (the copy's width follows).
+    let live = true;
+    void document.fonts?.ready.then(() => live && read());
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(read);
+    ro?.observe(el);
+    return () => {
+      live = false;
+      ro?.disconnect();
+    };
+  }, [labels]);
+
+  const kept = items.filter((x) => !x.rarely || x.value === value);
+  let shown = kept;
+  const known = sizes.length === items.length + 1 && sizes.every((s) => s > 0);
+  if (!narrow && known && Number.isFinite(width)) {
+    const w = (x: T) => sizes[items.indexOf(x)]! + gap;
+    const all = kept.reduce((a, x) => a + w(x), 0);
+    if (kept.length < items.length || all > width) {
+      // Room for "More", then the open entry, then the others in order while they fit.
+      let left = width - sizes[items.length]! - gap;
+      const active = kept.find((x) => x.value === value);
+      if (active) left -= w(active);
+      const fit = new Set(active ? [active.value] : []);
+      for (const x of kept) {
+        if (x === active) continue;
+        if (w(x) > left) break;
+        left -= w(x);
+        fit.add(x.value);
+      }
+      shown = kept.filter((x) => fit.has(x.value));
+    }
+  }
+  const hidden = items.filter((x) => !shown.includes(x));
+  return { room, measure, narrow, shown, hidden };
 }

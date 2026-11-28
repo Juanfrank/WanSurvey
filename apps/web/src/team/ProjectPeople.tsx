@@ -6,9 +6,9 @@ import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { FoldedHelp, inputCls } from '../designer/fields.js';
-import { permKey } from '../admin/permissions.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, Card, Drawer, ErrorText, MoreMenu, type MenuEntry } from '../routes/ui.js';
+import { ExternalReason } from './ExternalReason.js';
 import { RoleGuide } from './RoleGuide.js';
 
 interface People {
@@ -346,31 +346,7 @@ function PersonDialog({
             </label>
           ))}
         </fieldset>
-        {needsReason ? (
-          <div
-            role="alert"
-            className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-ink-900"
-            data-testid="external-warning"
-          >
-            <p className="font-medium">{t('team.projectPeople.externalWarning')}</p>
-            <ul className="ml-5 list-disc">
-              {opens.map((p) => (
-                <li key={p}>{t(permKey(p))}</li>
-              ))}
-            </ul>
-            <label className="flex flex-col gap-1 font-medium text-slate-800">
-              {t('team.projectPeople.reason')}
-              <textarea
-                className={`${inputCls} min-h-[3rem] font-normal`}
-                required
-                minLength={3}
-                maxLength={500}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </label>
-          </div>
-        ) : null}
+        <ExternalReason opens={opens} reason={reason} onReason={setReason} />
         <RoleGuide roles={people.grantable} />
         {error ? <ErrorText>{error}</ErrorText> : null}
       </form>

@@ -180,7 +180,19 @@ test('at 200% zoom the administration pages reflow without scrolling sideways', 
     }
     await page.goto('/admin/organisation');
     await expect(page.getByRole('heading', { level: 1, name: 'Organisation' })).toBeVisible();
+    // The section pills keep one line: those that do not fit are under "More", the open one shows.
+    const sections = page.getByRole('navigation', { name: 'Administration sections' });
+    await expect(sections.getByRole('link', { name: 'Organisation', exact: true })).toBeVisible();
+    await expect(sections.getByRole('button', { name: 'More sections' })).toBeVisible();
+    for (const box of await sections
+      .locator('a, button')
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right)))
+      expect(box).toBeLessThanOrEqual(640);
     await shot(page, 'v2-admin-zoom-200-organisation', { fullPage: false });
+    await sections.getByRole('button', { name: 'More sections' }).click();
+    await page.getByRole('menuitem', { name: 'Activity log' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Activity log' })).toBeVisible();
+    await expect(sections.getByRole('link', { name: 'Activity log', exact: true })).toBeVisible();
   } finally {
     await reset2fa();
     await db.end();

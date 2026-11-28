@@ -486,7 +486,12 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(client.getByRole('button', { name: 'Save roles' })).toBeDisabled();
   await warning.getByRole('textbox').fill('Audits the fieldwork for the client');
   await expect(client.getByRole('button', { name: 'Save roles' })).toBeEnabled();
-  await shot(page, 'v2-team-roles-external-reason');
+  // The reason's field is clear of the dialog's footer (it scrolled into view when it appeared).
+  const reasonBox = await warning.getByRole('textbox').boundingBox();
+  const footerBox = await client.locator('[data-sticky-footer]').boundingBox();
+  expect(reasonBox!.y + reasonBox!.height).toBeLessThanOrEqual(footerBox!.y);
+  // Not the whole page: a full-page capture lays the dialog out again, scrolled back to its top.
+  await shot(page, 'v2-team-roles-external-reason', { fullPage: false });
   await client.getByRole('button', { name: 'Cancel' }).click();
 
   // An administrator sees the webhooks, read only, as the API keys.
