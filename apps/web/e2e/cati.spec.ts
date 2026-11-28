@@ -146,3 +146,56 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await db.end();
   }
 });
+
+test('a supervisor sees the attempts used against the limit and reopens an exhausted case', async ({
+  page,
+}) => {
+  const db = connectDb();
+  // A held case of the project, closed here as a non-contact after its last allowed attempt.
+  const [c] = await db.all(
+    `select top 1 c.id, c.external_id, c.status, c.disposition, c.attempts, p.settings
+     from cases c join projects p on p.id = c.project_id
+     where p.name = 'Household Survey 2026' and c.status = 'assigned'
+       and c.checked_out_device is null and c.assigned_to is not null
+     order by c.external_id desc`,
+  );
+  const max =
+    (JSON.parse((c!.settings as string | null) ?? '{}') as { cati?: { maxAttempts?: number } }).cati
+      ?.maxAttempts ?? 8;
+  const id = c!.external_id as string;
+  try {
+    await db.run(
+      `update cases set status = 'finalised', disposition = 'NON_CONTACT', attempts = ? where id = ?`,
+      [max, c!.id],
+    );
+    await openProject(page, 'supervisor@demo.wansurvey.test');
+    await page.getByRole('tab', { name: 'Cases', exact: true }).click();
+    await page.getByLabel('Search id or sample data').fill(id);
+    await page.getByRole('button', { name: `Open case ${id}`, exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: `Case ${id}` });
+    await expect(drawer.getByTestId('case-attempts')).toHaveText(
+      `· ${max} attempts of ${max} allowed`,
+    );
+    const reopen = drawer.getByRole('button', { name: `Reopen with ${max} new attempts` });
+    await expect(reopen).toBeVisible();
+    await shot(page, 'v2-cati-exhausted-case', { fullPage: false });
+    page.once('dialog', (d) => void d.accept());
+    await reopen.click();
+    await expect(drawer).toContainText(`Case reopened with ${max} new attempts.`);
+    await expect(drawer.getByTestId('case-header')).toContainText('Assigned');
+    await expect(reopen).toHaveCount(0);
+    await shot(page, 'v2-cati-case-reopened', { fullPage: false });
+    const [after] = await db.all(`select status, disposition, attempts from cases where id = ?`, [
+      c!.id,
+    ]);
+    expect(after).toMatchObject({ status: 'assigned', disposition: null, attempts: 0 });
+  } finally {
+    await db.run(`update cases set status = ?, disposition = ?, attempts = ? where id = ?`, [
+      c!.status,
+      c!.disposition,
+      c!.attempts,
+      c!.id,
+    ]);
+    await db.end();
+  }
+});

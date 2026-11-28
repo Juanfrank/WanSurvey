@@ -9,8 +9,9 @@ import { ConditionBuilder } from '../designer/ConditionBuilder.js';
 import { controlCls, NumberField, smallBtn, TextField } from '../designer/fields.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { caseVariables } from '../designer/vars.js';
-import { Button, Card, ErrorText } from '../routes/ui.js';
+import { Button, Card, ErrorText, TableScroll } from '../routes/ui.js';
 import { STATUSES, useAssignees, useSampleFields } from './hooks.js';
+import { dateTime } from '../format.js';
 
 interface Rule {
   id: string;
@@ -165,40 +166,69 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
       <Card>
         <h2 className="mb-1 text-lg font-semibold">{t('cases.rules.workload')}</h2>
         {people.data?.length ? (
-          <div className="overflow-x-auto">
+          <TableScroll label={t('cases.rules.workload')}>
             <table className="w-full text-sm" data-testid="workload">
               <thead className="text-left text-xs text-slate-600">
                 <tr>
-                  <th scope="col" className="py-1">
+                  <th scope="col" className="py-1 pr-2">
                     {t('cases.rules.person')}
                   </th>
-                  <th scope="col">{t('cases.rules.teams')}</th>
+                  <th scope="col" className="px-2">
+                    {t('cases.rules.teams')}
+                  </th>
                   {STATUSES.filter((s) => s !== 'fresh').map((s) => (
-                    <th key={s} scope="col">
+                    <th key={s} scope="col" className="px-2">
                       {t(`cases.status.${s}`)}
                     </th>
                   ))}
+                  <th scope="col" className="px-2" title={t('cases.rules.overdueHint')}>
+                    {t('cases.rules.overdue')}
+                  </th>
+                  <th scope="col" className="px-2" title={t('cases.rules.callbacksHint')}>
+                    {t('cases.rules.callbacks')}
+                  </th>
+                  <th scope="col" className="px-2">
+                    {t('cases.rules.completesToday')}
+                  </th>
+                  <th scope="col" className="px-2">
+                    {t('cases.rules.lastContact')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {people.data.map((p) => (
                   <tr key={p.userId} data-person={p.email}>
-                    <th scope="row" className="py-1.5 text-left font-medium">
+                    <th scope="row" className="py-1.5 pr-2 text-left font-medium">
                       {p.name}
                     </th>
-                    <td className="text-slate-700">
+                    <td className="px-2 text-slate-700">
                       {p.teams?.map((tm) => tm.name).join(', ') || '—'}
                     </td>
                     {STATUSES.filter((s) => s !== 'fresh').map((s) => (
-                      <td key={s} data-status={s}>
+                      <td key={s} data-status={s} className="px-2">
                         {p.workload[s] ?? 0}
                       </td>
                     ))}
+                    <td
+                      data-col="overdue"
+                      className={`px-2 ${p.overdue ? 'font-semibold text-red-ink-800' : ''}`}
+                    >
+                      {p.overdue ?? '—'}
+                    </td>
+                    <td data-col="callbacks" className="px-2">
+                      {p.callbacks ?? 0}
+                    </td>
+                    <td data-col="completes-today" className="px-2">
+                      {p.completesToday ?? 0}
+                    </td>
+                    <td data-col="last-contact" className="px-2 whitespace-nowrap text-slate-700">
+                      {p.lastContactAt ? dateTime(p.lastContactAt) : t('cases.rules.never')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         ) : (
           <p className="text-sm text-slate-600">{t('cases.rules.noPeople')}</p>
         )}

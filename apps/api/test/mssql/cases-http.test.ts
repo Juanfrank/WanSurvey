@@ -646,6 +646,96 @@ describe.skipIf(!configured)('SQL Server: cases over HTTP', () => {
     ).toBe(403);
   });
 
+  it('filters by team, deadline and untried cases; the workload has field figures; exhausted cases reopen', async () => {
+    const other = await createProject(t.owner, tenant.id);
+    await sql`UPDATE projects SET settings = ${JSON.stringify({
+      fieldwork: { caseExpiryHours: 72 },
+      cati: { maxAttempts: 2 },
+    })} WHERE id = ${other}`.execute(t.owner);
+    const iv3 = await createUser(t.owner, tenant.id, [{ role: 'interviewer' }]);
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+    // F0 overdue, F1 due within 48 h, F2 untried and far from its deadline, F3 exhausted.
+    const spec = [
+      { status: 'assigned', at: hoursAgo(80), who: iv3.id, attempts: 1 },
+      { status: 'in_progress', at: hoursAgo(30), who: iv3.id, attempts: 0 },
+      { status: 'assigned', at: hoursAgo(1), who: interviewer2.id, attempts: 0 },
+      { status: 'finalised', at: hoursAgo(5), who: interviewer2.id, attempts: 2 },
+    ];
+    const ids = spec.map(() => randomUUID());
+    for (const [i, c] of spec.entries())
+      await sql`INSERT INTO cases (id, tenant_id, project_id, external_id, sample, status, assigned_to,
+          assigned_at, attempts, disposition, next_contact_at)
+        VALUES (${ids[i]!}, ${tenant.id}, ${other}, ${'F' + i}, '{}', ${c.status}, ${c.who},
+          CAST(${c.at} AS datetimeoffset(3)), ${c.attempts},
+          ${c.status === 'finalised' ? 'NON_CONTACT' : null},
+          ${i === 0 ? sql`DATEADD(hour, 2, SYSDATETIMEOFFSET())` : null})`.execute(t.owner);
+    await sql`INSERT INTO call_attempts (id, tenant_id, project_id, case_id, interviewer_id, started_at)
+      VALUES (${randomUUID()}, ${tenant.id}, ${other}, ${ids[0]!}, ${iv3.id}, SYSDATETIMEOFFSET())`.execute(
+      t.owner,
+    );
+    await sql`INSERT INTO call_attempts (id, tenant_id, project_id, case_id, interviewer_id, started_at)
+      VALUES (${randomUUID()}, ${tenant.id}, ${other}, ${ids[3]!}, ${interviewer2.id}, SYSDATETIMEOFFSET())`.execute(
+      t.owner,
+    );
+    const team = randomUUID();
+    await sql`INSERT INTO teams (id, tenant_id, name) VALUES (${team}, ${tenant.id}, 'Turno tarde')`.execute(
+      t.owner,
+    );
+    await sql`INSERT INTO team_members (team_id, user_id, tenant_id) VALUES (${team}, ${interviewer2.id}, ${tenant.id})`.execute(
+      t.owner,
+    );
+    const url = `/api/v1/projects/${other}/cases`;
+    const ext = async (s: Session, q: Record<string, string>) => {
+      const r = await s.agent.get(url).query(q);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      return r.body.rows.map((x: { externalId: string }) => x.externalId).sort();
+    };
+    expect(await ext(supervisor, { quick: 'overdue' })).toEqual(['F0']);
+    expect(await ext(supervisor, { quick: 'due_soon' })).toEqual(['F1']);
+    expect(await ext(supervisor, { quick: 'no_attempt' })).toEqual(['F2']);
+    // interviewer2 is in the team.
+    expect(await ext(supervisor, { team })).toEqual(['F2', 'F3']);
+    // An interviewer's own list ignores the team.
+    const i2s = await login(t, interviewer2, tenant.slug);
+    expect(await ext(i2s, { team: randomUUID() })).toEqual(['F2', 'F3']);
+    expect((await supervisor.agent.get(url).query({ quick: 'late' })).status).toBe(400);
+
+    const ppl = await supervisor.agent.get(`/api/v1/projects/${other}/assignees`);
+    expect(ppl.status).toBe(200);
+    const i1 = ppl.body.find((p: { userId: string }) => p.userId === iv3.id);
+    expect(i1).toMatchObject({ overdue: 1, callbacks: 1, completesToday: 0 });
+    expect(i1.lastContactAt).toBeTruthy();
+    const i2 = ppl.body.find((p: { userId: string }) => p.userId === interviewer2.id);
+    expect(i2).toMatchObject({ overdue: 0, callbacks: 0, completesToday: 0 });
+
+    // The exhausted case: the supervisor sees the limit and gives it a new round.
+    const detail = await supervisor.agent.get(`${url}/${ids[3]}`);
+    expect(detail.body).toMatchObject({ attempts: 2, maxAttempts: 2, canReopenAttempts: true });
+    expect((await supervisor.agent.get(`${url}/${ids[0]}`)).body.canReopenAttempts).toBe(false);
+    expect((await post(interviewerS, `${url}/${ids[0]}/reopen-attempts`)).status).toBe(403);
+    expect((await post(supervisor, `${url}/${ids[0]}/reopen-attempts`)).status).toBe(400);
+    const re = await post(supervisor, `${url}/${ids[3]}/reopen-attempts`);
+    expect(re.status, JSON.stringify(re.body)).toBe(200);
+    const [after] = await rows(
+      sql`SELECT status, disposition, attempts, assigned_to FROM cases WHERE id = ${ids[3]!}`,
+    );
+    expect(after).toMatchObject({ status: 'assigned', disposition: null, attempts: 0 });
+    expect((after!.assigned_to as string).toLowerCase()).toBe(interviewer2.id);
+    const audit = await rows(
+      sql`SELECT details FROM audit_log WHERE target_id = ${ids[3]!} AND action = 'case.updated'`,
+    );
+    expect(JSON.parse(audit[0]!.details as string)).toMatchObject({
+      reopened: 'attempts',
+      previousAttempts: 2,
+    });
+    expect((await post(supervisor, `${url}/${ids[3]}/reopen-attempts`)).status).toBe(400);
+    // Its deadline counts from the reopening, and its calls keep it out of "not tried yet".
+    expect(await ext(supervisor, { quick: 'overdue' })).toEqual(['F0']);
+    expect(await ext(supervisor, { quick: 'no_attempt' })).toEqual(['F2']);
+    // No deadline left behind for the expiry job of other tests sharing the database.
+    await sql`UPDATE projects SET settings = '{}' WHERE id = ${other}`.execute(t.owner);
+  });
+
   it('keeps cases inside their tenant', async () => {
     const other = await createTenant(t.owner);
     const s = await login(t, await createUser(t.owner, other.id, [{ role: 'admin' }]), other.slug);

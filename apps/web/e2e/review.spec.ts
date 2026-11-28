@@ -148,4 +148,12 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await expect(correct).toBeHidden();
   await sup.keyboard.press('a');
   await expect(sup.getByTestId('review-status')).toHaveAttribute('data-status', 'approved');
+
+  // The interviewer's list shows the result of the finished case and its review.
+  await iv.reload();
+  await iv.getByRole('tab', { name: 'My cases' }).click();
+  await iv.getByLabel('Search id or sample data').fill(caseId);
+  const done = iv.locator(`tr[data-case="${caseId}"]`);
+  await expect(done.locator('[data-review="approved"]')).toContainText('Review: approved');
+  await shot(iv, 'v2-my-cases-review');
 });

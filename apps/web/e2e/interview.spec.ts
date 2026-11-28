@@ -41,11 +41,12 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   // Wait for the filtered list (earlier tests finish some of these cases).
   await expect(row).toContainText('Assigned');
   const caseId = (await row.getAttribute('data-case'))!;
-  await row.getByRole('button', { name: `Open case ${caseId}` }).click();
-  const drawer = page.getByRole('dialog', { name: `Case ${caseId}` });
-  await drawer.getByRole('button', { name: 'Start interview' }).click();
-  await drawer.getByLabel('Mode').selectOption('CAPI');
-  await drawer.getByRole('button', { name: 'Start interview' }).click();
+  // Straight from the work list: the questionnaire has two modes, so the mode is asked first.
+  await row.getByRole('button', { name: `Start case ${caseId}` }).click();
+  const start = page.getByRole('dialog', { name: `Start an interview on case ${caseId}` });
+  await start.getByLabel('Mode').selectOption('CAPI');
+  await shot(page, 'v2-my-cases-start-dialog', { fullPage: false });
+  await start.getByRole('button', { name: 'Start interview' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(`Case ${caseId}`) })).toBeVisible();
 
   // Consent text, consent yes, age 40: by keyboard.

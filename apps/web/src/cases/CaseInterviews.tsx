@@ -8,6 +8,7 @@ import { controlCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { CallList, type CallRow } from '../cati/CallsTab.js';
 import { startInterview } from '../interview/useInterview.js';
+import { Dialog } from '../designer/Dialog.js';
 import { Button } from '../routes/ui.js';
 import { timeOnly } from '../format.js';
 
@@ -21,19 +22,23 @@ interface QuestionnaireRow {
 const MODES: Mode[] = ['CAPI', 'CATI'];
 
 /**
- * Start (or resume) an interview on a case. With one questionnaire in use it starts straight
- * away; with several, the person picks one first.
+ * Start (or resume) an interview on a case: the person confirms the questionnaire and the mode,
+ * then the interview opens. `compact` is the work list's row button: with nothing to choose (one
+ * questionnaire, and one mode or a resume) it starts at once; otherwise the same choices open in
+ * a dialog.
  */
 export function StartInterview({
   projectId,
   caseId,
   externalId,
   resume,
+  compact,
 }: {
   projectId: string;
   caseId: string;
   externalId: string;
   resume: boolean;
+  compact?: { label: string; ariaLabel: string };
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -69,6 +74,107 @@ export function StartInterview({
     }
   };
 
+  const form = (
+    <form
+      className="flex flex-wrap items-end gap-3 rounded-md border border-indigo-200 bg-indigo-50 p-3"
+      aria-label={t('interview.startTitle', { id: externalId })}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void go();
+      }}
+    >
+      {usable.length > 1 ? (
+        <label className="flex flex-col gap-1">
+          <span className="font-medium">{t('interview.questionnaire')}</span>
+          <select
+            className={`${controlCls} w-auto`}
+            value={chosen}
+            onChange={(e) => setQid(e.target.value)}
+          >
+            {usable.map((q) => (
+              <option key={q.id} value={q.id}>
+                {q.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {!resume ? (
+        <label className="flex flex-col gap-1">
+          <span className="font-medium">{t('interview.mode')}</span>
+          <select
+            className={`${controlCls} w-auto`}
+            value={mode}
+            onChange={(e) => setMode(e.target.value as Mode)}
+          >
+            {offered.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      <Button type="submit" busy={busy} disabled={!chosen}>
+        {resume ? t('interview.resumeCase') : t('interview.start')}
+      </Button>
+      <button type="button" className={smallBtn} onClick={() => setOpen(false)}>
+        {t('interview.close')}
+      </button>
+    </form>
+  );
+
+  if (compact) {
+    if (list.isSuccess && !usable.length) return null;
+    const direct = usable.length === 1 && (resume || offered.length === 1);
+    return (
+      <>
+        <Button
+          type="button"
+          size="sm"
+          className="whitespace-nowrap"
+          aria-label={compact.ariaLabel}
+          busy={busy && !open}
+          disabled={!list.isSuccess}
+          onClick={() =>
+            !direct
+              ? setOpen(true)
+              : !resume && mode === 'CATI'
+                ? // A phone case goes through the call screen, as from the case panel.
+                  void navigate({
+                    to: '/projects/$projectId',
+                    params: { projectId },
+                    search: { tab: 'calls', call: caseId },
+                  })
+                : void go()
+          }
+        >
+          {compact.label}
+        </Button>
+        {open ? (
+          // Out of the row cell's right alignment.
+          <div className="text-left">
+            <Dialog
+              title={t('interview.startTitle', { id: externalId })}
+              onClose={() => setOpen(false)}
+            >
+              <div className="flex flex-col gap-2 text-sm">
+                {form}
+                <p role="status" aria-live="polite" className="text-red-ink-800 empty:hidden">
+                  {error}
+                </p>
+              </div>
+            </Dialog>
+          </div>
+        ) : (
+          <p role="status" aria-live="polite" className="text-xs text-red-ink-800 empty:hidden">
+            {error}
+          </p>
+        )}
+      </>
+    );
+  }
+
   if (list.isSuccess && !usable.length)
     return <p className="text-slate-600">{t('interview.noQuestionnaire')}</p>;
   return (
@@ -96,53 +202,7 @@ export function StartInterview({
           ) : null}
         </div>
       ) : (
-        <form
-          className="flex flex-wrap items-end gap-3 rounded-md border border-indigo-200 bg-indigo-50 p-3"
-          aria-label={t('interview.startTitle', { id: externalId })}
-          onSubmit={(e) => {
-            e.preventDefault();
-            void go();
-          }}
-        >
-          {usable.length > 1 ? (
-            <label className="flex flex-col gap-1">
-              <span className="font-medium">{t('interview.questionnaire')}</span>
-              <select
-                className={`${controlCls} w-auto`}
-                value={chosen}
-                onChange={(e) => setQid(e.target.value)}
-              >
-                {usable.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {!resume ? (
-            <label className="flex flex-col gap-1">
-              <span className="font-medium">{t('interview.mode')}</span>
-              <select
-                className={`${controlCls} w-auto`}
-                value={mode}
-                onChange={(e) => setMode(e.target.value as Mode)}
-              >
-                {offered.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <Button type="submit" disabled={busy || !chosen}>
-            {resume ? t('interview.resumeCase') : t('interview.start')}
-          </Button>
-          <button type="button" className={smallBtn} onClick={() => setOpen(false)}>
-            {t('interview.close')}
-          </button>
-        </form>
+        form
       )}
       <p role="status" aria-live="polite" className="text-red-ink-800">
         {error}

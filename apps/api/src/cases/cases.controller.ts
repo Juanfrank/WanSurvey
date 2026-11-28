@@ -26,8 +26,14 @@ import { deal, fairWeights, productivity, quotas, type Output } from './distribu
 import { daysBetween, windowsIn, type Frequency } from '../metrics/goal-periods.js';
 import { CasesService } from './cases.service.js';
 import { words } from './pii.js';
+import { dayBounds, localDay } from '../stats/zoned-day.js';
 
 const round = (x: number) => Math.round(x * 1000) / 1000;
+/** Closed as a non-contact once its call attempts ran out. */
+const exhausted = (
+  c: { status: string; disposition: string | null; attempts: number },
+  max: number,
+) => c.status === 'finalised' && c.disposition === 'NON_CONTACT' && c.attempts >= max;
 const PERM = { projectParam: 'projectId' } as const;
 const READ = ['cases.read_all', 'cases.read_assigned'] as const;
 const WithdrawBody = z.strictObject({
@@ -44,6 +50,13 @@ const ListQuery = z.object({
   /** A user id, `me` or `none`. */
   assignedTo: z.union([z.uuid(), z.enum(['me', 'none'])]).optional(),
   q: z.string().max(200).optional(),
+  /** Cases held by members of this team of the organisation (people who see every case). */
+  team: z.uuid().optional(),
+  /**
+   * Quick filters: open cases past their deadline or reaching it within 48 hours (by the
+   * project's case expiry), or assigned cases not yet tried (no call, no interview).
+   */
+  quick: z.enum(['due_soon', 'overdue', 'no_attempt']).optional(),
   /** Rule-style filter over case.*, status, priority (evaluated on the server). */
   filter: z.string().max(2000).optional(),
   sort: z.enum(['externalId', 'priority', 'updatedAt', 'todo']).default('externalId'),
@@ -155,10 +168,25 @@ export class CasesController {
       };
       const pii = await this.svc.piiFields(t, projectId);
       const canSee = this.svc.canSeePii(ctx, projectId);
+      const expiry = caseExpiryHours(settings.fieldwork);
       const conds: CaseQuery = {
         ...base,
         status: q.status,
         assignedTo: q.assignedTo === 'me' ? ctx.userId : q.assignedTo,
+        ...(q.team && !own ? { teamId: q.team } : {}),
+        ...(q.quick === 'no_attempt' ? { noAttempt: true } : {}),
+        ...(q.quick === 'due_soon' || q.quick === 'overdue'
+          ? expiry
+            ? {
+                deadline: {
+                  kind: q.quick === 'overdue' ? ('overdue' as const) : ('soon' as const),
+                  hours: expiry,
+                  now: new Date(),
+                },
+              }
+            : // Without a deadline in the project no case is due: an empty list of ids.
+              { ids: [] }
+          : {}),
         // Personal fields are searchable only by people allowed to see them: sealed ones by
         // whole words, through their keyed hashes (H1).
         search: q.q
@@ -214,7 +242,7 @@ export class CasesController {
         fields,
         assignmentMode: settings.assignmentMode,
         caseExpiryDays: settings.fieldwork.caseExpiryDays,
-        caseExpiryHours: caseExpiryHours(settings.fieldwork),
+        caseExpiryHours: expiry,
         piiMasked: pii.size > 0,
         /** The caller's own cases are listed with personal data shown. */
         autoReveal: auto && pii.size > 0,
@@ -299,6 +327,13 @@ export class CasesController {
           c.status === 'assigned' &&
           (c.assignedTo === ctx.userId || can(ctx.memberships, 'cases.assign', projectId)),
         canForceRelease: !!c.checkedOutAt && can(ctx.memberships, 'cases.assign', projectId),
+        // Phone attempts: how many the project allows, and whether a case closed after the last
+        // one may be given a new round (by whoever edits or assigns cases).
+        maxAttempts: settings.cati.maxAttempts,
+        canReopenAttempts:
+          exhausted(c, settings.cati.maxAttempts) &&
+          (can(ctx.memberships, 'cases.edit', projectId) ||
+            can(ctx.memberships, 'cases.assign', projectId)),
       };
     });
   }
@@ -411,6 +446,60 @@ export class CasesController {
         }),
       );
       return row;
+    });
+  }
+
+  /**
+   * A case closed as a non-contact after its last allowed call attempt goes back to the queue
+   * with a new round of attempts (held by the same person, if any). The calls made stay in its
+   * history; the event and the audit entry keep how many there were.
+   */
+  @Post('cases/:caseId/reopen-attempts')
+  @HttpCode(200)
+  @RequirePermission(['cases.edit', 'cases.assign'], PERM)
+  reopenAttempts(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const settings = await this.svc.settings(t, projectId);
+      const before = await this.loadCase(t, ctx, projectId, caseId);
+      const max = settings.cati.maxAttempts;
+      if (!exhausted(before, max) || !(await t.reopenExhausted(caseId)))
+        throw new BadRequestException({
+          code: 'NOT_EXHAUSTED',
+          message: 'Only a case closed after its last call attempt can be reopened this way',
+        });
+      const status = before.assignedTo ? 'assigned' : 'fresh';
+      await this.svc.events(t, ctx.userId, [
+        {
+          caseId,
+          type: 'status_changed',
+          details: {
+            from: before.status,
+            to: status,
+            reopened: 'attempts',
+            attempts: before.attempts,
+          },
+        },
+      ]);
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'case.updated',
+          targetType: 'case',
+          targetId: caseId,
+          details: {
+            projectId,
+            fields: ['status', 'attempts'],
+            reopened: 'attempts',
+            previousAttempts: before.attempts,
+            maxAttempts: max,
+            status,
+          },
+        }),
+      );
+      return { id: caseId, status, attempts: 0 };
     });
   }
 
@@ -726,17 +815,35 @@ export class CasesController {
   @RequirePermission('cases.assign', PERM)
   assignees(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
-      await this.svc.project(t, projectId);
+      const project = await this.svc.project(t, projectId);
+      const settings = await this.svc.settings(t, projectId);
       const people = await this.svc.assignees(t, projectId);
       const load = await t.workload(projectId);
       const teams = await t.teamsOf(people.map((p) => p.userId));
-      return people.map((p) => ({
-        ...p,
-        teams: teams.filter((m) => m.userId === p.userId).map(({ id, name }) => ({ id, name })),
-        workload: Object.fromEntries(
-          load.filter((l) => l.userId === p.userId).map((l) => [l.status, l.n]),
-        ),
-      }));
+      // Overdue by the project's case deadline, today by its time zone.
+      const now = new Date();
+      const expiry = caseExpiryHours(settings.fieldwork);
+      const day = dayBounds(localDay(now, project.timezone ?? 'UTC'), project.timezone ?? 'UTC');
+      const field = await t.fieldLoad(projectId, {
+        overdueBefore: expiry ? new Date(now.getTime() - expiry * 3_600_000) : null,
+        todayFrom: day.from,
+        todayTo: day.to,
+      });
+      return people.map((p) => {
+        const f = field.find((x) => x.userId === p.userId);
+        return {
+          ...p,
+          teams: teams.filter((m) => m.userId === p.userId).map(({ id, name }) => ({ id, name })),
+          workload: Object.fromEntries(
+            load.filter((l) => l.userId === p.userId).map((l) => [l.status, l.n]),
+          ),
+          // Null when the project sets no deadline.
+          overdue: expiry ? (f?.overdue ?? 0) : null,
+          callbacks: f?.callbacks ?? 0,
+          completesToday: f?.completesToday ?? 0,
+          lastContactAt: f?.lastContactAt ?? null,
+        };
+      });
     });
   }
 

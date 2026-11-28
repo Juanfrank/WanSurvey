@@ -40,6 +40,11 @@ export interface CaseRowView {
   nextContactAt: Date | null;
   /** An interview of the case was sent back to its interviewer for corrections. */
   returned: boolean;
+  /**
+   * Where the case's latest submitted interview stands in review: pending (submitted, in review
+   * or resubmitted), approved, returned or rejected; null without one.
+   */
+  review: 'pending' | 'approved' | 'returned' | 'rejected' | null;
 }
 
 /** Which cases: always one project; the rest narrows. */
@@ -55,6 +60,28 @@ export interface CaseQuery {
   visibleTo?: { userId: string; pool: boolean };
   /** Text in the external id or the plain sample (personal fields hidden), or token hits. */
   search?: { term: string; hiddenFields: string[]; tokens: string[] };
+  /** Held by a member of this team of the organisation. */
+  teamId?: string;
+  /**
+   * Open held cases by their deadline (assignment plus `hours`): past it, or reaching it within
+   * the next 48 hours.
+   */
+  deadline?: { kind: 'soon' | 'overdue'; hours: number; now: Date };
+  /** Assigned cases nobody has tried yet: no call attempt (counted or recorded) and no interview. */
+  noAttempt?: boolean;
+}
+
+/** Per person, the field figures of the workload table. */
+export interface FieldLoad {
+  userId: string;
+  /** Open cases past their deadline (0 when the project sets none). */
+  overdue: number;
+  /** Open cases with a callback or appointment booked, theirs or on cases they hold. */
+  callbacks: number;
+  /** Complete interviews submitted today (project time zone), rejected ones aside. */
+  completesToday: number;
+  /** Their latest call or interview in the project. */
+  lastContactAt: Date | null;
 }
 
 export interface CaseOrder {
@@ -226,6 +253,17 @@ export interface CasesTx {
   openLoad(projectId: string, people: string[]): Promise<{ userId: string; n: number }[]>;
   /** Cases per holder and status, for the workload. */
   workload(projectId: string): Promise<{ userId: string | null; status: string; n: number }[]>;
+  /** Overdue cases, pending callbacks, today's completes and last contact, per person. */
+  fieldLoad(
+    projectId: string,
+    v: { overdueBefore: Date | null; todayFrom: Date; todayTo: Date },
+  ): Promise<FieldLoad[]>;
+  /**
+   * Gives a case closed after its last allowed call attempt a new round: open again (held by
+   * the same person, if any, with its deadline counted from now), its attempt count back to
+   * zero. The calls stay recorded.
+   */
+  reopenExhausted(id: string): Promise<boolean>;
   /** Everything held per person (any status), for the rule strategies. */
   heldTotals(projectId: string): Promise<{ userId: string | null; n: number }[]>;
 
@@ -339,6 +377,14 @@ const TODO_RANK = ksql`CASE
   WHEN c.status = 'fresh' THEN 4
   WHEN c.status = 'finalised' THEN 5
   ELSE 6 END`;
+/** The review state of the case's latest submitted interview (see `CaseRowView.review`). */
+const REVIEW = ksql<string | null>`(SELECT TOP 1 CASE
+    WHEN rv.status IN ('submitted', 'in_review', 'resubmitted') THEN 'pending'
+    ELSE rv.status END
+  FROM interviews rv
+  WHERE rv.case_id = c.id AND rv.status IN
+    ('submitted', 'in_review', 'resubmitted', 'approved', 'returned', 'rejected')
+  ORDER BY COALESCE(rv.submitted_at, rv.started_at) DESC, rv.id)`;
 
 export class MssqlCasesTx implements CasesTx {
   constructor(
@@ -498,6 +544,29 @@ export class MssqlCasesTx implements CasesTx {
         : b.where('c.assigned_to', '=', u);
     }
     if (q.status) b = b.where('c.status', '=', q.status);
+    if (q.teamId)
+      b = b.where(
+        ksql<boolean>`c.assigned_to IN (SELECT tm.user_id FROM team_members tm WHERE tm.team_id = ${q.teamId})`,
+      );
+    if (q.deadline) {
+      const cut = q.deadline.now.getTime() - q.deadline.hours * 3_600_000;
+      b = b
+        .where('c.status', 'in', ['assigned', 'in_progress'])
+        .where('c.assigned_to', 'is not', null)
+        .where('c.assigned_at', 'is not', null);
+      b =
+        q.deadline.kind === 'overdue'
+          ? b.where('c.assigned_at', '<', instant(new Date(cut)))
+          : b
+              .where('c.assigned_at', '>=', instant(new Date(cut)))
+              .where('c.assigned_at', '<', instant(new Date(cut + 48 * 3_600_000)));
+    }
+    if (q.noAttempt)
+      b = b
+        .where('c.status', '=', 'assigned')
+        .where('c.attempts', '=', 0)
+        .where(ksql<boolean>`NOT EXISTS (SELECT 1 FROM interviews na WHERE na.case_id = c.id)`)
+        .where(ksql<boolean>`NOT EXISTS (SELECT 1 FROM call_attempts nc WHERE nc.case_id = c.id)`);
     if (q.assignedTo === 'none') b = b.where('c.assigned_to', 'is', null);
     else if (q.assignedTo) b = b.where('c.assigned_to', '=', q.assignedTo);
     if (q.search) {
@@ -534,6 +603,7 @@ export class MssqlCasesTx implements CasesTx {
     let query = this.base(q)
       .select([
         ksql<boolean>`CASE WHEN ${RETURNED} THEN 1 ELSE 0 END`.as('returned'),
+        REVIEW.as('review'),
         'c.next_contact_at',
         'c.id',
         'c.external_id',
@@ -592,6 +662,7 @@ export class MssqlCasesTx implements CasesTx {
       baseWeight: r.base_weight,
       nextContactAt: r.next_contact_at,
       returned: Boolean(r.returned),
+      review: (r.review ?? null) as CaseRowView['review'],
     }));
   }
 
@@ -879,6 +950,63 @@ export class MssqlCasesTx implements CasesTx {
       .groupBy(['assigned_to', 'status'])
       .execute();
     return rows.map((r) => ({ userId: lowOrNull(r.assigned_to), status: r.status, n: r.n }));
+  }
+
+  async fieldLoad(
+    projectId: string,
+    v: { overdueBefore: Date | null; todayFrom: Date; todayTo: Date },
+  ) {
+    const overdue = v.overdueBefore
+      ? await ksql<{ id: string; n: number }>`
+          SELECT assigned_to AS id, COUNT(*) AS n FROM cases
+          WHERE project_id = ${projectId} AND status IN ('assigned', 'in_progress')
+            AND assigned_to IS NOT NULL AND assigned_at < ${instant(v.overdueBefore)}
+          GROUP BY assigned_to`.execute(this.tx)
+      : { rows: [] };
+    const callbacks = await ksql<{ id: string; n: number }>`
+      SELECT COALESCE(callback_user_id, assigned_to) AS id, COUNT(*) AS n FROM cases
+      WHERE project_id = ${projectId} AND status IN ('fresh', 'assigned', 'in_progress')
+        AND next_contact_at IS NOT NULL AND COALESCE(callback_user_id, assigned_to) IS NOT NULL
+      GROUP BY COALESCE(callback_user_id, assigned_to)`.execute(this.tx);
+    const today = await ksql<{ id: string; n: number }>`
+      SELECT interviewer_id AS id, COUNT(*) AS n FROM interviews
+      WHERE project_id = ${projectId} AND interviewer_id IS NOT NULL
+        AND disposition = 'COMPLETE' AND status <> 'rejected'
+        AND submitted_at >= ${instant(v.todayFrom)} AND submitted_at < ${instant(v.todayTo)}
+      GROUP BY interviewer_id`.execute(this.tx);
+    const last = await ksql<{ id: string; at: Date }>`
+      SELECT id, MAX(at) AS at FROM (
+        SELECT interviewer_id AS id, started_at AS at FROM call_attempts
+        WHERE project_id = ${projectId} AND interviewer_id IS NOT NULL
+        UNION ALL
+        SELECT interviewer_id AS id, started_at AS at FROM interviews
+        WHERE project_id = ${projectId} AND interviewer_id IS NOT NULL
+      ) x GROUP BY id`.execute(this.tx);
+    const out = new Map<string, FieldLoad>();
+    const row = (id: string) => {
+      const k = low(id);
+      let r = out.get(k);
+      if (!r) {
+        r = { userId: k, overdue: 0, callbacks: 0, completesToday: 0, lastContactAt: null };
+        out.set(k, r);
+      }
+      return r;
+    };
+    for (const r of overdue.rows) row(r.id).overdue = r.n;
+    for (const r of callbacks.rows) row(r.id).callbacks = r.n;
+    for (const r of today.rows) row(r.id).completesToday = r.n;
+    for (const r of last.rows) row(r.id).lastContactAt = r.at;
+    return [...out.values()];
+  }
+
+  async reopenExhausted(id: string) {
+    const res = await ksql`
+      UPDATE cases SET
+        status = CASE WHEN assigned_to IS NULL THEN 'fresh' ELSE 'assigned' END,
+        assigned_at = CASE WHEN assigned_to IS NULL THEN assigned_at ELSE SYSDATETIMEOFFSET() END,
+        disposition = NULL, attempts = 0, next_contact_at = NULL, updated_at = SYSDATETIMEOFFSET()
+      WHERE id = ${id} AND status = 'finalised' AND disposition = 'NON_CONTACT'`.execute(this.tx);
+    return Number(res.numAffectedRows ?? 0) > 0;
   }
 
   async heldTotals(projectId: string) {

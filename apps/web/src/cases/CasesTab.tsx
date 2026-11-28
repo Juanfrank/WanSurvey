@@ -29,6 +29,7 @@ import {
 } from './hooks.js';
 import type { SampleField } from '../designer/vars.js';
 import { FieldLabels } from './FieldLabels.js';
+import { useMedia } from '../routes/SideDrawer.js';
 import { dateTime } from '../format.js';
 import { AssignmentsTab } from './AssignmentsTab.js';
 import { DistributeDialog } from './DistributeDialog.js';
@@ -63,8 +64,14 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
   const canEditCases = useCan('cases.edit', projectId);
   // Interviewers and clerks: their own work list, what to do first at the top.
   const mine = !canReadAll;
+  const canOwnMetrics = useCan('metrics.own', projectId);
+  const me = useMe();
+  // Phones get one card per case instead of the wide table.
+  const narrow = useMedia('(max-width: 639px)');
   const [status, setStatus] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
+  const [team, setTeam] = useState('');
+  const [quick, setQuick] = useState<'' | Quick>('');
   const [search, setSearch] = useState('');
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState<string | undefined>();
@@ -102,17 +109,43 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
   useEffect(() => {
     setPage(1);
     setSelected(new Set());
-  }, [status, assignedTo, term, filter]);
+  }, [status, assignedTo, team, quick, term, filter]);
 
   const list = useQuery({
-    queryKey: ['cases', projectId, questionnaire, status, assignedTo, term, filter, page],
+    queryKey: [
+      'cases',
+      projectId,
+      questionnaire,
+      status,
+      assignedTo,
+      team,
+      quick,
+      term,
+      filter,
+      page,
+    ],
     queryFn: () =>
       api<CaseList>(
-        `/projects/${projectId}/cases?${qs({ questionnaireId: questionnaire, status, assignedTo, q: term, filter, page, limit, sort: mine ? 'todo' : undefined })}`,
+        `/projects/${projectId}/cases?${qs({ questionnaireId: questionnaire, status, assignedTo, team, quick, q: term, filter, page, limit, sort: mine ? 'todo' : undefined })}`,
       ),
     placeholderData: (prev) => prev,
   });
   const people = useAssignees(projectId, canAssign);
+  // The organisation's teams of the people who work cases here, for the team filter.
+  const teams = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const p of people.data ?? []) for (const tm of p.teams ?? []) byId.set(tm.id, tm.name);
+    return [...byId]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [people.data]);
+  // An interviewer's goal in force: completes so far against the target (weekly first).
+  const goals = useQuery({
+    queryKey: ['goals', projectId],
+    queryFn: () => api<GoalRow[]>(`/projects/${projectId}/goals`),
+    enabled: mine && canOwnMetrics,
+  });
+  const goal = myGoal(goals.data ?? [], me.data?.user.id);
   const data = list.data;
   const fields = useMemo(() => data?.fields ?? [], [data]);
   const shownNames = cols ?? fields.slice(0, MAX_FIELD_COLUMNS).map((f) => f.name);
@@ -158,6 +191,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
   });
   const counts = data?.counts ?? {};
   const kpis = caseKpis(data, mine, pool);
+  const cards = kpis.length + (goal ? 1 : 0);
   // Interviewers: only the states their cards stand for (free pool cases when they are offered).
   const totalOf: readonly CaseStatus[] = mine
     ? pool
@@ -229,7 +263,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
         </h2>
         <ul
           aria-label={t('cases.list.kpi.label')}
-          className={`grid grid-cols-2 gap-3 ${kpis.length > 4 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-4'}`}
+          className={`grid grid-cols-2 gap-3 ${cards > 4 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-4'}`}
         >
           {kpis.map((k) => {
             const body = (
@@ -264,6 +298,24 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
               </li>
             );
           })}
+          {goal ? (
+            <li data-kpi="goal">
+              <div
+                className={`h-full w-full rounded-lg border p-3 text-left shadow-sm ${goal.completes >= goal.target ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}
+              >
+                <span className="block text-xs font-medium text-slate-600">
+                  {t(`cases.list.kpi.goal.${goalWindow(goal.frequency)}`)}
+                </span>
+                <span className="block text-2xl font-bold tabular-nums" data-goal="">
+                  {goal.completes}
+                  <span className="text-base font-semibold text-slate-600"> / {goal.target}</span>
+                </span>
+                <span className="block text-xs text-slate-600">
+                  {t(`cases.list.kpi.goalState.${goal.state}`)}
+                </span>
+              </div>
+            </li>
+          ) : null}
         </ul>
       </section>
       <div className="flex flex-wrap items-end gap-3">
@@ -324,6 +376,47 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
             </select>
           </label>
         ) : null}
+        {canReadAll && teams.length ? (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">{t('cases.list.team')}</span>
+            <select
+              className={`${controlCls} w-auto`}
+              value={team}
+              onChange={(e) => setTeam(e.target.value)}
+            >
+              <option value="">{t('cases.list.anyTeam')}</option>
+              {teams.map((tm) => (
+                <option key={tm.id} value={tm.id}>
+                  {tm.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <div
+          role="group"
+          aria-label={t('cases.list.quick.label')}
+          className="flex flex-col gap-1 text-sm"
+        >
+          <span className="font-medium" aria-hidden="true">
+            {t('cases.list.quick.label')}
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK.filter((k) => k === 'no_attempt' || data?.caseExpiryHours).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={quick === k}
+                title={t(`cases.list.quick.hint.${k}`, { count: data?.caseExpiryHours ?? 0 })}
+                data-quick={k}
+                className={`${smallBtn} h-9 whitespace-nowrap aria-pressed:border-indigo-500 aria-pressed:bg-indigo-50 aria-pressed:text-indigo-ink-700`}
+                onClick={() => setQuick(quick === k ? '' : k)}
+              >
+                {t(`cases.list.quick.${k}`)}
+              </button>
+            ))}
+          </div>
+        </div>
         {SHOW_LATER && fields.length > MAX_FIELD_COLUMNS ? (
           <details className="text-sm">
             <summary className="cursor-pointer font-medium">{t('cases.list.columns')}</summary>
@@ -503,189 +596,233 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
-        <table
-          className="w-full min-w-[40rem] text-sm"
-          data-testid="cases-table"
+      {narrow ? (
+        <ul
+          className="flex flex-col gap-2"
+          aria-label={`${t('cases.list.title')} · ${t('cases.list.total', { count: data?.total ?? 0 })}`}
           aria-busy={list.isFetching}
+          data-testid="cases-cards"
         >
-          <caption className="sr-only">
-            {t('cases.list.title')} · {t('cases.list.total', { count: data?.total ?? 0 })}
-          </caption>
-          <thead className="bg-slate-50 text-left text-xs text-slate-600">
-            <tr>
-              {canAssign ? (
-                <th scope="col" className="w-8 px-2 py-2">
+          {rows.map((r, i) => (
+            <li
+              key={r.id}
+              data-card={r.externalId}
+              className={`rounded-lg border p-3 text-sm shadow-sm ${selected.has(r.id) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-white'}`}
+            >
+              <div className="flex items-start gap-2">
+                {canAssign ? (
                   <input
                     type="checkbox"
-                    aria-label={t('cases.list.selectPage')}
-                    checked={allOnPage}
-                    // Not while the previous list is shown during a reload.
-                    disabled={list.isPlaceholderData}
-                    onChange={() => {
-                      const next = new Set(selected);
-                      rows.forEach((r) => (allOnPage ? next.delete(r.id) : next.add(r.id)));
-                      setSelected(next);
-                    }}
+                    className="mt-1"
+                    aria-label={t('cases.list.select', { id: r.externalId })}
+                    checked={selected.has(r.id)}
+                    onChange={() => toggle(i, false)}
                   />
-                </th>
-              ) : null}
-              <th scope="col" className="px-2 py-2">
-                {t('cases.list.col.externalId')}
-              </th>
-              <th scope="col" className="px-2 py-2">
-                {t('cases.list.col.status')}
-              </th>
-              {canReadAll ? (
-                <>
-                  <th scope="col" className="px-2 py-2">
-                    {t('cases.list.col.assignedTo')}
-                  </th>
-                  <th scope="col" className="px-2 py-2">
-                    {t('cases.list.col.assignedAt')}
-                  </th>
-                  <th scope="col" className="px-2 py-2">
-                    {t('cases.list.col.since')}
-                  </th>
-                </>
-              ) : null}
-              <th scope="col" className="px-2 py-2">
-                {t('cases.list.col.priority')}
-              </th>
-              {shownFields.map((f) => (
-                <th key={f.name} scope="col" className="px-2 py-2">
-                  <FieldName field={f} />
-                </th>
-              ))}
-              {mine && canConductHere ? (
-                <th scope="col" className="px-2 py-2">
-                  <span className="sr-only">{t('cases.list.col.action')}</span>
-                </th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((r, i) => (
-              <tr
-                key={r.id}
-                className={selected.has(r.id) ? 'bg-indigo-50' : undefined}
-                data-case={r.externalId}
-              >
-                {canAssign ? (
-                  <td className="px-2 py-1.5">
-                    <input
-                      type="checkbox"
-                      aria-label={t('cases.list.select', { id: r.externalId })}
-                      checked={selected.has(r.id)}
-                      onChange={() => undefined}
-                      onClick={(e) => toggle(i, e.shiftKey)}
-                      onKeyDown={(e) => {
-                        if (e.key === ' ') {
-                          e.preventDefault();
-                          toggle(i, e.shiftKey);
-                        }
-                      }}
-                    />
-                  </td>
                 ) : null}
-                <td className="px-2 py-1.5">
+                <div className="min-w-0 flex-1">
                   <button
                     type="button"
-                    className="font-mono text-indigo-ink-700 underline-offset-2 hover:underline"
+                    className="font-mono text-base font-semibold text-indigo-ink-700 underline-offset-2 hover:underline"
                     aria-label={t('cases.list.open', { id: r.externalId })}
                     onClick={() => setOpen(r.id)}
                   >
                     {r.externalId}
                   </button>
-                </td>
-                <td className="px-2 py-1.5">
-                  <StatusBadge status={r.status} />
-                  {!canReadAll && !r.assignedTo ? (
-                    <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-ink-900">
-                      {t('cases.list.availableBadge')}
-                    </span>
-                  ) : null}
-                  {r.returned && (r.status === 'assigned' || r.status === 'in_progress') ? (
-                    <span
-                      className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-ink-900"
-                      data-testid="returned-badge"
-                    >
-                      {t('cases.list.returnedBadge')}
-                    </span>
-                  ) : null}
-                  {r.status === 'finalised' && r.disposition ? (
-                    <span className="block text-xs text-slate-600" data-col="result">
-                      {dispositionLabel(t, r.disposition)}
-                    </span>
-                  ) : null}
-                  {r.nextContactAt && (r.status === 'assigned' || r.status === 'in_progress') ? (
-                    <span className="block text-xs text-slate-600" data-col="next-contact">
-                      {t('cases.list.nextContact', { date: dateTime(r.nextContactAt) })}
-                    </span>
-                  ) : null}
-                </td>
+                  <div className="mt-1">
+                    <StatusCell r={r} own={!canReadAll} />
+                  </div>
+                </div>
+                {mine && canConductHere ? (
+                  <RowAction projectId={projectId} r={r} me={me.data?.user.id} />
+                ) : null}
+              </div>
+              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                {shownFields.map((f) => (
+                  <div key={f.name} className="contents">
+                    <dt className="text-slate-600">{f.label ?? f.name}</dt>
+                    <dd className="min-w-0 break-words">
+                      <SampleValue value={r.sample[f.name]} />
+                    </dd>
+                  </div>
+                ))}
                 {canReadAll ? (
                   <>
-                    <td className="px-2 py-1.5">{r.assignedName ?? '—'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      {r.assignedTo && r.assignedAt ? dateTime(r.assignedAt) : '—'}
-                    </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap" data-col="since">
-                      {/* The clock stops once the case is closed. */}
+                    <dt className="text-slate-600">{t('cases.list.col.assignedTo')}</dt>
+                    <dd>
+                      {r.assignedName ?? '—'}
                       {r.assignedTo &&
                       r.assignedAt &&
                       (r.status === 'assigned' || r.status === 'in_progress')
-                        ? assignedAge(t, r.assignedAt)
-                        : '—'}
-                      {r.assignedAt &&
-                      (r.status === 'assigned' || r.status === 'in_progress') &&
-                      dueAt(r.assignedAt, data?.caseExpiryHours) ? (
-                        <span className="block text-xs text-slate-600" data-col="due">
-                          {t('cases.list.dueOn', {
-                            date: dateTime(dueAt(r.assignedAt, data?.caseExpiryHours)!),
-                          })}
-                        </span>
-                      ) : null}
-                    </td>
+                        ? ` · ${assignedAge(t, r.assignedAt)}`
+                        : ''}
+                    </dd>
                   </>
                 ) : null}
-                <td className="px-2 py-1.5">{r.priority}</td>
+                {r.priority ? (
+                  <>
+                    <dt className="text-slate-600">{t('cases.list.col.priority')}</dt>
+                    <dd>{r.priority}</dd>
+                  </>
+                ) : null}
+              </dl>
+            </li>
+          ))}
+          {data && !rows.length ? (
+            <li className="rounded-lg border border-slate-200 bg-white p-4 text-slate-600">
+              {data.total === 0 && !status && !assignedTo && !team && !quick && !term && !filter
+                ? t('cases.list.none')
+                : t('cases.list.empty')}
+            </li>
+          ) : null}
+        </ul>
+      ) : (
+        <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+          <table
+            className="w-full min-w-[40rem] text-sm"
+            data-testid="cases-table"
+            aria-busy={list.isFetching}
+          >
+            <caption className="sr-only">
+              {t('cases.list.title')} · {t('cases.list.total', { count: data?.total ?? 0 })}
+            </caption>
+            <thead className="bg-slate-50 text-left text-xs text-slate-600">
+              <tr>
+                {canAssign ? (
+                  <th scope="col" className="w-8 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={t('cases.list.selectPage')}
+                      checked={allOnPage}
+                      // Not while the previous list is shown during a reload.
+                      disabled={list.isPlaceholderData}
+                      onChange={() => {
+                        const next = new Set(selected);
+                        rows.forEach((r) => (allOnPage ? next.delete(r.id) : next.add(r.id)));
+                        setSelected(next);
+                      }}
+                    />
+                  </th>
+                ) : null}
+                <th scope="col" className="px-2 py-2">
+                  {t('cases.list.col.externalId')}
+                </th>
+                <th scope="col" className="px-2 py-2">
+                  {t('cases.list.col.status')}
+                </th>
+                {canReadAll ? (
+                  <>
+                    <th scope="col" className="px-2 py-2">
+                      {t('cases.list.col.assignedTo')}
+                    </th>
+                    <th scope="col" className="px-2 py-2">
+                      {t('cases.list.col.assignedAt')}
+                    </th>
+                    <th scope="col" className="px-2 py-2">
+                      {t('cases.list.col.since')}
+                    </th>
+                  </>
+                ) : null}
+                <th scope="col" className="px-2 py-2">
+                  {t('cases.list.col.priority')}
+                </th>
                 {shownFields.map((f) => (
-                  <td key={f.name} className="px-2 py-1.5">
-                    <SampleValue value={r.sample[f.name]} />
-                  </td>
+                  <th key={f.name} scope="col" className="px-2 py-2">
+                    <FieldName field={f} />
+                  </th>
                 ))}
                 {mine && canConductHere ? (
-                  <td className="px-2 py-1.5 text-right">
-                    {r.status === 'assigned' || r.status === 'in_progress' ? (
-                      <button
-                        type="button"
-                        className={`${smallBtn} whitespace-nowrap`}
-                        aria-label={t(
-                          r.status === 'in_progress'
-                            ? 'cases.list.continueCase'
-                            : 'cases.list.startCase',
-                          { id: r.externalId },
-                        )}
-                        onClick={() => setOpen(r.id)}
-                      >
-                        {t(r.status === 'in_progress' ? 'cases.list.continue' : 'cases.list.start')}
-                      </button>
-                    ) : null}
-                  </td>
+                  <th scope="col" className="px-2 py-2">
+                    <span className="sr-only">{t('cases.list.col.action')}</span>
+                  </th>
                 ) : null}
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {data && !rows.length ? (
-          <p className="p-4 text-sm text-slate-600">
-            {data.total === 0 && !status && !assignedTo && !term && !filter
-              ? t('cases.list.none')
-              : t('cases.list.empty')}
-          </p>
-        ) : null}
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r, i) => (
+                <tr
+                  key={r.id}
+                  className={selected.has(r.id) ? 'bg-indigo-50' : undefined}
+                  data-case={r.externalId}
+                >
+                  {canAssign ? (
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="checkbox"
+                        aria-label={t('cases.list.select', { id: r.externalId })}
+                        checked={selected.has(r.id)}
+                        onChange={() => undefined}
+                        onClick={(e) => toggle(i, e.shiftKey)}
+                        onKeyDown={(e) => {
+                          if (e.key === ' ') {
+                            e.preventDefault();
+                            toggle(i, e.shiftKey);
+                          }
+                        }}
+                      />
+                    </td>
+                  ) : null}
+                  <td className="px-2 py-1.5">
+                    <button
+                      type="button"
+                      className="font-mono text-indigo-ink-700 underline-offset-2 hover:underline"
+                      aria-label={t('cases.list.open', { id: r.externalId })}
+                      onClick={() => setOpen(r.id)}
+                    >
+                      {r.externalId}
+                    </button>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <StatusCell r={r} own={!canReadAll} />
+                  </td>
+                  {canReadAll ? (
+                    <>
+                      <td className="px-2 py-1.5">{r.assignedName ?? '—'}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">
+                        {r.assignedTo && r.assignedAt ? dateTime(r.assignedAt) : '—'}
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap" data-col="since">
+                        {/* The clock stops once the case is closed. */}
+                        {r.assignedTo &&
+                        r.assignedAt &&
+                        (r.status === 'assigned' || r.status === 'in_progress')
+                          ? assignedAge(t, r.assignedAt)
+                          : '—'}
+                        {r.assignedAt &&
+                        (r.status === 'assigned' || r.status === 'in_progress') &&
+                        dueAt(r.assignedAt, data?.caseExpiryHours) ? (
+                          <span className="block text-xs text-slate-600" data-col="due">
+                            {t('cases.list.dueOn', {
+                              date: dateTime(dueAt(r.assignedAt, data?.caseExpiryHours)!),
+                            })}
+                          </span>
+                        ) : null}
+                      </td>
+                    </>
+                  ) : null}
+                  <td className="px-2 py-1.5">{r.priority}</td>
+                  {shownFields.map((f) => (
+                    <td key={f.name} className="px-2 py-1.5">
+                      <SampleValue value={r.sample[f.name]} />
+                    </td>
+                  ))}
+                  {mine && canConductHere ? (
+                    <td className="px-2 py-1.5 text-right">
+                      <RowAction projectId={projectId} r={r} me={me.data?.user.id} />
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data && !rows.length ? (
+            <p className="p-4 text-sm text-slate-600">
+              {data.total === 0 && !status && !assignedTo && !team && !quick && !term && !filter
+                ? t('cases.list.none')
+                : t('cases.list.empty')}
+            </p>
+          ) : null}
+        </div>
+      )}
       <nav className="flex items-center gap-3 text-sm" aria-label={t('cases.list.title')}>
         <button
           type="button"
@@ -717,6 +854,122 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
         />
       ) : null}
     </div>
+  );
+}
+
+/** The list's quick filters (the deadline ones only when the project sets a case deadline). */
+const QUICK = ['due_soon', 'overdue', 'no_attempt'] as const;
+type Quick = (typeof QUICK)[number];
+
+interface GoalRow {
+  userId: string | null;
+  frequency: string;
+  endsOn: string;
+  target: number;
+  completes: number;
+  state: 'upcoming' | 'on_track' | 'behind' | 'met' | 'missed' | 'rest';
+}
+
+/** The person's own goal in force today, a weekly one first; none when they have no goal. */
+export function myGoal(
+  goals: GoalRow[],
+  userId: string | undefined,
+  today = new Date().toLocaleDateString('en-CA'),
+) {
+  // `met` also marks a goal whose period is over: only those still running count.
+  const live = goals.filter(
+    (g) =>
+      g.userId === userId &&
+      userId !== undefined &&
+      g.endsOn >= today &&
+      (g.state === 'on_track' || g.state === 'behind' || g.state === 'met'),
+  );
+  return live.find((g) => g.frequency === 'weekly') ?? live[0];
+}
+
+/** Which window a goal's completes are counted over, for its card's title. */
+const goalWindow = (f: string) =>
+  f === 'weekly'
+    ? 'weekly'
+    : f === 'monthly'
+      ? 'monthly'
+      : f === 'daily' || f === 'business_days'
+        ? 'daily'
+        : 'period';
+
+const reviewTone: Record<NonNullable<CaseRow['review']>, Tone> = {
+  pending: 'info',
+  approved: 'success',
+  returned: 'warning',
+  rejected: 'danger',
+};
+
+/**
+ * A case's state in the list: its status and, below, what to know about it — free to take,
+ * returned, its result and review once finished, or its next contact.
+ */
+function StatusCell({ r, own }: { r: CaseRow; own: boolean }) {
+  const { t } = useTranslation();
+  const open = r.status === 'assigned' || r.status === 'in_progress';
+  return (
+    <>
+      <StatusBadge status={r.status} />
+      {own && !r.assignedTo ? (
+        <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-ink-900">
+          {t('cases.list.availableBadge')}
+        </span>
+      ) : null}
+      {r.returned && open ? (
+        <span
+          className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-ink-900"
+          data-testid="returned-badge"
+        >
+          {t('cases.list.returnedBadge')}
+        </span>
+      ) : null}
+      {r.status === 'finalised' && (r.disposition || r.review) ? (
+        <span
+          className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-slate-600"
+          data-col="result"
+        >
+          {r.disposition ? dispositionLabel(t, r.disposition) : null}
+          {r.review ? (
+            <span data-review={r.review}>
+              {r.disposition ? '· ' : ''}
+              {t('cases.list.review')}{' '}
+              <Badge tone={reviewTone[r.review]}>{t(`cases.list.reviewState.${r.review}`)}</Badge>
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+      {r.nextContactAt && open ? (
+        <span className="block text-xs text-slate-600" data-col="next-contact">
+          {t('cases.list.nextContact', { date: dateTime(r.nextContactAt) })}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/** Start or continue the interview of one's own open case, straight from the list. */
+function RowAction({ projectId, r, me }: { projectId: string; r: CaseRow; me?: string }) {
+  const { t } = useTranslation();
+  if (!(r.status === 'assigned' || r.status === 'in_progress') || !me || r.assignedTo !== me)
+    return null;
+  const resume = r.status === 'in_progress';
+  return (
+    <StartInterview
+      projectId={projectId}
+      caseId={r.id}
+      externalId={r.externalId}
+      resume={resume}
+      compact={{
+        label: t(resume ? 'cases.list.continue' : 'cases.list.start'),
+        ariaLabel: t(resume ? 'cases.list.continueCase' : 'cases.list.startCase', {
+          id: r.externalId,
+        }),
+      }}
+    />
   );
 }
 
@@ -828,6 +1081,10 @@ interface CaseDetail extends CaseRow {
   substitutes?: { id: string; externalId: string } | null;
   substitutedBy?: { id: string; externalId: string } | null;
   canSubstitute?: boolean;
+  /** Phone attempts the project allows. */
+  maxAttempts?: number;
+  /** Closed after its last call attempt, and the caller may give it a new round. */
+  canReopenAttempts?: boolean;
 }
 
 /** Where the case comes from in the sample (S1), and its substitute by the plan's rule. */
@@ -956,6 +1213,8 @@ function CaseDrawer({
     if (casePriority !== undefined) setPriority(String(casePriority));
   }, [casePriority]);
   const [note, setNote] = useState('');
+  // Worded when shown, so it follows the language.
+  const [reopened, setReopened] = useState<number | null>(null);
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ['case', caseId] });
     await qc.invalidateQueries({ queryKey: ['cases', projectId] });
@@ -980,6 +1239,20 @@ function CaseDrawer({
       await refresh();
     },
   });
+  // A case closed after its last call attempt gets a new round (supervisors of phone work).
+  const reopen = useMutation({
+    mutationFn: () =>
+      api(`/projects/${projectId}/cases/${caseId}/reopen-attempts`, { method: 'POST' }),
+    onSuccess: async () => {
+      setNote('');
+      setReopened(c?.maxAttempts ?? 0);
+      await refresh();
+    },
+    onError: (e) => {
+      setReopened(null);
+      setNote(localiseError(t, e));
+    },
+  });
   const patch = useMutation({
     mutationFn: (body: object) =>
       api(`/projects/${projectId}/cases/${caseId}`, { method: 'PATCH', body }),
@@ -989,8 +1262,145 @@ function CaseDrawer({
     },
   });
 
+  const header = c ? (
+    <div className="flex flex-col gap-2 text-sm" data-testid="case-header">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={c.status} />
+        {c.disposition ? (
+          <span data-testid="case-disposition">
+            ·{' '}
+            {t(`analysis.dispositionLabels.${c.disposition}`, {
+              defaultValue: c.disposition,
+            })}
+          </span>
+        ) : null}
+        {c.attempts ? (
+          <span data-testid="case-attempts">
+            ·{' '}
+            {c.maxAttempts
+              ? t('cases.detail.attemptsOf', { count: c.attempts, max: c.maxAttempts })
+              : t('cases.detail.attempts', { count: c.attempts })}
+          </span>
+        ) : null}
+        {c.assignedName ? (
+          <span>
+            · {c.assignedName}
+            {c.assignedAt
+              ? ` · ${t('cases.list.assignedOn', { date: dateTime(c.assignedAt), age: assignedAge(t, c.assignedAt) })}`
+              : ''}
+          </span>
+        ) : null}
+        {c.pii.masked ? (
+          <span className="ml-auto flex items-center gap-2">
+            <span className="text-slate-600">{t('cases.detail.masked')}</span>
+            {c.pii.canReveal ? (
+              <button
+                ref={first}
+                type="button"
+                className={smallBtn}
+                title={t('cases.detail.revealNote')}
+                onClick={() => setReveal(true)}
+              >
+                {t('cases.detail.reveal')}
+              </button>
+            ) : null}
+          </span>
+        ) : c.pii.auto ? (
+          <span className="ml-auto text-slate-600" data-testid="pii-confidential">
+            {t('cases.detail.autoShown')} {t('cases.detail.confidential')}
+          </span>
+        ) : reveal ? (
+          <span className="ml-auto text-slate-600" data-testid="pii-confidential">
+            {t('cases.detail.confidential')}
+          </span>
+        ) : null}
+      </div>
+      {c.checkedOutAt ? (
+        <p className="flex flex-wrap items-center gap-2 text-slate-700" data-testid="checked-out">
+          {t('cases.detail.onDevice', {
+            time: dateTime(c.checkedOutAt),
+          })}
+          {c.canForceRelease ? (
+            <button
+              type="button"
+              className={smallBtn}
+              disabled={hand.isPending}
+              onClick={() => hand.mutate('force-release')}
+            >
+              {t('cases.detail.forceRelease')}
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+      {c.canClaim || c.canRelease || c.canReopenAttempts || note || reopened !== null ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {c.canReopenAttempts ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              busy={reopen.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    t('cases.detail.reopenAttemptsConfirm', {
+                      id: c.externalId,
+                      count: c.maxAttempts ?? 0,
+                    }),
+                  )
+                )
+                  reopen.mutate();
+              }}
+            >
+              {t('cases.detail.reopenAttempts', { count: c.maxAttempts ?? 0 })}
+            </Button>
+          ) : null}
+          {c.canClaim ? (
+            <Button
+              type="button"
+              size="sm"
+              disabled={hand.isPending}
+              onClick={() => hand.mutate('claim')}
+            >
+              {t('cases.detail.claim')}
+            </Button>
+          ) : null}
+          {c.canRelease ? (
+            <button
+              type="button"
+              className={smallBtn}
+              disabled={hand.isPending}
+              onClick={() => hand.mutate('release')}
+            >
+              {t('cases.detail.release')}
+            </button>
+          ) : null}
+          <p role="status" aria-live="polite">
+            {note ||
+              (reopened !== null ? t('cases.detail.attemptsReopened', { count: reopened }) : '')}
+          </p>
+        </div>
+      ) : null}
+      {canConduct &&
+      (c.status === 'assigned' || c.status === 'in_progress' || c.canClaim) &&
+      (c.assignedTo === me.data?.user.id || c.canClaim) ? (
+        <StartInterview
+          projectId={projectId}
+          caseId={caseId}
+          externalId={c.externalId}
+          resume={c.status === 'in_progress'}
+        />
+      ) : null}
+    </div>
+  ) : null;
+
   return (
-    <Dialog title={t('cases.detail.title', { id: c?.externalId ?? '…' })} onClose={onClose} wide>
+    <Dialog
+      title={t('cases.detail.title', { id: c?.externalId ?? '…' })}
+      onClose={onClose}
+      wide
+      header={header}
+    >
       {!c ? (
         <p aria-busy="true">…</p>
       ) : (
@@ -998,107 +1408,6 @@ function CaseDrawer({
           className="flex flex-col gap-4 text-sm [&>section]:border-t [&>section]:border-slate-200 [&>section]:pt-3"
           data-testid="case-detail"
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={c.status} />
-            {c.disposition ? (
-              <span data-testid="case-disposition">
-                ·{' '}
-                {t(`analysis.dispositionLabels.${c.disposition}`, {
-                  defaultValue: c.disposition,
-                })}
-              </span>
-            ) : null}
-            {c.attempts ? <span>· {t('cases.detail.attempts', { count: c.attempts })}</span> : null}
-            {c.assignedName ? (
-              <span>
-                · {c.assignedName}
-                {c.assignedAt
-                  ? ` · ${t('cases.list.assignedOn', { date: dateTime(c.assignedAt), age: assignedAge(t, c.assignedAt) })}`
-                  : ''}
-              </span>
-            ) : null}
-            {c.pii.masked ? (
-              <span className="ml-auto flex items-center gap-2">
-                <span className="text-slate-600">{t('cases.detail.masked')}</span>
-                {c.pii.canReveal ? (
-                  <button
-                    ref={first}
-                    type="button"
-                    className={smallBtn}
-                    title={t('cases.detail.revealNote')}
-                    onClick={() => setReveal(true)}
-                  >
-                    {t('cases.detail.reveal')}
-                  </button>
-                ) : null}
-              </span>
-            ) : c.pii.auto ? (
-              <span className="ml-auto text-slate-600" data-testid="pii-confidential">
-                {t('cases.detail.autoShown')} {t('cases.detail.confidential')}
-              </span>
-            ) : reveal ? (
-              <span className="ml-auto text-slate-600" data-testid="pii-confidential">
-                {t('cases.detail.confidential')}
-              </span>
-            ) : null}
-          </div>
-          {c.checkedOutAt ? (
-            <p
-              className="flex flex-wrap items-center gap-2 text-slate-700"
-              data-testid="checked-out"
-            >
-              {t('cases.detail.onDevice', {
-                time: dateTime(c.checkedOutAt),
-              })}
-              {c.canForceRelease ? (
-                <button
-                  type="button"
-                  className={smallBtn}
-                  disabled={hand.isPending}
-                  onClick={() => hand.mutate('force-release')}
-                >
-                  {t('cases.detail.forceRelease')}
-                </button>
-              ) : null}
-            </p>
-          ) : null}
-          {c.canClaim || c.canRelease || note ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {c.canClaim ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={hand.isPending}
-                  onClick={() => hand.mutate('claim')}
-                >
-                  {t('cases.detail.claim')}
-                </Button>
-              ) : null}
-              {c.canRelease ? (
-                <button
-                  type="button"
-                  className={smallBtn}
-                  disabled={hand.isPending}
-                  onClick={() => hand.mutate('release')}
-                >
-                  {t('cases.detail.release')}
-                </button>
-              ) : null}
-              <p role="status" aria-live="polite">
-                {note}
-              </p>
-            </div>
-          ) : null}
-          {canConduct &&
-          (c.status === 'assigned' || c.status === 'in_progress' || c.canClaim) &&
-          (c.assignedTo === me.data?.user.id || c.canClaim) ? (
-            <StartInterview
-              projectId={projectId}
-              caseId={caseId}
-              externalId={c.externalId}
-              resume={c.status === 'in_progress'}
-            />
-          ) : null}
           <section aria-labelledby="cd-sample">
             <h3 id="cd-sample" className="mb-1 font-semibold">
               {t('cases.detail.sample')}

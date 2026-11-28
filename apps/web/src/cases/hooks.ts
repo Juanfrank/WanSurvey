@@ -22,6 +22,8 @@ export interface CaseRow {
   nextContactAt?: string | null;
   /** An interview of the case was sent back for corrections. */
   returned?: boolean;
+  /** Where its latest submitted interview stands in review. */
+  review?: 'pending' | 'approved' | 'returned' | 'rejected' | null;
 }
 
 export interface CaseList {
@@ -56,6 +58,14 @@ export interface Assignee {
   /** The organisation's teams the person is in. */
   teams?: { id: string; name: string }[];
   workload: Partial<Record<CaseStatus, number>>;
+  /** Open cases past their deadline; null when the project sets none. */
+  overdue?: number | null;
+  /** Callbacks and appointments booked for them or on their cases. */
+  callbacks?: number;
+  /** Complete interviews submitted today. */
+  completesToday?: number;
+  /** Their latest call or interview in the project. */
+  lastContactAt?: string | null;
 }
 
 /**

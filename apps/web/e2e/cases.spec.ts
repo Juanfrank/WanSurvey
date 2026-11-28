@@ -1,6 +1,7 @@
 import { expect, test, type Page } from './fixtures.js';
 import { sampleTable } from '@wansurvey/fixtures';
 import { writeXlsx } from 'hucre/xlsx';
+import { connectDb } from './db.js';
 import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
@@ -158,6 +159,49 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
   await shot(page, 'cases-list');
   await expectAccessible(page);
 
+  // Quick filters and a team: a crew with the clerk in it, and a 72 h deadline on cases.
+  const db = connectDb();
+  const team = crypto.randomUUID();
+  const [project] = await db.all(
+    `select id, settings from projects where name = 'Household Survey 2026'`,
+  );
+  try {
+    await db.run(
+      `insert into teams (id, tenant_id, name)
+       select ?, tenant_id, 'Turno mañana' from projects where id = ?`,
+      [team, project!.id],
+    );
+    await db.run(
+      `insert into team_members (team_id, user_id, tenant_id)
+       select ?, u.id, p.tenant_id from users u, projects p where u.email = ? and p.id = ?`,
+      [team, CLERK, project!.id],
+    );
+    const settings = JSON.parse((project!.settings as string | null) ?? '{}');
+    await db.run(`update projects set settings = ? where id = ?`, [
+      JSON.stringify({ ...settings, fieldwork: { ...settings.fieldwork, caseExpiryHours: 72 } }),
+      project!.id,
+    ]);
+    await page.reload();
+    await page.getByLabel('Search id or sample data').fill('XHH000');
+    await page.getByRole('combobox', { name: 'Team' }).selectOption({ label: 'Turno mañana' });
+    const quick = page.getByRole('group', { name: 'Quick filters' });
+    await expect(quick.getByRole('button', { name: 'Due within 48 h' })).toBeVisible();
+    await expect(quick.getByRole('button', { name: 'Overdue' })).toBeVisible();
+    await quick.getByRole('button', { name: 'Not tried yet' }).click();
+    await expect(page.getByText('Page 1 of 1 · 4 cases')).toBeVisible();
+    await expect(page.locator('tr[data-case="XHH0003"]')).toContainText('Demo clerk');
+    await shot(page, 'v2-cases-quick-filters');
+    await quick.getByRole('button', { name: 'Overdue' }).click();
+    await expect(page.getByText('No cases match.')).toBeVisible();
+    await quick.getByRole('button', { name: 'Overdue' }).click();
+    await page.getByRole('combobox', { name: 'Team' }).selectOption({ label: 'Any team' });
+  } finally {
+    await db.run(`update projects set settings = ? where id = ?`, [project!.settings, project!.id]);
+    await db.run(`delete from team_members where team_id = ?`, [team]);
+    await db.run(`delete from teams where id = ?`, [team]);
+    await db.end();
+  }
+
   // Cases can also be shared out at random and evenly among several people.
   await page
     .getByRole('combobox', { name: 'How to assign' })
@@ -196,6 +240,11 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
   await expect(drawer.getByTestId('contacts')).toContainText('@example.org');
   await expect(drawer).toContainText('Assigned');
   await shot(page, 'cases-detail');
+  // Scrolled down, the code, status and main actions stay at the top.
+  await drawer.evaluate((d) => (d.scrollTop = d.scrollHeight));
+  await expect(drawer.getByTestId('case-header')).toBeInViewport();
+  await expect(drawer.getByRole('heading', { name: 'History' })).toBeInViewport();
+  await shot(page, 'v2-cases-detail-sticky', { fullPage: false });
   await drawer.getByRole('button', { name: 'Close' }).click();
 
   const clerk = await browser.newPage();
@@ -246,6 +295,18 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   rules = page.getByRole('dialog', { name: 'Assignment rules' });
   const clerkRow = rules.getByTestId('workload').locator(`tr[data-person="${CLERK}"]`);
   await expect(clerkRow.locator('td[data-status="assigned"]')).toHaveText('10');
+  // Field figures per person: overdue (no deadline here), callbacks, today's completes, last contact.
+  await expect(clerkRow.locator('td[data-col="overdue"]')).toHaveText('—');
+  await expect(clerkRow.locator('td[data-col="completes-today"]')).toHaveText('0');
+  await expect(
+    rules.getByTestId('workload').getByRole('columnheader', { name: 'Last contact' }),
+  ).toBeVisible();
+  await rules.evaluate((d) => (d.scrollTop = 0));
+  // The new columns are on the right of the table's scroller.
+  await rules
+    .getByRole('region', { name: 'Workload' })
+    .evaluate((el) => (el.scrollLeft = el.scrollWidth));
+  await shot(page, 'v2-cases-workload', { fullPage: false });
   // When someone falls ill, the cases they have not started go to another person at once.
   const move = rules.getByRole('form', { name: 'Move someone’s cases' });
   await move.getByLabel('From').selectOption({ label: 'Demo clerk (10 not started)' });
@@ -269,6 +330,19 @@ test('interviewers see their cases automatically; in pool mode the first to take
   await expect(page.getByText(/cases? assigned\./)).toBeVisible();
   await expect(page.locator('tr[data-case="XHH0007"]')).toContainText('Demo interviewer');
 
+  // A weekly goal for the interviewer, shown against their completes.
+  const db = connectDb();
+  const goal = crypto.randomUUID();
+  // From yesterday, so it is running whatever the project's time zone.
+  const today = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  await db.run(
+    `insert into interviewer_goals (id, tenant_id, project_id, user_id, frequency, starts_on, ends_on, target)
+     select ?, p.tenant_id, p.id, u.id, 'weekly', ?, ?, 10 from projects p, users u
+     where p.name = 'Household Survey 2026' and u.email = ?`,
+    [goal, today, inAMonth, INTERVIEWER],
+  );
+
   // The interviewer sees names and contacts of their case without asking.
   const interviewer = await browser.newPage();
   await openProject(interviewer, INTERVIEWER);
@@ -281,6 +355,24 @@ test('interviewers see their cases automatically; in pool mode the first to take
   await expect(interviewer.locator('[data-kpi="todo"]')).toBeVisible();
   await expect(interviewer.locator('[data-kpi="fresh"]')).toHaveCount(0);
   await expect(interviewer.getByText(/Personal data of your cases is shown/)).toBeVisible();
+  await expect(interviewer.locator('[data-kpi="goal"]')).toContainText(
+    'Completes this week / goal',
+  );
+  await expect(interviewer.locator('[data-kpi="goal"] [data-goal]')).toContainText('/ 10');
+  // Start goes straight to the interview from the list (here, choosing the mode first).
+  await expect(row.getByRole('button', { name: 'Start case XHH0007' })).toBeVisible();
+  await shot(interviewer, 'v2-my-cases-goal-start', { fullPage: false });
+  await db.run(`delete from interviewer_goals where id = ?`, [goal]);
+  await db.end();
+  // On a phone, each case is a card.
+  await interviewer.setViewportSize({ width: 390, height: 844 });
+  const card = interviewer.locator('[data-card="XHH0007"]');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Start case XHH0007' })).toBeVisible();
+  await expect(interviewer.getByTestId('cases-table')).toHaveCount(0);
+  await shot(interviewer, 'v2-my-cases-phone');
+  await interviewer.setViewportSize({ width: 1280, height: 720 });
+  await expect(row).toBeVisible();
   await interviewer.getByRole('button', { name: 'Open case XHH0007' }).click();
   const drawer = interviewer.getByRole('dialog', { name: 'Case XHH0007' });
   await expect(drawer.getByTestId('contacts')).toContainText('@example.org');

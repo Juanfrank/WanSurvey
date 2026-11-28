@@ -167,6 +167,20 @@ export const casesEn = {
         returned: 'A reviewer asked for corrections',
         available: 'Free for you to take',
       },
+      goal: {
+        weekly: 'Completes this week / goal',
+        monthly: 'Completes this month / goal',
+        daily: 'Completes today / goal',
+        period: 'Completes / goal for the period',
+      },
+      goalState: {
+        upcoming: 'Not started yet',
+        on_track: 'On track',
+        behind: 'Behind the pace',
+        met: 'Goal met',
+        missed: 'Goal missed',
+        rest: 'No goal today',
+      },
     },
     age: {
       lessHour: 'under 1 h',
@@ -191,6 +205,30 @@ export const casesEn = {
     continue: 'Continue',
     startCase: 'Start case {{id}}',
     continueCase: 'Continue case {{id}}',
+    team: 'Team',
+    anyTeam: 'Any team',
+    quick: {
+      label: 'Quick filters',
+      due_soon: 'Due within 48 h',
+      overdue: 'Overdue',
+      no_attempt: 'Not tried yet',
+      hint: {
+        due_soon_one:
+          'Open cases whose deadline ({{count}} h after assignment) ends within the next 48 hours',
+        due_soon_other:
+          'Open cases whose deadline ({{count}} h after assignment) ends within the next 48 hours',
+        overdue_one: 'Open cases past their deadline ({{count}} h after assignment)',
+        overdue_other: 'Open cases past their deadline ({{count}} h after assignment)',
+        no_attempt: 'Assigned cases with no call and no interview yet',
+      },
+    },
+    review: 'Review:',
+    reviewState: {
+      pending: 'pending',
+      approved: 'approved',
+      returned: 'returned',
+      rejected: 'rejected',
+    },
   },
   labels: {
     title: 'Names of the sample variables',
@@ -298,6 +336,16 @@ export const casesEn = {
     close: 'Close',
     attempts_one: '{{count}} attempt',
     attempts_other: '{{count}} attempts',
+    attemptsOf_one: '{{count}} attempt of {{max}} allowed',
+    attemptsOf_other: '{{count}} attempts of {{max}} allowed',
+    reopenAttempts_one: 'Reopen with {{count}} new attempt',
+    reopenAttempts_other: 'Reopen with {{count}} new attempts',
+    reopenAttemptsConfirm_one:
+      'Reopen case {{id}}? It goes back to the call queue with {{count}} new attempt; the calls made stay in its history.',
+    reopenAttemptsConfirm_other:
+      'Reopen case {{id}}? It goes back to the call queue with {{count}} new attempts; the calls made stay in its history.',
+    attemptsReopened_one: 'Case reopened with {{count}} new attempt.',
+    attemptsReopened_other: 'Case reopened with {{count}} new attempts.',
     event: {
       link_made: 'Personal web link made',
       misidentified: 'Marked as wrong person',
@@ -458,6 +506,13 @@ export const casesEn = {
     workload: 'Workload',
     person: 'Person',
     teams: 'Teams',
+    overdue: 'Overdue',
+    overdueHint: 'Open cases past their deadline after assignment',
+    callbacks: 'Callbacks due',
+    callbacksHint: 'Callbacks and appointments booked for them or on the cases they hold',
+    completesToday: 'Completes today',
+    lastContact: 'Last contact',
+    never: 'never',
     move: 'Move someone’s cases',
     moveHint:
       'When someone falls ill or leaves: the cases they hold and have not started go to another person. Interviews already started stay with them.',
@@ -816,6 +871,20 @@ export const casesEs: CasesCatalogue = {
         returned: 'Un revisor pidió correcciones',
         available: 'Libres para tomar',
       },
+      goal: {
+        weekly: 'Completas esta semana / meta',
+        monthly: 'Completas este mes / meta',
+        daily: 'Completas hoy / meta',
+        period: 'Completas / meta del periodo',
+      },
+      goalState: {
+        upcoming: 'Aún no empieza',
+        on_track: 'Al día',
+        behind: 'Por debajo del ritmo',
+        met: 'Meta cumplida',
+        missed: 'Meta no alcanzada',
+        rest: 'Hoy no hay meta',
+      },
     },
     age: {
       lessHour: 'menos de 1 h',
@@ -840,6 +909,30 @@ export const casesEs: CasesCatalogue = {
     continue: 'Continuar',
     startCase: 'Iniciar el caso {{id}}',
     continueCase: 'Continuar el caso {{id}}',
+    team: 'Equipo',
+    anyTeam: 'Cualquier equipo',
+    quick: {
+      label: 'Filtros rápidos',
+      due_soon: 'Vence en 48 h',
+      overdue: 'Vencido',
+      no_attempt: 'Sin intento',
+      hint: {
+        due_soon_one:
+          'Casos abiertos cuyo plazo ({{count}} h desde la asignación) termina en las próximas 48 horas',
+        due_soon_other:
+          'Casos abiertos cuyo plazo ({{count}} h desde la asignación) termina en las próximas 48 horas',
+        overdue_one: 'Casos abiertos que pasaron su plazo ({{count}} h desde la asignación)',
+        overdue_other: 'Casos abiertos que pasaron su plazo ({{count}} h desde la asignación)',
+        no_attempt: 'Casos asignados sin ninguna llamada ni entrevista todavía',
+      },
+    },
+    review: 'Revisión:',
+    reviewState: {
+      pending: 'pendiente',
+      approved: 'aprobada',
+      returned: 'devuelta',
+      rejected: 'rechazada',
+    },
   },
   labels: {
     title: 'Nombres de las variables de muestra',
@@ -949,6 +1042,16 @@ export const casesEs: CasesCatalogue = {
     close: 'Cerrar',
     attempts_one: '{{count}} intento',
     attempts_other: '{{count}} intentos',
+    attemptsOf_one: '{{count}} intento de {{max}} permitidos',
+    attemptsOf_other: '{{count}} intentos de {{max}} permitidos',
+    reopenAttempts_one: 'Reabrir con {{count}} intento nuevo',
+    reopenAttempts_other: 'Reabrir con {{count}} intentos nuevos',
+    reopenAttemptsConfirm_one:
+      '¿Reabrir el caso {{id}}? Vuelve a la cola de llamadas con {{count}} intento nuevo; las llamadas hechas quedan en el historial.',
+    reopenAttemptsConfirm_other:
+      '¿Reabrir el caso {{id}}? Vuelve a la cola de llamadas con {{count}} intentos nuevos; las llamadas hechas quedan en el historial.',
+    attemptsReopened_one: 'Caso reabierto con {{count}} intento nuevo.',
+    attemptsReopened_other: 'Caso reabierto con {{count}} intentos nuevos.',
     event: {
       link_made: 'Enlace web personal generado',
       misidentified: 'Marcado como persona mal identificada',
@@ -1111,6 +1214,13 @@ export const casesEs: CasesCatalogue = {
     workload: 'Carga de trabajo',
     person: 'Persona',
     teams: 'Equipos',
+    overdue: 'Vencidos',
+    overdueHint: 'Casos abiertos que pasaron su plazo desde la asignación',
+    callbacks: 'Rellamadas pendientes',
+    callbacksHint: 'Rellamadas y citas agendadas para la persona o en los casos que tiene',
+    completesToday: 'Completas hoy',
+    lastContact: 'Último contacto',
+    never: 'nunca',
     move: 'Mover los casos de una persona',
     moveHint:
       'Cuando alguien se enferma o se va: los casos que tiene sin empezar pasan a otra persona. Las entrevistas ya empezadas se quedan con ella.',

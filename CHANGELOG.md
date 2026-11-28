@@ -19,6 +19,14 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
+  deadline) and "Not tried yet", a team filter, the review state of finished cases, and the
+  workload table with overdue cases, callbacks due, today's completes and last contact. An
+  interviewer's "Start"/"Continue" opens the interview from the list, their weekly goal shows
+  beside their figures, and on a phone each case is a card. The case panel keeps its code, status
+  and main actions in view; a case closed after its last call attempt shows the attempts against
+  the limit and can be reopened with a new round (`POST /projects/:id/cases/:caseId/reopen-attempts`,
+  recorded in its history and the audit log).
 - **Rotation and randomisation of a section's or block's items**: in the editor, "Order of the
   items" shuffles or rotates them per interview (seeded by the interview, so every device and the
   server see the same order); items can be kept in place in the definition (`itemOrder.fixed`), and an optional

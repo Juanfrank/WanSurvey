@@ -9,11 +9,14 @@ export function Dialog({
   children,
   onClose,
   wide,
+  header,
 }: {
   title: ReactNode;
   children: ReactNode;
   onClose(): void;
   wide?: boolean;
+  /** Shown under the title; both stay in view while the rest scrolls. */
+  header?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -38,9 +41,21 @@ export function Dialog({
         onClose();
       }}
     >
-      <h2 id={`${id}-title`} className="mb-4 text-lg font-semibold">
-        {title}
-      </h2>
+      {header ? (
+        <div
+          className="sticky -top-6 z-10 -mx-6 -mt-6 mb-4 border-b border-slate-200 bg-white px-6 pt-6 pb-3"
+          data-sticky-header=""
+        >
+          <h2 id={`${id}-title`} className="mb-2 text-lg font-semibold">
+            {title}
+          </h2>
+          {header}
+        </div>
+      ) : (
+        <h2 id={`${id}-title`} className="mb-4 text-lg font-semibold">
+          {title}
+        </h2>
+      )}
       {children}
     </dialog>
   );

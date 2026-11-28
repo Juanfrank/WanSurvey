@@ -11,7 +11,7 @@ import {
 import type { ReactNode } from 'react';
 import { ProjectSettings } from '@wansurvey/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CasesTab, caseKpis } from '../src/cases/CasesTab.js';
+import { CasesTab, caseKpis, myGoal } from '../src/cases/CasesTab.js';
 import { CaseMap } from '../src/cases/CaseMap.js';
 import { DistributeDialog } from '../src/cases/DistributeDialog.js';
 import { SettingsTab } from '../src/cases/SettingsTab.js';
@@ -182,6 +182,45 @@ describe('case figures', () => {
       'withdrawn',
     ]);
     expect(managers.find((k) => k.key === 'finalised')?.sub).toBe(4);
+  });
+});
+
+describe('quick filters and goals', () => {
+  it('filter cases not tried yet; the deadline ones need a case deadline', async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        {inRouter(<CasesTab projectId="p" />).ui}
+      </QueryClientProvider>,
+    );
+    const untried = await screen.findByRole('button', { name: 'Not tried yet' });
+    // The mocked project sets no deadline.
+    expect(screen.queryByRole('button', { name: 'Overdue' })).toBeNull();
+    await user.click(untried);
+    expect(untried.getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(calls.some((c) => c.url.includes('quick=no_attempt'))).toBe(true));
+  });
+
+  it("pick the interviewer's own goal in force, a weekly one first", () => {
+    const g = (
+      userId: string | null,
+      frequency: string,
+      state = 'on_track',
+      endsOn = '2099-01-01',
+    ) => ({ userId, frequency, target: 10, completes: 3, state, endsOn }) as never;
+    expect(myGoal([g(null, 'weekly'), g('u1', 'daily'), g('u1', 'weekly')], 'u1')).toMatchObject({
+      frequency: 'weekly',
+      userId: 'u1',
+    });
+    expect(myGoal([g('u1', 'weekly', 'upcoming'), g('u2', 'weekly')], 'u1')).toBeUndefined();
+    expect(myGoal([g('u1', 'monthly')], undefined)).toBeUndefined();
+    // A goal met in a period already over is not the one in force.
+    expect(
+      myGoal([g('u1', 'weekly', 'met', '2026-01-31'), g('u1', 'monthly')], 'u1', '2026-11-27'),
+    ).toMatchObject({ frequency: 'monthly' });
   });
 });
 
