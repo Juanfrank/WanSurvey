@@ -17,6 +17,7 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ## [Unreleased]
 
+- The designer names the questionnaire once: the breadcrumb ends in its name, edited in place as the page's title, and the toolbar under it keeps only the language, save state, undo, redo and publish. With nothing chosen in the outline the editor says "Choose an item in the outline to edit it."; "Add a section to start." is left for an empty questionnaire. The questionnaire preview has a breadcrumb back to Home, and its scenario-name field no longer cuts its placeholder short on a phone. The feedback links (one per face, the e-mail code, the iframe and the printed QR) add `r=`, `embed=1` and fixed answers to a query the link already has instead of starting a second `?`.
 - The option cards of the sampling plan show their description on one line (all of it in the ⓘ), the personal-columns note of an import folds to one line, and a page title keeps its ⓘ close so its buttons fit on the account row.
 
 ### Added

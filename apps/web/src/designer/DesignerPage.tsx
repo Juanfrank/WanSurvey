@@ -267,7 +267,7 @@ export function DesignerPage() {
                   toolbarH ? ({ '--sticky-top': `${toolbarH + 8}px` } as CSSProperties) : undefined
                 }
               >
-                {/* The breadcrumb, with the questionnaire's name as the h1, beside the account. */}
+                {/* The breadcrumb, with the questionnaire's name as the h1 (editable), beside the account. */}
                 <PageHeader
                   nowrap
                   parents={[
@@ -290,9 +290,29 @@ export function DesignerPage() {
                     </Link>,
                   ]}
                   title={
-                    <span className="truncate" title={d.name}>
-                      {d.name || t('designer.untitled')}
-                    </span>
+                    <>
+                      {/* The name is said once: here, as the page's h1, and edited in place (the
+                      toolbar below does not repeat it). It grows with the name and is cut short
+                      with "…" when the row has no room (shown whole on pointing). */}
+                      {canEdit ? (
+                        <input
+                          aria-label={t('designer.name')}
+                          className="field-sizing-content max-w-full min-w-[8ch] truncate rounded-md border border-transparent px-1.5 py-0.5 font-bold text-navy hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                          title={d.name}
+                          value={d.name}
+                          placeholder={t('designer.untitled')}
+                          size={Math.max(8, (d.name || t('designer.untitled')).length)}
+                          onChange={(e) => d.rename(e.target.value)}
+                        />
+                      ) : (
+                        <span className="truncate" title={d.name}>
+                          {d.name || t('designer.untitled')}
+                        </span>
+                      )}
+                      {/* Not shown: lets the breadcrumb measure itself again when the name
+                      changes (an input has no text of its own). */}
+                      <span hidden>{d.name}</span>
+                    </>
                   }
                 />
                 {qState && qState !== 'active' ? (
@@ -304,24 +324,13 @@ export function DesignerPage() {
                     {t(`designer.qActions.banner.${qState}`)}
                   </p>
                 ) : null}
-                {/* One toolbar on every tab, kept at the top while scrolling: the name, then the
-                language, save state, undo, redo and publish as one group on the right. */}
+                {/* One toolbar on every tab, kept at the top while scrolling: the language, save
+                state, undo, redo and publish as one group on the right (the name is the h1). */}
                 <div
                   ref={setToolbar}
                   className="@container sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-2 py-1"
                   data-testid="designer-toolbar"
                 >
-                  <label className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-[6rem]">
-                    <span className="sr-only">{t('designer.name')}</span>
-                    {/* A long name is cut short with "…" (shown whole on pointing). */}
-                    <input
-                      className="min-w-0 flex-1 truncate rounded-md border border-transparent px-2 py-1 text-lg font-semibold hover:border-slate-300 focus:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                      title={d.name}
-                      value={d.name}
-                      readOnly={!canEdit}
-                      onChange={(e) => d.rename(e.target.value)}
-                    />
-                  </label>
                   <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                     {draft.languages.length > 1 ? (
                       <label
@@ -581,7 +590,10 @@ export function DesignerPage() {
                             <fieldset disabled={!canEdit} className="min-w-0">
                               {selected === SETTINGS_ID ? (
                                 <p className="text-sm text-slate-600">
-                                  {t('designer.emptyEditor')}
+                                  {/* "Add a section" only while there is nothing to pick. */}
+                                  {draft.sections.length === 0
+                                    ? t('designer.emptyEditor')
+                                    : t('designer.pickItem')}
                                 </p>
                               ) : (
                                 <ItemEditor

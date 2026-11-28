@@ -3,6 +3,7 @@ import { SAMPLES } from '@wansurvey/fixtures';
 import { InterviewRunner, PaperForm, pick, type PaperContext } from '@wansurvey/renderer';
 import { MODES, type Mode } from '@wansurvey/schema';
 import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { Card, PageHeader } from '../routes/ui.js';
 import {
@@ -140,7 +141,16 @@ export function PreviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title={t('preview.title')} />
+      {/* Opened from Home and run on the samples (or a file): no project above it, so the way
+      back is Home. */}
+      <PageHeader
+        parents={[
+          <Link key="home" to="/" className="hover:underline">
+            {t('app.home')}
+          </Link>,
+        ]}
+        title={t('preview.title')}
+      />
       {/* While the interview runs, the source goes with the test's set-up (folded on a phone). */}
       {runs ? null : source}
       {p.loaded.jsonError ? (

@@ -64,6 +64,7 @@ export const designerEn = {
   designSections: 'Design sections',
   settingsSections: 'Settings topics',
   emptyEditor: 'Add a section to start.',
+  pickItem: 'Choose an item in the outline to edit it.',
   tab: {
     form: 'Form',
     design: 'Design',
@@ -947,6 +948,7 @@ export const designerEs: DesignerCatalogue = {
   designSections: 'Secciones del diseño',
   settingsSections: 'Temas de los ajustes',
   emptyEditor: 'Agregue una sección para empezar.',
+  pickItem: 'Elija un ítem del esquema para editarlo.',
   tab: {
     form: 'Formulario',
     design: 'Diseño',

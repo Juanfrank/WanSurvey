@@ -343,7 +343,7 @@ export function ScenariosPanel({
       <p className="text-sm text-slate-600">{help ?? t('preview.scenariosHelp')}</p>
       {toScenario ? (
         <form
-          className="flex gap-2"
+          className="flex flex-wrap gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             const s = toScenario(name.trim() || t('preview.runDefault', { n: list.length + 1 }));
@@ -355,9 +355,10 @@ export function ScenariosPanel({
           <label className="sr-only" htmlFor="scenario-name">
             {t('preview.scenarioName')}
           </label>
+          {/* Room for the whole placeholder: on a narrow screen the button wraps under it. */}
           <input
             id="scenario-name"
-            className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
+            className="min-w-0 flex-1 basis-48 rounded-md border border-slate-300 px-2 py-1 text-sm"
             placeholder={t('preview.scenarioName')}
             value={name}
             onChange={(e) => setName(e.target.value)}

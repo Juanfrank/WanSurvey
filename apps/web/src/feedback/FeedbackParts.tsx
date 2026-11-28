@@ -154,6 +154,37 @@ function CopyBox({ label, value, id }: { label: string; value: string; id: strin
   );
 }
 
+/**
+ * `url` with `params` added to its query: `?` when it has none yet, `&` when it already has one,
+ * any `#fragment` kept at the end. What the URL already has is kept as written, except a
+ * parameter given again, which is replaced rather than repeated. Empty values are left out.
+ */
+export function withQuery(url: string, params: Record<string, string | number>): string {
+  const hashAt = url.indexOf('#');
+  const hash = hashAt >= 0 ? url.slice(hashAt) : '';
+  const beforeHash = hashAt >= 0 ? url.slice(0, hashAt) : url;
+  const queryAt = beforeHash.indexOf('?');
+  const base = queryAt >= 0 ? beforeHash.slice(0, queryAt) : beforeHash;
+  const added = Object.entries(params).filter(([, v]) => v !== '');
+  const replaced = new Set(added.map(([k]) => k));
+  const keyOf = (part: string) => {
+    const raw = part.split('=')[0]!.replace(/\+/g, ' ');
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  };
+  const kept = (queryAt >= 0 ? beforeHash.slice(queryAt + 1) : '')
+    .split('&')
+    .filter((part) => part && !replaced.has(keyOf(part)));
+  const parts = [
+    ...kept,
+    ...added.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`),
+  ];
+  return `${base}${parts.length ? `?${parts.join('&')}` : ''}${hash}`;
+}
+
 /** An attribute value or text in copied HTML, with quotes and markup characters escaped. */
 const escapeHtml = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -171,7 +202,7 @@ export function feedbackEmailHtml(
     '<table role="presentation" cellpadding="6"><tr>',
     ...scores.map((s) => {
       const label = escapeHtml(labels[s - 1] ?? '');
-      return `  <td align="center"><a href="${escapeHtml(`${point.url}?r=${s}`)}" style="font-size:36px;text-decoration:none" title="${label}">${EMOJI[point.faces][s - 1]}</a><br><span style="font:12px sans-serif">${label}</span></td>`;
+      return `  <td align="center"><a href="${escapeHtml(withQuery(point.url, { r: s }))}" style="font-size:36px;text-decoration:none" title="${label}">${EMOJI[point.faces][s - 1]}</a><br><span style="font:12px sans-serif">${label}</span></td>`;
     }),
     '</tr></table>',
   ].join('\n');
@@ -181,7 +212,7 @@ export function feedbackEmailHtml(
 export function feedbackIframeHtml(
   point: Pick<FeedbackPoint, 'url' | 'name' | 'askComment'>,
 ): string {
-  return `<iframe src="${escapeHtml(`${point.url}?embed=1`)}" title="${escapeHtml(point.name)}" width="380" height="${point.askComment ? 320 : 190}" style="border:0"></iframe>`;
+  return `<iframe src="${escapeHtml(withQuery(point.url, { embed: 1 }))}" title="${escapeHtml(point.name)}" width="380" height="${point.askComment ? 320 : 190}" style="border:0"></iframe>`;
 }
 
 /** One link per face, and ready-made code for an e-mail and for a web page. */
@@ -202,11 +233,11 @@ export function FeedbackLinks({ point }: { point: FeedbackPoint }) {
               className="min-w-0 break-all rounded bg-white px-1.5 py-0.5"
               aria-label={t('feedback.linkOf', { n: s })}
             >
-              {`${point.url}?r=${s}`}
+              {withQuery(point.url, { r: s })}
             </code>
             <a
               className="text-indigo-ink-700 underline"
-              href={`${point.url}?r=${s}`}
+              href={withQuery(point.url, { r: s })}
               target="_blank"
               rel="noreferrer"
             >

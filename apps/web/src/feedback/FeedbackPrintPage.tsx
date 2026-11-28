@@ -8,7 +8,7 @@ import { Button, PageHeader } from '../routes/ui.js';
 import { Face } from './Faces.js';
 import type { FeedbackItem } from '@wansurvey/schema/feedback';
 import type { TFunction } from 'i18next';
-import type { FeedbackPoint } from './FeedbackParts.js';
+import { withQuery, type FeedbackPoint } from './FeedbackParts.js';
 
 const LAYOUTS = [4, 6, 8] as const;
 
@@ -38,11 +38,7 @@ export function FeedbackPrintPage() {
   const text = (x: Record<string, string>) => x[lang] ?? Object.values(x)[0] ?? '';
   const items = p?.items ?? [];
   const asked = items.filter((it) => !(it.param && fixed[it.param]));
-  const query = Object.entries(fixed)
-    .filter(([, v]) => v)
-    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-    .join('&');
-  const url = p ? (query ? `${p.url}?${query}` : p.url) : '';
+  const url = p ? withQuery(p.url, fixed) : '';
   const small = perPage === 8;
   return (
     <div className="flex flex-col gap-6" data-testid="feedback-print">
