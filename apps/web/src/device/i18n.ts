@@ -2,6 +2,16 @@
 export const deviceEn = {
   title: 'My device',
   link: 'My device',
+  team: {
+    title: 'Cases on devices',
+    who: 'Interviewer',
+    cases: 'Cases on device',
+    devices_one: 'on {{count}} device',
+    devices_other: 'on {{count}} devices',
+    lastSync: 'Last sync',
+    stale: 'No sync for over a day',
+    none: 'No interviewer holds cases on a device.',
+  },
   online: 'Online',
   offline: 'Offline',
   lastSync: 'Last sync: {{time}}',
@@ -106,6 +116,16 @@ export type DeviceCatalogue = typeof deviceEn;
 export const deviceEs: DeviceCatalogue = {
   title: 'Mi dispositivo',
   link: 'Mi dispositivo',
+  team: {
+    title: 'Casos en dispositivos',
+    who: 'Encuestador',
+    cases: 'Casos en el dispositivo',
+    devices_one: 'en {{count}} dispositivo',
+    devices_other: 'en {{count}} dispositivos',
+    lastSync: 'Última sincronización',
+    stale: 'Más de un día sin sincronizar',
+    none: 'Ningún encuestador tiene casos en un dispositivo.',
+  },
   online: 'En línea',
   offline: 'Sin conexión',
   lastSync: 'Última sincronización: {{time}}',

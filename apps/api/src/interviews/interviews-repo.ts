@@ -130,6 +130,26 @@ export interface InterviewsTx extends CasesTx {
   finaliseCase(id: string, disposition: string): Promise<void>;
   setCheckout(id: string, v: { device: string; by: string; at: Date } | null): Promise<void>;
   checkIn(projectId: string, ids: string[], deviceId: string, userId: string): Promise<string[]>;
+  /** Notes that a person's device has just synchronised with a project (169). */
+  noteDeviceSync(projectId: string, userId: string, deviceId: string): Promise<void>;
+  /**
+   * Per interviewer: cases on a device, devices that hold them, and when they last synchronised
+   * with the project (for someone holding cases, the device holding cases that synchronised the
+   * longest time ago); those holding cases or synchronised lately.
+   */
+  devicesOverview(
+    projectId: string,
+    sinceDays: number,
+  ): Promise<
+    {
+      userId: string;
+      name: string;
+      cases: number;
+      devices: number;
+      checkedOutAt: Date | null;
+      lastSync: Date | null;
+    }[]
+  >;
   caseBrief(
     projectId: string,
     id: string,
@@ -221,6 +241,8 @@ export interface InterviewsTx extends CasesTx {
 
   userName(id: string): Promise<string | null>;
   projectName(projectId: string): Promise<string | null>;
+  /** The latest note written during the interview (176): shown when it is taken up again. */
+  lastNote(interviewId: string): Promise<{ key: string; text: string; at: Date } | null>;
 
   // History of a case
   caseInterviews(caseId: string): Promise<
@@ -417,6 +439,71 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
         AND id IN (SELECT CAST(j.[value] AS uniqueidentifier) FROM OPENJSON(${JSON.stringify(ids)}) j)
         AND checked_out_device = ${deviceId} AND checked_out_by = ${userId}`.execute(this.itx);
     return res.rows.map((r) => low(r.id));
+  }
+
+  async noteDeviceSync(projectId: string, userId: string, deviceId: string) {
+    await ksql`
+      UPDATE device_syncs SET synced_at = SYSDATETIMEOFFSET()
+      WHERE project_id = ${projectId} AND user_id = ${userId} AND device_id = ${deviceId};
+      IF @@ROWCOUNT = 0
+      BEGIN TRY
+        INSERT INTO device_syncs (tenant_id, project_id, user_id, device_id)
+        VALUES (${this.tenant}, ${projectId}, ${userId}, ${deviceId});
+      END TRY
+      BEGIN CATCH
+        -- The same device at the same moment in another request: its row is there now.
+        IF ERROR_NUMBER() NOT IN (2601, 2627) THROW;
+      END CATCH;`.execute(this.itx);
+  }
+
+  async devicesOverview(projectId: string, sinceDays: number) {
+    const res = await ksql<{
+      user_id: string;
+      name: string;
+      cases: number;
+      devices: number;
+      checked_out_at: Date | null;
+      last_sync: Date | null;
+    }>`
+      WITH by_device AS (
+        SELECT checked_out_by AS user_id, checked_out_device AS device_id, COUNT(*) AS cases,
+          MIN(checked_out_at) AS checked_out_at
+        FROM cases
+        WHERE project_id = ${projectId} AND checked_out_device IS NOT NULL
+          AND checked_out_by IS NOT NULL
+        GROUP BY checked_out_by, checked_out_device
+      ), held AS (
+        -- A person with cases on two devices is as late as the device that synchronised last
+        -- the longest time ago (a download counts as a synchronisation).
+        SELECT b.user_id, SUM(b.cases) AS cases, COUNT(*) AS devices,
+          MIN(b.checked_out_at) AS checked_out_at,
+          MIN(COALESCE(d.synced_at, b.checked_out_at)) AS last_sync
+        FROM by_device b
+        LEFT JOIN device_syncs d ON d.project_id = ${projectId} AND d.user_id = b.user_id
+          AND d.device_id = b.device_id
+        GROUP BY b.user_id
+      ), synced AS (
+        SELECT user_id, MAX(synced_at) AS last_sync FROM device_syncs
+        WHERE project_id = ${projectId}
+        GROUP BY user_id
+      )
+      SELECT u.id AS user_id, u.name, COALESCE(h.cases, 0) AS cases, COALESCE(h.devices, 0) AS devices,
+        h.checked_out_at, COALESCE(h.last_sync, s.last_sync) AS last_sync
+      FROM users u
+      LEFT JOIN held h ON h.user_id = u.id
+      LEFT JOIN synced s ON s.user_id = u.id
+      WHERE h.user_id IS NOT NULL
+        OR s.last_sync > DATEADD(day, ${-sinceDays}, SYSDATETIMEOFFSET())
+      ORDER BY CASE WHEN h.user_id IS NULL THEN 1 ELSE 0 END,
+        COALESCE(h.last_sync, s.last_sync), u.name`.execute(this.itx);
+    return res.rows.map((r) => ({
+      userId: low(r.user_id),
+      name: r.name,
+      cases: Number(r.cases),
+      devices: Number(r.devices),
+      checkedOutAt: r.checked_out_at,
+      lastSync: r.last_sync,
+    }));
   }
 
   async caseBrief(projectId: string, id: string) {
@@ -654,6 +741,22 @@ export class MssqlInterviewsTx extends MssqlCasesTx implements InterviewsTx {
       .where('id', '=', id)
       .executeTakeFirst();
     return u?.name ?? null;
+  }
+
+  async lastNote(interviewId: string) {
+    const row = await this.itx
+      .selectFrom('interview_paradata')
+      .select(['payload', 'at'])
+      .where('interview_id', '=', interviewId)
+      .where('type', '=', 'note_added')
+      .orderBy('at', 'desc')
+      .orderBy('seq', 'desc')
+      .top(1)
+      .executeTakeFirst();
+    if (!row) return null;
+    const d = parse<Record<string, unknown>>(row.payload) ?? {};
+    const text = typeof d.text === 'string' ? d.text : '';
+    return text ? { key: String(d.key ?? ''), text, at: row.at as Date } : null;
   }
 
   async projectName(projectId: string) {

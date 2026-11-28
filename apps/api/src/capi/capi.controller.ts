@@ -1,4 +1,13 @@
-import { Body, Controller, HttpCode, Inject, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+} from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
@@ -43,6 +52,13 @@ export class CapiController {
     return this.repo.inTenant(ctx.tenantId, (t) =>
       this.capi.checkin(t, ctx, projectId, body.deviceId, body.caseIds),
     );
+  }
+
+  /** Cases on devices and the last synchronisation, per interviewer (those who follow the team). */
+  @Get('projects/:projectId/capi/devices')
+  @RequirePermission('metrics.team', PERM)
+  devices(@Auth() ctx: AuthContext, @Param('projectId', ParseUUIDPipe) projectId: string) {
+    return this.repo.inTenant(ctx.tenantId, (t) => this.capi.devices(t, projectId));
   }
 
   /** Frees a case from a device that is lost or broken (supervisors). */

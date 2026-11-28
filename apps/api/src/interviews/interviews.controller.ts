@@ -90,7 +90,9 @@ export class InterviewsController {
   get(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
       const row = await this.own(t, ctx, id);
-      return this.runtime.payload(t, row, row.deviceId);
+      const payload = await this.runtime.payload(t, row, row.deviceId);
+      // The interviewer's own last note on it, for the card shown when it is taken up (176).
+      return { ...payload, lastNote: await t.lastNote(row.id) };
     });
   }
 
@@ -104,8 +106,8 @@ export class InterviewsController {
   @RequirePermission(CONDUCT_OR_KEY, { anyProject: true })
   @ApiBody({ schema: z.toJSONSchema(SyncBody, { io: 'input' }) as object })
   sync(@Auth() ctx: AuthContext, @Body(new ZodPipe(SyncBody)) body: z.infer<typeof SyncBody>) {
-    return this.repo.inTenant(ctx.tenantId, (t) =>
-      this.runtime.sync(
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const out = await this.runtime.sync(
         t,
         { tenantId: ctx.tenantId, userId: ctx.userId, ctx },
         body.deviceId,
@@ -115,8 +117,12 @@ export class InterviewsController {
         this.runtime.createOffline
           ? (item) => this.runtime.createOffline!(t, ctx, body.deviceId, item)
           : undefined,
-      ),
-    );
+      );
+      // A device's "Sync now" for a project: when it last reached the server (169).
+      if (body.projectId && can(ctx.memberships, CONDUCT, body.projectId))
+        await t.noteDeviceSync(body.projectId, ctx.userId, body.deviceId);
+      return out;
+    });
   }
 
   /**

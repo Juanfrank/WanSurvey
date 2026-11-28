@@ -14,10 +14,13 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, apiFull } from '../api.js';
-import { dateTime, number } from '../format.js';
+import { dateTime, number, timeOnly } from '../format.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
+import { useCan } from '../designer/hooks.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
+import { useMe } from '../routes/AppLayout.js';
+import { currentGoal, GoalBadge, type Goal } from '../routes/HomePage.js';
 import { PhoneIcon } from '../routes/icons.js';
 import { CallbackReminders } from '../routes/Notifications.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
@@ -198,6 +201,26 @@ export function CallsTab({
     queryFn: () =>
       api<Shift>(`/projects/${projectId}/cati/shift?since=${encodeURIComponent(since)}`),
     enabled: !served,
+  });
+
+  // The caller's own goal and pace, as on Home (89, 108).
+  const me = useMe();
+  const canOwn = useCan('metrics.own', projectId);
+  const canTeam = useCan('metrics.team', projectId);
+  const goals = useQuery({
+    queryKey: ['goals', projectId],
+    queryFn: () => api<Goal[]>(`/projects/${projectId}/goals`),
+    enabled: !served && (canOwn || canTeam),
+  });
+  const myGoal = currentGoal((goals.data ?? []).filter((g) => g.userId === me.data?.user.id));
+
+  // What "Next case" would bring, read without taking it (19).
+  const peek = useQuery({
+    queryKey: ['cati-peek', projectId, qid],
+    queryFn: () =>
+      api<Peek>(`/projects/${projectId}/cati/peek${qid ? `?questionnaireId=${qid}` : ''}`),
+    enabled: !served && !busy,
+    refetchInterval: 30_000,
   });
 
   // A callback coming due is announced once.
@@ -515,7 +538,10 @@ export function CallsTab({
               : null}
           </p>
         ) : null}
-        {!served && shift.data ? <ShiftSummary shift={shift.data} /> : null}
+        {!served && !seeking && peek.data ? (
+          <QueuePeek peek={peek.data} now={now} hideReason={!!idle} />
+        ) : null}
+        {!served && shift.data ? <ShiftSummary shift={shift.data} goal={myGoal} /> : null}
 
         {served ? (
           <form
@@ -892,8 +918,52 @@ export function CallsTab({
   );
 }
 
+/** What the queue would serve next, or why nothing; a preview that holds nothing (19). */
+interface Peek {
+  next: {
+    kind: 'open' | 'pinned' | 'callback' | 'new' | 'retry';
+    externalId: string;
+    attempts: number;
+    at: string | null;
+  } | null;
+  reason: string | null;
+  nextAt: string | null;
+}
+
+function QueuePeek({ peek, now, hideReason }: { peek: Peek; now: number; hideReason: boolean }) {
+  const { t } = useTranslation();
+  const n = peek.next;
+  if (!n && hideReason) return null;
+  const when = (at: string) =>
+    new Date(at).toDateString() === new Date(now).toDateString() ? timeOnly(at) : dateTime(at);
+  const text = !n
+    ? `${t(`cati.reason.${peek.reason ?? 'empty'}`, { defaultValue: t('cati.reason.empty') })}${
+        peek.nextAt ? ` ${t('cati.nextCallback', { time: dateTime(peek.nextAt) })}` : ''
+      }`
+    : n.kind === 'new'
+      ? t('cati.peek.new')
+      : n.kind === 'retry'
+        ? t('cati.peek.retry', { count: n.attempts })
+        : n.kind === 'open'
+          ? t('cati.peek.open', { id: n.externalId })
+          : n.kind === 'pinned'
+            ? t('cati.peek.pinned', { id: n.externalId })
+            : n.at && Date.parse(n.at) < now
+              ? t('cati.peek.callbackOverdue', { time: when(n.at) })
+              : t('cati.peek.callback', { time: n.at ? when(n.at) : '' });
+  return (
+    <p
+      className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
+      data-testid="queue-peek"
+      data-kind={n?.kind ?? 'none'}
+    >
+      <span className="font-semibold">{t('cati.peek.label')}</span> {text}
+    </p>
+  );
+}
+
 /** The caller's day so far: calls, contacts (and the contact rate), completes, time on the phone. */
-function ShiftSummary({ shift }: { shift: Shift }) {
+function ShiftSummary({ shift, goal }: { shift: Shift; goal?: Goal }) {
   const { t } = useTranslation();
   const mins = Math.round(shift.talkMs / 60_000);
   const rate = shift.calls ? Math.round((shift.contacts / shift.calls) * 100) : null;
@@ -923,6 +993,11 @@ function ShiftSummary({ shift }: { shift: Shift }) {
           </div>
         ))}
       </dl>
+      {goal ? (
+        <div className="mt-3 border-t border-slate-100 pt-3" data-testid="shift-goal">
+          <GoalBadge goal={goal} own />
+        </div>
+      ) : null}
     </section>
   );
 }

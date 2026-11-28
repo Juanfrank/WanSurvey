@@ -23,6 +23,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { maskContact, maskSample } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
 import type { AuthContext } from '../common/auth-context.js';
+import { checkPaperMeta } from '../papi/paper-meta.js';
 import { closedCode } from '../questionnaires/state.js';
 import { type CaseFull, type InterviewRow, type InterviewsTx } from './interviews-repo.js';
 import type { StartBody, SubmitBody, SyncItem } from './schemas.js';
@@ -268,7 +269,17 @@ export class InterviewsService {
         run.push(o);
       }
       const answers = run.filter((o) => o.kind === 'answer');
-      const para = run.filter((o) => o.kind === 'paradata');
+      // The date and duration of a paper form are checked here too (126): a wrong value is
+      // recorded as missing and reported.
+      let paperInvalid = false;
+      const para = run
+        .filter((o) => o.kind === 'paradata')
+        .map((o) => {
+          if (o.type !== 'paper_meta') return o;
+          const checked = checkPaperMeta(o.payload);
+          paperInvalid ||= checked.invalid;
+          return { ...o, payload: checked.payload };
+        });
       await t.insertAnswerEvents(
         row.id,
         deviceId,
@@ -323,6 +334,7 @@ export class InterviewsService {
       acks[item.id] = last;
       if (hasState) versions[item.id] = row.stateVersion + 1;
       if (stale) errors[item.id] = 'STALE_STATE';
+      else if (paperInvalid) errors[item.id] = 'PAPER_META_INVALID';
     }
     return { acks, errors, versions, serverTime: new Date().toISOString() };
   }

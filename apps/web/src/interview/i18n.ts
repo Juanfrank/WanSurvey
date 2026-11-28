@@ -26,6 +26,8 @@ export const interviewEn = {
     SUBMITTED: 'This interview has been submitted already.',
     STALE_STATE:
       'This interview was changed elsewhere meanwhile; the answers given here were not kept. Open it again to see the latest.',
+    PAPER_META_INVALID:
+      'The server did not keep the date or the duration written on the form: the date cannot be later than today and the duration is a whole number of minutes from 1 to 600. Correct them.',
   },
   lowSpace: 'This device is almost out of storage space. Sync and free some space soon.',
   side: 'Case details',
@@ -75,6 +77,7 @@ export const interviewEn = {
     ago: 'Last activity {{when}}.',
     answered_one: '{{count}} answer kept.',
     answered_other: '{{count}} answers kept.',
+    note: 'Last note:',
     lastAnswer: 'Go to the last question answered',
     dismiss: 'Continue here',
   },
@@ -200,6 +203,8 @@ export const interviewEs: InterviewCatalogue = {
     SUBMITTED: 'Esta entrevista ya fue enviada.',
     STALE_STATE:
       'Esta entrevista se cambió en otro lugar mientras tanto; las respuestas dadas aquí no se guardaron. Ábrala de nuevo para ver la última versión.',
+    PAPER_META_INVALID:
+      'El servidor no guardó la fecha o la duración escritas en el formulario: la fecha no puede ser posterior a hoy y la duración es un número entero de minutos de 1 a 600. Corríjalas.',
   },
   lowSpace: 'Este dispositivo casi no tiene espacio. Sincronice y libere espacio pronto.',
   side: 'Datos del caso',
@@ -249,6 +254,7 @@ export const interviewEs: InterviewCatalogue = {
     ago: 'Última actividad {{when}}.',
     answered_one: '{{count}} respuesta guardada.',
     answered_other: '{{count}} respuestas guardadas.',
+    note: 'Última nota:',
     lastAnswer: 'Ir a la última pregunta respondida',
     dismiss: 'Seguir aquí',
   },

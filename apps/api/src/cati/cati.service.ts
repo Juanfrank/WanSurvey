@@ -195,6 +195,67 @@ export class CatiService implements OnModuleInit {
     return this.open(t, ctx, projectId, c, now, questionnaireId);
   }
 
+  /**
+   * What "Next case" would serve now, without serving it (19): read only, so nothing is locked,
+   * no call is opened and the queue is left as it is. Another caller may still take that case
+   * first; this is a preview, not a reservation.
+   */
+  async peek(t: CatiTx, ctx: AuthContext, projectId: string, questionnaireId?: string) {
+    const settings = await this.cases.settings(t, projectId);
+    if (!settings.contactBasis.phone) return { next: null, reason: 'no_basis', nextAt: null };
+    // "Next case" serves the caller's open call first.
+    const open = await this.openAttempt(t, ctx, projectId);
+    if (open) {
+      const c = await t.caseOf(open.caseId);
+      return {
+        next: {
+          kind: 'open',
+          externalId: c?.externalId ?? '',
+          attempts: c?.attempts ?? 0,
+          at: null,
+        },
+        reason: null,
+        nextAt: null,
+      };
+    }
+    const tz = await this.projectTimezone(t, projectId);
+    const now = new Date();
+    const pool = settings.assignmentMode === 'pool';
+    const rows = await t.candidates({
+      projectId,
+      questionnaireId,
+      userId: ctx.userId,
+      pool,
+      maxAttempts: settings.cati.maxAttempts,
+      limit: CANDIDATES,
+    });
+    const options = { me: ctx.userId, now, settings: settings.cati, pool, projectTimezone: tz };
+    const queue = rows.map((r) => this.queueCase(r));
+    const pick = nextEligible(queue, options);
+    if (!('case' in pick))
+      return { next: null, reason: pick.reason, nextAt: await t.upcoming(projectId, ctx.userId) };
+    const q = pick.case;
+    const kind =
+      q.pinnedBy === ctx.userId
+        ? 'pinned'
+        : q.disposition === 'CALLBACK' && q.nextContactAt
+          ? 'callback'
+          : q.attempts === 0
+            ? 'new'
+            : 'retry';
+    const row = rows.find((r) => r.id === q.id)!;
+    return {
+      next: {
+        kind,
+        externalId: row.externalId,
+        attempts: q.attempts,
+        at: kind === 'callback' || kind === 'pinned' ? q.nextContactAt : null,
+      },
+      reason: null,
+      nextAt: null,
+    };
+  }
+
   /** Locks the case to the caller and opens a call on it. */
   private async open(
     t: CatiTx,

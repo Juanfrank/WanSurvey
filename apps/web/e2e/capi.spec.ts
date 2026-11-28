@@ -1,8 +1,9 @@
 import { expect, test, type Page } from './fixtures.js';
 import { connectDb, marks } from './db.js';
-import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import { expectAccessible, login, resultsSection, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
+const SUPERVISOR = 'supervisor@demo.wansurvey.test';
 
 const question = (page: Page, id: string) => page.locator(`[data-qkey^="${id}"]`).first();
 async function onQuestion(page: Page, id: string) {
@@ -111,6 +112,25 @@ test('download cases, interview offline after a reload, and everything arrives o
     await box.check();
     await page.getByRole('button', { name: 'Download selected' }).click();
     await expect(page.getByTestId('device-message')).toContainText('1 case downloaded.');
+
+    // The supervisor sees, on the live dashboard, who holds cases on a device and when it last
+    // synchronised (169).
+    const sup = await context.browser()!.newPage();
+    await login(sup, SUPERVISOR);
+    await pickOrganisation(sup, 'Demo Research');
+    await sup
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('link', { name: 'Projects', exact: true })
+      .click();
+    await sup.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
+    await resultsSection(sup, 'Dashboard');
+    const held = sup.getByTestId('team-devices').locator('tr[data-user="Demo interviewer"]');
+    await expect(held).toContainText('1');
+    await expect(held).toContainText(/now|second|minute/);
+    await held.scrollIntoViewIfNeeded();
+    await shot(sup, 'v2-dashboard-devices', { fullPage: false });
+    await sup.close();
+
     await page.getByRole('button', { name: 'Sign out' }).click();
     const leave = page.getByRole('dialog', { name: 'Before you sign out' });
     await expect(leave).toContainText('This device keeps 1 downloaded case, with personal data.');

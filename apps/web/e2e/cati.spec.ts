@@ -3,6 +3,7 @@ import { connectDb } from './db.js';
 import { PM, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
+const GOAL_ID = '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
 
 async function openProject(page: Page, email: string) {
   await login(page, email);
@@ -48,6 +49,8 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await page.getByRole('tab', { name: 'Phone calls' }).click();
     const calls = page.getByTestId('calls');
     await expect(calls.getByRole('button', { name: /Next case/ })).toBeVisible();
+    // Before asking, what the queue would bring: a preview that takes nothing (19).
+    await expect(calls.getByTestId('queue-peek')).toContainText(/^Next: /);
 
     // N: the next case, with its numbers, introduction and outcomes.
     await page.keyboard.press('n');
@@ -92,9 +95,23 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
       `update cases set next_contact_at = dateadd(minute, -1, sysdatetimeoffset()) where external_id = ?`,
       [caseId],
     );
+    // A goal for this caller this week (taken off at the end: other tests set their own).
+    await db.run(
+      `insert into interviewer_goals (id, tenant_id, project_id, user_id, frequency, starts_on, ends_on, target)
+       select ?, p.tenant_id, p.id, u.id, 'period', cast(dateadd(day, -1, sysdatetimeoffset()) as date),
+              cast(dateadd(day, 6, sysdatetimeoffset()) as date), 10
+       from projects p cross join users u
+       where p.name = 'Household Survey 2026' and u.email = ?`,
+      [GOAL_ID, INTERVIEWER],
+    );
     await page.reload();
     await page.getByRole('tab', { name: 'Phone calls' }).click();
     await expect(page.getByTestId('callback-due')).toContainText(`Callback due: case ${caseId}`);
+    // The empty screen says what comes next, and the caller's goal sits with the day so far.
+    await expect(page.getByTestId('queue-peek')).toHaveAttribute('data-kind', 'callback');
+    await expect(page.getByTestId('queue-peek')).toContainText('Next: an overdue callback from');
+    await expect(page.getByTestId('shift-goal')).toContainText('My goal: ');
+    await shot(page, 'v2-cati-peek-and-goal', { fullPage: false });
     await expect(page.getByTestId('callbacks-overdue')).toContainText(caseId);
     await shot(page, 'cati-callbacks');
     await expectAccessible(page);
@@ -143,6 +160,7 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await expect(history).toContainText('Answered');
     await expect(history).toContainText('Call back later');
   } finally {
+    await db.run(`delete from interviewer_goals where id = ?`, [GOAL_ID]);
     await db.end();
   }
 });

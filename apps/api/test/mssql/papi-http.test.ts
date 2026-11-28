@@ -172,6 +172,47 @@ describe.skipIf(!configured)('SQL Server: paper forms over HTTP', () => {
     expect(c).toMatchObject({ status: 'finalised', disposition: 'COMPLETE' });
   });
 
+  it('checks the date and duration written on the form on the server too (126)', async () => {
+    const caseId = await newCase(clerk1.id, 'P0150');
+    const device = 'clerk-desk-0150';
+    const r = await post(k1, `/projects/${project}/interviews`, {
+      id: randomUUID(),
+      caseId,
+      questionnaireId: qid,
+      mode: 'PAPI',
+      deviceId: device,
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const id = (r.body as Payload).interview.id;
+    const meta = (seq: number, payload: object) => ({
+      seq,
+      kind: 'paradata' as const,
+      type: 'paper_meta',
+      at: new Date().toISOString(),
+      payload,
+    });
+    const future = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    const bad = await post(k1, '/interviews/sync', {
+      deviceId: device,
+      interviews: [{ id, ops: [meta(1, { date: future, minutes: 900 })] }],
+    }).expect(200);
+    // Recorded (the device goes on) without the wrong values, and reported.
+    expect(bad.body.acks[id]).toBe(1);
+    expect(bad.body.errors[id]).toBe('PAPER_META_INVALID');
+    const good = await post(k1, '/interviews/sync', {
+      deviceId: device,
+      interviews: [{ id, ops: [meta(2, { date: '2026-01-15', minutes: 35 })] }],
+    }).expect(200);
+    expect(good.body.errors[id]).toBeUndefined();
+    const stored = await rows(
+      sql`SELECT payload FROM interview_paradata WHERE interview_id = ${id} AND type = 'paper_meta' ORDER BY seq`,
+    );
+    expect(stored.map((s) => JSON.parse(s.payload as string))).toEqual([
+      { date: null, minutes: null },
+      { date: '2026-01-15', minutes: 35 },
+    ]);
+  });
+
   it('double entry: another clerk keys again, differences are listed and resolved', async () => {
     await doubleEntry(true);
     const caseId = await newCase(clerk1.id, 'P0200');

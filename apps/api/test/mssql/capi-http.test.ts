@@ -302,6 +302,47 @@ describe.skipIf(!configured)('SQL Server: offline face-to-face interviewing', ()
     });
     expect(co.body.cases).toHaveLength(1);
   });
+  it('shows supervisors the cases on each device and its last sync (169)', async () => {
+    const u = await createUser(t.owner, tenant.id, [{ role: 'interviewer', projectId: project }]);
+    const s = await login(t, u);
+    const a = await newCase(u.id);
+    const b = await newCase(u.id);
+    const phone = 'device-phone-0169';
+    await post(s, `/projects/${project}/capi/checkout`, {
+      deviceId: phone,
+      caseIds: [a, b],
+    }).expect(200);
+    const list = async () =>
+      (await supervisor.agent.get(`/api/v1/projects/${project}/capi/devices`).expect(200)).body as {
+        userId: string;
+        cases: number;
+        devices: number;
+        lastSync: string | null;
+      }[];
+    const first = (await list()).find((r) => r.userId === u.id)!;
+    expect(first).toMatchObject({ cases: 2, devices: 1 });
+    expect(first.lastSync).not.toBeNull();
+    // A "Sync now" with nothing to send still counts; an open interview's sends do not ask for it.
+    await q`UPDATE device_syncs SET synced_at = DATEADD(day, -3, SYSDATETIMEOFFSET()) WHERE user_id = ${u.id}`;
+    const old = (await list()).find((r) => r.userId === u.id)!;
+    expect(Date.now() - Date.parse(old.lastSync!)).toBeGreaterThan(2 * 86_400_000);
+    await post(s, '/interviews/sync', { deviceId: phone, interviews: [] }).expect(200);
+    expect((await list()).find((r) => r.userId === u.id)!.lastSync).toBe(old.lastSync);
+    await post(s, '/interviews/sync', {
+      deviceId: phone,
+      projectId: project,
+      interviews: [],
+    }).expect(200);
+    const now = (await list()).find((r) => r.userId === u.id)!;
+    expect(Date.now() - Date.parse(now.lastSync!)).toBeLessThan(60_000);
+    // Interviewers do not see the team's devices.
+    expect((await s.agent.get(`/api/v1/projects/${project}/capi/devices`)).status).toBe(403);
+    await post(s, `/projects/${project}/capi/checkin`, { deviceId: phone, caseIds: [a, b] }).expect(
+      200,
+    );
+    expect((await list()).find((r) => r.userId === u.id)).toMatchObject({ cases: 0 });
+  });
+
   it('an offline start keeps to the case’s questionnaire, one in use, and the caller’s permission', async () => {
     const u = await createUser(t.owner, tenant.id, [
       { role: 'interviewer', projectId: project },

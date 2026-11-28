@@ -216,6 +216,12 @@ export function syncDevice(projectId: string): Promise<SyncReport> {
       const c = cases.find((x) => x.interviewId === id);
       if (c) await store.patchCase(c.caseId, { problem: code });
     }
+    // The server notes this device's synchronisation, for the supervisors' view (169). Only
+    // bookkeeping: the work above is done whether or not this last note gets through.
+    await api('/interviews/sync', {
+      method: 'POST',
+      body: { deviceId, projectId, interviews: [] },
+    }).catch(() => undefined);
     await store.setMeta(`lastSync:${projectId}`, report.at);
     return report;
   });
