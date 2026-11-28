@@ -15,7 +15,16 @@ import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import { z } from 'zod';
 import { MASK } from '../cases/case-logic.js';
 import { CasesService } from '../cases/cases.service.js';
-import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
+import {
+  AfterClose,
+  Auth,
+  FieldWork,
+  RequirePermission,
+  can,
+  isClosed,
+  lateUploadAllowed,
+  type AuthContext,
+} from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import {
   INTERVIEWS_REPO,
@@ -55,6 +64,7 @@ export class InterviewsController {
 
   /** Starts an interview on a case, or resumes the one in progress. Idempotent on `id`. */
   @Post('projects/:projectId/interviews')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission(CONDUCT_OR_KEY, PERM)
   @ApiBody({ schema: z.toJSONSchema(StartBody) as object })
@@ -86,6 +96,7 @@ export class InterviewsController {
 
   /** Everything a device needs to resume an interview. */
   @Get('interviews/:id')
+  @AfterClose()
   @RequirePermission(CONDUCT_OR_KEY, { anyProject: true })
   get(@Auth() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
@@ -102,6 +113,7 @@ export class InterviewsController {
    * out of order, is harmless. The answer is the last number acknowledged per interview.
    */
   @Post('interviews/sync')
+  @AfterClose()
   @HttpCode(200)
   @RequirePermission(CONDUCT_OR_KEY, { anyProject: true })
   @ApiBody({ schema: z.toJSONSchema(SyncBody, { io: 'input' }) as object })
@@ -112,8 +124,14 @@ export class InterviewsController {
         { tenantId: ctx.tenantId, userId: ctx.userId, ctx },
         body.deviceId,
         body.interviews,
-        // As `own`: the caller's interview, in a project where they still conduct or key.
-        (row) => (this.mayWrite(ctx, row) ? null : 'NOT_FOUND'),
+        // As `own`: the caller's interview, in a project where they still conduct or key (or,
+        // once it is closed, one they started before the close).
+        (row) =>
+          this.mayWrite(ctx, row)
+            ? null
+            : isClosed(ctx, row.projectId) && row.interviewerId === ctx.userId
+              ? 'PROJECT_CLOSED'
+              : 'NOT_FOUND',
         this.runtime.createOffline
           ? (item) => this.runtime.createOffline!(t, ctx, body.deviceId, item)
           : undefined,
@@ -121,7 +139,16 @@ export class InterviewsController {
       // A device's "Sync now" for a project: when it last reached the server (169).
       if (body.projectId && can(ctx.memberships, CONDUCT, body.projectId))
         await t.noteDeviceSync(body.projectId, ctx.userId, body.deviceId);
-      return out;
+      // The projects the device asked about that are closed and where the caller worked: the
+      // device then removes what it keeps of them, once nothing is left to send.
+      const asked = [...new Set([body.projectId, ...(body.projectIds ?? [])])].filter(
+        (p): p is string => !!p,
+      );
+      const held = ctx.heldGrants ?? ctx.memberships;
+      const closedProjects = asked
+        .filter((p) => isClosed(ctx, p) && CONDUCT_OR_KEY.some((perm) => can(held, perm, p)))
+        .map((p) => p.toLowerCase());
+      return { ...out, closedProjects };
     });
   }
 
@@ -130,6 +157,7 @@ export class InterviewsController {
    * questionnaire version and case data; a path that differs from the client's is refused.
    */
   @Post('interviews/:id/submit')
+  @AfterClose()
   @HttpCode(200)
   @RequirePermission(CONDUCT_OR_KEY, { anyProject: true })
   @ApiBody({ schema: z.toJSONSchema(SubmitBody) as object })
@@ -163,6 +191,12 @@ export class InterviewsController {
   ) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
       const row = await this.own(t, ctx, id, true);
+      // Moving an interview to another device is fieldwork: not in a closed project.
+      if (isClosed(ctx, row.projectId))
+        throw new ConflictException({
+          code: 'PROJECT_CLOSED',
+          message: 'This project is closed: fieldwork is over',
+        });
       if (!EDITABLE.has(row.status))
         throw new ConflictException({ code: 'SUBMITTED', message: 'Already submitted' });
       const moved = await t.takeOver(id, { deviceId: body.deviceId, now: new Date() });
@@ -210,15 +244,33 @@ export class InterviewsController {
 
   private async own(t: InterviewsTx, ctx: AuthContext, id: string, lock = false) {
     const row = await t.interview(id, lock);
-    if (!row || !this.mayWrite(ctx, row)) throw new NotFoundException('Interview not found');
+    if (!row) throw new NotFoundException('Interview not found');
+    if (!this.mayWrite(ctx, row)) {
+      if (isClosed(ctx, row.projectId) && row.interviewerId === ctx.userId)
+        throw new ConflictException({
+          code: 'PROJECT_CLOSED',
+          message: 'This project is closed: fieldwork is over',
+        });
+      throw new NotFoundException('Interview not found');
+    }
     return row;
   }
 
-  private mayWrite(ctx: AuthContext, row: Pick<InterviewRow, 'interviewerId' | 'projectId'>) {
+  /**
+   * The caller's interview, in a project where they conduct or key. Once the project is
+   * closed, only one started before the close is still taken (by whoever held the role then),
+   * so what a device did in the field is not lost; nothing newer is.
+   */
+  private mayWrite(
+    ctx: AuthContext,
+    row: Pick<InterviewRow, 'interviewerId' | 'projectId' | 'startedAt'>,
+  ) {
+    if (row.interviewerId !== ctx.userId) return false;
+    if (isClosed(ctx, row.projectId))
+      return lateUploadAllowed(ctx, row.projectId, row.startedAt, CONDUCT_OR_KEY);
     return (
-      row.interviewerId === ctx.userId &&
-      (can(ctx.memberships, CONDUCT, row.projectId) ||
-        can(ctx.memberships, 'dataentry.key', row.projectId))
+      can(ctx.memberships, CONDUCT, row.projectId) ||
+      can(ctx.memberships, 'dataentry.key', row.projectId)
     );
   }
 }

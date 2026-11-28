@@ -40,11 +40,20 @@ import {
   ReviewSettings,
   ShortcutSettings,
   projectSettings,
+  roleMatrix,
+  staysWhenClosed,
+  type Role,
 } from '@wansurvey/schema';
 import { themeProblems } from '@wansurvey/schema/cawi-theme';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
+import {
+  AfterClose,
+  Auth,
+  RequirePermission,
+  can,
+  type AuthContext,
+} from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
 import { ruleProblem } from '../cases/cleaning.js';
 import { ORG_REPO, type OrgRepo } from './org-repo.js';
@@ -121,12 +130,20 @@ export class ProjectsController {
     private readonly audit: AuditService,
   ) {}
 
-  /** Tenant-wide members see every project; project-scoped members see only theirs. */
+  /**
+   * Tenant-wide members see every project; project-scoped members see only theirs. Field roles
+   * no longer see a closed project (`withoutClosedProjects`).
+   */
   @Get()
+  // Someone whose projects are all closed gets an empty list, not a refusal.
+  @AfterClose()
   @RequirePermission('projects.read', { anyProject: true })
   list(@Auth() ctx: AuthContext) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
-      if (can(ctx.memberships, 'projects.read')) return (await t.projects()).map(withSettings);
+      if (can(ctx.memberships, 'projects.read'))
+        return (await t.projects())
+          .filter((p) => can(ctx.memberships, 'projects.read', p.id))
+          .map(withSettings);
       const ids = ctx.memberships
         .filter((m) => m.projectId !== null && can([m], 'projects.read', m.projectId))
         .map((m) => m.projectId!);
@@ -267,7 +284,18 @@ export class ProjectsController {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
       const project = await t.project(id);
       if (!project) throw new NotFoundException('Project not found');
-      return { status: project.status, ...(await t.closeout(id)) };
+      const { grants, ...open } = await t.closeout(id);
+      // Who loses access when the project closes: people all of whose roles here are field
+      // roles (`staysWhenClosed`). Their roles stay; reopening gives the access back.
+      const matrix = roleMatrix((await t.tenant())?.rolePermissions);
+      const byPerson = new Map<string, boolean>();
+      for (const g of grants) {
+        if (!(g.role in matrix)) continue;
+        const stays = staysWhenClosed(matrix[g.role as Role]);
+        byPerson.set(g.userId, (byPerson.get(g.userId) ?? false) || stays);
+      }
+      const fieldPeople = [...byPerson.values()].filter((stays) => !stays).length;
+      return { status: project.status, closedAt: project.closedAt ?? null, ...open, fieldPeople };
     });
   }
 

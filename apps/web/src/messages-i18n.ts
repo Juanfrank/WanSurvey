@@ -161,6 +161,8 @@ export const messagesEn = {
     SAME_CLERK: 'The second entry must be keyed by another person.',
     ENTRIES_DIFFER: 'Resolve the differences between the two paper entries first.',
     CASE_CLOSED: 'This case is finished or withdrawn.',
+    PROJECT_CLOSED:
+      'This project is closed: fieldwork is over. Whoever runs the project can reopen it.',
     ENTRY_IN_PROGRESS: 'Another entry of this form is in progress.',
     IN_PROGRESS_OTHER_MODE: 'This case has an interview in progress in another mode.',
     NO_LAWFUL_BASIS:
@@ -361,6 +363,8 @@ export const messagesEs: MessagesCatalogue = {
     SAME_CLERK: 'La segunda digitación debe hacerla otra persona.',
     ENTRIES_DIFFER: 'Primero resuelva las diferencias entre las dos digitaciones.',
     CASE_CLOSED: 'Este caso terminó o fue retirado.',
+    PROJECT_CLOSED:
+      'Este proyecto está cerrado: el trabajo de campo terminó. Quien administra el proyecto puede reabrirlo.',
     ENTRY_IN_PROGRESS: 'Otra digitación de este formulario está en curso.',
     IN_PROGRESS_OTHER_MODE: 'Este caso tiene una entrevista en curso en otro modo.',
     NO_LAWFUL_BASIS:

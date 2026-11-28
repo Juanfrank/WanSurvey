@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { isClosedStatus } from '@wansurvey/schema';
 import { sql as ksql } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import { CasesStore } from '../cases/cases-store.mssql.js';
@@ -50,6 +51,8 @@ export interface InvitationView {
   expiresAt: Date | null;
   /** Withdrawn by project staff: the link no longer opens the survey. */
   revokedAt: Date | null;
+  /** The project is closed or archived (read with the locked link): the survey no longer opens. */
+  projectClosed?: boolean;
 }
 export interface WaveView {
   id: string;
@@ -234,7 +237,9 @@ export interface CawiTx extends InterviewsTx {
   }): Promise<void>;
   openLinkTarget(
     id: string,
-  ): Promise<(TargetView & { projectId: string; questionnaireId: string }) | null>;
+  ): Promise<
+    (TargetView & { projectId: string; questionnaireId: string; projectClosed: boolean }) | null
+  >;
   insertOpenInvitation(v: {
     projectId: string;
     questionnaireId: string;
@@ -339,6 +344,9 @@ function toInvitation(r: Record<string, unknown>): InvitationView {
     interviewId: id('interview_id'),
     expiresAt: (r.expires_at as Date | null) ?? null,
     revokedAt: (r.revoked_at as Date | null) ?? null,
+    ...(r.project_status !== undefined
+      ? { projectClosed: isClosedStatus(r.project_status as string) }
+      : {}),
   } as unknown as InvitationView;
 }
 
@@ -719,9 +727,11 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
 
   async openLinkTarget(id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT l.project_id, l.questionnaire_id, q.state, q.successor_id, v.id AS version_id, v.version
+      SELECT l.project_id, l.questionnaire_id, q.state, q.successor_id, v.id AS version_id, v.version,
+        p.status AS project_status
       FROM open_links l
       JOIN questionnaires q ON q.id = l.questionnaire_id
+      JOIN projects p ON p.id = l.project_id
       OUTER APPLY (
         SELECT TOP 1 id, version FROM questionnaire_versions
         WHERE questionnaire_id = q.id AND status = 'published' ORDER BY version DESC
@@ -736,6 +746,7 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
           successorId: lowOrNull((r.successor_id as string | null) ?? null),
           versionId: lowOrNull((r.version_id as string | null) ?? null),
           version: (r.version as number | null) ?? null,
+          projectClosed: isClosedStatus(r.project_status as string),
         }
       : null;
   }
@@ -804,7 +815,8 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
 
   async lockInvitation(id: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT * FROM invitations WITH (UPDLOCK, ROWLOCK) WHERE id = ${id}`.execute(this.mctx);
+      SELECT i.*, (SELECT p.status FROM projects p WHERE p.id = i.project_id) AS project_status
+      FROM invitations i WITH (UPDLOCK, ROWLOCK) WHERE i.id = ${id}`.execute(this.mctx);
     return res.rows[0] ? toInvitation(res.rows[0]) : null;
   }
 

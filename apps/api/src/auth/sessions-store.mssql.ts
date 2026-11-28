@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { CLOSED_PROJECT_STATUSES } from '@wansurvey/schema';
 import { sql } from 'kysely';
 import { instant } from '../db/mssql/instant.js';
 import type { MssqlTx } from '../db/mssql/database.js';
@@ -26,6 +27,8 @@ export interface SessionRow {
   memberStatus: string;
   rolePermissions: Record<string, unknown>;
   grants: { role: string; projectId: string | null }[];
+  /** The organisation's closed or archived projects, with when they were closed. */
+  closedProjects: { id: string; closedAt: Date | null }[];
 }
 
 const lower = (s: string | null) => (s === null ? null : s.toLowerCase());
@@ -69,6 +72,12 @@ export class SessionsStore {
       .select(['role', 'project_id'])
       .where('user_id', '=', row.user_id)
       .execute();
+    // Fieldwork is over in these: field roles no longer reach them (`withoutClosedProjects`).
+    const closed = await tx
+      .selectFrom('projects')
+      .select(['id', 'closed_at'])
+      .where('status', 'in', [...CLOSED_PROJECT_STATUSES])
+      .execute();
     return {
       id: row.id.toLowerCase(),
       tenantId: row.tenant_id.toLowerCase(),
@@ -86,6 +95,7 @@ export class SessionsStore {
       memberStatus: row.member_status,
       rolePermissions: JSON.parse(row.role_permissions) as Record<string, unknown>,
       grants: grants.map((g) => ({ role: g.role, projectId: lower(g.project_id) })),
+      closedProjects: closed.map((p) => ({ id: p.id.toLowerCase(), closedAt: p.closed_at })),
     };
   }
 

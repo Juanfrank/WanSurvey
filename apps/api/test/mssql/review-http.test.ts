@@ -257,6 +257,37 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
     expect(audit.map((a) => a.action)).toEqual(
       expect.arrayContaining(['interview.returned', 'interview.approved']),
     );
+    // Reopening an approved interview is for whoever runs the project: the supervisor is not
+    // offered it nor allowed it; the project manager reads the interview and reopens it.
+    expect((await sup.agent.get(`/api/v1/review/interviews/${id}`)).body.allowed).toEqual([]);
+    const refused = await post(sup, `/review/interviews/${id}/transition`, { to: 'in_review' });
+    expect(refused.status).toBe(403);
+    const pm = await login(
+      t,
+      await createUser(t.owner, tenant.id, [{ role: 'project_manager', projectId: project }]),
+      tenant.slug,
+    );
+    const seen = await pm.agent.get(`/api/v1/review/interviews/${id}`);
+    expect(seen.status, JSON.stringify(seen.body)).toBe(200);
+    expect(seen.body.allowed).toEqual(['in_review']);
+    await post(pm, `/review/interviews/${id}/transition`, { to: 'in_review' }).expect(200);
+    await post(sup, `/review/interviews/${id}/transition`, { to: 'approved' }).expect(200);
+    // Not once the project is closed: reviewers could not reach it any more.
+    const setStatus = (status: string) =>
+      pm.agent
+        .patch(`/api/v1/projects/${project}`)
+        .set('x-csrf-token', pm.csrf)
+        .send({ status })
+        .expect(200);
+    await setStatus('closed');
+    try {
+      expect((await pm.agent.get(`/api/v1/review/interviews/${id}`)).body.allowed).toEqual([]);
+      const closed = await post(pm, `/review/interviews/${id}/transition`, { to: 'in_review' });
+      expect(closed.status).toBe(409);
+      expect(closed.body.code).toBe('PROJECT_CLOSED');
+    } finally {
+      await setStatus('active');
+    }
     // The interviewer sees their own signals: approved, returned once.
     const own = await me.agent.get(`/api/v1/projects/${project}/review/mine`);
     expect(own.status).toBe(200);

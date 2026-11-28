@@ -9,11 +9,16 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { createInterview } from '@wansurvey/logic';
-import { Disposition, type Permission, type ReviewSettings } from '@wansurvey/schema';
+import {
+  Disposition,
+  MANAGE_PROJECT,
+  type Permission,
+  type ReviewSettings,
+} from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService, type AuditAction } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
-import { can, type AuthContext } from '../common/auth-context.js';
+import { can, isClosed, type AuthContext } from '../common/auth-context.js';
 import { MASK, maskContact, maskSample } from '../cases/case-logic.js';
 import type { InterviewRow } from '../interviews/interviews-repo.js';
 import { InterviewsService, personalVariables } from '../interviews/interviews.service.js';
@@ -107,7 +112,8 @@ const TRANSITIONS: Record<string, Partial<Record<To, Permission>>> = {
     approved: 'interviews.approve',
     rejected: 'interviews.approve',
   },
-  approved: { in_review: 'interviews.approve' },
+  // Reopening an approved interview is for whoever runs the project.
+  approved: { in_review: MANAGE_PROJECT },
 };
 
 const AUDIT: Record<To, AuditAction> = {
@@ -331,18 +337,28 @@ export class ReviewService implements OnModuleInit {
     return row;
   }
 
-  /** Reviewers of the project, or the interviewer whose interview it is. */
-  private async access(t: ReviewTx, ctx: AuthContext, id: string, lock = false) {
+  /**
+   * Reviewers of the project, or the interviewer whose interview it is. Whoever runs the project
+   * reads it too (to reopen an approved interview), without reviewing it.
+   */
+  private async access(
+    t: ReviewTx,
+    ctx: AuthContext,
+    id: string,
+    lock = false,
+    opts: { manager?: boolean } = {},
+  ) {
     const row = await this.load(t, id, lock);
     const reviewer = this.reviewer(ctx, row.projectId);
-    if (!reviewer && row.interviewerId !== ctx.userId)
+    const manager = !!opts.manager && can(ctx.memberships, MANAGE_PROJECT, row.projectId);
+    if (!reviewer && !manager && row.interviewerId !== ctx.userId)
       throw new NotFoundException('Interview not found');
-    return { row, reviewer };
+    return { row, reviewer, manager };
   }
 
   /** Everything the review screen shows (R4). */
   async detail(t: ReviewTx, ctx: AuthContext, id: string) {
-    const { row, reviewer } = await this.access(t, ctx, id);
+    const { row, reviewer, manager } = await this.access(t, ctx, id, false, { manager: true });
     const compiled = await this.runtime.compiledOf(t, row.questionnaireVersionId);
     const externalId = row.caseId ? await t.externalIdOf(row.caseId) : null;
     const who = row.interviewerId ? await t.userName(row.interviewerId) : null;
@@ -384,12 +400,16 @@ export class ReviewService implements OnModuleInit {
     const state = row.state as Record<string, unknown>;
     // A first paper entry is approved only once its differences with the second are resolved.
     const openDifferences = row.entryPass === 1 ? await t.openDifferences(id) : 0;
-    const allowed = reviewer
-      ? (Object.entries(TRANSITIONS[row.status] ?? {}) as [To, Permission][])
-          .filter(([, perm]) => can(ctx.memberships, perm, row.projectId))
-          .map(([to]) => to)
-          .filter((to) => to !== 'approved' || !openDifferences)
-      : [];
+    const closed = isClosed(ctx, row.projectId);
+    const allowed =
+      reviewer || manager
+        ? (Object.entries(TRANSITIONS[row.status] ?? {}) as [To, Permission][])
+            .filter(([, perm]) => can(ctx.memberships, perm, row.projectId))
+            .map(([to]) => to)
+            // An approved interview is not reopened once the project is closed.
+            .filter((to) => !(row.status === 'approved' && to === 'in_review' && closed))
+            .filter((to) => to !== 'approved' || !openDifferences)
+        : [];
     return {
       interview: {
         id: row.id,
@@ -489,6 +509,12 @@ export class ReviewService implements OnModuleInit {
       });
     if (!can(ctx.memberships, perm, row.projectId))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'You may not do this' });
+    // Reopening an approved interview sends it back to reviewers: not once the project closed.
+    if (row.status === 'approved' && isClosed(ctx, row.projectId))
+      throw new ConflictException({
+        code: 'PROJECT_CLOSED',
+        message: 'This project is closed: reopen the project first',
+      });
     if (body.to === 'approved' && row.entryPass === 1 && (await t.openDifferences(id)))
       throw new ConflictException({
         code: 'ENTRIES_DIFFER',

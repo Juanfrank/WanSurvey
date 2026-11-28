@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BreakingChange, Diagnostic, MappingProblem, ScenarioCheck } from '@wansurvey/logic';
-import { roleHasPermission, Scenario, type Permission, type Role } from '@wansurvey/schema';
+import {
+  roleHasPermission,
+  Scenario,
+  type Permission,
+  type Role,
+  grantReaches,
+  type ProjectGrant,
+} from '@wansurvey/schema';
 import { api } from '../api.js';
 import type { ScenarioStore } from '../preview/panels.js';
 import { useMe } from '../routes/AppLayout.js';
@@ -13,7 +20,7 @@ export function useCan(permission: Permission, projectId: string | null): boolea
       (m.permissions
         ? m.permissions.includes(permission)
         : roleHasPermission(m.role as Role, permission)) &&
-      (m.projectId === null || m.projectId === projectId),
+      grantReaches(m as ProjectGrant, projectId),
   );
 }
 

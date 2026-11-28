@@ -338,6 +338,32 @@ export function DevicePage() {
       >
         {message}
       </p>
+      {state?.closed.map((n) => (
+        <section
+          key={n.projectId}
+          aria-labelledby={`closed-${n.projectId}`}
+          data-testid="project-closed"
+          data-project={n.projectId}
+          data-kept={n.kept}
+          className={`rounded-md border-l-4 px-3 py-2 text-sm ${n.kept ? 'border-amber-500 bg-amber-50 text-amber-ink-900' : 'border-slate-400 bg-slate-50 text-slate-800'}`}
+        >
+          <h2 id={`closed-${n.projectId}`} className="font-semibold">
+            {t('device.closed.title')}
+          </h2>
+          <p>
+            {(() => {
+              const vars = {
+                name: n.name ?? t('device.closed.unnamed'),
+                date: new Date(n.at).toLocaleString(i18n.language),
+              };
+              if (n.kept) return t('device.closed.kept', { ...vars, count: n.kept });
+              return n.removed
+                ? t('device.closed.removed', { ...vars, count: n.removed })
+                : t('device.closed.removedNone', vars);
+            })()}
+          </p>
+        </section>
+      ))}
       {gps ? (
         <p className="rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-ink-900">
           <strong>{t('device.gpsTitle')}:</strong> {t('device.gpsOn')}. {gps.gpsNotice}

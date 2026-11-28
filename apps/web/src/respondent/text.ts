@@ -14,6 +14,8 @@ export const TEXT = {
       'Este enlace venció y ya no abre la encuesta. Si aún desea responder, pida un enlace nuevo a quien se lo envió.',
     linkRevoked:
       'Este enlace fue anulado y ya no abre la encuesta. Si aún desea responder, pida un enlace nuevo a quien se lo envió.',
+    projectClosed:
+      'Esta encuesta ya cerró y no recibe más respuestas. ¡Gracias por su interés en participar!',
     saving: 'Guardando…',
     saved: 'Respuestas guardadas',
     offline: 'Sin conexión: sus respuestas se guardan en este dispositivo.',
@@ -43,6 +45,8 @@ export const TEXT = {
       'This link has expired and no longer opens the survey. If you still want to answer, ask whoever sent it for a new one.',
     linkRevoked:
       'This link was withdrawn and no longer opens the survey. If you still want to answer, ask whoever sent it for a new one.',
+    projectClosed:
+      'This survey has closed and no longer takes answers. Thank you for your interest in taking part!',
     saving: 'Saving…',
     saved: 'Answers saved',
     offline: 'No connection: your answers are kept on this device.',

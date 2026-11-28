@@ -16,7 +16,7 @@ import {
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
+import { FieldWork, Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CASES_REPO, type CasesRepo } from './cases-repo.js';
 import { compileRule, ruleError } from './case-logic.js';
@@ -208,6 +208,7 @@ export class AssignmentRulesController {
 
   /** Runs the active rules (or one rule) over the unassigned fresh cases now. */
   @Post('assignments/apply')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission('cases.assign', PERM)
   apply(

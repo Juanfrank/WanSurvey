@@ -81,7 +81,13 @@ export interface Me {
   theme?: OrgTheme;
   mfaState: 'ok' | 'pending' | 'enroll';
   /** Each role with what it allows in this organisation (its permissions may be customised). */
-  memberships: { role: string; projectId: string | null; permissions?: string[] }[];
+  memberships: {
+    role: string;
+    projectId: string | null;
+    permissions?: string[];
+    /** Closed projects an organisation-wide field role no longer reaches. */
+    exceptProjects?: string[];
+  }[];
   permissions: string[];
   access: { state: 'ok' | 'no_role'; message: string | null };
   /** The terms of use and confidentiality every person accepts before working. */

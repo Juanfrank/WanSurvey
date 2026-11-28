@@ -188,6 +188,8 @@ export function ReviewPage() {
     historyOf(k).length > 1;
   const issues = path.filter((e) => hasIssue(e.key)).length;
   const shown = onlyIssues ? path.filter((e) => hasIssue(e.key)) : path;
+  /** An approved interview is reopened (back to review), not reviewed. */
+  const reopening = d.interview.status === 'approved';
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="review-screen">
@@ -263,11 +265,14 @@ export function ReviewPage() {
               size="sm"
               disabled={move.isPending}
               aria-keyshortcuts={to === 'approved' ? 'A' : to === 'returned' ? 'R' : undefined}
-              onClick={() =>
-                to === 'returned' || to === 'rejected' ? setDialog(to) : move.mutate({ to })
-              }
+              onClick={() => {
+                if (to === 'returned' || to === 'rejected') return setDialog(to);
+                // Reopening an approved interview (only whoever runs the project is offered it).
+                if (reopening && !window.confirm(t('review.screen.reopenConfirm'))) return;
+                move.mutate({ to });
+              }}
             >
-              {t(`review.screen.actions.${to}`)}
+              {t(`review.screen.actions.${reopening && to === 'in_review' ? 'reopen' : to}`)}
             </Button>
           ))}
         </div>

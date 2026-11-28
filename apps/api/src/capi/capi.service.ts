@@ -8,7 +8,7 @@ import type { CompiledQuestionnaire } from '@wansurvey/logic';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { CasesService } from '../cases/cases.service.js';
-import { can, type AuthContext } from '../common/auth-context.js';
+import { can, isClosed, lateUploadAllowed, type AuthContext } from '../common/auth-context.js';
 import type { InterviewRow, InterviewsTx } from '../interviews/interviews-repo.js';
 import { fieldedIn, InterviewsService } from '../interviews/interviews.service.js';
 import { DeviceId, type SyncItem } from '../interviews/schemas.js';
@@ -264,8 +264,17 @@ export class CapiService implements OnModuleInit {
     const c = await t.lockCaseById(start.caseId);
     if (!c || c.checkedOutDevice !== deviceId || c.checkedOutBy !== ctx.userId)
       return 'NOT_THIS_DEVICE';
+    // The device's start time, capped at the server's clock; once the project is closed, also
+    // no earlier than the case reached the device (what the server itself witnessed).
+    const claimed = Math.min(new Date(start.startedAt).getTime(), Date.now() + CLOCK_SKEW_MS);
+    const startedAt = new Date(claimed);
+    const witnessed = new Date(Math.max(claimed, c.checkedOutAt?.getTime() ?? claimed));
     // Downloading needed the permission; interviewing still does (it may have been taken away).
-    if (!can(ctx.memberships, 'interviews.conduct', c.projectId)) return 'NOT_FOUND';
+    // Once the project is closed, only an interview started on the device before the close.
+    if (isClosed(ctx, c.projectId)) {
+      if (!lateUploadAllowed(ctx, c.projectId, witnessed, ['interviews.conduct']))
+        return 'PROJECT_CLOSED';
+    } else if (!can(ctx.memberships, 'interviews.conduct', c.projectId)) return 'NOT_FOUND';
     if (c.status === 'finalised' || c.status === 'withdrawn') return 'CASE_CLOSED';
     if (await t.openInterview(c.id)) return 'CASE_IN_PROGRESS';
     const v = await t.publishedVersion(c.projectId, start.questionnaireVersionId);
@@ -282,9 +291,6 @@ export class CapiService implements OnModuleInit {
       c.projectId,
       c,
       settings.revealToInterviewers,
-    );
-    const startedAt = new Date(
-      Math.min(new Date(start.startedAt).getTime(), Date.now() + CLOCK_SKEW_MS),
     );
     const row = await t.insertInterview({
       id: item.id,

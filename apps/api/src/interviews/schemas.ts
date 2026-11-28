@@ -70,6 +70,11 @@ export const SyncBody = z.object({
    * synchronised with it (169). Left out by the background sends of an open interview.
    */
   projectId: z.uuid().optional(),
+  /**
+   * Other projects this device holds data of: the answer says which of them (and of
+   * `projectId`) are closed, so the device removes what it keeps of them once all is sent.
+   */
+  projectIds: z.array(z.uuid()).max(100).optional(),
 });
 
 export const SubmitBody = z.object({

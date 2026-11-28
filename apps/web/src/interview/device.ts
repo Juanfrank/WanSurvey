@@ -157,6 +157,65 @@ export interface SyncReport {
   checkedIn: number;
   problems: Record<string, string>;
   at: string;
+  /** Projects found closed on this sync, with what became of what the device kept of them. */
+  closed: ClosedNotice[];
+}
+
+/**
+ * A project closed while this device held something of it: once everything was sent, its cases
+ * and answers are removed (`removed`); what could not be sent stays (`kept`, never thrown away).
+ */
+export interface ClosedNotice {
+  projectId: string;
+  name: string | null;
+  at: string;
+  removed: number;
+  kept: number;
+}
+
+/**
+ * What to do with a project the server says is closed: remove what this device keeps of it,
+ * but only when nothing of it is left to send. Its cases are given back first (the server takes
+ * them back after the close too); without a connection nothing is removed and the next sync
+ * tries again. Interviews the server no longer takes (started after the close) stay on the
+ * device, with a notice: the project may be reopened to receive them.
+ */
+export async function settleClosedProject(
+  store: InterviewStore,
+  projectId: string,
+  deviceId: string,
+  at: string,
+  checkin: (projectId: string, caseIds: string[]) => Promise<unknown> = (p, caseIds) =>
+    api(`/projects/${p}/capi/checkin`, { method: 'POST', body: { deviceId, caseIds } }),
+): Promise<ClosedNotice | null> {
+  const cases = await store.cases(projectId);
+  const name =
+    cases[0]?.projectName ?? (await store.getMeta<string>(`project:${projectId}`)) ?? null;
+  const ofCases = new Set(cases.flatMap((c) => (c.interviewId ? [c.interviewId] : [])));
+  const copies = (await store.all()).filter(
+    (l) => l.meta?.projectId === projectId || ofCases.has(l.id),
+  );
+  // Nothing left of it here (removed on an earlier sync): the notice stays as it was.
+  if (!cases.length && !copies.length) return null;
+  const kept = copies.filter(hasUnsent).length;
+  let removed = 0;
+  if (!kept) {
+    if (cases.length) {
+      try {
+        await checkin(
+          projectId,
+          cases.map((c) => c.caseId),
+        );
+      } catch (e) {
+        // No connection: try again on the next sync. Refused: the data goes all the same.
+        if (isOffline(e)) return null;
+      }
+    }
+    removed = (await store.purgeProject(projectId)).cases;
+  }
+  const notice: ClosedNotice = { projectId, name, at, removed, kept };
+  await store.setMeta(`closed:${projectId}`, notice);
+  return notice;
 }
 
 /**
@@ -173,6 +232,7 @@ export function syncDevice(projectId: string): Promise<SyncReport> {
       checkedIn: 0,
       problems: {},
       at: new Date().toISOString(),
+      closed: [],
     };
     const ids = await store.unsynced();
     for (let i = 0; i < ids.length; i += 50) {
@@ -216,15 +276,64 @@ export function syncDevice(projectId: string): Promise<SyncReport> {
       const c = cases.find((x) => x.interviewId === id);
       if (c) await store.patchCase(c.caseId, { problem: code });
     }
-    // The server notes this device's synchronisation, for the supervisors' view (169). Only
-    // bookkeeping: the work above is done whether or not this last note gets through.
-    await api('/interviews/sync', {
+    // The server notes this device's synchronisation, for the supervisors' view (169), and
+    // says which projects this device holds something of are closed. Only bookkeeping: the
+    // work above is done whether or not this last note gets through.
+    const noticed = Object.keys(await store.metaWith<ClosedNotice>('closed:'));
+    const held = [...new Set([...(await store.projectsHeld()), ...noticed])]
+      .filter((p) => p !== projectId)
+      .slice(0, 100);
+    const note = await api<{ closedProjects?: string[] }>('/interviews/sync', {
       method: 'POST',
-      body: { deviceId, projectId, interviews: [] },
-    }).catch(() => undefined);
+      body: { deviceId, projectId, interviews: [], ...(held.length ? { projectIds: held } : {}) },
+    }).catch(() => null);
     await store.setMeta(`lastSync:${projectId}`, report.at);
+    if (note) {
+      const closed = new Set((note.closedProjects ?? []).map((p) => p.toLowerCase()));
+      // Only now, with everything above sent: what is left of a closed project goes.
+      for (const p of [projectId, ...held])
+        if (closed.has(p.toLowerCase())) {
+          const n = await settleClosedProject(store, p, deviceId, report.at);
+          if (n) report.closed.push(n);
+        } else {
+          // Reopened since: the notice no longer holds.
+          await store.deleteMeta(`closed:${p}`);
+        }
+    }
     return report;
   });
+}
+
+let sweeping: Promise<string[]> | null = null;
+
+/**
+ * Asks the server which projects this device holds something of are closed, and syncs each of
+ * them as "My device" does: everything waiting is sent first, then what is left of the project
+ * is removed (or kept, with a notice, when it cannot be sent). For someone who no longer sees a
+ * closed project, so never opens its device page. Resolves to the closed projects; quietly does
+ * nothing without a connection, offline storage or the right to send interviews.
+ */
+export function sweepClosedProjects(): Promise<string[]> {
+  sweeping ??= (async () => {
+    if (typeof indexedDB === 'undefined' || navigator.onLine === false) return [];
+    const found = await withStore(async (store) => {
+      const held = (await store.projectsHeld()).slice(0, 100);
+      return held.length ? { held, deviceId: await store.deviceId() } : null;
+    });
+    if (!found) return [];
+    const note = await api<{ closedProjects?: string[] }>('/interviews/sync', {
+      method: 'POST',
+      body: { deviceId: found.deviceId, interviews: [], projectIds: found.held },
+    });
+    const closed = found.held.filter((p) => (note.closedProjects ?? []).includes(p.toLowerCase()));
+    for (const p of closed) await syncDevice(p);
+    return closed;
+  })()
+    .catch(() => [])
+    .finally(() => {
+      sweeping = null;
+    });
+  return sweeping;
 }
 
 /** Gives back cases not started on this device. */
@@ -248,6 +357,10 @@ export function deviceState(projectId: string) {
     return {
       cases,
       waiting,
+      /** Projects found closed, this one first: what was removed from the device or kept. */
+      closed: Object.values(await store.metaWith<ClosedNotice>('closed:')).sort(
+        (a, b) => Number(b.projectId === projectId) - Number(a.projectId === projectId),
+      ),
       lastSync: await store.getMeta<string>(`lastSync:${projectId}`),
       projectName: cases[0]?.projectName ?? (await store.getMeta<string>(`project:${projectId}`)),
     };

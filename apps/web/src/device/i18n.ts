@@ -100,6 +100,22 @@ export const deviceEn = {
     QUESTIONNAIRE_DISABLED: 'The questionnaire is disabled; ask your supervisor.',
     QUESTIONNAIRE_COMPLETED: 'The questionnaire is completed; ask your supervisor.',
     STALE_STATE: 'This interview was changed elsewhere; open it again to see the latest.',
+    PROJECT_CLOSED:
+      'The project was closed after this interview started: it stays on this device until the project is reopened.',
+  },
+  closed: {
+    title: 'Project closed',
+    removed_one:
+      '{{name}} was closed. Everything was sent, so its {{count}} case and its answers were removed from this device on {{date}}.',
+    removed_other:
+      '{{name}} was closed. Everything was sent, so its {{count}} cases and their answers were removed from this device on {{date}}.',
+    removedNone:
+      '{{name}} was closed. Everything was sent, and what this device kept of it was removed on {{date}}.',
+    kept_one:
+      '{{name}} was closed and {{count}} interview could not be sent: it stays on this device. Do not clear this browser’s data. Tell whoever runs the project: if they reopen it, it is sent on the next sync.',
+    kept_other:
+      '{{name}} was closed and {{count}} interviews could not be sent: they stay on this device. Do not clear this browser’s data. Tell whoever runs the project: if they reopen it, they are sent on the next sync.',
+    unnamed: 'A project',
   },
   reasons: {
     CHECKED_OUT_ELSEWHERE: 'on another device',
@@ -218,6 +234,22 @@ export const deviceEs: DeviceCatalogue = {
     QUESTIONNAIRE_COMPLETED: 'El cuestionario está completo; consulte a su supervisor.',
     STALE_STATE:
       'Esta entrevista se cambió en otro lugar; ábrala de nuevo para ver la última versión.',
+    PROJECT_CLOSED:
+      'El proyecto se cerró después de iniciar esta entrevista: se queda en este dispositivo hasta que se reabra el proyecto.',
+  },
+  closed: {
+    title: 'Proyecto cerrado',
+    removed_one:
+      '{{name}} se cerró. Como todo se había enviado, su {{count}} caso y sus respuestas se borraron de este dispositivo el {{date}}.',
+    removed_other:
+      '{{name}} se cerró. Como todo se había enviado, sus {{count}} casos y sus respuestas se borraron de este dispositivo el {{date}}.',
+    removedNone:
+      '{{name}} se cerró. Como todo se había enviado, lo que este dispositivo guardaba de él se borró el {{date}}.',
+    kept_one:
+      '{{name}} se cerró y {{count}} entrevista no se pudo enviar: se queda en este dispositivo. No borre los datos de este navegador. Avise a quien administra el proyecto: si lo reabre, se enviará en la próxima sincronización.',
+    kept_other:
+      '{{name}} se cerró y {{count}} entrevistas no se pudieron enviar: se quedan en este dispositivo. No borre los datos de este navegador. Avise a quien administra el proyecto: si lo reabre, se enviarán en la próxima sincronización.',
+    unnamed: 'Un proyecto',
   },
   reasons: {
     CHECKED_OUT_ELSEWHERE: 'en otro dispositivo',

@@ -383,7 +383,8 @@ export class AuthService {
       theme,
       // People created by a first Microsoft sign-in have no role until an admin assigns one.
       access:
-        ctx.memberships.length === 0
+        // Roles only in closed projects are roles all the same (they come back on reopening).
+        (ctx.heldGrants ?? ctx.memberships).length === 0
           ? {
               state: 'no_role' as const,
               message: `Your account is active, but no role has been assigned to you in ${orgName} yet. An administrator of ${orgName} has been notified and needs to give you access before you can work here.`,

@@ -692,7 +692,7 @@ export const casesEn = {
     hours: 'hours',
     days: 'days',
     expiryHelp:
-      'Counted from the assignment; reassigning starts again. A case not finished in time closes as Expired, leaves the work lists and can be reopened by a supervisor.',
+      'Counted from the assignment; reassigning starts again. A case not finished in time closes as Expired, leaves the work lists and can be reopened by whoever runs the project.',
     capiTitle: 'Face-to-face interviewing',
     audioTitle: 'Recording of interviews',
     audioHelp:
@@ -1410,7 +1410,7 @@ export const casesEs: CasesCatalogue = {
     hours: 'horas',
     days: 'días',
     expiryHelp:
-      'Se cuentan desde la asignación; al reasignar, el plazo empieza de nuevo. Un caso no terminado a tiempo se cierra como Vencido, sale de las listas de trabajo y un supervisor puede reabrirlo.',
+      'Se cuentan desde la asignación; al reasignar, el plazo empieza de nuevo. Un caso no terminado a tiempo se cierra como Vencido, sale de las listas de trabajo y quien administra el proyecto puede reabrirlo.',
     capiTitle: 'Entrevistas en persona',
     audioTitle: 'Grabación de entrevistas',
     audioHelp:

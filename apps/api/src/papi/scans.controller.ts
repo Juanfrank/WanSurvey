@@ -19,7 +19,13 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Auth, can, RequirePermission, type AuthContext } from '../common/auth-context.js';
+import {
+  FieldWork,
+  Auth,
+  can,
+  RequirePermission,
+  type AuthContext,
+} from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { PAPI_REPO, type PapiRepo } from './papi-repo.js';
 import { FormsQuery } from './papi.service.js';
@@ -63,6 +69,7 @@ export class ScansController {
 
   /** Uploads scanned PDFs (each may hold many forms); they are read in the background. */
   @Post('projects/:projectId/papi/scans')
+  @FieldWork()
   @HttpCode(202)
   @RequirePermission([...KEYERS], PERM)
   @ApiConsumes('multipart/form-data')
@@ -108,6 +115,7 @@ export class ScansController {
 
   /** Takes a read form to finish it in the keying screen (the second round). */
   @Post('projects/:projectId/papi/scans/forms/:formId/claim')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission('dataentry.key', PERM)
   claim(

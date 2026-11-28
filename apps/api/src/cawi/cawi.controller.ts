@@ -14,7 +14,7 @@ import {
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
+import { FieldWork, Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { ZodPipe } from '../common/zod.js';
 import { CAWI_REPO, type CawiRepo } from './cawi-repo.js';
 import {
@@ -80,6 +80,7 @@ export class CawiController {
 
   /** Queues the wave's invitations; the dispatcher sends them. */
   @Post('waves/:waveId/send')
+  @FieldWork()
   @HttpCode(200)
   @RequirePermission('cawi.waves', PERM)
   send(
