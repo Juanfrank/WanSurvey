@@ -503,7 +503,8 @@ export function DashboardTab({ projectId, onGoals }: { projectId: string; onGoal
               />
             </Card>
           ) : null}
-          <Card className="flex flex-col gap-2">
+          {/* As tall as its list, not as the case figures beside it. */}
+          <Card className="flex flex-col gap-2 self-start">
             <h3 className="font-medium">{t('analysis.live.active')}</h3>
             {snap.active.length ? (
               <ul className="divide-y divide-slate-100" data-testid="active">

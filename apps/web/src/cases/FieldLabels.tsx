@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, FoldedHelp } from '../designer/fields.js';
 import type { SampleField } from '../designer/vars.js';
-import { localiseError } from '../i18n-messages.js';
+import { useNote } from '../i18n-messages.js';
 import { Button, Drawer } from '../routes/ui.js';
 
 /**
@@ -25,7 +25,7 @@ export function FieldLabels({
   const qc = useQueryClient();
   const formId = useId();
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [note, setNote] = useState('');
+  const [note, setNote] = useNote();
   const save = useMutation({
     mutationFn: async () => {
       const changed = fields.filter(
@@ -40,9 +40,9 @@ export function FieldLabels({
     },
     onSuccess: (n) => {
       setDraft({});
-      setNote(t('cases.labels.saved', { count: n }));
+      setNote({ key: 'cases.labels.saved', vars: { count: n } });
     },
-    onError: (e) => setNote(localiseError(t, e)),
+    onError: (e) => setNote({ error: e }),
     // Also after a failure part-way: the names saved before it show.
     onSettled: async () => {
       await qc.invalidateQueries({ queryKey: ['cases', projectId] });

@@ -11,7 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, useNote } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
 import { controlCls, FoldedHelp, NumberField, smallBtn, TextField } from '../designer/fields.js';
 import type { Project } from '../designer/ProjectPages.js';
@@ -64,10 +64,10 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
   const [quota, setQuota] = useState<number | undefined>();
   const [preview, setPreview] = useState<{ matching: number; unassigned: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const [moveFrom, setMoveFrom] = useState('');
   const [moveTo, setMoveTo] = useState('');
-  const [moved, setMoved] = useState('');
+  const [moved, setMoved] = useNote();
   // The two long forms (move someone's cases, add a rule) wait behind a button each.
   const [moving, setMoving] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -139,7 +139,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
         body: questionnaire ? { questionnaireId: questionnaire } : {},
       }),
     onSuccess: async (r) => {
-      setMessage(t('cases.rules.applied', { count: r.assigned }));
+      setMessage({ key: 'cases.rules.applied', vars: { count: r.assigned } });
       await refresh();
     },
     onError: fail,
@@ -155,7 +155,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
       }),
     onSuccess: async (r) => {
       setError(null);
-      setMoved(t('cases.rules.moved', { count: r.changed }));
+      setMoved({ key: 'cases.rules.moved', vars: { count: r.changed } });
       setMoveFrom('');
       setMoveTo('');
       await refresh();
@@ -309,7 +309,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
                   onChange={(e) => {
                     setMoveFrom(e.target.value);
                     if (e.target.value === moveTo) setMoveTo('');
-                    setMoved('');
+                    setMoved(null);
                   }}
                 >
                   <option value="">{t('cases.list.pickPerson')}</option>

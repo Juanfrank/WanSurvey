@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Dialog } from '../designer/Dialog.js';
 import { useCan } from '../designer/hooks.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { useNote } from '../i18n-messages.js';
 import { Button, MoreMenu, PageHeader } from '../routes/ui.js';
 import { useMedia } from '../routes/SideDrawer.js';
 import { api } from '../api.js';
@@ -99,7 +99,7 @@ export function InterviewPage() {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [help, setHelp] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const [submitting, setSubmitting] = useState(false);
   const [, setNow] = useState(0);
   const navRef = useRef<HTMLOListElement>(null);
@@ -204,12 +204,12 @@ export function InterviewPage() {
 
   const submit = async () => {
     setSubmitting(true);
-    setMessage('');
+    setMessage(null);
     try {
       const r = await iv.submit();
       await leave(true, r.status === 'queued');
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     } finally {
       setSubmitting(false);
     }
@@ -651,7 +651,7 @@ export function InterviewPage() {
               iv.note(noteText.trim());
               setNoteText('');
               setNoteOpen(false);
-              setMessage(t('interview.noteAdded'));
+              setMessage({ key: 'interview.noteAdded' });
             }}
           >
             <label className="flex flex-col gap-1">

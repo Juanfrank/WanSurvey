@@ -18,6 +18,18 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 ## [Unreleased]
 
 - The option cards of the sampling plan show their description on one line (all of it in the ⓘ), the personal-columns note of an import folds to one line, and a page title keeps its ⓘ close so its buttons fit on the account row.
+- **Review queue**: a search by case id (the API's queue takes `q`, part of the case id), and the
+  Status filter moves into the Filters panel with the others, with a chip while it is not
+  "Waiting for review". A link from Metrics still opens the queue on its interviewer.
+- **Tabs on a phone**: the project tabs that do not fit go under "More" on a phone too, instead
+  of a row that cut its last tab at the edge (also the administration's section pills).
+- **Status messages follow the language**: "Settings saved.", "11 personal links made.", "The
+  case is yours now." and the other messages of cases, web survey, analysis, review, calls,
+  device and interview are written out when shown, so changing the language changes them too
+  (they stayed in the language they were made in).
+- Smaller: the auto-provision checkbox of Microsoft sign-in and the two-step count on the
+  administration home keep their fine print behind an ⓘ; the dashboard's "Working now" card is
+  as tall as its list; the suggested retention periods wrap together.
 
 ### Added
 

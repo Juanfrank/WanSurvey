@@ -39,6 +39,8 @@ export const QueueQuery = z.object({
     .transform((v) => v.split(',').filter(Boolean))
     .pipe(z.array(z.enum(['submitted', 'in_review', 'approved', 'returned', 'rejected'])).min(1)),
   interviewerId: z.uuid().optional(),
+  /** Part of the case's id ("HH00" finds HH0001…HH0099). */
+  q: z.string().trim().max(100).optional(),
   mode: z.enum(['CATI', 'CAPI', 'CAWI', 'PAPI']).optional(),
   disposition: Disposition.optional(),
   flag: z.enum(FLAG_KINDS).optional(),

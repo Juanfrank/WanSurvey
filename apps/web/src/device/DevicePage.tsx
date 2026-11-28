@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { FoldedHelp, smallBtn } from '../designer/fields.js';
 import { InfoTip } from '../cases/samplingControls.js';
 import { dateTime } from '../format.js';
-import { dispositionLabel, localiseError } from '../i18n-messages.js';
+import { dispositionLabel, useNote } from '../i18n-messages.js';
 import {
   deviceState,
   downloadCases,
@@ -66,8 +66,8 @@ export function DevicePage() {
   const navigate = useNavigate();
   const online = useOnline();
   const [state, setState] = useState<Awaited<ReturnType<typeof deviceState>> | null>(null);
-  const [message, setMessage] = useState(
-    search.notice === 'queued' ? t('device.notice.queued') : '',
+  const [message, setMessage] = useNote(
+    search.notice === 'queued' ? { key: 'device.notice.queued' } : null,
   );
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -127,16 +127,19 @@ export function DevicePage() {
       try {
         const r = await syncDevice(projectId);
         if (manual || r.submitted || r.checkedIn)
-          setMessage(t('device.synced', { submitted: r.submitted, checkedIn: r.checkedIn }));
+          setMessage({
+            key: 'device.synced',
+            vars: { submitted: r.submitted, checkedIn: r.checkedIn },
+          });
         await mine.refetch();
       } catch (e) {
-        if (manual) setMessage(isOffline(e) ? t('device.syncFailed') : localiseError(t, e));
+        if (manual) setMessage(isOffline(e) ? { key: 'device.syncFailed' } : { error: e });
       } finally {
         setBusy(false);
         await refresh();
       }
     },
-    [projectId, refresh, t, mine],
+    [projectId, refresh, mine, setMessage],
   );
 
   useEffect(() => {
@@ -176,23 +179,25 @@ export function DevicePage() {
 
   const download = async () => {
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     try {
       const r = await downloadCases(projectId, [...picked]);
-      const refusedText = r.refused
-        .map((x) => {
-          const row = mine.data?.rows.find((m) => m.id === x.caseId);
-          return t('device.refused', {
-            id: row?.externalId ?? x.caseId,
-            reason: t(`device.reasons.${x.code}`, { defaultValue: x.code }),
-          });
-        })
-        .join(' ');
-      setMessage(`${t('device.downloaded', { count: r.downloaded })} ${refusedText}`.trim());
+      setMessage({
+        parts: [
+          { key: 'device.downloaded', vars: { count: r.downloaded } },
+          ...r.refused.map((x) => ({
+            key: 'device.refused',
+            vars: {
+              id: mine.data?.rows.find((m) => m.id === x.caseId)?.externalId ?? x.caseId,
+              reason: { key: `device.reasons.${x.code}`, vars: { defaultValue: x.code } },
+            },
+          })),
+        ],
+      });
       setPicked(new Set());
       await mine.refetch();
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     } finally {
       setBusy(false);
       await refresh();
@@ -207,7 +212,7 @@ export function DevicePage() {
         params: { projectId, interviewId: id },
       });
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     }
   };
 
@@ -217,7 +222,7 @@ export function DevicePage() {
       await returnCases(projectId, [c.caseId]);
       await mine.refetch();
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     } finally {
       setBusy(false);
       await refresh();

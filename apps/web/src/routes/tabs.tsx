@@ -69,8 +69,9 @@ const GAP = 4;
 /**
  * A first-level tab list that stays on one line. Tabs marked `rarely` (People, the project's
  * settings) go in a "More ▾" menu after the list, and so do the last tabs that do not fit the
- * width; the open tab is never hidden: when it is one of those, it shows in the row. Under
- * 640 px the row scrolls sideways instead (only the `rarely` ones are in "More").
+ * width; the open tab is never hidden: when it is one of those, it shows in the row. A phone
+ * folds the same way (a row that only scrolled sideways cut its last tab at the edge, with
+ * nothing to say there were more); if even the open tab and "More" do not fit, the row scrolls.
  *
  * Use it inside a Radix `Tabs.Root` whose value is `value`; `onSelect` does what the root's
  * `onValueChange` does, for the entries picked from "More".
@@ -213,8 +214,8 @@ export interface FitItem {
  * Put `room` on the part of the row the entries and "More" share (its width is what they have),
  * and `measure` on a hidden copy of the row (`invisible absolute w-max`) holding one child per
  * item, in order, styled as in the row, then one for "More ▾". `gap` is the gap between two
- * entries, in pixels. Under 640 px (`narrow`) every entry but the `rarely` ones is shown: the
- * row scrolls sideways there.
+ * entries, in pixels. A phone folds the same way; `narrow` (under 640 px) only tells the row
+ * to move what sits at its end (`OverflowTabList`'s `end`) to a line of its own.
  */
 export function useOverflowFit<T extends FitItem>(items: readonly T[], value: string, gap: number) {
   const { t } = useTranslation();
@@ -257,7 +258,7 @@ export function useOverflowFit<T extends FitItem>(items: readonly T[], value: st
   const kept = items.filter((x) => !x.rarely || x.value === value);
   let shown = kept;
   const known = sizes.length === items.length + 1 && sizes.every((s) => s > 0);
-  if (!narrow && known && Number.isFinite(width)) {
+  if (known && Number.isFinite(width)) {
     const w = (x: T) => sizes[items.indexOf(x)]! + gap;
     const all = kept.reduce((a, x) => a + w(x), 0);
     if (kept.length < items.length || all > width) {

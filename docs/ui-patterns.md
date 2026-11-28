@@ -65,8 +65,8 @@ basis-0 truncate` and its text in `title`, and its button in a bar under the row
 
 `OverflowTabList` replaces a wrapping `Tabs.List` of first-level tabs. Mark the seldom used tabs
 `rarely: true` (on a project: People and Project settings): they live in "More ▾" unless open. The
-last tabs that do not fit go there too; the open tab is always in the row. Under 640 px the row
-scrolls sideways. `sub` gives second-level pills (the questionnaire designer's topics, in the
+last tabs that do not fit go there too; the open tab is always in the row. A phone folds the
+same way (a row that only scrolled sideways hid its last tab at the edge). `sub` gives second-level pills (the questionnaire designer's topics, in the
 row of Design / Settings), and an item's `badge` (a count) shows after its label in the row.
 
 ```tsx
@@ -123,8 +123,9 @@ row of Design / Settings), and an item's `badge` (a count) shows after its label
 ```
 
 - **Search**: always in view; its label is the placeholder and its accessible name.
-- **The filter used most** (the review queue's Status) can stay in view: pass it, with its
-  visible label, as `lead`; it sits before the Filters button and gets no chip.
+- **A filter with a default** other than "any" (the review queue's Status, "Waiting for
+  review") goes in the panel like the rest; its chip shows only while it differs from the
+  default, and removing the chip puts the default back.
 - **Filters**: the controls keep their state where it was (the screen's own `useState`, the
   address); the bar only shows and hides them. Each filter that is on gets a chip with a
   "Remove filter: Status Assigned" button; "Filters · 2" says how many are on. The panel floats
@@ -201,6 +202,31 @@ only, a warning) stay in view, small.
   aside={<InfoTip id="team-intro" term={t('team.title')} text={t('team.intro')} align="start" />}
 />
 ```
+
+## Status messages: useNote
+
+A message shown after an action ("Settings saved.", "11 personal links made.", an error) is kept
+as its translation key and values, not as finished text, and written out when the screen is
+drawn: if the user changes the language, the message follows. `useNote` (`i18n-messages.ts`) is
+`useState` for it; `text` is already in the current language.
+
+```tsx
+const [message, setMessage] = useNote();
+// …
+onSuccess: (r) => setMessage({ key: 'cawi.links.made', vars: { count: r.links } }),
+onError: (e) => setMessage({ error: e }), // written out with localiseError
+setMessage(null); // none
+// A value that is itself a note is written out too; `parts` joins sentences.
+setMessage({ key: 'review.screen.done', vars: { status: { key: `interview.status.${to}` } } });
+setMessage({ parts: [{ key: 'cases.list.assigned', vars: { count } }, { key: 'cases.list.skipped', vars: { count: skipped } }] });
+// …
+<p role="status" aria-live="polite" className="empty:hidden">{message}</p>
+```
+
+A callback that reports to its parent (`onDone`) passes a `Note`, not a string. Do not keep
+`t(…)` in state (`useState(t('…'))`, `setMessage(t('…'))`): it freezes the language of the moment.
+The end-to-end tests run in English and switch to Spanish only for each screenshot, so a frozen
+message shows up in English in the pictures.
 
 ## End-to-end tests
 

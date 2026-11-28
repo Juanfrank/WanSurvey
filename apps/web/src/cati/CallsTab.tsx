@@ -17,7 +17,7 @@ import { api, apiFull } from '../api.js';
 import { dateTime, number, timeOnly } from '../format.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
-import { dispositionLabel, localiseError } from '../i18n-messages.js';
+import { useNote } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
 import { useMe } from '../routes/AppLayout.js';
 import { currentGoal, GoalBadge, type Goal } from '../routes/HomePage.js';
@@ -161,13 +161,13 @@ export function CallsTab({
   const [busy, setBusy] = useState(false);
   /** A new case has been asked for and has not come yet. */
   const [seeking, setSeeking] = useState(false);
-  const [message, setMessage] = useState(
-    notice === 'interview_done' ? t('cati.interviewDone') : '',
+  const [message, setMessage] = useNote(
+    notice === 'interview_done' ? { key: 'cati.interviewDone' } : null,
   );
   // Also when the workspace was already open as the interview ended.
   useEffect(() => {
-    if (notice === 'interview_done') setMessage(t('cati.interviewDone'));
-  }, [notice, t]);
+    if (notice === 'interview_done') setMessage({ key: 'cati.interviewDone' });
+  }, [notice, setMessage]);
   const [phone, setPhone] = useState(0);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [callback, setCallback] = useState('');
@@ -258,7 +258,7 @@ export function CallsTab({
       }
       setBusy(true);
       if (!current) {
-        setMessage('');
+        setMessage(null);
         setIdle(null);
         setSeeking(true);
       }
@@ -288,14 +288,14 @@ export function CallsTab({
           );
         }
       } catch (e) {
-        setMessage(localiseError(t, e));
+        setMessage({ error: e });
         if (caseId) void qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
       } finally {
         setBusy(false);
         setSeeking(false);
       }
     },
-    [busy, projectId, qid, t, qc],
+    [busy, projectId, qid, qc, setMessage],
   );
 
   // An open call (after a reload or coming back from the interview) is shown straight away.
@@ -346,7 +346,7 @@ export function CallsTab({
   const save = useCallback(async () => {
     if (!served || !outcome || !canSave) return;
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     const stop = outcomeAt || Date.now();
     try {
       const body: Record<string, unknown> = {
@@ -381,19 +381,25 @@ export function CallsTab({
         });
         return;
       }
-      const label = t(`cati.outcomes.${outcome}`);
+      const label = { key: `cati.outcomes.${outcome}` };
       setMessage(
         r.final
-          ? t('cati.savedFinal', {
-              outcome: label,
-              disposition: dispositionLabel(t, r.disposition ?? ''),
-            })
-          : r.nextContactAt
-            ? t('cati.savedRetry', {
+          ? {
+              key: 'cati.savedFinal',
+              vars: {
                 outcome: label,
-                time: dateTime(r.nextContactAt),
-              })
-            : t('cati.saved', { outcome: label }),
+                disposition: {
+                  key: `analysis.dispositionLabels.${r.disposition ?? ''}`,
+                  vars: { defaultValue: r.disposition ?? '' },
+                },
+              },
+            }
+          : r.nextContactAt
+            ? {
+                key: 'cati.savedRetry',
+                vars: { outcome: label, time: { dateTime: r.nextContactAt } },
+              }
+            : { key: 'cati.saved', vars: { outcome: label } },
       );
       setServed(null);
       setIdle(null);
@@ -402,7 +408,7 @@ export function CallsTab({
       void qc.invalidateQueries({ queryKey: ['cati-shift', projectId] });
       requestAnimationFrame(() => nextRef.current?.focus());
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     } finally {
       setBusy(false);
     }
@@ -421,8 +427,8 @@ export function CallsTab({
     qid,
     navigate,
     projectId,
-    t,
     qc,
+    setMessage,
   ]);
 
   const skip = async () => {
@@ -434,7 +440,7 @@ export function CallsTab({
       reset();
       requestAnimationFrame(() => nextRef.current?.focus());
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     } finally {
       setBusy(false);
     }
@@ -535,7 +541,7 @@ export function CallsTab({
                   });
                   await qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
                 } catch (e) {
-                  setMessage(localiseError(t, e));
+                  setMessage({ error: e });
                 }
               }}
             />

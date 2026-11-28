@@ -144,6 +144,9 @@ export async function shot(page: Page, name: string, opts: { fullPage?: boolean 
   await page.screenshot({
     path: `${process.env.SCREENSHOTS}/${name}.png`,
     fullPage: opts.fullPage ?? true,
+    // Transitions under way are shown at their end: a progress bar caught mid-way read
+    // "100 % complete" over a bar 70 % full.
+    animations: 'disabled',
   });
   if (before !== 'es') {
     await setLang(before);

@@ -3,7 +3,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, useNote } from '../i18n-messages.js';
 import { Button, Drawer, ErrorText, MoreMenu, TableScroll, type MenuEntry } from '../routes/ui.js';
 import { DataFilterFields, type DataFilters } from './ResultsTab.js';
 import { fileSize } from '../format.js';
@@ -67,7 +67,7 @@ export function ExportsTab({ projectId }: { projectId: string }) {
   // Personal answers stay out of the file unless chosen (data minimisation).
   const [personalData, setPersonalData] = useState<'include' | 'exclude'>('exclude');
   const [filters, setFilters] = useState<DataFilters>({});
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const [error, setError] = useState<string | null>(null);
   // The form opens in a side panel; the list keeps the page.
   const [creating, setCreating] = useState(false);
@@ -92,7 +92,7 @@ export function ExportsTab({ projectId }: { projectId: string }) {
     onSuccess: async () => {
       setError(null);
       setCreating(false);
-      setMessage(t('analysis.exports.requested'));
+      setMessage({ key: 'analysis.exports.requested' });
       await qc.invalidateQueries({ queryKey: ['exports', projectId] });
     },
     onError: (e) => setError(localiseError(t, e)),
@@ -159,10 +159,10 @@ export function ExportsTab({ projectId }: { projectId: string }) {
             onSelect: () => {
               const url = new URL(fileUrl(e), window.location.href).toString();
               // Copying refused or impossible (plain http): the address is shown to copy by hand.
-              if (!navigator.clipboard) return setMessage(url);
+              if (!navigator.clipboard) return setMessage({ text: url });
               navigator.clipboard.writeText(url).then(
-                () => setMessage(t('analysis.exports.copied')),
-                () => setMessage(url),
+                () => setMessage({ key: 'analysis.exports.copied' }),
+                () => setMessage({ text: url }),
               );
             },
           },
