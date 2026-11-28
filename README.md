@@ -99,6 +99,10 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 
 Seeded accounts log in with their e-mail only, for example `project.manager@demo.wansurvey.test`. That account belongs to two organisations, `demo` and `demo2`, and can switch between them. The owner and admin accounts must enrol TOTP on their first login.
 
+An installation for **one organisation** sets `SINGLE_TENANT=true`: choosing and switching
+organisations, and the "whole installation" settings, are hidden and refused, and the seed makes
+`demo` alone. See [`docs/single-tenant.md`](docs/single-tenant.md).
+
 ## Checks
 
 ```bash

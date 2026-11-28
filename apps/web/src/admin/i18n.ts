@@ -398,6 +398,8 @@ export const adminEn = {
       title: 'Analysis model refresh',
       intro:
         'The analysis model (Power BI, the SQL export) is refilled from the survey data. It covers every organisation of the installation, so this one setting applies to all of them. A refresh only runs when something changed.',
+      introSingle:
+        'The analysis model (Power BI, the SQL export) is refilled from the survey data. A refresh only runs when something changed.',
       frequency: 'Refresh',
       choice: {
         deployment: 'As the deployment sets it',
@@ -897,6 +899,8 @@ export const adminEs: typeof adminEn = {
       title: 'Actualización del modelo de análisis',
       intro:
         'El modelo de análisis (Power BI, la exportación SQL) se rellena con los datos de las encuestas. Abarca todas las organizaciones de la instalación, así que este ajuste vale para todas. Una actualización solo se ejecuta si algo cambió.',
+      introSingle:
+        'El modelo de análisis (Power BI, la exportación SQL) se rellena con los datos de las encuestas. Una actualización solo se ejecuta si algo cambió.',
       frequency: 'Actualizar',
       choice: {
         deployment: 'Como lo fije el despliegue',

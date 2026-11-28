@@ -227,6 +227,18 @@ const Env = z.object({
       .regex(/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/, 'A user principal name, such as ana@agency.org')
       .optional(),
   ),
+  /**
+   * 'true': the installation serves one organisation (single-tenant). What exists only because
+   * there may be several is hidden and refused: choosing or switching the organisation (those
+   * routes answer 404), the organisation in the sign-in and the Microsoft start (always the one),
+   * and the "Installation" block of the Organisation page (its settings join the organisation's).
+   * With no organisation yet, the first is made as always (INITIAL_ADMIN_USER or the seed); a
+   * database with more than one stops the start (docs/single-tenant.md). Default 'false'.
+   */
+  SINGLE_TENANT: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(60),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),

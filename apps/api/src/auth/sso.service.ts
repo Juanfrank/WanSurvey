@@ -10,6 +10,7 @@ import { parseSessionCookie } from './auth.guard.js';
 import { AUTH_REPO, type AuthRepo } from './auth-repo.js';
 import { AuthService, type ClientInfo } from './auth.service.js';
 import { isUniqueViolation, isUuid } from '../db/common.js';
+import { Tenancy } from '../tenants/tenancy.js';
 
 const STATE_TTL_MS = 10 * 60_000;
 
@@ -71,6 +72,7 @@ export class SsoService {
     private readonly configs: SsoConfigs,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
+    private readonly tenancy: Tenancy,
   ) {}
 
   get redirectUri(): string {
@@ -84,11 +86,15 @@ export class SsoService {
   /**
    * Builds the Microsoft authorize URL and the encrypted state cookie value. The organisation
    * comes from `org` or from the e-mail's domain; with neither, the person has to say which.
+   * In single-tenant mode it is always the one (`org` and the e-mail are not needed, nor read).
    */
   async start(input: { org?: string; email?: string; returnTo?: string }) {
     // Public settings only (no secret): the authorize address needs the directory and client.
     let config: SsoStartConfig | null;
-    if (input.org) {
+    if (this.tenancy.single) {
+      const only = await this.tenancy.tenantId();
+      config = only ? await this.configs.forTenant(only) : null;
+    } else if (input.org) {
       config = await this.configs.startBySlug(input.org);
     } else if (input.email && input.email.includes('@')) {
       const found = await this.configs.startByDomain(input.email.split('@').pop()!.trim());

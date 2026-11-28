@@ -91,6 +91,9 @@ export function OrganisationPage() {
     queryFn: () => api<Sso>('/tenant/sso'),
     enabled: !!me.data,
   });
+  // One organisation (SINGLE_TENANT): the installation is this organisation, so its settings are
+  // the organisation's own and there is no "whole installation" block.
+  const singleTenant = !!me.data?.singleTenant;
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -110,26 +113,29 @@ export function OrganisationPage() {
         <DataProtection />
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
         {tenant.data ? <TwoFactorPolicy tenant={tenant.data} /> : null}
+        {singleTenant ? <BiFrequency /> : null}
       </div>
       {/* Settings of the whole installation, apart from this organisation's own. */}
-      <section
-        aria-labelledby="org-installation"
-        className="flex flex-col gap-3 border-t border-slate-200 pt-4"
-      >
-        <div className="flex items-center gap-1">
-          <h2 id="org-installation" className="text-xl font-semibold">
-            {t('admin.org.installation.title')}
-          </h2>
-          <InfoTip
-            id="org-installation-info"
-            term={t('admin.org.installation.title')}
-            text={t('admin.org.installation.intro')}
-          />
-        </div>
-        <div className={CARDS}>
-          <BiFrequency />
-        </div>
-      </section>
+      {singleTenant ? null : (
+        <section
+          aria-labelledby="org-installation"
+          className="flex flex-col gap-3 border-t border-slate-200 pt-4"
+        >
+          <div className="flex items-center gap-1">
+            <h2 id="org-installation" className="text-xl font-semibold">
+              {t('admin.org.installation.title')}
+            </h2>
+            <InfoTip
+              id="org-installation-info"
+              term={t('admin.org.installation.title')}
+              text={t('admin.org.installation.intro')}
+            />
+          </div>
+          <div className={CARDS}>
+            <BiFrequency />
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -624,6 +630,7 @@ function BiFrequency() {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const me = useMe();
+  const singleTenant = !!me.data?.singleTenant;
   const canManage = !!me.data?.permissions.includes('tenant.manage');
   const setting = useQuery({
     queryKey: ['app-settings-bi'],
@@ -664,7 +671,11 @@ function BiFrequency() {
           save.mutate();
         }}
       >
-        <CardTitle id="org-bi" title={t('admin.org.bi.title')} info={t('admin.org.bi.intro')} />
+        <CardTitle
+          id="org-bi"
+          title={t('admin.org.bi.title')}
+          info={t(singleTenant ? 'admin.org.bi.introSingle' : 'admin.org.bi.intro')}
+        />
         <div className="flex flex-col gap-1">
           <label htmlFor="bi-frequency" className="text-sm font-medium text-slate-700">
             {t('admin.org.bi.frequency')}

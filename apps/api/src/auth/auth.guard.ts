@@ -25,6 +25,7 @@ import { safeEqual, sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { AUTH_REPO, grantsOf, type AuthRepo } from './auth-repo.js';
 import { isUuid } from '../db/common.js';
+import { Tenancy } from '../tenants/tenancy.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOUCH_INTERVAL_MS = 60_000;
@@ -51,6 +52,7 @@ export class AuthGuard implements CanActivate {
     @Inject(AUTH_REPO) private readonly repo: AuthRepo,
     @Inject(CONFIG) private readonly config: AppConfig,
     private readonly keys: ApiKeysService,
+    private readonly tenancy: Tenancy,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -111,6 +113,9 @@ export class AuthGuard implements CanActivate {
 
   private async loadKey(req: AuthedRequest, scope: ApiKeyScope | undefined): Promise<AuthContext> {
     const key = await this.keys.authenticate(req.headers.authorization, req.ip ?? null);
+    // Single-tenant mode: a key of another organisation in the database opens nothing.
+    if (!(await this.tenancy.allows(key.tenantId)))
+      throw new UnauthorizedException({ code: 'INVALID_API_KEY', message: 'Invalid API key' });
     if (scope && !key.scopes.includes(scope))
       throw new ForbiddenException({
         code: 'MISSING_SCOPE',
@@ -138,6 +143,13 @@ export class AuthGuard implements CanActivate {
     const cookie = parseSessionCookie(req.cookies?.[SESSION_COOKIE]);
     if (!cookie)
       throw new UnauthorizedException({ code: 'UNAUTHENTICATED', message: 'Sign in required' });
+    // Single-tenant mode: a session of another organisation in the database (from before the
+    // mode was turned on) has ended.
+    if (!(await this.tenancy.allows(cookie.tenantId)))
+      throw new UnauthorizedException({
+        code: 'SESSION_EXPIRED',
+        message: 'Your session has ended; sign in again',
+      });
     const now = new Date();
     const idleMs = this.config.SESSION_IDLE_MINUTES * 60_000;
 

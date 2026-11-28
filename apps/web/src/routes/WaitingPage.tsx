@@ -10,7 +10,10 @@ export function WaitingPage() {
   const me = useMe();
   const queryClient = useQueryClient();
   if (!me.data) return null;
-  const others = me.data.tenants.filter((tn) => tn.id !== me.data!.tenantId);
+  // One organisation (SINGLE_TENANT): no other to offer.
+  const others = me.data.singleTenant
+    ? []
+    : me.data.tenants.filter((tn) => tn.id !== me.data!.tenantId);
   const org = me.data.tenants.find((tn) => tn.id === me.data!.tenantId)?.name;
   // Said in the interface's language (the server's message is in English): with the
   // organisation's name when it is known, else the server's words.

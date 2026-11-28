@@ -127,6 +127,7 @@ import { GeoService } from './geo/geo.service.js';
 import { LibraryController } from './library/library.controller.js';
 import { CollabController } from './questionnaires/collab.controller.js';
 import { QuestionnairesController } from './questionnaires/questionnaires.controller.js';
+import { Tenancy } from './tenants/tenancy.js';
 import { TenantsController } from './tenants/tenants.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
@@ -256,6 +257,7 @@ export class AppModule {
                   : new ConsoleSms(config.NODE_ENV !== 'production')),
         },
         Engine,
+        Tenancy,
         { provide: AUTH_REPO, useClass: MssqlAuthRepo },
         { provide: ORG_REPO, useClass: MssqlOrgRepo },
         { provide: TEAMS_REPO, useClass: MssqlTeamsRepo },

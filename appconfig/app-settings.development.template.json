@@ -150,6 +150,11 @@
     "slotSetting": false
   },
   {
+    "name": "SINGLE_TENANT",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
     "name": "SESSION_IDLE_MINUTES",
     "value": "60",
     "slotSetting": false

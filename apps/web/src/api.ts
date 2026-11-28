@@ -77,6 +77,11 @@ export interface Me {
   user: { id: string; email: string; name: string; firstName: string | null; totpEnabled: boolean };
   tenantId: string;
   tenants: TenantSummary[];
+  /**
+   * The installation serves one organisation (SINGLE_TENANT): nothing about choosing or switching
+   * organisations, or about "the whole installation", is shown.
+   */
+  singleTenant?: boolean;
   /** The organisation's default theme and accent. */
   theme?: OrgTheme;
   mfaState: 'ok' | 'pending' | 'enroll';
@@ -132,10 +137,12 @@ export async function switchTenant(tenantId: string): Promise<boolean> {
   }
 }
 
-/** What the sign-in page offers (`GET /auth/methods`). */
+/** What the sign-in page offers, and the installation's mode (`GET /auth/methods`). */
 export interface AuthMethods {
   password: boolean;
   microsoftNeedsEmail: boolean;
+  /** The installation serves one organisation (SINGLE_TENANT); also in `Me` once signed in. */
+  singleTenant?: boolean;
 }
 
 /** Multipart upload (sample files); same cookies and CSRF header as `api`. */

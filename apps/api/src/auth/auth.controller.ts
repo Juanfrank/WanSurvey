@@ -17,12 +17,13 @@ import { AllowPendingMfa, Auth, Public, type AuthContext } from '../common/auth-
 import { clearSessionCookies, setSessionCookies } from '../common/cookies.js';
 import { ZodPipe } from '../common/zod.js';
 import { CONFIG, loadConfig, type AppConfig } from '../config.js';
+import { Tenancy } from '../tenants/tenancy.js';
 import { AuthService, MIN_PASSWORD_LENGTH, type ClientInfo } from './auth.service.js';
 
 const LoginBody = z.object({
   email: z.string().email().max(254),
   password: z.string().min(1).max(512),
-  /** Organisation slug or id; defaults to the one used last. */
+  /** Organisation slug or id; defaults to the one used last. Ignored in single-tenant mode. */
   tenant: z.string().min(1).max(64).optional(),
 });
 const SwitchBody = z.object({ tenantId: z.string().uuid() });
@@ -47,6 +48,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     @Inject(CONFIG) private readonly config: AppConfig,
+    private readonly tenancy: Tenancy,
   ) {}
 
   /** With password sign-in off (PASSWORD_LOGIN=false), every password route answers this. */
@@ -59,13 +61,19 @@ export class AuthController {
     });
   }
 
-  /** What the sign-in page offers: the password form, and whether Microsoft needs the e-mail. */
+  /**
+   * The web app's public configuration: what the sign-in page offers (the password form, and
+   * whether Microsoft needs the e-mail to find the organisation) and whether the installation
+   * serves a single organisation (SINGLE_TENANT: the web app hides what is about several).
+   */
   @Public()
   @Get('methods')
   methods() {
     return {
       password: this.config.PASSWORD_LOGIN,
-      microsoftNeedsEmail: true,
+      // With one organisation there is nothing to find from the e-mail's domain.
+      microsoftNeedsEmail: !this.tenancy.single,
+      singleTenant: this.tenancy.single,
     };
   }
 
@@ -93,6 +101,7 @@ export class AuthController {
   @AllowPendingMfa()
   @Get('tenants')
   tenants(@Auth() ctx: AuthContext) {
+    this.tenancy.refuseIfSingle();
     return this.auth.listTenants(ctx);
   }
 
@@ -105,6 +114,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    this.tenancy.refuseIfSingle();
     const result = await this.auth.switchTenant(ctx, body.tenantId, client(req));
     setSessionCookies(res, this.config, result.cookie, result.csrfToken);
     return { mfaState: result.mfaState, csrfToken: result.csrfToken, tenant: result.tenant };

@@ -29,6 +29,7 @@ import { SsoConfigs } from './sso-config.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { isUuid, type UserTenant } from '../db/common.js';
 import { byCode } from '../common/sort.js';
+import { Tenancy } from '../tenants/tenancy.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 
@@ -98,7 +99,16 @@ export class AuthService {
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
     private readonly ssoConfigs: SsoConfigs,
+    private readonly tenancy: Tenancy,
   ) {}
+
+  /** The person's organisations that can be opened here: only the one in single-tenant mode. */
+  private async openable(userId: string): Promise<UserTenant[]> {
+    const all = await this.repo.userTenants(userId);
+    if (!this.tenancy.single) return all;
+    const only = await this.tenancy.tenantId();
+    return all.filter((t) => t.id === only);
+  }
 
   /**
    * Accounts are global; a session belongs to one organisation. Without `tenant`, the
@@ -132,7 +142,7 @@ export class AuthService {
     // With a second factor the count starts again only after the code: otherwise signing in
     // again would reset it between guesses of the code.
     if (!user.totpEnabled) await this.repo.succeeded(user.id);
-    const tenants = await this.repo.userTenants(user.id);
+    const tenants = await this.openable(user.id);
     if (tenants.length === 0) throw invalidCredentials();
     // Organisations that require Microsoft sign-in accept a password only from their owners.
     const enforced = new Set(
@@ -141,7 +151,8 @@ export class AuthService {
     const passwordAllowed = async (t: UserTenant) =>
       !enforced.has(t.id) || (await this.isOwnerIn(t.id, user.id));
     let chosen: UserTenant | undefined;
-    if (input.tenant) {
+    // Single-tenant mode: there is no organisation to choose (the one is the only one listed).
+    if (input.tenant && !this.tenancy.single) {
       const wanted = input.tenant.toLowerCase();
       chosen = tenants.find((t) => t.slug === wanted || t.id === input.tenant);
       if (!chosen) {
@@ -168,11 +179,12 @@ export class AuthService {
   }
 
   async listTenants(ctx: AuthContext): Promise<TenantSummary[]> {
-    return (await this.repo.userTenants(ctx.userId)).map(summary);
+    return (await this.openable(ctx.userId)).map(summary);
   }
 
   /** Moves the user to another organisation: the current session ends and a new one starts. */
   async switchTenant(ctx: AuthContext, tenantId: string, client: ClientInfo): Promise<LoginResult> {
+    this.tenancy.refuseIfSingle();
     const tenants = await this.repo.userTenants(ctx.userId);
     const target = tenants.find((t) => t.id === tenantId);
     if (!target) {
@@ -380,6 +392,8 @@ export class AuthService {
       terms,
       tenantId: ctx.tenantId,
       tenants,
+      // SINGLE_TENANT: the web app leaves out what is about several organisations.
+      singleTenant: this.tenancy.single,
       theme,
       // People created by a first Microsoft sign-in have no role until an admin assigns one.
       access:

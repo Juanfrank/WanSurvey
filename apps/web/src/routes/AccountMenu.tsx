@@ -21,7 +21,8 @@ export function initialsOf(name: string | null | undefined, email: string) {
 
 /**
  * The account pill at the top right: the person's badge (initials, name, e-mail), which opens
- * their menu (organisation and language), and, next to it, sign out.
+ * their menu (organisation and language), and, next to it, sign out. An installation that serves a
+ * single organisation (SINGLE_TENANT) has no organisation to choose: the menu leaves it out.
  */
 export function AccountMenu({
   me,
@@ -108,20 +109,22 @@ export function AccountMenu({
           <p className="truncate font-semibold text-navy">{name}</p>
           <p className="truncate text-xs text-slate-600">{me.user.email}</p>
         </div>
-        <label className="flex flex-col gap-1">
-          <span className="eyebrow">{t('app.organisation')}</span>
-          <select
-            className={field}
-            value={me.tenantId}
-            onChange={(e) => onSwitchTenant(e.target.value)}
-          >
-            {me.tenants.map((tn) => (
-              <option key={tn.id} value={tn.id}>
-                {tn.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {me.singleTenant ? null : (
+          <label className="flex flex-col gap-1">
+            <span className="eyebrow">{t('app.organisation')}</span>
+            <select
+              className={field}
+              value={me.tenantId}
+              onChange={(e) => onSwitchTenant(e.target.value)}
+            >
+              {me.tenants.map((tn) => (
+                <option key={tn.id} value={tn.id}>
+                  {tn.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1">
           <span className="eyebrow">{t('app.language')}</span>
           <select

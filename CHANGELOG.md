@@ -34,6 +34,17 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Single-tenant mode** (`SINGLE_TENANT=true`, a deployment setting; default off, nothing
+  changes without it): an installation for one organisation hides and refuses what exists only
+  because there may be several. The API answers 404 (`SINGLE_TENANT`) to the list of the person's
+  organisations and to switching; sign-in, the Microsoft start and `/auth/me` always use the one
+  organisation (the e-mail is no longer asked first to find it). The web app reads the mode from
+  `GET /auth/methods` and `GET /auth/me` (`singleTenant`) and leaves out the account menu's
+  organisation picker, the waiting page's other organisations and the Organisation page's "Whole
+  installation" block (its analysis refresh joins the organisation's cards). A new installation serves its first organisation once it is made
+  (`INITIAL_ADMIN_USER`; `db:seed` makes `demo` alone); a database with several organisations
+  stops the start, saying so. See [`docs/single-tenant.md`](docs/single-tenant.md). **Upgrade**:
+  nothing to do; the new setting is in the App Service templates and `.env.example`.
 - **Less scrolling on lists and project pages** (first part): shared building blocks for every
   screen, described in [`docs/ui-patterns.md`](docs/ui-patterns.md): a filter bar (the search in
   view, the other filters in a panel that floats over the list behind a "Filters · N" button,

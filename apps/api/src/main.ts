@@ -140,7 +140,13 @@ async function listen(): Promise<void> {
     (await import('./observability.js')).initObservability(config);
   }
   const app = await m.createApp();
-  await app.listen(config.PORT);
+  try {
+    await app.listen(config.PORT);
+  } catch (e) {
+    // SINGLE_TENANT cannot tell which organisation to serve: a setting to change, not a wait.
+    if (e instanceof Error && e.name === 'SingleTenantError') throw new ConfigError(e.message);
+    throw e;
+  }
   console.log(`WanSurvey ${m.VERSION} listening on port ${config.PORT}`);
 }
 

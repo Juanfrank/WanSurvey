@@ -19,14 +19,27 @@ export const at = (d: Date) => sql`CAST(${d.toISOString()} AS datetimeoffset(3))
  * The demo project has the household questionnaire, published as version 1, and 50 sample
  * cases; a rule assigns the region 1 cases to the interviewer.
  * Owners and admins enrol TOTP on first login. Idempotent: does nothing if the tenant exists.
+ * `singleTenant` (SINGLE_TENANT=true): "demo" alone, and only into a database with no organisation.
  */
-export async function seed(adminUrl: string, password: string): Promise<void> {
+export async function seed(
+  adminUrl: string,
+  password: string,
+  opts: { singleTenant?: boolean } = {},
+): Promise<void> {
   const db = createOwnerDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });
+  const single = !!opts.singleTenant;
   try {
     const existing = await sql`SELECT id FROM tenants WHERE slug = 'demo'`.execute(db);
     if (existing.rows.length) {
       console.log('Demo tenant already exists; nothing to do');
       return;
+    }
+    if (single) {
+      const any = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tenants`.execute(db);
+      if (Number(any.rows[0]!.n) > 0)
+        throw new Error(
+          'SINGLE_TENANT=true: the database already has an organisation; the demo would be a second one',
+        );
     }
     const tenantId = uuidv7();
     const otherTenantId = uuidv7();
@@ -37,17 +50,19 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
       await run(
         sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Demo Research', 'demo')`,
       );
-      await run(
-        sql`INSERT INTO tenants (id, name, slug) VALUES (${otherTenantId}, 'Second Agency', 'demo2')`,
-      );
+      if (!single)
+        await run(
+          sql`INSERT INTO tenants (id, name, slug) VALUES (${otherTenantId}, 'Second Agency', 'demo2')`,
+        );
       await run(sql`
         INSERT INTO projects (id, tenant_id, name, code, status, modes_enabled, timezone, languages, settings)
         VALUES (${projectId}, ${tenantId}, 'Household Survey 2026', 'HH2026', 'active',
                 ${JSON.stringify(['CATI', 'CAPI', 'CAWI', 'PAPI'])}, 'America/Lima', ${JSON.stringify(['es'])},
                 ${JSON.stringify({ contactBasis: { phone: 'public_task', visit: 'public_task' } })})`);
-      await run(sql`
-        INSERT INTO projects (id, tenant_id, name, code, status)
-        VALUES (${uuidv7()}, ${otherTenantId}, 'Business Panel', 'BIZ', 'active')`);
+      if (!single)
+        await run(sql`
+          INSERT INTO projects (id, tenant_id, name, code, status)
+          VALUES (${uuidv7()}, ${otherTenantId}, 'Business Panel', 'BIZ', 'active')`);
       const questionnaireId = uuidv7();
       const definition = Questionnaire.parse(household);
       const compiled = compile(definition);
@@ -78,7 +93,7 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
           VALUES (${userId}, ${email}, ${`Demo ${role}`}, ${role}, 'active', ${hash}, ${TERMS_VERSION}, SYSDATETIMEOFFSET())`);
         await member(tenantId, userId);
         await membership(tenantId, userId, role);
-        if (role === 'project_manager') {
+        if (role === 'project_manager' && !single) {
           // Same account in a second organisation, to try switching.
           await member(otherTenantId, userId);
           await membership(otherTenantId, userId, 'supervisor');
@@ -136,10 +151,14 @@ export async function seed(adminUrl: string, password: string): Promise<void> {
       await run(sql`INSERT INTO assignments (id, tenant_id, project_id, user_id, kind, name, filter)
                     VALUES (${uuidv7()}, ${tenantId}, ${projectId}, ${interviewer}, 'rule', 'Region 1', 'case.region == 1')`);
     });
-    console.log(
-      'Seeded organisations "demo" and "demo2" (log in with the e-mail and SEED_PASSWORD).',
-    );
-    console.log('project.manager@demo.wansurvey.test belongs to both.');
+    if (single)
+      console.log('Seeded organisation "demo" (log in with the e-mail and SEED_PASSWORD).');
+    else {
+      console.log(
+        'Seeded organisations "demo" and "demo2" (log in with the e-mail and SEED_PASSWORD).',
+      );
+      console.log('project.manager@demo.wansurvey.test belongs to both.');
+    }
   } finally {
     await db.destroy();
   }
@@ -151,7 +170,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.error('DATABASE_ADMIN_URL is required');
     process.exit(1);
   }
-  seed(admin, process.env.SEED_PASSWORD ?? 'demo-password-123').catch((e) => {
+  seed(admin, process.env.SEED_PASSWORD ?? 'demo-password-123', {
+    singleTenant: process.env.SINGLE_TENANT === 'true',
+  }).catch((e) => {
     console.error(e);
     process.exit(1);
   });
