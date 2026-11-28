@@ -74,6 +74,7 @@ export const papiEn = {
     downloadHelp:
       'Forms with exact positions and a code on every page, so their scans can be read automatically. Print them as they are (A4, no scaling).',
     title: 'Read scanned forms',
+    open: 'Upload scans',
     help: 'Upload one or more PDFs of scanned forms; a PDF may hold many forms, in any order. Marked circles are read and checked against the questionnaire’s rules; handwriting, doubtful or conflicting marks and missing pages are left for a second round.',
     choose: 'PDF files',
     upload: 'Upload and read',
@@ -195,6 +196,7 @@ export const papiEs: PapiCatalogue = {
     downloadHelp:
       'Formularios con posiciones exactas y un código en cada página, para leer sus escaneos automáticamente. Imprímalos tal cual (A4, sin ajustar el tamaño).',
     title: 'Leer formularios escaneados',
+    open: 'Cargar escaneos',
     help: 'Cargue uno o más PDF de formularios escaneados; un PDF puede traer varios formularios, en cualquier orden. Se leen los círculos marcados y se validan con las reglas del cuestionario; lo manuscrito, las marcas dudosas o en conflicto y las páginas faltantes quedan para una segunda ronda.',
     choose: 'Archivos PDF',
     upload: 'Cargar y leer',

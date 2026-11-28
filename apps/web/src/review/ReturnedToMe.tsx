@@ -70,13 +70,15 @@ function Returned({ projectId }: { projectId: string }) {
   return (
     <section
       aria-labelledby="returned-title"
-      className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm"
+      className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm"
       data-testid="returned"
     >
-      <h2 id="returned-title" className="font-semibold">
-        {t('review.returned.title')}
-      </h2>
-      <p className="mb-2 text-slate-700">{t('review.returned.help')}</p>
+      <div className="mb-1 flex flex-wrap items-baseline gap-x-3">
+        <h2 id="returned-title" className="font-semibold">
+          {t('review.returned.title')}
+        </h2>
+        <p className="text-slate-700">{t('review.returned.help')}</p>
+      </div>
       <ul className="flex flex-col gap-2">
         {list.data.map((r) => (
           <li
@@ -123,14 +125,15 @@ function MyQuality({ projectId }: { projectId: string }) {
   return (
     <section
       aria-labelledby="my-quality-title"
-      className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm"
+      className="flex items-baseline gap-x-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
       data-testid="my-quality"
     >
-      <h2 id="my-quality-title" className="font-semibold">
+      {/* One line: the title (what it is, on hover and for screen readers) and the figures. */}
+      <h2 id="my-quality-title" className="flex-none font-semibold" title={t('review.mine.help')}>
         {t('review.mine.title')}
+        <span className="sr-only">. {t('review.mine.help')}</span>
       </h2>
-      <p className="mb-2 text-slate-700">{t('review.mine.help')}</p>
-      <dl className="flex flex-wrap gap-x-6 gap-y-2">
+      <dl className="flex min-w-0 flex-1 flex-wrap gap-x-4 gap-y-1 [&>div]:flex [&>div]:items-baseline [&>div]:gap-1.5">
         <div>
           <dt className="text-xs text-slate-600">{t('review.mine.approved')}</dt>
           <dd className="tabular-nums font-medium" data-key="approved">

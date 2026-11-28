@@ -1022,7 +1022,7 @@ function StatusCell({ r, own }: { r: CaseRow; own: boolean }) {
       ) : null}
       {r.status === 'finalised' && (r.disposition || r.review) ? (
         <span
-          className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-slate-600"
+          className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap text-xs text-slate-600"
           data-col="result"
         >
           {r.disposition ? dispositionLabel(t, r.disposition) : null}

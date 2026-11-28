@@ -17,7 +17,8 @@ import {
   syncDevice,
 } from '../interview/device.js';
 import type { DeviceCase } from '../interview/store.js';
-import { Button, Card } from '../routes/ui.js';
+import { ShowMoreButton, useShowMore } from '../routes/ShowMore.js';
+import { Button, Card, MoreMenu, PageHeader } from '../routes/ui.js';
 import { CloudIcon, tone, useOnline } from './status.js';
 
 interface CaseRow {
@@ -169,6 +170,8 @@ export function DevicePage() {
   const candidates = (mine.data?.rows ?? []).filter(
     (r) => (r.status === 'assigned' || r.status === 'in_progress') && !onDevice.has(r.id),
   );
+  // A long list of cases to take comes in blocks of 20.
+  const more = useShowMore(candidates.length);
 
   const download = async () => {
     setBusy(true);
@@ -230,61 +233,63 @@ export function DevicePage() {
     now - Date.parse(state.lastSync) > STALE_SYNC_HOURS * 3_600_000;
 
   return (
-    <div className="flex flex-col gap-6" data-testid="device">
-      <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-        <ol className="flex flex-wrap items-center gap-1.5">
-          <li>
-            <Link to="/projects" className="hover:underline">
-              {t('designer.projects')}
-            </Link>
-          </li>
-          {name ? (
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden="true">/</span>
-              <Link to="/projects/$projectId" params={{ projectId }} className="hover:underline">
-                {name}
-              </Link>
-            </li>
-          ) : null}
-          <li className="flex items-center gap-1.5">
-            <span aria-hidden="true">/</span>
-            <span aria-current="page" className="font-medium text-slate-700">
-              {t('device.title')}
-            </span>
-          </li>
-        </ol>
-      </nav>
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h1 className="text-2xl font-bold">{t('device.title')}</h1>
-        {canInstall ? (
-          <button
-            type="button"
-            className={smallBtn}
-            onClick={() => {
-              void install.current?.prompt();
-              setCanInstall(false);
-            }}
+    <div className="flex flex-col gap-4" data-testid="device">
+      <PageHeader
+        parents={[
+          <Link
+            key="projects"
+            to="/projects"
+            activeOptions={{ exact: true }}
+            className="hover:underline"
           >
-            {t('device.install')}
-          </button>
-        ) : null}
-      </header>
+            {t('designer.projects')}
+          </Link>,
+          ...(name
+            ? [
+                <Link
+                  key="project"
+                  to="/projects/$projectId"
+                  params={{ projectId }}
+                  activeOptions={{ exact: true }}
+                  className="hover:underline"
+                >
+                  {name}
+                </Link>,
+              ]
+            : []),
+        ]}
+        title={<span aria-current="page">{t('device.title')}</span>}
+        actions={
+          canInstall ? (
+            <button
+              type="button"
+              className={smallBtn}
+              onClick={() => {
+                void install.current?.prompt();
+                setCanInstall(false);
+              }}
+            >
+              {t('device.install')}
+            </button>
+          ) : null
+        }
+      />
 
       <section
         aria-labelledby="device-sync"
         data-testid="sync-card"
-        className={`flex flex-wrap items-center gap-x-10 gap-y-4 rounded-xl border p-5 ${tone(online, waiting)}`}
+        className={`flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl border px-4 py-2.5 ${tone(online, waiting)}`}
       >
         <h2 id="device-sync" className="sr-only">
           {t('device.statusTitle')}
         </h2>
         <div className="flex items-center gap-3">
-          <CloudIcon online={online} className="h-10 w-10" />
+          <CloudIcon online={online} className="h-7 w-7" />
           <div className="flex flex-col">
-            <span data-testid="connection" data-online={online} className="text-lg font-semibold">
+            <span data-testid="connection" data-online={online} className="font-semibold">
               {online ? t('device.online') : t('device.offline')}
             </span>
-            <span className="text-sm">
+            <span className="text-xs">
               {state?.lastSync
                 ? t('device.lastSync', {
                     time: new Date(state.lastSync).toLocaleString(i18n.language),
@@ -294,12 +299,13 @@ export function DevicePage() {
           </div>
         </div>
         <p className="flex items-baseline gap-2" data-testid="waiting" data-count={waiting}>
-          <span className="text-4xl font-bold tabular-nums">{waiting}</span>
+          <span className="text-2xl font-bold tabular-nums">{waiting}</span>
           <span className="text-sm font-medium">{t('device.toSendLabel', { count: waiting })}</span>
         </p>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Button
             type="button"
+            size="sm"
             disabled={!online || busy}
             aria-describedby={online ? undefined : 'sync-unavailable'}
             onClick={() => void sync(true)}
@@ -348,13 +354,15 @@ export function DevicePage() {
                       <th scope="col">{t('device.priority')}</th>
                       <th scope="col">{t('device.due')}</th>
                       <th scope="col">{t('device.state')}</th>
-                      <th scope="col">{t('device.actions')}</th>
+                      <th scope="col" className="text-right">
+                        {t('device.actions')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {state.cases.map((c) => (
                       <tr key={c.caseId} data-case={c.externalId} data-status={c.status}>
-                        <td className="py-1.5 font-medium">{c.externalId}</td>
+                        <td className="whitespace-nowrap py-1.5 font-medium">{c.externalId}</td>
                         <td>{place(c)}</td>
                         <td>{c.priority ?? '—'}</td>
                         <td data-testid="due">
@@ -381,31 +389,40 @@ export function DevicePage() {
                             </span>
                           ) : null}
                         </td>
-                        <td className="flex flex-wrap gap-2 py-1">
-                          {c.status === 'ready' || c.status === 'started' ? (
-                            <button type="button" className={smallBtn} onClick={() => void open(c)}>
-                              {c.status === 'ready' ? t('device.start') : t('device.continue')}
-                              <span className="sr-only"> {c.externalId}</span>
-                            </button>
-                          ) : null}
-                          {c.status === 'ready' && online ? (
-                            <button
-                              type="button"
-                              className={smallBtn}
-                              disabled={busy}
-                              onClick={() => void giveBack(c)}
-                            >
-                              {t('device.return')}
-                              <span className="sr-only"> {c.externalId}</span>
-                            </button>
-                          ) : null}
+                        <td className="py-1">
+                          <div className="flex items-center justify-end gap-2">
+                            {c.status === 'ready' || c.status === 'started' ? (
+                              <button
+                                type="button"
+                                className={smallBtn}
+                                onClick={() => void open(c)}
+                              >
+                                {c.status === 'ready' ? t('device.start') : t('device.continue')}
+                                <span className="sr-only"> {c.externalId}</span>
+                              </button>
+                            ) : null}
+                            {c.status === 'ready' && online ? (
+                              <MoreMenu
+                                label={t('device.caseActions', { id: c.externalId })}
+                                entries={[
+                                  {
+                                    type: 'item',
+                                    id: 'return',
+                                    label: t('device.returnCase', { id: c.externalId }),
+                                    disabled: busy,
+                                    onSelect: () => void giveBack(c),
+                                  },
+                                ]}
+                              />
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="text-sm text-slate-700" data-testid="device-privacy">
+              <p className="text-xs text-slate-700" data-testid="device-privacy">
                 {t('device.privacy')}
               </p>
             </>
@@ -419,7 +436,6 @@ export function DevicePage() {
           <h2 id="device-download" className="text-lg font-semibold">
             {t('device.download')}
           </h2>
-          <p className="text-sm text-slate-600">{t('device.downloadHelp')}</p>
           {!online ? (
             <p className="text-slate-700">{t('device.needsConnection')}</p>
           ) : candidates.length ? (
@@ -431,7 +447,7 @@ export function DevicePage() {
               }}
             >
               <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3" data-testid="download-list">
-                {candidates.map((r) => (
+                {candidates.slice(0, more.shown).map((r) => (
                   <li key={r.id}>
                     <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm">
                       <input
@@ -456,6 +472,7 @@ export function DevicePage() {
                   </li>
                 ))}
               </ul>
+              <ShowMoreButton more={more} />
               <div>
                 <Button type="submit" disabled={busy || !picked.size}>
                   {t('device.downloadSelected')}
@@ -465,6 +482,7 @@ export function DevicePage() {
           ) : (
             <p className="text-slate-600">{t('device.noneToDownload')}</p>
           )}
+          <p className="text-xs text-slate-600">{t('device.downloadHelp')}</p>
         </section>
       </Card>
     </div>

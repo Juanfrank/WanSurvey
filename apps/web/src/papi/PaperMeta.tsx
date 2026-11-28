@@ -66,21 +66,22 @@ export function PaperMeta({
   return (
     <section
       aria-label={t('papi.meta.title')}
-      className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+      className="flex flex-col gap-1 text-sm"
       data-testid="paper-meta"
     >
-      <div className="flex flex-wrap items-end gap-4">
+      {/* One line under the case's status: label and field side by side, the rule after. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {second ? (
           <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-ink-900">
             {t('papi.meta.second')}
           </span>
         ) : null}
-        <label className="flex flex-col gap-1">
+        <label className="flex items-center gap-2">
           <span>{t('papi.meta.date')}</span>
           <input
             type="date"
             max={localToday()}
-            className="rounded-md border border-slate-300 px-2 py-1"
+            className="rounded-md border border-slate-300 bg-white px-2 py-0.5"
             aria-invalid={problems.date ? true : undefined}
             aria-describedby="paper-meta-hint"
             value={date}
@@ -88,14 +89,14 @@ export function PaperMeta({
             onBlur={save}
           />
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex items-center gap-2">
           <span>{t('papi.meta.minutes')}</span>
           <input
             type="number"
             min={1}
             max={MAX_FORM_MINUTES}
             step={1}
-            className="w-24 rounded-md border border-slate-300 px-2 py-1"
+            className="w-20 rounded-md border border-slate-300 bg-white px-2 py-0.5"
             aria-invalid={problems.minutes ? true : undefined}
             aria-describedby="paper-meta-hint"
             value={minutes}

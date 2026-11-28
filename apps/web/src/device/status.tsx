@@ -91,11 +91,12 @@ export function DeviceStatusLink({ projectId }: { projectId: string }) {
       ]
     : [online ? t('device.online') : t('device.offline')];
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    // Small, so that on a project it fits on the breadcrumb's line beside the account.
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
       <Link
         to="/projects/$projectId/device"
         params={{ projectId }}
-        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+        className="whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 py-1 font-medium hover:bg-slate-50"
       >
         {t('device.link')}
       </Link>
@@ -104,9 +105,9 @@ export function DeviceStatusLink({ projectId }: { projectId: string }) {
         data-online={online}
         data-waiting={held ? waiting : undefined}
         title={t('device.indicatorTitle')}
-        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm font-medium ${held || !online ? tone(online, waiting) : 'border-slate-300 bg-white text-slate-700'}`}
+        className={`flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 font-medium ${held || !online ? tone(online, waiting) : 'border-slate-300 bg-white text-slate-700'}`}
       >
-        <CloudIcon online={online} className="h-4 w-4" />
+        <CloudIcon online={online} className="h-3.5 w-3.5" />
         {parts.join(' · ')}
       </span>
     </div>

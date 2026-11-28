@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures.js';
+import { expect, overlaysSettled, test } from './fixtures.js';
 import { connectDb } from './db.js';
 import { uuidv7 } from 'uuidv7';
 import {
@@ -52,12 +52,19 @@ test('scanned forms: a PDF with two forms is split and read, and the clerk finis
     );
     expect(pdf.headers()['content-type']).toBe('application/pdf');
     const scans = page.getByTestId('scans');
-    await scans.getByLabel('PDF files').setInputFiles({
+    // The upload opens in a side panel; the batches stay at the top of the section.
+    await scans.getByRole('button', { name: 'Upload scans' }).click();
+    const uploadPanel = page.getByRole('dialog', { name: 'Upload scans' });
+    await uploadPanel.getByLabel('PDF files').setInputFiles({
       name: 'escaneo-lote-1.pdf',
       mimeType: 'application/pdf',
       buffer: await pdf.body(),
     });
-    await scans.getByRole('button', { name: 'Upload and read' }).click();
+    // The panel is checked by axe as it opens (fixtures.ts).
+    await overlaysSettled(page, 1);
+    await shot(page, 'p2-papi-scans-upload', { fullPage: false });
+    await uploadPanel.getByRole('button', { name: 'Upload and read' }).click();
+    await expect(uploadPanel).toBeHidden();
     const batch = scans.locator('[data-batch="escaneo-lote-1.pdf"]');
     await expect(batch.getByTestId('batch-status')).toHaveText('Read', { timeout: 60_000 });
     await expect(batch.locator('tr[data-form="SCAN-A"]')).toContainText('Second round');

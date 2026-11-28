@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { CloseIcon, PinIcon } from './icons.js';
 
@@ -108,6 +115,7 @@ export function SideDrawer({
   badgeLabel,
   width = '22rem',
   className = '',
+  float,
   children,
 }: {
   id: string;
@@ -121,11 +129,17 @@ export function SideDrawer({
   /** Width when pinned. */
   width?: string;
   className?: string;
+  /**
+   * Collapsed, a floating button at the bottom right (its visible text: "Callbacks (2)")
+   * instead of a rail: the content keeps the whole width. The pane opens above the button.
+   */
+  float?: string;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
   const box = useRef<HTMLElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const pane = useRef<HTMLDivElement>(null);
   const enter = useRef<ReturnType<typeof setTimeout>>(undefined);
   const leave = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { inline, open } = drawer;
@@ -158,6 +172,11 @@ export function SideDrawer({
       document.removeEventListener('keydown', esc);
     };
   }, [inline, open, drawer]);
+  // Folded to a button, a pane closed by what was picked in it (a "Call now") gives the focus
+  // back to the button instead of leaving it on nothing.
+  useLayoutEffect(() => {
+    if (!open && pane.current?.contains(document.activeElement)) button.current?.focus();
+  }, [open]);
   // A pending open or close is dropped once the pane changes by other means.
   useEffect(() => {
     clearTimeout(enter.current);
@@ -204,9 +223,9 @@ export function SideDrawer({
   const line = side === 'left' ? 'min-[900px]:border-r' : 'min-[900px]:border-l';
   useLayoutEffect(() => {
     const root = document.documentElement.style;
-    root.setProperty(`--pane-${side}`, inline ? width : '3rem');
+    root.setProperty(`--pane-${side}`, inline ? width : float ? '0px' : '3rem');
     return () => void root.removeProperty(`--pane-${side}`);
-  }, [side, inline, width]);
+  }, [side, inline, width, float]);
 
   if (inline)
     return (
@@ -218,6 +237,82 @@ export function SideDrawer({
       >
         <div className="no-print flex justify-end">{pin}</div>
         {children}
+      </aside>
+    );
+
+  const closeButton = (
+    <button
+      type="button"
+      aria-label={`${t('app.close')}: ${label}`}
+      title={t('app.close')}
+      onClick={() => {
+        drawer.setOpen(false);
+        button.current?.focus();
+      }}
+      className="grid h-8 w-8 place-items-center rounded-full text-slate-600 hover:bg-indigo-50 hover:text-indigo-ink-600"
+    >
+      <CloseIcon className="h-4 w-4" />
+    </button>
+  );
+  const onEscape = (e: ReactKeyboardEvent) => {
+    if (e.key === 'Escape' && open && !e.defaultPrevented) {
+      e.preventDefault();
+      drawer.setOpen(false);
+      button.current?.focus();
+    }
+  };
+
+  if (float)
+    return (
+      <aside
+        ref={box}
+        aria-label={label}
+        className={`no-print fixed bottom-4 z-20 flex flex-col gap-2 ${
+          side === 'left' ? 'items-start' : 'items-end'
+        } ${
+          side === 'left' ? 'left-4 min-[900px]:left-[calc(var(--side-w,0px)+1rem)]' : 'right-4'
+        }`}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) drawer.setOpen(false);
+        }}
+        onKeyDown={onEscape}
+      >
+        <div
+          ref={pane}
+          id={id}
+          hidden={!open}
+          className={`flex max-h-[min(36rem,calc(100vh-6rem))] w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-card ${className}`}
+        >
+          <div className="flex items-center justify-end gap-1">
+            {pin}
+            {closeButton}
+          </div>
+          {children}
+        </div>
+        <button
+          ref={button}
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          aria-describedby={badge ? countId : undefined}
+          onClick={() => drawer.setOpen(!open)}
+          className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold shadow-card ${
+            open
+              ? 'border-indigo-600 bg-indigo-600 text-on-fill'
+              : badge
+                ? 'border-amber-300 bg-amber-50 text-amber-ink-900 hover:bg-amber-100'
+                : 'border-slate-200 bg-white text-navy hover:bg-indigo-50'
+          }`}
+        >
+          {icon}
+          {float}
+        </button>
+        {/* What the colour says, read as the button's description. */}
+        {badge ? (
+          <span id={countId} hidden>
+            {badgeLabel ?? badge}
+          </span>
+        ) : null}
       </aside>
     );
 
@@ -240,13 +335,7 @@ export function SideDrawer({
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) drawer.setOpen(false);
       }}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && open && !e.defaultPrevented) {
-          e.preventDefault();
-          drawer.setOpen(false);
-          button.current?.focus();
-        }
-      }}
+      onKeyDown={onEscape}
     >
       <div
         className={`flex h-full flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 shadow-sm min-[900px]:rounded-none min-[900px]:border-y-0 min-[900px]:shadow-none ${
@@ -305,18 +394,7 @@ export function SideDrawer({
       >
         <div className="flex items-center justify-end gap-1">
           {pin}
-          <button
-            type="button"
-            aria-label={`${t('app.close')}: ${label}`}
-            title={t('app.close')}
-            onClick={() => {
-              drawer.setOpen(false);
-              button.current?.focus();
-            }}
-            className="grid h-8 w-8 place-items-center rounded-full text-slate-600 hover:bg-indigo-50 hover:text-indigo-ink-600"
-          >
-            <CloseIcon className="h-4 w-4" />
-          </button>
+          {closeButton}
         </div>
         {children}
       </div>

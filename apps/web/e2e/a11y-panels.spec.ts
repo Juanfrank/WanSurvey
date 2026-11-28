@@ -107,7 +107,7 @@ test('the outline drawer of the designer: pinned, as a rail, over the editor; na
   await expect(rail).toBeFocused();
 });
 
-test('the callbacks drawer of the calls screen: pinned, as a rail, over the content', async ({
+test('the callbacks drawer of the calls screen: a floating button, over the content, pinned', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
@@ -115,16 +115,22 @@ test('the callbacks drawer of the calls screen: pinned, as a rail, over the cont
   await page.getByRole('tab', { name: 'Calls' }).click();
   const drawer = page.getByRole('complementary', { name: 'My callbacks' });
   await expect(drawer).toBeVisible();
+  // Folded by default: a floating button that says whether the pane is open.
+  const button = drawer.getByRole('button', { name: /^Callbacks \(\d+\)$/ });
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
   await expectAccessible(page);
-  await page.getByRole('button', { name: 'Unpin: My callbacks' }).click();
-  const rail = page.getByRole('button', { name: /^My callbacks/ });
-  await expect(rail).toHaveAttribute('aria-expanded', 'false');
-  await expectAccessible(page);
-  await rail.click();
-  await expect(rail).toHaveAttribute('aria-expanded', 'true');
+  await button.click();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
   await overlaysSettled(page, 0);
   await expectAccessible(page);
   await page.keyboard.press('Escape');
-  await expect(rail).toHaveAttribute('aria-expanded', 'false');
-  await expect(rail).toBeFocused();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+  await expect(button).toBeFocused();
+  // Kept open: a column beside the content; unpinned, the floating button again.
+  await button.click();
+  await page.getByRole('button', { name: 'Keep open: My callbacks' }).click();
+  await expect(page.getByRole('button', { name: 'Unpin: My callbacks' })).toBeVisible();
+  await expectAccessible(page);
+  await page.getByRole('button', { name: 'Unpin: My callbacks' }).click();
+  await expect(drawer.getByRole('button', { name: /^Callbacks \(\d+\)$/ })).toBeVisible();
 });

@@ -75,7 +75,7 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
   await expect(crumbs).toContainText('Household Survey 2026');
   await expect(crumbs.getByRole('link', { name: 'My cases' })).toBeVisible();
-  await expect(crumbs.locator('[aria-current="page"]')).toHaveText(caseId);
+  await expect(crumbs.locator('[aria-current="page"]')).toHaveText(`Case ${caseId}`);
   await shot(page, 'v2-interview-breadcrumb', { fullPage: false });
   // A note before stopping: the card shown when it is taken up again repeats it (176).
   await page.keyboard.press('Control+m');

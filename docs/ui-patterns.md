@@ -39,7 +39,18 @@ the right (`AppLayout`). A page puts its title there with `PageHeader`, which re
 
 The two sit side by side in a flex row, so the account never covers the title (it used to be laid
 over the page's first line). A page that does not use `PageHeader` still works: the row then has
-only the account. Pages with their own header card (interview, review, device) keep it for now.
+only the account. The work screens (interview, review, My device, print) use it too: the
+breadcrumb's last step is the case, as the `h1` marked `aria-current="page"`, and what used to
+be a header card (timers, language, saved) is one slim line under the row. `noPrint` keeps the
+header out of a printout.
+
+## Long lists in blocks, side panes as a floating button
+
+- `useShowMore(total)` and `ShowMoreButton` (`routes/ShowMore.tsx`): the first 20 rows and a
+  "Show 20 more (35 left)" button, for lists that are not paged by the server.
+- `SideDrawer` with `float="Callbacks (2)"`: folded, the pane is a floating button at the bottom
+  right (not a rail), so the content keeps its width; it opens above the button and can still be
+  kept open as a column (the calls screen's "My callbacks").
 
 ## Tabs on one line
 

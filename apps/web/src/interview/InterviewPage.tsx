@@ -11,7 +11,7 @@ import { Dialog } from '../designer/Dialog.js';
 import { useCan } from '../designer/hooks.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
-import { Button } from '../routes/ui.js';
+import { Button, PageHeader } from '../routes/ui.js';
 import { api } from '../api.js';
 import type { ReviewComment } from '../review/ReviewPage.js';
 import { ago, AnswersSoFar, Contacts, SampleData } from './side.js';
@@ -244,59 +244,55 @@ export function InterviewPage() {
 
   return (
     <div className="flex flex-col gap-3" onKeyDown={onKeyDown}>
-      <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-        <ol className="flex flex-wrap items-center gap-1.5">
-          <li>{crumb(t('designer.projects'), '/projects')}</li>
-          {project.data ? (
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden="true">/</span>
-              {crumb(project.data.name, '/projects/$projectId')}
-            </li>
-          ) : null}
-          <li className="flex items-center gap-1.5">
-            <span aria-hidden="true">/</span>
-            {crumb(parent.label, parent.to, parent.search)}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span aria-hidden="true">/</span>
-            <span aria-current="page" className="font-medium text-slate-700">
-              {payload.context.externalId ?? t('interview.case', { id: '' }).trim()}
+      {/* The breadcrumb, with the case as the page's title, on the app's top row. */}
+      <PageHeader
+        parents={[
+          crumb(t('designer.projects'), '/projects'),
+          ...(project.data ? [crumb(project.data.name, '/projects/$projectId')] : []),
+          crumb(parent.label, parent.to, parent.search),
+        ]}
+        title={
+          <span aria-current="page" className="whitespace-nowrap">
+            {t('interview.case', { id: payload.context.externalId ?? '' }).trim()}
+          </span>
+        }
+        aside={
+          name ? (
+            <span className="truncate text-base font-normal text-slate-700 max-sm:hidden">
+              {name}
             </span>
-          </li>
-        </ol>
-      </nav>
-      <header className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <h1 className="text-lg font-semibold">
-          {t('interview.case', { id: payload.context.externalId ?? '' })}
-          {name ? (
-            <>
-              {' '}
-              <span className="ml-2 font-normal text-slate-700">{name}</span>
-            </>
-          ) : null}
-        </h1>
+          ) : null
+        }
+      />
+      {/* One slim line, not a card: who, how long, the language and whether it is saved. */}
+      <header
+        className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm"
+        data-testid="interview-status"
+      >
+        {/* On a phone the top row has no room for the respondent's name: it is said here. */}
+        {name ? <span className="font-medium sm:hidden">{name}</span> : null}
         {payload.interview.interviewer ? (
-          <span className="text-sm text-slate-600">
+          <span className="text-slate-600">
             {t('interview.interviewer', { name: payload.interview.interviewer })}
           </span>
         ) : null}
-        <dl className="flex gap-4 text-sm">
-          <div>
+        <dl className="flex gap-4">
+          <div className="flex items-baseline gap-1.5">
             <dt className="text-xs text-slate-600">{t('interview.elapsed')}</dt>
             <dd className="font-mono" data-testid="elapsed">
               {clock(iv.clock?.activeMs() ?? 0)}
             </dd>
           </div>
-          <div>
+          <div className="flex items-baseline gap-1.5">
             <dt className="text-xs text-slate-600">{t('interview.onQuestion')}</dt>
             <dd className="font-mono">{clock(iv.clock?.onQuestionMs() ?? 0)}</dd>
           </div>
         </dl>
         {languages.length > 1 ? (
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2">
             <span>{t('interview.language')}</span>
             <select
-              className="rounded-md border border-slate-300 px-2 py-1"
+              className="rounded-md border border-slate-300 px-2 py-0.5"
               value={lang}
               onChange={(e) => iv.setLanguage(e.target.value)}
             >
@@ -369,6 +365,8 @@ export function InterviewPage() {
           onSave={(meta) => iv.paperMeta(meta)}
         />
       ) : null}
+      {/* A scanned form's second round: the cut-out of the page, as wide as the screen so the
+          handwriting stays legible, right above the question. */}
       {payload.interview.mode === 'PAPI' ? (
         <ScanPanel
           interviewId={interviewId}

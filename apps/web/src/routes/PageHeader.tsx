@@ -40,6 +40,7 @@ export function PageHeader({
   icon,
   aside,
   actions,
+  noPrint = false,
 }: {
   /** The `h1`'s content. */
   title: ReactNode;
@@ -53,6 +54,8 @@ export function PageHeader({
   aside?: ReactNode;
   /** The page's main buttons, after the title. */
   actions?: ReactNode;
+  /** Left out of the printout (a page that is printed, like the paper forms). */
+  noPrint?: boolean;
 }) {
   const { t } = useTranslation();
   const slot = useContext(HeaderSlotContext);
@@ -99,7 +102,10 @@ export function PageHeader({
     </div>
   );
   const header = (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2" data-page-header="">
+    <div
+      className={`flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 ${noPrint ? 'no-print' : ''}`}
+      data-page-header=""
+    >
       {body}
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>

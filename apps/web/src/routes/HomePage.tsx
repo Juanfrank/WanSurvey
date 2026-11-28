@@ -176,7 +176,7 @@ export function HomePage() {
   const name = me.data?.user.firstName || me.data?.user.name || '';
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <PageHeader title={t('home.welcome', { name })} />
       {isAdmin && members.data ? <AdminPending members={members.data} /> : null}
       {working.length ? (
@@ -193,7 +193,7 @@ export function HomePage() {
         />
       ) : null}
       <Card>
-        <h2 className="mb-3 text-lg font-semibold">{t('home.projects')}</h2>
+        <h2 className="mb-2 text-lg font-semibold">{t('home.projects')}</h2>
         <QueryState query={projects} isEmpty={!rows.length} empty={t('home.noProjects')}>
           {portfolio ? (
             <Portfolio
@@ -219,13 +219,13 @@ export function HomePage() {
   );
 }
 
-/** A figure with its label, linked to where it is worked on. */
+/** A figure with its label as a pill (one line), linked to where it is worked on. */
 function Tile({ label, value, children }: { label: string; value: number; children?: ReactNode }) {
   return (
     <div
-      className={`flex flex-col gap-1 rounded-lg border p-3 ${value ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-white'}`}
+      className={`inline-flex flex-wrap items-baseline gap-x-2 rounded-lg border px-3 py-1.5 ${value ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-white'}`}
     >
-      <span className="text-2xl font-bold tabular-nums">{number(value)}</span>
+      <span className="text-lg font-bold leading-none tabular-nums">{number(value)}</span>
       <span className="text-sm text-slate-700">{label}</span>
       {children}
     </div>
@@ -245,13 +245,13 @@ function AdminPending({ members }: { members: Member[] }) {
   return (
     <Card>
       <section aria-labelledby="home-admin">
-        <h2 id="home-admin" className="mb-3 text-lg font-semibold">
+        <h2 id="home-admin" className="mb-2 text-lg font-semibold">
           {t('home.admin.title')}
         </h2>
         {!awaiting && !invited && !noTwoFactor ? (
-          <p className="mb-3 text-slate-600">{t('home.admin.none')}</p>
+          <p className="mb-2 text-slate-600">{t('home.admin.none')}</p>
         ) : null}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="flex flex-wrap gap-2">
           <Tile label={t('home.admin.awaiting')} value={awaiting}>
             {awaiting ? link : null}
           </Tile>
@@ -310,17 +310,20 @@ function MyDay({
   return (
     <Card>
       <section aria-labelledby="home-day">
-        <h2 id="home-day" className="mb-3 text-lg font-semibold">
-          {t('home.day.title')}
-        </h2>
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <Tile label={t('home.day.returned')} value={total('returned')} />
-          <Tile label={t('home.day.callbacksDue')} value={total('callbacksDue')} />
-          <Tile label={t('home.day.open')} value={total('open')} />
+        {/* The title and the day's figures on one line. */}
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h2 id="home-day" className="text-lg font-semibold">
+            {t('home.day.title')}
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            <Tile label={t('home.day.returned')} value={total('returned')} />
+            <Tile label={t('home.day.callbacksDue')} value={total('callbacksDue')} />
+            <Tile label={t('home.day.open')} value={total('open')} />
+          </div>
         </div>
-        <h3 className="mb-2 font-semibold">{t('home.day.forToday')}</h3>
+        <h3 className="mb-1 font-semibold">{t('home.day.forToday')}</h3>
         {due.length ? (
-          <ul className="mb-4 divide-y divide-slate-100" data-testid="home-due">
+          <ul className="mb-3 divide-y divide-slate-100" data-testid="home-due">
             {due.map((c) => (
               <li key={c.caseId} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span>
@@ -347,7 +350,7 @@ function MyDay({
             ))}
           </ul>
         ) : (
-          <p className="mb-4 text-slate-600">{t('home.day.forTodayEmpty')}</p>
+          <p className="mb-3 text-sm text-slate-600">{t('home.day.forTodayEmpty')}</p>
         )}
         <ul className="divide-y divide-slate-100">
           {projects.map((p) => {

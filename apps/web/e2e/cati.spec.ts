@@ -113,20 +113,16 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await expect(page.getByTestId('shift-goal')).toContainText('My goal: ');
     await shot(page, 'v2-cati-peek-and-goal', { fullPage: false });
     await expect(page.getByTestId('callbacks-overdue')).toContainText(caseId);
+    // Folded by default: a floating "Callbacks (1)" button, so the call area keeps the width.
+    const callbacksBox = page.getByRole('complementary', { name: 'My callbacks' });
+    const floating = callbacksBox.getByRole('button', { name: 'Callbacks (1)', exact: true });
+    await expect(floating).toHaveAttribute('aria-expanded', 'false');
     await shot(page, 'cati-callbacks');
     await expectAccessible(page);
-    // Collapsed, a rail beside the calls counts what is due; it opens over the call area.
-    await page.getByRole('button', { name: 'Unpin: My callbacks' }).click();
-    const rail = page.getByRole('complementary', { name: 'My callbacks' });
-    await expect(rail).toContainText('1');
-    // The pointer was on the pin, now over the rail: move it away to see the rail alone.
-    await page.mouse.move(500, 500);
-    await expect(rail.getByRole('button', { name: 'My callbacks', exact: true })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
     await shot(page, 'cati-callbacks-rail', { fullPage: false });
-    await rail.getByRole('button', { name: 'My callbacks', exact: true }).click();
+    // It opens over the call area, above the button.
+    await floating.click();
+    await expect(floating).toHaveAttribute('aria-expanded', 'true');
     await shot(page, 'cati-callbacks-over', { fullPage: false });
     await page.getByRole('button', { name: `Call now: case ${caseId}` }).click();
     await expect(calls.locator('form[data-case]')).toHaveAttribute('data-case', caseId);

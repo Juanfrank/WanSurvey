@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, upload } from '../api.js';
 import { smallBtn } from '../designer/fields.js';
 import { dateTime } from '../format.js';
 import { localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
-import { Button, FileInput } from '../routes/ui.js';
+import { ShowMoreButton, useShowMore } from '../routes/ShowMore.js';
+import { Button, Drawer, FileInput } from '../routes/ui.js';
 
 interface ScanForm {
   id: string;
@@ -55,6 +56,8 @@ export function ScanForms({
   // What to say, not the text: it follows the interface language when it changes.
   const [message, setMessage] = useState<{ uploaded: number } | { error: unknown } | null>(null);
   const [inputKey, setInputKey] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const formId = useId();
   const list = useQuery({
     queryKey: ['papi-scans', projectId],
     queryFn: () => api<Batch[]>(`/projects/${projectId}/papi/scans`),
@@ -62,6 +65,8 @@ export function ScanForms({
     refetchInterval: (q) =>
       q.state.data?.some((b) => b.status === 'queued' || b.status === 'running') ? 2000 : false,
   });
+  // Many uploads come in blocks of 10 batches, the newest first.
+  const batches = useShowMore(list.data?.length ?? 0, 10);
   const send = useMutation({
     mutationFn: () => {
       const form = new FormData();
@@ -70,6 +75,7 @@ export function ScanForms({
     },
     onSuccess: async (r) => {
       setMessage({ uploaded: r.batches.length });
+      setUploading(false);
       setFiles([]);
       setInputKey((k) => k + 1);
       await qc.invalidateQueries({ queryKey: ['papi-scans', projectId] });
@@ -97,41 +103,70 @@ export function ScanForms({
     }
   };
 
+  const status = (
+    <p role="status" aria-live="polite" className="empty:hidden">
+      {!message
+        ? null
+        : 'uploaded' in message
+          ? t('papi.scans.uploaded', { count: message.uploaded })
+          : localiseError(t, message.error)}
+    </p>
+  );
+  // A fresh panel each time: no file left from a panel closed without uploading.
+  const openUpload = (v: boolean) => {
+    setFiles([]);
+    setInputKey((k) => k + 1);
+    if (v) setMessage(null);
+    setUploading(v);
+  };
+
   return (
     <section aria-labelledby="papi-scans" className="flex flex-col gap-3" data-testid="scans">
-      <h2 id="papi-scans" className="text-base font-semibold">
-        {t('papi.scans.title')}
-      </h2>
-      <p className="max-w-4xl text-slate-600">{t('papi.scans.help')}</p>
-      <form
-        className="flex flex-wrap items-end gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (files.length) send.mutate();
-        }}
-      >
-        <FileInput
-          key={inputKey}
-          label={t('papi.scans.choose')}
-          accept="application/pdf,.pdf"
-          multiple
-          onChange={(e) => setFiles([...(e.target.files ?? [])])}
-        />
-        <Button type="submit" disabled={!files.length || send.isPending}>
-          {t('papi.scans.upload')}
+      {/* The title and the button that opens the upload: the batches come right under it. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 id="papi-scans" className="text-base font-semibold">
+          {t('papi.scans.title')}
+        </h2>
+        <Button type="button" size="sm" onClick={() => openUpload(true)}>
+          {t('papi.scans.open')}
         </Button>
-      </form>
-      <p role="status" aria-live="polite" className="empty:hidden">
-        {!message
-          ? null
-          : 'uploaded' in message
-            ? t('papi.scans.uploaded', { count: message.uploaded })
-            : localiseError(t, message.error)}
-      </p>
+      </div>
+      {uploading ? (
+        <Drawer
+          title={t('papi.scans.open')}
+          onClose={() => openUpload(false)}
+          footer={
+            <Button type="submit" form={formId} disabled={!files.length || send.isPending}>
+              {t('papi.scans.upload')}
+            </Button>
+          }
+        >
+          <form
+            id={formId}
+            className="flex flex-col gap-3 text-sm"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (files.length) send.mutate();
+            }}
+          >
+            <p className="text-slate-600">{t('papi.scans.help')}</p>
+            <FileInput
+              key={inputKey}
+              label={t('papi.scans.choose')}
+              accept="application/pdf,.pdf"
+              multiple
+              onChange={(e) => setFiles([...(e.target.files ?? [])])}
+            />
+            {status}
+          </form>
+        </Drawer>
+      ) : null}
+      {/* While the panel is open, what happened is said in it (the page behind is inert). */}
+      {uploading ? null : status}
       {list.data && !list.data.length ? (
         <p className="text-slate-600">{t('papi.scans.none')}</p>
       ) : null}
-      {(list.data ?? []).map((b) => (
+      {(list.data ?? []).slice(0, batches.shown).map((b) => (
         <article
           key={b.id}
           className="rounded-lg border border-slate-200 bg-white p-3"
@@ -167,8 +202,8 @@ export function ScanForms({
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {b.forms.map((f) => {
+                <InBlocks rows={b.forms} cols={5}>
+                  {(f) => {
                     const counts = new Map<string, number>();
                     for (const i of f.issues) counts.set(i.kind, (counts.get(i.kind) ?? 0) + 1);
                     const short = f.pagesFound.length < f.pagesExpected;
@@ -209,8 +244,8 @@ export function ScanForms({
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
+                  }}
+                </InBlocks>
               </table>
             </div>
           ) : null}
@@ -228,6 +263,32 @@ export function ScanForms({
           ) : null}
         </article>
       ))}
+      <ShowMoreButton more={batches} />
     </section>
+  );
+}
+
+/** The forms of a batch, 20 at a time: a PDF may hold a whole stack of them. */
+function InBlocks({
+  rows,
+  cols,
+  children,
+}: {
+  rows: ScanForm[];
+  cols: number;
+  children(f: ScanForm): ReactNode;
+}) {
+  const more = useShowMore(rows.length);
+  return (
+    <tbody className="divide-y divide-slate-100">
+      {rows.slice(0, more.shown).map(children)}
+      {more.left ? (
+        <tr>
+          <td colSpan={cols} className="py-1.5">
+            <ShowMoreButton more={more} />
+          </td>
+        </tr>
+      ) : null}
+    </tbody>
   );
 }

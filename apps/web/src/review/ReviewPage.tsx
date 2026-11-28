@@ -16,7 +16,7 @@ import { inputCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button } from '../routes/ui.js';
+import { Button, PageHeader } from '../routes/ui.js';
 import { FlagChips, minutes } from './ReviewTab.js';
 
 type To = 'in_review' | 'approved' | 'returned' | 'rejected';
@@ -182,49 +182,46 @@ export function ReviewPage() {
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="review-screen">
-      <nav aria-label={t('designer.breadcrumb')} className="text-slate-600">
-        <ol className="flex flex-wrap items-center gap-1.5">
-          <li>
-            <Link to="/projects" activeOptions={{ exact: true }} className="hover:underline">
-              {t('designer.projects')}
-            </Link>
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span aria-hidden="true">/</span>
-            <Link
-              to="/projects/$projectId"
-              params={{ projectId }}
-              activeOptions={{ exact: true }}
-              className="hover:underline"
-            >
-              {project.data?.name ?? '…'}
-            </Link>
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span aria-hidden="true">/</span>
-            <Link
-              to="/projects/$projectId"
-              params={{ projectId }}
-              search={{ tab: 'review' }}
-              className="hover:underline"
-            >
-              {metricsTeam || metricsOwn ? t('cases.tabs.supervision') : t('cases.tabs.review')}
-            </Link>
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span aria-hidden="true">/</span>
-            <span aria-current="page" className="font-medium text-slate-700">
-              {t('review.screen.crumb', {
-                id: d.interview.externalId ?? d.interview.id.slice(0, 8),
-              })}
-            </span>
-          </li>
-        </ol>
-      </nav>
-      <header className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <h1 className="text-lg font-semibold">
-          {t('review.screen.title', { id: d.interview.externalId ?? d.interview.id.slice(0, 8) })}
-        </h1>
+      {/* The breadcrumb, with the case as the page's title, on the app's top row. */}
+      <PageHeader
+        parents={[
+          <Link
+            key="projects"
+            to="/projects"
+            activeOptions={{ exact: true }}
+            className="hover:underline"
+          >
+            {t('designer.projects')}
+          </Link>,
+          <Link
+            key="project"
+            to="/projects/$projectId"
+            params={{ projectId }}
+            activeOptions={{ exact: true }}
+            className="hover:underline"
+          >
+            {project.data?.name ?? '…'}
+          </Link>,
+          <Link
+            key="review"
+            to="/projects/$projectId"
+            params={{ projectId }}
+            search={{ tab: 'review' }}
+            className="hover:underline"
+          >
+            {metricsTeam || metricsOwn ? t('cases.tabs.supervision') : t('cases.tabs.review')}
+          </Link>,
+        ]}
+        title={
+          <span aria-current="page">
+            {t('review.screen.crumb', {
+              id: d.interview.externalId ?? d.interview.id.slice(0, 8),
+            })}
+          </span>
+        }
+      />
+      {/* One slim line, not a card: who, how, where it stands, and the decisions. */}
+      <header className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <span>{d.interview.interviewer ?? '—'}</span>
         <span>{modeLabel(t, d.interview.mode)}</span>
         <span data-testid="review-status" data-status={d.interview.status}>
@@ -250,7 +247,10 @@ export function ReviewPage() {
             })}
           </span>
         ) : null}
-        <div className="ml-auto flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {d.allowed.length ? (
+            <span className="text-xs text-slate-600">{t('review.screen.keys')}</span>
+          ) : null}
           {d.allowed.map((to) => (
             <Button
               key={to}
@@ -272,9 +272,6 @@ export function ReviewPage() {
       <p role="status" aria-live="polite" className="empty:hidden" data-testid="review-message">
         {message}
       </p>
-      {d.allowed.length ? (
-        <p className="text-xs text-slate-600">{t('review.screen.keys')}</p>
-      ) : null}
       {d.interview.openDifferences ? (
         <p
           className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2"

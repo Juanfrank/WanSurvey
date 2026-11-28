@@ -51,27 +51,30 @@ export function ScanPanel({
   return (
     <section
       aria-labelledby="scan-panel"
-      className="flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 text-sm"
+      className="flex flex-col gap-2 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 text-sm"
       data-testid="scan-panel"
     >
-      <h2 id="scan-panel" className="font-semibold">
-        {t('papi.scans.panel')}
-      </h2>
-      {pending.length ? (
-        <p className="font-medium" data-testid="scan-progress">
-          {at >= 0
-            ? t('papi.scans.progress', { n: at + 1, total: pending.length })
-            : t('papi.scans.progressOff', { count: pending.length })}
-        </p>
-      ) : null}
-      {q?.issue ? (
-        <p data-testid="scan-reason">
-          {t('papi.scans.reason', {
-            reason: t(`papi.scans.kinds.${q.issue.kind}`),
-          })}
-          {q.issue.detail ? <span className="text-slate-600"> · {q.issue.detail}</span> : null}
-        </p>
-      ) : null}
+      {/* The heading, where the question is in the round and why it was left: one line. */}
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <h2 id="scan-panel" className="font-semibold">
+          {t('papi.scans.panel')}
+        </h2>
+        {pending.length ? (
+          <p className="font-medium" data-testid="scan-progress">
+            {at >= 0
+              ? t('papi.scans.progress', { n: at + 1, total: pending.length })
+              : t('papi.scans.progressOff', { count: pending.length })}
+          </p>
+        ) : null}
+        {q?.issue ? (
+          <p data-testid="scan-reason">
+            {t('papi.scans.reason', {
+              reason: t(`papi.scans.kinds.${q.issue.kind}`),
+            })}
+            {q.issue.detail ? <span className="text-slate-600"> · {q.issue.detail}</span> : null}
+          </p>
+        ) : null}
+      </div>
       {q?.areas.length ? (
         q.areas.map((a, i) => {
           const page = info.data.pages.find((p) => p.id === a.pageId);

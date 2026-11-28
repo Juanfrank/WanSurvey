@@ -187,7 +187,7 @@ export function CallsTab({
     return () => clearInterval(timer);
   }, []);
 
-  const drawer = useDrawer('ws.callbacks.pinned');
+  const drawer = useDrawer('ws.callbacks.pinned.v2', false);
   const callbacks = useQuery({
     queryKey: ['cati-callbacks', projectId],
     queryFn: () => api<Callback[]>(`/projects/${projectId}/cati/callbacks`),
@@ -484,10 +484,7 @@ export function CallsTab({
   const dueCallbacks = (callbacks.data ?? []).filter((c) => new Date(c.at).getTime() <= now).length;
 
   return (
-    <div
-      className="grid grid-cols-[minmax(0,1fr)_3rem] gap-4 min-[900px]:grid-cols-1"
-      data-testid="calls"
-    >
+    <div className="flex flex-col gap-4 pb-14" data-testid="calls">
       <section aria-labelledby="calls-title" className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <h2 id="calls-title" className="text-lg font-semibold">
@@ -505,7 +502,6 @@ export function CallsTab({
               {t('cati.next')} <kbd className="ml-1 text-xs opacity-80">N</kbd>
             </button>
           ) : null}
-          <p className="text-sm text-slate-700">{t('cati.shortcuts')}</p>
         </div>
         <p
           role="status"
@@ -880,6 +876,10 @@ export function CallsTab({
             </section>
           </form>
         ) : null}
+        {/* The keys, as a footnote: the screen opens with the case, not with a line of help. */}
+        <p className="text-xs text-slate-600" data-testid="calls-keys">
+          {t('cati.shortcuts')}
+        </p>
       </section>
 
       <SideDrawer
@@ -891,6 +891,7 @@ export function CallsTab({
         icon={<PhoneIcon className="h-[18px] w-[18px]" />}
         badge={dueCallbacks}
         badgeLabel={`${t('cati.callbacksGroup.overdue')}: ${dueCallbacks}`}
+        float={t('cati.callbacksButton', { count: callbacks.data?.length ?? 0 })}
         className="text-sm"
       >
         <CallbackReminders />

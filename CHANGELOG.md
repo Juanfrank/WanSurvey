@@ -34,6 +34,19 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     by the rules; share out the free cases) sit on the right; assigning, unassigning and
     withdrawing the ticked cases is in a bar at the bottom; each case takes one line; the note on
     hidden personal data is a footnote under the table.
+  - **Fieldwork screens**: the interview, the review of an interview, My device and the print
+    page put their breadcrumb, with the case (or the page) as the title, on the top row beside
+    the account; the interview's timers, language and "Saved" are one slim line instead of a
+    card, so the question starts near the top. On a paper form, the date and duration written
+    on it are one line and the cut-out of a scanned form sits right above its question.
+  - **Calls**: "My callbacks" is folded into a floating "Callbacks (n)" button (amber when some
+    are due) that opens the list over the calls; the script and the outcomes get the whole
+    width. It can still be kept open as a column. The keyboard keys are a footnote.
+  - **My cases** (interviewer): the quality signals and the interviews returned to fix are each
+    one compact line. **Home**: the day's figures are pills on the title's line, not tall tiles.
+  - **My device**: a slimmer sync bar; "Give back" is in each case's "⋯"; the cases to download
+    come 20 at a time ("Show 20 more"). **Scanned forms**: the upload opens in a side panel and
+    the batches come first (10 at a time, the forms of a batch 20 at a time).
 
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the

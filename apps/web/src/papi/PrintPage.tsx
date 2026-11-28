@@ -4,7 +4,7 @@ import { respondentFromCase, type CompiledQuestionnaire } from '@wansurvey/logic
 import { PaperForm, pick } from '@wansurvey/renderer';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { Button } from '../routes/ui.js';
+import { Button, PageHeader } from '../routes/ui.js';
 import { QrCode } from './QrCode.js';
 
 interface Forms {
@@ -39,30 +39,59 @@ export function PrintPage() {
       return api<Forms>(`/projects/${projectId}/papi/forms?${q.toString()}`);
     },
   });
+  // The project's name for the breadcrumb (usually cached from the project page).
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<{ name: string }>(`/projects/${projectId}`),
+    retry: false,
+  });
   const f = forms.data;
   const lang = f?.compiled.questionnaire.defaultLanguage ?? 'es';
   return (
-    <div className="flex flex-col gap-6" data-testid="print">
-      <div className="no-print flex flex-wrap items-center gap-3">
-        <Link
-          to="/projects/$projectId"
-          params={{ projectId }}
-          search={{ tab: 'paper', ...(search.q ? { q: search.q } : {}) }}
-          className="text-sm text-slate-600 hover:underline"
-        >
-          {t('papi.print.back')}
-        </Link>
-        <h1 className="text-2xl font-bold">{t('papi.print.title')}</h1>
-        {f ? (
-          <span className="text-sm text-slate-700">
-            {f.questionnaire.name} · v{f.version} ·{' '}
-            {t('papi.print.count', { count: f.cases.length })}
-          </span>
-        ) : null}
-        <Button type="button" onClick={() => window.print()} disabled={!f?.cases.length}>
-          {t('papi.print.print')}
-        </Button>
-      </div>
+    <div className="flex flex-col gap-4" data-testid="print">
+      {/* On the app's top row, beside the account; none of it is printed. */}
+      <PageHeader
+        noPrint
+        parents={[
+          <Link
+            key="projects"
+            to="/projects"
+            activeOptions={{ exact: true }}
+            className="hover:underline"
+          >
+            {t('designer.projects')}
+          </Link>,
+          <Link
+            key="project"
+            to="/projects/$projectId"
+            params={{ projectId }}
+            activeOptions={{ exact: true }}
+            search={{ tab: 'paper', ...(search.q ? { q: search.q } : {}) }}
+            className="hover:underline"
+          >
+            {project.data?.name ?? '…'}
+          </Link>,
+        ]}
+        title={<span aria-current="page">{t('papi.print.title')}</span>}
+        aside={
+          f ? (
+            <span className="text-sm font-normal text-slate-700">
+              {f.questionnaire.name} · v{f.version} ·{' '}
+              {t('papi.print.count', { count: f.cases.length })}
+            </span>
+          ) : null
+        }
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => window.print()}
+            disabled={!f?.cases.length}
+          >
+            {t('papi.print.print')}
+          </Button>
+        }
+      />
       {f && !f.cases.length ? <p>{t('papi.print.none')}</p> : null}
       {f?.cases.map((c) => (
         <article

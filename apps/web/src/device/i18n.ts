@@ -81,6 +81,8 @@ export const deviceEn = {
   start: 'Start interview',
   continue: 'Continue',
   return: 'Give back',
+  caseActions: 'More actions for case {{id}}',
+  returnCase: 'Give back {{id}}',
   elsewhere: 'on a device',
   notice: {
     queued: 'Interview kept on this device. It is sent at the next sync.',
@@ -195,6 +197,8 @@ export const deviceEs: DeviceCatalogue = {
   start: 'Iniciar entrevista',
   continue: 'Continuar',
   return: 'Devolver',
+  caseActions: 'Más acciones del caso {{id}}',
+  returnCase: 'Devolver {{id}}',
   elsewhere: 'en un dispositivo',
   notice: {
     queued: 'Entrevista guardada en este dispositivo. Se enviará en la próxima sincronización.',
