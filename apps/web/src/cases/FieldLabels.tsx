@@ -1,18 +1,29 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls } from '../designer/fields.js';
 import type { SampleField } from '../designer/vars.js';
 import { localiseError } from '../i18n-messages.js';
+import { Button, Drawer } from '../routes/ui.js';
 
 /**
  * Readable names for the sample variables (first_name → “First name”), shown in the case list
- * and the case detail with the code under them. Folded away until needed.
+ * and the case detail with the code under them. In a side panel opened from the list's
+ * "⋯ More" menu.
  */
-export function FieldLabels({ projectId, fields }: { projectId: string; fields: SampleField[] }) {
+export function FieldLabels({
+  projectId,
+  fields,
+  onClose,
+}: {
+  projectId: string;
+  fields: SampleField[];
+  onClose(): void;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const formId = useId();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [note, setNote] = useState('');
   const save = useMutation({
@@ -38,18 +49,32 @@ export function FieldLabels({ projectId, fields }: { projectId: string; fields: 
       await qc.invalidateQueries({ queryKey: ['sample-fields', projectId] });
     },
   });
+  // Names typed and not saved are not thrown away without asking.
+  const close = () => {
+    if (Object.keys(draft).length && !window.confirm(t('cases.labels.discard'))) return;
+    onClose();
+  };
   return (
-    <details className="text-sm" data-testid="field-labels">
-      <summary className="cursor-pointer font-medium">{t('cases.labels.title')}</summary>
+    <Drawer
+      title={t('cases.labels.title')}
+      onClose={close}
+      footer={
+        <Button type="submit" size="sm" form={formId} disabled={save.isPending}>
+          {t('cases.labels.save')}
+        </Button>
+      }
+    >
       <form
-        className="mt-2 flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3"
+        id={formId}
+        className="flex flex-col gap-3 text-sm"
+        data-testid="field-labels"
         onSubmit={(e) => {
           e.preventDefault();
           save.mutate();
         }}
       >
-        <p className="text-xs text-slate-600">{t('cases.labels.help')}</p>
-        <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 sm:max-w-lg">
+        <p className="text-slate-600">{t('cases.labels.help')}</p>
+        <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5">
           {fields.map((f) => (
             <div key={f.name} className="contents">
               <span className="font-mono text-slate-700">{f.name}</span>
@@ -63,15 +88,10 @@ export function FieldLabels({ projectId, fields }: { projectId: string; fields: 
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <button type="submit" className={smallBtn} disabled={save.isPending}>
-            {t('cases.labels.save')}
-          </button>
-          <p role="status" aria-live="polite" className="text-slate-700">
-            {note}
-          </p>
-        </div>
+        <p role="status" aria-live="polite" className="text-slate-700">
+          {note}
+        </p>
       </form>
-    </details>
+    </Drawer>
   );
 }

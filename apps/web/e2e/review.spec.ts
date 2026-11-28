@@ -1,5 +1,12 @@
 import { expect, overlaysSettled, test, type Page } from './fixtures.js';
-import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import {
+  expectAccessible,
+  login,
+  shot,
+  pickOrganisation,
+  openFilters,
+  closeFilters,
+} from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const SUPERVISOR = 'supervisor@demo.wansurvey.test';
@@ -41,7 +48,9 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   const iv = await (await browser.newContext({ storageState: './e2e/english-ui.json' })).newPage();
   await openProject(iv, INTERVIEWER);
   await iv.getByRole('tab', { name: 'My cases' }).click();
+  await openFilters(iv);
   await iv.getByRole('combobox', { name: /^Status/ }).selectOption('assigned');
+  await closeFilters(iv);
   const row = iv.getByTestId('cases-table').locator('tbody tr').first();
   await expect(row).toContainText('Assigned');
   const caseId = (await row.getAttribute('data-case'))!;

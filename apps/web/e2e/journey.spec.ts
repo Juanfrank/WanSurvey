@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from './fixtures.js';
-import { PASSWORD, PM, shot } from './helpers.js';
+import { PASSWORD, PM, shot, gotoTab } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const CODE = `EV${Date.now() % 100000}`;
@@ -176,7 +176,7 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByLabel('Asignar seleccionados a').selectOption({ label: 'Demo interviewer' });
   await page.getByRole('button', { name: 'Asignar', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'Demo interviewer' })).toHaveCount(8);
-  await page.getByRole('tab', { name: 'Ajustes del proyecto', exact: true }).click();
+  await gotoTab(page, 'Ajustes del proyecto');
   await page.getByRole('tab', { name: 'Teléfono', exact: true }).click();
   // Calls all day, so the test does not depend on the hour it runs at.
   await page.getByLabel('Llamar desde').fill('00:00');

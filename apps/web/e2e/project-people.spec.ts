@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { expectAccessible, login, shot } from './helpers.js';
+import { expectAccessible, login, shot, gotoTab } from './helpers.js';
 
 test('the project manager gives someone a role in the project, from the project', async ({
   page,
@@ -10,7 +10,7 @@ test('the project manager gives someone a role in the project, from the project'
     .getByRole('link', { name: 'Projects', exact: true })
     .click();
   await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
-  await page.getByRole('tab', { name: 'People', exact: true }).click();
+  await gotoTab(page, 'People');
   await expect(page.getByRole('heading', { name: 'Users of the project' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Add a user' }).click();

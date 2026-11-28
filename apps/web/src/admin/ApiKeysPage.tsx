@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, QueryState } from '../routes/ui.js';
+import { Button, Card, ErrorText, QueryState, PageHeader } from '../routes/ui.js';
 
 interface Key {
   id: string;
@@ -64,13 +64,15 @@ export function ApiKeysPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <h1 className="text-2xl font-bold">{t('admin.apiKeys')}</h1>
-        {canManage ? (
-          <Button onClick={() => setCreating(true)}>{t('admin.apiKeysPage.add')}</Button>
-        ) : null}
-      </div>
-      <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.apiKeysPage.intro')}</p>
+      <PageHeader
+        title={t('admin.apiKeys')}
+        actions={
+          canManage ? (
+            <Button onClick={() => setCreating(true)}>{t('admin.apiKeysPage.add')}</Button>
+          ) : null
+        }
+      />
+      <p className="max-w-3xl text-slate-600">{t('admin.apiKeysPage.intro')}</p>
       {canManage ? null : (
         <p className="-mt-3 text-sm text-slate-600">{t('admin.apiKeysPage.readOnly')}</p>
       )}

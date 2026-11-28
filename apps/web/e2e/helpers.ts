@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export const PASSWORD = 'demo-password-123';
 export const PM = 'project.manager@demo.wansurvey.test';
@@ -30,6 +30,44 @@ export async function pickOrganisation(page: Page, name: string) {
   await org.focus();
   await page.keyboard.press('Escape');
   await expect(org).toBeHidden();
+}
+
+/**
+ * Opens a project's tab by its name (English or Spanish), wherever it is: in the row of tabs or
+ * under "More ▾", where People, the project settings and the tabs that do not fit are kept.
+ */
+export async function gotoTab(page: Page, name: string) {
+  const tabs = page.getByRole('tablist', { name: /^(Project sections|Secciones del proyecto)$/ });
+  await expect(tabs.getByRole('tab').first()).toBeVisible();
+  const tab = tabs.getByRole('tab', { name, exact: true });
+  if (!(await tab.count())) {
+    await page.getByRole('button', { name: /^(More sections|Más secciones)$/ }).click();
+    await page
+      .getByRole('menu', { name: /^(More sections|Más secciones)$/ })
+      .getByRole('menuitem', { name, exact: true })
+      .click();
+  } else await tab.click();
+  await expect(tabs.getByRole('tab', { name, exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+}
+
+/**
+ * Opens a list's Filters panel (FilterBar: the selects and quick filters are behind the
+ * "Filters" button), if it is closed. `scope`: where the list is, when the page has several.
+ */
+export async function openFilters(page: Page, scope?: Locator) {
+  const button = (scope ?? page).getByRole('button', { name: /^(Filters|Filtros)( · \d+)?$/ });
+  if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** Closes the Filters panel (Escape, from inside it) if it is open. */
+export async function closeFilters(page: Page, scope?: Locator) {
+  const button = (scope ?? page).getByRole('button', { name: /^(Filters|Filtros)( · \d+)?$/ });
+  if ((await button.getAttribute('aria-expanded')) === 'true') await button.click();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
 }
 
 const require = createRequire(import.meta.url);
@@ -111,15 +149,23 @@ export async function paperTab(page: Page) {
  */
 export async function resultsSection(page: Page, section: 'Summary' | 'Dashboard' | 'Metrics') {
   const tabs = page.getByRole('tablist', { name: 'Project sections' });
-  if (section === 'Summary') return tabs.getByRole('tab', { name: 'Results', exact: true }).click();
-  if (section === 'Dashboard')
-    return tabs.getByRole('tab', { name: 'Overview', exact: true }).click();
-  const supervision = tabs.getByRole('tab', { name: 'Supervision', exact: true });
-  if (await supervision.count()) {
-    await supervision.click();
+  if (section === 'Summary') return gotoTab(page, 'Results');
+  if (section === 'Dashboard') return gotoTab(page, 'Overview');
+  // Supervision, when there is one, holds the metrics beside the review queue.
+  await expect(tabs.getByRole('tab').first()).toBeVisible();
+  const more = page.getByRole('button', { name: 'More sections' });
+  let supervision = (await tabs.getByRole('tab', { name: 'Supervision', exact: true }).count()) > 0;
+  if (!supervision && (await more.count())) {
+    await more.click();
+    supervision =
+      (await page.getByRole('menuitem', { name: 'Supervision', exact: true }).count()) > 0;
+    await page.keyboard.press('Escape');
+  }
+  if (supervision) {
+    await gotoTab(page, 'Supervision');
     await page
       .getByRole('tablist', { name: 'Supervision sections' })
       .getByRole('tab', { name: 'Metrics', exact: true })
       .click();
-  } else await tabs.getByRole('tab', { name: 'Metrics', exact: true }).click();
+  } else await gotoTab(page, 'Metrics');
 }

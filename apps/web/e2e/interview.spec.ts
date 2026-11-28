@@ -1,5 +1,12 @@
 import { expect, overlaysSettled, test, type Page } from './fixtures.js';
-import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import {
+  expectAccessible,
+  login,
+  shot,
+  pickOrganisation,
+  openFilters,
+  closeFilters,
+} from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const SUPERVISOR = 'supervisor@demo.wansurvey.test';
@@ -36,7 +43,9 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   test.setTimeout(120_000);
   await openProject(page, INTERVIEWER);
   await page.getByRole('tab', { name: 'My cases' }).click();
+  await openFilters(page);
   await page.getByRole('combobox', { name: /^Status/ }).selectOption('assigned');
+  await closeFilters(page);
   const row = page.getByTestId('cases-table').locator('tbody tr').first();
   // Wait for the filtered list (earlier tests finish some of these cases).
   await expect(row).toContainText('Assigned');

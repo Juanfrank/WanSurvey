@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card } from '../routes/ui.js';
+import { Button, Card, PageHeader } from '../routes/ui.js';
 import { AUDIT_ACTIONS, AUDIT_PRESETS, type AuditPreset } from './audit-actions.js';
 import { actionLabel, describeDetails, type DescribeContext } from './audit-details.js';
 
@@ -196,8 +196,8 @@ export function AuditPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('admin.audit')}</h1>
-      <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.log.intro')}</p>
+      <PageHeader title={t('admin.audit')} />
+      <p className="max-w-3xl text-slate-600">{t('admin.log.intro')}</p>
       <Card className="flex flex-col gap-4">
         <div
           role="group"

@@ -9,6 +9,7 @@ import {
   pickOrganisation,
   resultsSection,
   shot,
+  gotoTab,
 } from './helpers.js';
 
 const ADMIN = 'admin@demo.wansurvey.test';
@@ -53,7 +54,7 @@ test('the app is served with a strict Content-Security-Policy and breaks none of
   await openProject(page);
   await shot(page, 'project-home');
   for (const tab of ['Cases', 'Results', 'Exports', 'Project settings']) {
-    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await gotoTab(page, tab);
     await page.waitForLoadState('networkidle');
   }
   for (const section of ['Dashboard', 'Metrics'] as const) {
@@ -122,7 +123,8 @@ test('at 200% zoom the project pages reflow without scrolling sideways', async (
   await openProject(page);
   for (const tab of ['Cases', 'Dashboard', 'Results', 'Exports']) {
     if (tab === 'Dashboard') await resultsSection(page, 'Dashboard');
-    else await page.getByRole('tab', { name: tab, exact: true }).click();
+    // At 640 px the tabs that do not fit are under "More".
+    else await gotoTab(page, tab);
     await page.waitForLoadState('networkidle');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
@@ -209,7 +211,7 @@ test('the dark theme: chosen in the account menu, remembered, and readable on ev
   // Every main page passes the accessibility checks (colour contrast included) in the dark.
   const tabs = ['Questionnaires', 'Cases', 'Results', 'Project settings'];
   for (const tab of tabs) {
-    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await gotoTab(page, tab);
     await expect(page.getByRole('tabpanel').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
     await expectAccessible(page);

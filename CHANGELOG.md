@@ -19,6 +19,22 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Less scrolling on lists and project pages** (first part): shared building blocks for every
+  screen, described in [`docs/ui-patterns.md`](docs/ui-patterns.md): a filter bar (the search in
+  view, the other filters in a panel that floats over the list behind a "Filters · N" button,
+  chips for the filters that are on), a bar of actions on the ticked rows fixed at the bottom
+  while rows are ticked, a side panel for create forms, and a "⋯" menu for secondary actions.
+  - **Compact header**: the page title, or on a project the breadcrumb with the project name in
+    bold, shares the top row with the account menu instead of taking two rows of its own. The
+    project's tabs fit on one line: People and Project settings (and tabs that do not fit) are
+    under "More ▾", and the open tab always shows in the row.
+  - **Case list**: the figures are a strip of pills (their definition in the tooltip; they
+    still filter); Status, Assigned to, Team and the quick filters are behind "Filters"; "⚙
+    Rules" and "⋯ More" (names of the sample variables, in a side panel; assign every free case
+    by the rules; share out the free cases) sit on the right; assigning, unassigning and
+    withdrawing the ticked cases is in a bar at the bottom; each case takes one line; the note on
+    hidden personal data is a footnote under the table.
+
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the
   workload table with overdue cases, callbacks due, today's completes and last contact. An

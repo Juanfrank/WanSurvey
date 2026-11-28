@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api, ApiError, nextRouteFor, switchTenant as openTenant, type Me } from '../api.js';
 import { TermsGate } from './TermsGate.js';
 import { AccountMenu } from './AccountMenu.js';
+import { HeaderSlotContext } from './PageHeader.js';
 import { adminMenuGroups } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
 import { LogoMark, LogoName } from './Logo.js';
@@ -75,6 +76,8 @@ export function AppLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const me = useMe();
+  // Where pages put their title (PageHeader), beside the account menu.
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     if (me.error instanceof ApiError && me.error.status === 401) void navigate({ to: '/login' });
@@ -126,16 +129,23 @@ export function AppLayout() {
       >
         {/* Up to 1600 px: wide screens are used; on very wide ones lines do not drift apart. */}
         <div className="mx-auto flex max-w-[100rem] flex-col">
-          {/* A row of its own above the page: laid over the page's first line, it covered the
-              interview timer, the case header and long titles. */}
-          <div className="no-print mb-3 flex justify-end">
-            <AccountMenu
-              me={me.data}
-              onSwitchTenant={(id) => void switchTenant(id)}
-              onSignOut={() => void logout()}
-            />
+          {/* One row: the page's title or breadcrumb (a PageHeader, moved here) on the left and
+              the account on the right. Side by side in a flex row, never laid over each other:
+              laid over the page's first line, the account covered the interview timer, the
+              case header and long titles. */}
+          <div className="mb-4 flex items-center justify-between gap-x-4 gap-y-2">
+            <div ref={setSlot} className="min-w-0 flex-1" data-testid="page-header-slot" />
+            <div className="no-print flex-none">
+              <AccountMenu
+                me={me.data}
+                onSwitchTenant={(id) => void switchTenant(id)}
+                onSignOut={() => void logout()}
+              />
+            </div>
           </div>
-          <Outlet />
+          <HeaderSlotContext.Provider value={slot}>
+            <Outlet />
+          </HeaderSlotContext.Provider>
         </div>
       </main>
     </div>

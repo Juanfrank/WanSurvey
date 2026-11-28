@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api, upload } from '../api.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, QueryState } from '../routes/ui.js';
+import { Button, Card, ErrorText, QueryState, PageHeader } from '../routes/ui.js';
 import { parseTable, pick } from './registry-csv.js';
 
 const REASONS = ['do_not_contact', 'not_interested', 'complaint', 'deceased', 'other'] as const;
@@ -182,8 +182,8 @@ export function RegistryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('admin.registry.title')}</h1>
-      <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.registry.intro')}</p>
+      <PageHeader title={t('admin.registry.title')} />
+      <p className="max-w-3xl text-slate-600">{t('admin.registry.intro')}</p>
 
       <div className="grid items-start gap-6 xl:grid-cols-2">
         <Card>

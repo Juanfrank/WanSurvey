@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Card } from '../routes/ui.js';
+import { Card, PageHeader } from '../routes/ui.js';
 import { ADMIN_GROUPS, adminMenuFor, adminSectionsFor } from './sections.js';
 
 /**
@@ -149,7 +149,7 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('app.admin')}</h1>
+      <PageHeader title={t('app.admin')} />
       {tiles.length ? (
         <section aria-labelledby="admin-attention" className="flex flex-col gap-3">
           <h2 id="admin-attention" className="text-lg font-semibold">

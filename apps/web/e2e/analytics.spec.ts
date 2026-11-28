@@ -3,7 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { connectDb } from './db.js';
 import { expect, test, type Page } from './fixtures.js';
-import { expectAccessible, login, PM, pickOrganisation, resultsSection, shot } from './helpers.js';
+import {
+  expectAccessible,
+  login,
+  PM,
+  pickOrganisation,
+  resultsSection,
+  shot,
+  openFilters,
+  closeFilters,
+} from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const SUPERVISOR = 'supervisor@demo.wansurvey.test';
@@ -56,7 +65,9 @@ test('the supervisor dashboard updates live when an interview is submitted elsew
   const iv = await (await browser.newContext({ storageState: './e2e/english-ui.json' })).newPage();
   await openProject(iv, INTERVIEWER);
   await iv.getByRole('tab', { name: 'My cases' }).click();
+  await openFilters(iv);
   await iv.getByRole('combobox', { name: /^Status/ }).selectOption('assigned');
+  await closeFilters(iv);
   const row = iv.getByTestId('cases-table').locator('tbody tr').first();
   await expect(row).toContainText('Assigned');
   const caseId = (await row.getAttribute('data-case'))!;

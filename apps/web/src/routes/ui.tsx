@@ -14,6 +14,21 @@ import { localiseError } from '../i18n-messages.js';
 import { CloseIcon } from './icons.js';
 import { LogoMark, LogoName } from './Logo.js';
 
+/**
+ * Layout patterns for lists and forms, each in its own file (see docs/ui-patterns.md):
+ * - `FilterBar`: search, a "Filters" button with a floating panel, chips of what is on, tools.
+ * - `BulkBar`: the actions on ticked rows, fixed at the bottom while something is ticked.
+ * - `Drawer`: a side panel (modal) for the form that creates something.
+ * - `MoreMenu`: "⋯", a menu of secondary actions for a row or a toolbar.
+ * - `PageHeader`: the page's title or breadcrumb, on the top row beside the account menu.
+ * - `OverflowTabList` (tabs.tsx): first-level tabs on one line, with "More ▾".
+ */
+export { FilterBar, type ActiveFilter } from './FilterBar.js';
+export { BulkBar } from './BulkBar.js';
+export { Drawer } from './Drawer.js';
+export { MoreMenu, type MenuEntry } from './MoreMenu.js';
+export { PageHeader } from './PageHeader.js';
+
 /** Small shared building blocks so screens stay consistent. */
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (

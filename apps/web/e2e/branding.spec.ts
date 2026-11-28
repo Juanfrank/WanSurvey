@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { expectAccessible, login, pickOrganisation, shot } from './helpers.js';
+import { expectAccessible, login, pickOrganisation, shot, gotoTab } from './helpers.js';
 
 /** A 1×1 PNG, scaled up by the page. */
 const PNG = Buffer.from(
@@ -18,7 +18,7 @@ test('a project logo, and the web survey in the project colours with it', async 
     .getByRole('link', { name: 'Projects', exact: true })
     .click();
   await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
-  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
+  await gotoTab(page, 'Project settings');
   await page.getByRole('tab', { name: 'Logo and style', exact: true }).click();
 
   await page.getByLabel('Choose the logo image').setInputFiles({

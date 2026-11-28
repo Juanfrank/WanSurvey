@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { CheckField, Hint, inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import { Button, Card, ErrorText, Field, PageHeader } from '../routes/ui.js';
 import type { RolesView } from './permissions.js';
 import { useFacts } from '../routes/InfoPages.js';
 import { Link } from '@tanstack/react-router';
@@ -79,8 +79,8 @@ export function OrganisationPage() {
   });
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('admin.organisation')}</h1>
-      <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.org.intro')}</p>
+      <PageHeader title={t('admin.organisation')} />
+      <p className="max-w-3xl text-slate-600">{t('admin.org.intro')}</p>
       <div className="grid items-start gap-6 xl:grid-cols-2">
         {tenant.data ? <General tenant={tenant.data} /> : <div aria-busy="true" />}
         {tenant.data ? <Appearance tenant={tenant.data} /> : null}

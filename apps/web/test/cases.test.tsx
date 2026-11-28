@@ -196,12 +196,19 @@ describe('quick filters and goals', () => {
         {inRouter(<CasesTab projectId="p" />).ui}
       </QueryClientProvider>,
     );
+    // The filters are in a panel behind the Filters button.
+    await user.click(await screen.findByRole('button', { name: /^Filters/ }));
     const untried = await screen.findByRole('button', { name: 'Not tried yet' });
     // The mocked project sets no deadline.
     expect(screen.queryByRole('button', { name: 'Overdue' })).toBeNull();
     await user.click(untried);
     expect(untried.getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => expect(calls.some((c) => c.url.includes('quick=no_attempt'))).toBe(true));
+    // What is on shows as a chip, with a button to take it off.
+    await user.click(
+      screen.getByRole('button', { name: 'Remove filter: Quick filter Not tried yet' }),
+    );
+    expect(untried.getAttribute('aria-pressed')).toBe('false');
   });
 
   it("pick the interviewer's own goal in force, a weekly one first", () => {

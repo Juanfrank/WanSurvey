@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { expectAccessible, login, pickOrganisation, shot } from './helpers.js';
+import { expectAccessible, login, pickOrganisation, shot, gotoTab } from './helpers.js';
 
 const outlineItem = (page: Page, name: string) =>
   page.getByRole('treeitem').filter({ has: page.locator(`span.font-mono:text-is("${name}")`) });
@@ -17,7 +17,7 @@ test('the information notice is part of the questionnaire: added from the design
   await page.getByRole('main').getByRole('link', { name: 'Household Survey 2026' }).click();
 
   // The project asks every questionnaire to open with the notice.
-  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
+  await gotoTab(page, 'Project settings');
   await page.getByRole('tab', { name: 'Privacy', exact: true }).click();
   // A usual retention period in one click, with what it would do tonight; left as it was.
   const retention = page.getByTestId('retention-settings');
@@ -73,7 +73,7 @@ test('the information notice is part of the questionnaire: added from the design
 
   // Back as it was for the other tests.
   await page.getByRole('link', { name: 'Household Survey 2026' }).first().click();
-  await page.getByRole('tab', { name: 'Project settings', exact: true }).click();
+  await gotoTab(page, 'Project settings');
   await page.getByRole('tab', { name: 'Privacy', exact: true }).click();
   await page
     .getByLabel('Do not publish a questionnaire that does not open with the information notice')

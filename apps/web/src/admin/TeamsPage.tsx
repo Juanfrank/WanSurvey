@@ -5,7 +5,7 @@ import { api, ApiError } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field, QueryState } from '../routes/ui.js';
+import { Button, Card, ErrorText, Field, QueryState, PageHeader } from '../routes/ui.js';
 
 interface Team {
   id: string;
@@ -52,13 +52,15 @@ export function TeamsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <h1 className="text-2xl font-bold">{t('admin.teams')}</h1>
-        {canManage ? (
-          <Button onClick={() => setEditing('new')}>{t('admin.teamsPage.add')}</Button>
-        ) : null}
-      </div>
-      <p className="-mt-3 max-w-3xl text-slate-600">
+      <PageHeader
+        title={t('admin.teams')}
+        actions={
+          canManage ? (
+            <Button onClick={() => setEditing('new')}>{t('admin.teamsPage.add')}</Button>
+          ) : null
+        }
+      />
+      <p className="max-w-3xl text-slate-600">
         {t('admin.teamsPage.intro')} {canManage ? '' : t('admin.teamsPage.readOnly')}
       </p>
       <p

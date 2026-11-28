@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './fixtures.js';
 import { connectDb } from './db.js';
-import { PM, expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import { PM, expectAccessible, login, shot, pickOrganisation, gotoTab } from './helpers.js';
 
 const INTERVIEWER = 'interviewer@demo.wansurvey.test';
 const GOAL_ID = '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
@@ -29,7 +29,7 @@ async function onQuestion(page: Page, id: string) {
 
 test('the project manager opens calling hours all day', async ({ page }) => {
   await openProject(page, PM);
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await gotoTab(page, 'Project settings');
   await page.getByRole('tab', { name: 'Phone', exact: true }).click();
   const cati = page.getByTestId('cati-settings');
   await cati.getByLabel('Calling from').fill('00:00');

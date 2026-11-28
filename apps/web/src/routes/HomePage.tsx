@@ -7,7 +7,7 @@ import { ProjectLogo } from './ProjectLogo.js';
 import { api, type Me } from '../api.js';
 import { dateTime, number } from '../format.js';
 import { useMe } from './AppLayout.js';
-import { Card, QueryState } from './ui.js';
+import { Card, QueryState, PageHeader } from './ui.js';
 
 interface ProjectRow {
   id: string;
@@ -177,7 +177,7 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('home.welcome', { name })}</h1>
+      <PageHeader title={t('home.welcome', { name })} />
       {isAdmin && members.data ? <AdminPending members={members.data} /> : null}
       {working.length ? (
         <MyDay

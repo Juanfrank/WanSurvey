@@ -4,7 +4,7 @@ import { InterviewRunner, PaperForm, pick, type PaperContext } from '@wansurvey/
 import { MODES, type Mode } from '@wansurvey/schema';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card } from '../routes/ui.js';
+import { Card, PageHeader } from '../routes/ui.js';
 import {
   AnswersPanel,
   ComparePanel,
@@ -30,7 +30,7 @@ export function PreviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('preview.title')}</h1>
+      <PageHeader title={t('preview.title')} />
 
       <Card className="no-print flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-4">

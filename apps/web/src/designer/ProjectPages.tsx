@@ -6,7 +6,8 @@ import { MODES, type Mode, type ProjectSettings } from '@wansurvey/schema';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProjectLogo } from '../routes/ProjectLogo.js';
-import { subTabCls, tabCls } from '../routes/tabs.js';
+import { OverflowTabList, subTabCls } from '../routes/tabs.js';
+import { PageHeader } from '../routes/PageHeader.js';
 import { api, ApiError } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
@@ -79,13 +80,14 @@ export function ProjectsPage() {
   });
   return (
     <div className="flex flex-col gap-6">
-      {/* The action stays beside the title: the account pill sits at the right. */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <h1 className="text-2xl font-bold">{t('designer.projects')}</h1>
-        {canCreate && !creating && (
-          <Button onClick={() => setCreating(true)}>{t('designer.newProject.open')}</Button>
-        )}
-      </div>
+      <PageHeader
+        title={t('designer.projects')}
+        actions={
+          canCreate && !creating ? (
+            <Button onClick={() => setCreating(true)}>{t('designer.newProject.open')}</Button>
+          ) : null
+        }
+      />
       {creating && <NewProjectForm onCancel={() => setCreating(false)} />}
       <Card>
         <QueryState query={projects} isEmpty={!projects.data?.length} empty={t('home.noProjects')}>
@@ -1228,46 +1230,38 @@ export function ProjectPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
-        <ol className="flex flex-wrap items-center gap-1.5">
-          <li>
-            <Link to="/projects" className="hover:underline">
-              {t('designer.projects')}
+      {/* The breadcrumb is the title, on the top row beside the account. */}
+      <PageHeader
+        parents={[
+          <Link key="projects" to="/projects" className="hover:underline">
+            {t('designer.projects')}
+          </Link>,
+        ]}
+        icon={
+          project.data ? (
+            <ProjectLogo project={project.data} className="h-7 w-auto max-w-[6rem]" />
+          ) : null
+        }
+        title={
+          project.data ? (
+            <Link
+              to="/projects/$projectId"
+              params={{ projectId }}
+              className="hover:underline"
+              onClick={() => {
+                setTab(null);
+                setPanel(null);
+              }}
+            >
+              {project.data.name}
             </Link>
-          </li>
-          {project.data ? (
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden="true">/</span>
-              <Link
-                to="/projects/$projectId"
-                params={{ projectId }}
-                className="hover:underline"
-                onClick={() => {
-                  setTab(null);
-                  setPanel(null);
-                }}
-              >
-                {project.data.name}
-              </Link>
-            </li>
-          ) : null}
-          {current ? (
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden="true">/</span>
-              <span aria-current="page" className="font-medium text-slate-700">
-                {tabLabel(current)}
-              </span>
-            </li>
-          ) : null}
-        </ol>
-      </nav>
-      <div className="flex flex-wrap items-center gap-4">
-        {project.data ? (
-          <ProjectLogo project={project.data} className="h-10 w-auto max-w-[10rem]" />
-        ) : null}
-        <h1 className="text-2xl font-bold">{project.data?.name ?? '…'}</h1>
-        {canDevice ? <DeviceStatusLink projectId={projectId} /> : null}
-      </div>
+          ) : (
+            '…'
+          )
+        }
+        current={current ? tabLabel(current) : undefined}
+        aside={canDevice ? <DeviceStatusLink projectId={projectId} /> : null}
+      />
       {current ? (
         <Tabs.Root
           value={current}
@@ -1277,24 +1271,25 @@ export function ProjectPage() {
           }}
           className="flex flex-col gap-4"
         >
-          <div className="flex flex-wrap items-end gap-x-3 border-b border-slate-200">
-            <Tabs.List aria-label={t('cases.tabs.label')} className="flex flex-wrap gap-1">
-              {tabs.map((x) => (
-                <Tabs.Trigger
-                  key={x}
-                  value={x}
-                  className={tabCls}
-                  // The Cases tab always opens on the case list; the questionnaires on their list.
-                  onClick={() => {
-                    if (x === 'cases') setCasesSub('list');
-                    if (x === 'questionnaires') setPanel(null);
-                  }}
-                >
-                  {tabLabel(x)}
-                </Tabs.Trigger>
-              ))}
-            </Tabs.List>
-          </div>
+          {/* One line: People and the settings (and what does not fit) under "More". */}
+          <OverflowTabList
+            label={t('cases.tabs.label')}
+            value={current}
+            onSelect={(v) => {
+              setTab(v as ProjectTab);
+              if (v !== 'questionnaires') setPanel(null);
+            }}
+            items={tabs.map((x) => ({
+              value: x,
+              label: tabLabel(x),
+              rarely: x === 'people' || x === 'settings',
+              // The Cases tab always opens on the case list; the questionnaires on their list.
+              onClick: () => {
+                if (x === 'cases') setCasesSub('list');
+                if (x === 'questionnaires') setPanel(null);
+              },
+            }))}
+          />
           <Tabs.Content value="overview">
             {current === 'overview' ? (
               <ProjectOverview

@@ -16,7 +16,7 @@ import { inputCls } from '../designer/fields.js';
 import { below, Menu, type MenuEntry } from '../designer/Menu.js';
 import { dateTime } from '../format.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field } from '../routes/ui.js';
+import { Button, Card, ErrorText, Field, PageHeader } from '../routes/ui.js';
 import { RoleGuide } from './RoleGuide.js';
 import { matchesGrants, redundantRows } from './roles.js';
 
@@ -240,14 +240,15 @@ export function TeamPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* The action stays beside the title: the account pill sits at the right. */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <h1 className="text-2xl font-bold">{t('team.title')}</h1>
-        {canManage ? (
-          <Button onClick={() => setInviting(true)}>{t('team.invite.open')}</Button>
-        ) : null}
-      </div>
-      <p className="-mt-3 max-w-3xl text-slate-600">
+      <PageHeader
+        title={t('team.title')}
+        actions={
+          canManage ? (
+            <Button onClick={() => setInviting(true)}>{t('team.invite.open')}</Button>
+          ) : null
+        }
+      />
+      <p className="max-w-3xl text-slate-600">
         {t('team.intro')} {canManage ? '' : t('team.readOnly')}
       </p>
       {notice ? (

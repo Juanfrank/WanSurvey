@@ -17,6 +17,7 @@ import { designerEn, designerEs } from './designer/i18n.js';
 import { messagesEn, messagesEs } from './messages-i18n.js';
 import { passwordEn, passwordEs, teamEn, teamEs } from './team/i18n.js';
 import { homeEn, homeEs } from './routes/home-i18n.js';
+import { uiEn, uiEs } from './routes/ui-i18n.js';
 
 const en = {
   app: {
@@ -229,6 +230,7 @@ const en = {
   team: teamEn,
   admin: adminEn,
   setup: setupEn,
+  ui: uiEn,
   password: passwordEn,
   ...messagesEn,
 };
@@ -456,6 +458,7 @@ const es: Catalogue = {
   team: teamEs,
   admin: adminEs,
   setup: setupEs,
+  ui: uiEs,
   password: passwordEs,
   ...messagesEs,
 };

@@ -11,6 +11,7 @@ import {
   paperTab,
   questionnaireAction,
   shot,
+  gotoTab,
 } from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
@@ -100,7 +101,7 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
       await browser.newContext({ storageState: './e2e/english-ui.json' })
     ).newPage();
     await openPaper(pm, PM);
-    await pm.getByRole('tab', { name: 'Project settings', exact: true }).click();
+    await gotoTab(pm, 'Project settings');
     await pm.getByRole('tab', { name: 'Paper', exact: true }).click();
     await pm.getByLabel(/Key every form twice/).check();
     await pm.getByRole('button', { name: 'Save settings' }).click();

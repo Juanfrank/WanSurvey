@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText } from '../routes/ui.js';
+import { Button, Card, ErrorText, PageHeader } from '../routes/ui.js';
 import { PERMISSION_AREAS, permKey, type RolesView } from './permissions.js';
 
 const isSensitive = (p: string) => SENSITIVE_PERMISSIONS.includes(p as Permission);
@@ -94,9 +94,9 @@ export function RolesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t('admin.roles')}</h1>
-      <p className="-mt-3 max-w-3xl text-slate-600">{t('admin.rolesPage.intro')}</p>
-      <p className="-mt-3 flex max-w-3xl items-start gap-2 text-sm text-slate-600">
+      <PageHeader title={t('admin.roles')} />
+      <p className="max-w-3xl text-slate-600">{t('admin.rolesPage.intro')}</p>
+      <p className="flex max-w-3xl items-start gap-2 text-sm text-slate-600">
         <SensitiveMark />
         {t('admin.rolesPage.sensitiveLegend')}
       </p>

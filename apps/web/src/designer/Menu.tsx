@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from 'react';
 
+export type MenuCloseReason = 'select' | 'escape' | 'tab' | 'outside' | 'resize';
+
 export type MenuEntry =
   | {
       type: 'item';
@@ -44,7 +46,8 @@ export function Menu({
   entries: MenuEntry[];
   /** Viewport coordinates of the top-left corner (clamped to stay on screen). */
   at: { x: number; y: number };
-  onClose(): void;
+  /** Why it closed: a pick, Escape or Tab, a click outside, or the window resized. */
+  onClose(reason?: MenuCloseReason): void;
   minWidth?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -75,9 +78,9 @@ export function Menu({
 
   useEffect(() => {
     const down = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
+      if (!ref.current?.contains(e.target as Node)) onClose('outside');
     };
-    const blur = () => onClose();
+    const blur = () => onClose('resize');
     document.addEventListener('mousedown', down);
     window.addEventListener('resize', blur);
     return () => {
@@ -98,7 +101,7 @@ export function Menu({
     else if (e.key === 'ArrowUp') go(i - 1);
     else if (e.key === 'Home') go(0);
     else if (e.key === 'End') go(list.length - 1);
-    else if (e.key === 'Escape' || e.key === 'Tab') onClose();
+    else if (e.key === 'Escape' || e.key === 'Tab') onClose(e.key === 'Tab' ? 'tab' : 'escape');
     else if (e.key.length === 1 && /\S/.test(e.key) && !e.ctrlKey && !e.metaKey) {
       const k = e.key.toLowerCase();
       const after = [...list.slice(i + 1), ...list.slice(0, i + 1)];
@@ -110,7 +113,7 @@ export function Menu({
 
   const pick = (it: Extract<MenuEntry, { type: 'item' }>) => {
     if (it.disabled) return;
-    if (!it.keepOpen) onClose();
+    if (!it.keepOpen) onClose('select');
     it.onSelect();
   };
 

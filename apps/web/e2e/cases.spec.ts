@@ -2,7 +2,15 @@ import { expect, test, type Page } from './fixtures.js';
 import { sampleTable } from '@wansurvey/fixtures';
 import { writeXlsx } from 'hucre/xlsx';
 import { connectDb } from './db.js';
-import { expectAccessible, login, shot, pickOrganisation } from './helpers.js';
+import {
+  expectAccessible,
+  login,
+  shot,
+  pickOrganisation,
+  gotoTab,
+  openFilters,
+  closeFilters,
+} from './helpers.js';
 
 const CLERK = 'data.entry@demo.wansurvey.test';
 
@@ -135,6 +143,10 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
   await page.getByLabel('Select case XHH0002').check();
   await page.getByLabel('Select case XHH0006', { exact: true }).click({ modifiers: ['Shift'] });
   await expect(page.getByText('4 selected')).toBeVisible();
+  // The actions on the ticked cases float at the bottom, as a region named after them.
+  await expect(page.getByRole('region', { name: '4 cases selected' })).toBeVisible();
+  await shot(page, 'cases-bulk-bar', { fullPage: false });
+  await expectAccessible(page);
   await page.locator('#assign-to').selectOption({ label: 'Demo clerk' });
   await page.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(page.getByText('4 cases assigned.')).toBeVisible();
@@ -149,13 +161,19 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
   await expect(kpis.locator('[data-kpi]')).toHaveCount(5);
   const sum = (await kpis.locator('[data-n]').allTextContents()).reduce((a, n) => a + +n, 0);
   await expect(page.getByTestId('kpi-total')).toHaveText(String(sum));
-  // Readable names for the sample variables, with the code under them.
-  await page.getByText('Names of the sample variables').click();
+  // Readable names for the sample variables, with the code under them, in a side panel
+  // opened from the list's "More" menu.
+  await page.getByRole('button', { name: 'More tools of the case list' }).click();
+  await page.getByRole('menuitem', { name: 'Names of the sample variables' }).click();
+  const names = page.getByRole('dialog', { name: 'Names of the sample variables' });
   await page.getByRole('textbox', { name: 'Name of first_name' }).fill('First name');
   await page.getByRole('button', { name: 'Save names' }).click();
   await expect(page.getByText('1 name saved.')).toBeVisible();
   await expect(page.getByTestId('cases-table').locator('thead')).toContainText('First name');
-  await page.getByText('Names of the sample variables').click();
+  await shot(page, 'cases-names-drawer', { fullPage: false });
+  await expectAccessible(page);
+  await names.getByRole('button', { name: 'Close' }).click();
+  await expect(names).toBeHidden();
   await shot(page, 'cases-list');
   await expectAccessible(page);
 
@@ -183,6 +201,7 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
     ]);
     await page.reload();
     await page.getByLabel('Search id or sample data').fill('XHH000');
+    await openFilters(page);
     await page.getByRole('combobox', { name: 'Team' }).selectOption({ label: 'Turno mañana' });
     const quick = page.getByRole('group', { name: 'Quick filters' });
     await expect(quick.getByRole('button', { name: 'Due within 48 h' })).toBeVisible();
@@ -190,11 +209,17 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
     await quick.getByRole('button', { name: 'Not tried yet' }).click();
     await expect(page.getByText('Page 1 of 1 · 4 cases')).toBeVisible();
     await expect(page.locator('tr[data-case="XHH0003"]')).toContainText('Demo clerk');
-    await shot(page, 'v2-cases-quick-filters');
+    // What is on shows as chips beside the Filters button.
+    await expect(page.getByRole('button', { name: 'Filters · 2' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Filters on' })).toContainText(
+      'Team: Turno mañana',
+    );
+    await shot(page, 'v2-cases-quick-filters', { fullPage: false });
     await quick.getByRole('button', { name: 'Overdue' }).click();
     await expect(page.getByText('No cases match.')).toBeVisible();
     await quick.getByRole('button', { name: 'Overdue' }).click();
-    await page.getByRole('combobox', { name: 'Team' }).selectOption({ label: 'Any team' });
+    await page.getByRole('button', { name: 'Remove filter: Team Turno mañana' }).click();
+    await expect(page.getByRole('button', { name: 'Filters', exact: true })).toBeVisible();
   } finally {
     await db.run(`update projects set settings = ? where id = ?`, [project!.settings, project!.id]);
     await db.run(`delete from team_members where team_id = ?`, [team]);
@@ -202,11 +227,10 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
     await db.end();
   }
 
-  // Cases can also be shared out at random and evenly among several people.
-  await page
-    .getByRole('combobox', { name: 'How to assign' })
-    .selectOption({ label: 'At random, evenly' });
-  await page.getByRole('button', { name: 'Assign', exact: true }).click();
+  // Cases can also be shared out at random and evenly among several people (every free
+  // case, from the list's "More" menu; the ticked ones from the bar at the bottom).
+  await page.getByRole('button', { name: 'More tools of the case list' }).click();
+  await page.getByRole('menuitem', { name: 'Share out the free cases…' }).click();
   const share = page.getByRole('dialog', { name: 'Share out at random' });
   // Interviewers are chosen to begin with; owners and administrators sit apart, not chosen.
   await expect(share.getByRole('checkbox', { name: 'All interviewers' })).toBeChecked();
@@ -228,9 +252,6 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
   await shot(page, 'cases-distribute');
   await expectAccessible(page);
   await share.getByRole('button', { name: 'Cancel' }).click();
-  await page
-    .getByRole('combobox', { name: 'How to assign' })
-    .selectOption({ label: 'To a person' });
 
   // The project manager may reveal personal data of a case; it is recorded.
   await page.getByRole('button', { name: 'Open case XHH0003' }).click();
@@ -285,9 +306,8 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
 
   // Back in the list, the free cases go out by the rules.
   const before = Number(await page.locator('[data-kpi="assigned"] [data-n]').textContent());
-  await page.getByLabel('How to assign').selectOption({ label: 'By the rules' });
-  await expect(page.getByText('Assign free cases by the rules')).toBeVisible();
-  await page.getByRole('button', { name: 'Assign', exact: true }).click();
+  await page.getByRole('button', { name: 'More tools of the case list' }).click();
+  await page.getByRole('menuitem', { name: 'Assign free cases by the rules' }).click();
   await expect(page.getByText(/cases? assigned\./)).toBeVisible();
   await expect(page.locator('[data-kpi="assigned"] [data-n]')).not.toHaveText(String(before));
   await shot(page, 'cases-kpis');
@@ -382,7 +402,7 @@ test('interviewers see their cases automatically; in pool mode the first to take
   // The audit entry for this first view is asserted in the API tests (admins need MFA here).
 
   // The project manager switches the project to an open pool.
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await gotoTab(page, 'Project settings');
   await page.getByRole('radio', { name: /Open pool/ }).check();
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByText('Settings saved.')).toBeVisible();
@@ -395,7 +415,9 @@ test('interviewers see their cases automatically; in pool mode the first to take
   for (const p of [interviewer, clerk]) {
     await p.reload();
     await p.getByRole('tab', { name: 'My cases' }).click();
+    await openFilters(p);
     await p.getByRole('combobox', { name: /^Show/ }).selectOption({ label: 'Available to claim' });
+    await closeFilters(p);
   }
   const free = interviewer.locator('[data-testid="cases-table"] tbody tr').first();
   await expect(free).toContainText('Available');
