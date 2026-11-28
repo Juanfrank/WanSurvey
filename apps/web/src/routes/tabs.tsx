@@ -178,7 +178,10 @@ export function OverflowTabList({
       ref={wrap}
       className={`relative flex min-w-0 gap-x-3 ${sub ? 'flex-1 items-center' : 'items-end border-b border-slate-200'}`}
     >
-      <div ref={room} className={`flex min-w-0 flex-1 gap-x-1 ${sub ? 'items-center' : 'items-end'}`}>
+      <div
+        ref={room}
+        className={`flex min-w-0 flex-1 gap-x-1 ${sub ? 'items-center' : 'items-end'}`}
+      >
         <Tabs.List
           aria-label={label}
           className={`flex min-w-0 gap-1 ${narrow ? 'overflow-x-auto' : ''}`}
