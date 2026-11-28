@@ -10,6 +10,7 @@ import { adminMenuGroups } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
 import { LogoMark, LogoName } from './Logo.js';
 import { setOrgTheme } from '../org-theme.js';
+import { setFormatLocale } from '../format.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
 import { confirmSignOut } from '../device/leave.js';
 
@@ -88,6 +89,8 @@ export function AppLayout() {
     }
   }, [me.data, me.error, location.pathname, navigate]);
 
+  // The organisation's regional format of dates and numbers, before any page renders one.
+  if (me.data) setFormatLocale(me.data.formatLocale);
   // The organisation's default theme and accent, for people who have not chosen their own.
   const theme = me.data?.theme;
   useEffect(() => {
@@ -102,6 +105,7 @@ export function AppLayout() {
     if (!(await confirmSignOut())) return;
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     forgetCachedMe();
+    setFormatLocale(null);
     queryClient.clear();
     await navigate({ to: '/login' });
   };

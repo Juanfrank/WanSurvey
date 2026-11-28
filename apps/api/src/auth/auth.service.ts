@@ -386,7 +386,11 @@ export class AuthService {
     const orgName = tenants.find((t) => t.id === ctx.tenantId)?.name ?? 'this organisation';
     // The organisation's look, for everyone who works in it (no permission to read the
     // organisation is needed for that).
-    const theme = orgTheme(await this.repo.inTenant(ctx.tenantId, (t) => t.branding()));
+    const { branding, formatLocale } = await this.repo.inTenant(ctx.tenantId, async (t) => ({
+      branding: await t.branding(),
+      formatLocale: await t.formatLocale(),
+    }));
+    const theme = orgTheme(branding);
     return {
       user,
       terms,
@@ -395,6 +399,8 @@ export class AuthService {
       // SINGLE_TENANT: the web app leaves out what is about several organisations.
       singleTenant: this.tenancy.single,
       theme,
+      // How dates and numbers are written in this organisation (null: as the interface language).
+      formatLocale,
       // People created by a first Microsoft sign-in have no role until an admin assigns one.
       access:
         ctx.memberships.length === 0

@@ -7,6 +7,7 @@ import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { dispositionLabel, localiseError, modeLabel, useNote } from '../i18n-messages.js';
 import { Button, ErrorText, FilterBar, type ActiveFilter } from '../routes/ui.js';
+import { locale } from '../format.js';
 
 export const FLAG_KINDS = [
   'speeding',
@@ -497,7 +498,7 @@ function Queue({ projectId }: { projectId: string }) {
                   </td>
                   <td>
                     {r.submittedAt
-                      ? new Date(r.submittedAt).toLocaleString(i18n.language, {
+                      ? new Date(r.submittedAt).toLocaleString(locale(i18n.language), {
                           dateStyle: 'short',
                           timeStyle: 'short',
                         })

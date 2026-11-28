@@ -287,6 +287,8 @@ export function templateBlankableFields(segments: Segment[]): string[] {
 
 export interface RenderOptions {
   lang: string;
+  /** How dates are written (the organisation's regional format, BCP 47); `lang` when left out. */
+  locale?: string;
   /** Text for an unresolved pipe. Default: `[expr]`, visible so designers notice it. */
   placeholder?: (src: string) => string;
   /** Label for DK / Refused / NA values. */
@@ -343,9 +345,10 @@ function renderExpr(
         text =
           style === 'iso'
             ? new Date(ms).toISOString().slice(0, 10)
-            : new Intl.DateTimeFormat(opts.lang, { dateStyle: style, timeZone: 'UTC' }).format(
-                new Date(ms),
-              );
+            : new Intl.DateTimeFormat(dateLocale(style, opts), {
+                dateStyle: style,
+                timeZone: 'UTC',
+              }).format(new Date(ms));
       } catch {
         text = formatValue(value, opts);
       }
@@ -354,6 +357,21 @@ function renderExpr(
   }
   if (text !== null) return text;
   return formatValue(value, opts);
+}
+
+/**
+ * The locale of a piped date: the regional format for one in figures ('short', 31/12/26); for one
+ * with a month name, the text's language with the region of the format, so a Spanish text never
+ * gets an English month.
+ */
+function dateLocale(style: string, opts: RenderOptions): string {
+  if (!opts.locale || style === 'short') return opts.locale ?? opts.lang;
+  const region = new Intl.Locale(opts.locale);
+  const text = new Intl.Locale(opts.lang);
+  if (region.language === text.language) return opts.locale;
+  return region.region
+    ? new Intl.Locale(text.baseName, { region: region.region }).toString()
+    : opts.lang;
 }
 
 export function formatValue(value: Value, opts: RenderOptions): string {

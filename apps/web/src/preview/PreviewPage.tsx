@@ -18,6 +18,7 @@ import {
 import { usePreview } from './usePreview.js';
 import { AsSeenFrame } from './AsSeen.js';
 import { useMedia } from '../routes/SideDrawer.js';
+import { chosenFormatLocale } from '../format.js';
 
 const selectCls = 'max-w-full rounded-md border border-slate-300 bg-white px-2 py-1.5';
 
@@ -414,6 +415,7 @@ export function PreviewWorkbench({
                   <PaperForm
                     compiled={p.loaded.compiled}
                     lang={p.options.language}
+                    formatLocale={chosenFormatLocale()}
                     context={p.options.context as PaperContext}
                   />
                 </div>
@@ -438,6 +440,7 @@ export function PreviewWorkbench({
                       session={p.session}
                       mode={p.options.mode}
                       lang={p.options.language}
+                      formatLocale={chosenFormatLocale()}
                       onChange={p.onChange}
                     />
                   </Card>

@@ -17,6 +17,7 @@ import {
   PageHeader,
   TableScroll,
 } from '../routes/ui.js';
+import { locale } from '../format.js';
 
 const EVENTS = [
   'interview.submitted',
@@ -372,7 +373,10 @@ function LogDialog({
     mutationFn: (id: string) => api(`/webhooks/deliveries/${id}/redeliver`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['webhook-deliveries'] }),
   });
-  const when = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'short', timeStyle: 'medium' });
+  const when = new Intl.DateTimeFormat(locale(i18n.language), {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  });
   return (
     <Dialog title={t('admin.webhooksPage.deliveries')} onClose={onClose} wide>
       <QueryState query={q}>{null}</QueryState>

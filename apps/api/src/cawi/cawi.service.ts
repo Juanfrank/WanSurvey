@@ -1028,6 +1028,8 @@ export class CawiService implements OnModuleInit {
         redirectUrl: settings.cawi.redirectUrl,
       };
       const branding = this.branding(project.logoUpdatedAt, settings.cawi.theme, token);
+      // Dates and numbers in the form as the organisation writes them (null: the language's).
+      const formatLocale = await tx.formatLocale();
       // A finished survey says so and nothing more: its answers and the respondent's record
       // are not handed to whoever holds the link.
       if (row.status !== 'in_progress')
@@ -1050,6 +1052,7 @@ export class CawiService implements OnModuleInit {
           serverTime: new Date().toISOString(),
           completion,
           branding,
+          formatLocale,
         };
       const lastSeq = await this.runtime.touchDevice(tx, row.id, deviceId);
       if (!inv.startedAt) await tx.patchInvitation(inv.id, { startedAt: new Date() });
@@ -1074,6 +1077,7 @@ export class CawiService implements OnModuleInit {
         serverTime: p.serverTime,
         completion,
         branding,
+        formatLocale,
       };
     });
   }

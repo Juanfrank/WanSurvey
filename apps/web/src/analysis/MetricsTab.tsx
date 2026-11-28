@@ -9,6 +9,7 @@ import { useCan } from '../designer/hooks.js';
 import { FilterBar, TableScroll, type ActiveFilter } from '../routes/ui.js';
 import { fmtNum, fmtPct } from './charts.js';
 import { GoalsSection } from './GoalsSection.js';
+import { locale } from '../format.js';
 
 const KEYS = [
   'completes',
@@ -122,7 +123,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
     ' ' +
     t(CONCERN[k] === o ? 'analysis.metrics.outlierCheck' : 'analysis.metrics.outlierFine');
   const day = (d: string) =>
-    new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, { timeZone: 'UTC' });
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(locale(i18n.language), { timeZone: 'UTC' });
   const chips: ActiveFilter[] = [
     ...(from
       ? [

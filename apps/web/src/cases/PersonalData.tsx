@@ -6,6 +6,7 @@ import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { localiseError, useNote } from '../i18n-messages.js';
 import { ErrorText } from '../routes/ui.js';
+import { locale } from '../format.js';
 
 /**
  * A data subject's requests for one case (H3): download what is held about them, or erase
@@ -70,7 +71,7 @@ export function PersonalData({
       {anonymisedAt ? (
         <p className="text-slate-600">
           {t('cases.privacy.anonymised', {
-            date: new Date(anonymisedAt).toLocaleDateString(i18n.language),
+            date: new Date(anonymisedAt).toLocaleDateString(locale(i18n.language)),
           })}
         </p>
       ) : null}

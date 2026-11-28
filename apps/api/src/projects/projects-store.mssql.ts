@@ -59,11 +59,18 @@ export class ProjectsStore {
       : null;
   }
 
-  /** Changes name, plan or branding, and merges `settings` into the ones there are. */
+  /**
+   * Changes name, branding or regional format, and merges `settings` into the ones there are.
+   */
   async updateTenant(
     tx: MssqlTx,
     id: string,
-    v: { name?: string; branding?: Record<string, unknown>; settings?: Record<string, unknown> },
+    v: {
+      name?: string;
+      branding?: Record<string, unknown>;
+      settings?: Record<string, unknown>;
+      formatLocale?: string | null;
+    },
   ): Promise<TenantRow | null> {
     const current = await this.tenant(tx, id);
     if (!current) return null;
@@ -73,6 +80,7 @@ export class ProjectsStore {
         ...(v.name !== undefined ? { name: v.name } : {}),
         ...(v.branding !== undefined ? { branding: JSON.stringify(v.branding) } : {}),
         ...(v.settings ? { settings: JSON.stringify({ ...current.settings, ...v.settings }) } : {}),
+        ...(v.formatLocale !== undefined ? { format_locale: v.formatLocale } : {}),
       })
       .where('id', '=', id)
       .execute();

@@ -140,6 +140,8 @@ export interface AuthTx extends AccountTx {
   acceptTerms(userId: string, version: number): Promise<void>;
   /** The organisation's branding (its look); readable by every member. */
   branding(): Promise<unknown>;
+  /** The organisation's regional format of dates and numbers (null: the language's); readable by every member. */
+  formatLocale(): Promise<string | null>;
   /** The organisation's settings (its two-step policy among them); readable by every member. */
   settings(): Promise<unknown>;
   /** Opens a session; the person's last organisation is set when it differs. */
@@ -374,6 +376,11 @@ class MssqlAuthTx implements AuthTx {
     } catch {
       return null;
     }
+  }
+
+  async formatLocale(): Promise<string | null> {
+    const r = await this.tx.selectFrom('tenants').select('format_locale').executeTakeFirst();
+    return r?.format_locale ?? null;
   }
 
   async settings(): Promise<unknown> {

@@ -382,6 +382,40 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(page.getByText('Time zone: America/Lima')).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
 
+  // The regional format: dates and numbers the organisation's way, the language unchanged.
+  const firstChange = page
+    .locator('tr[data-action="tenant.updated"]')
+    .first()
+    .locator('td')
+    .first();
+  await nav.getByRole('link', { name: 'Activity log' }).click();
+  // Following the language (English): month first, 12 hours.
+  await expect(firstChange).toHaveText(/^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s[AP]M$/);
+  await nav.getByRole('link', { name: 'Organisation', exact: true }).click();
+  const regional = page.locator('form').filter({ has: page.getByLabel('Format', { exact: true }) });
+  const preview = page.getByTestId('format-preview');
+  await expect(preview).toContainText('12/31/26');
+  await expect(preview).toContainText('1,234,567.89');
+  await regional.getByLabel('Format', { exact: true }).selectOption('es-ES');
+  await expect(preview).toContainText('31/12/26');
+  await expect(preview).toContainText('14:05');
+  await expect(preview).toContainText('1.234.567,89');
+  await regional.getByLabel('Format', { exact: true }).selectOption('en-GB');
+  await expect(preview).toContainText('31/12/2026');
+  await regional.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Regional format saved.')).toBeVisible();
+  await shot(page, 'admin-organisation-regional');
+  await expectAccessible(page);
+  // The same entry in the log now reads day first, in 24 hours; the interface stays in English.
+  await nav.getByRole('link', { name: 'Activity log' }).click();
+  await expect(firstChange).toHaveText(/^\d{1,2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Activity log' })).toBeVisible();
+  // Back to following the language, as the rest of the tests expect.
+  await nav.getByRole('link', { name: 'Organisation', exact: true }).click();
+  await regional.getByLabel('Format', { exact: true }).selectOption('');
+  await regional.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Regional format saved.')).toBeVisible();
+
   // The activity log has it all.
   await nav.getByRole('link', { name: 'Activity log' }).click();
   await openFilters(page);

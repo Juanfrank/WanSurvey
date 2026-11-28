@@ -20,6 +20,10 @@ import {
   type TableEncoder,
   type TableLayout,
   type TableStats,
+  excelMomentFormat,
+  isMoment,
+  wallClock,
+  type ReadableFormat,
 } from '@wansurvey/exporters';
 import { writeXlsxStreamSheets, type XlsxStreamRow, type XlsxStreamSheet } from 'hucre/xlsx';
 import { z } from 'zod';
@@ -122,20 +126,32 @@ function codebookSheets(columns: TableLayout['columns']): XlsxStreamSheet[] {
   ];
 }
 
-/** The rows of a data table as they come in batches, value labels in place of codes if asked. */
+/**
+ * The rows of a data table as they come in batches, value labels in place of codes if asked.
+ * With the organisation's regional format, moments are Excel dates in the project's time zone,
+ * shown the locale's way (numbers stay numbers, which Excel shows as its user's settings say).
+ */
 async function* dataRows(
   table: TableLayout,
   batches: AsyncGenerator<Cell[][]>,
   labels: boolean,
+  readable?: ReadableFormat,
 ): AsyncGenerator<XlsxStreamRow> {
   yield table.columns.map((c) => ({ value: c.name, style: BOLD }));
+  const moments = readable ? table.columns.map(isMoment) : [];
+  const toDate = readable ? wallClock(readable.timeZone) : null;
+  const momentStyle = readable ? { numFmt: excelMomentFormat(readable.locale) } : undefined;
   for await (const batch of batches)
     for (const row of batch)
       yield row.map((v, i) => {
         const c = table.columns[i]!;
         if (labels && typeof v === 'number' && c.valueLabels?.has(v)) return c.valueLabels.get(v)!;
+        if (moments[i] && typeof v === 'string') {
+          const value = toDate!(v);
+          if (value) return { value, style: momentStyle };
+        }
         return v;
-      }) as SheetCell[];
+      }) as XlsxStreamRow;
 }
 
 /** A column of text, for the codebook written as CSV. */
@@ -362,9 +378,14 @@ export class ExportsService implements OnModuleInit {
     let writer: StorageWriter | undefined;
     try {
       const opts = ExportBody.parse(job.options);
-      const src = await this.repo.inTenant(tenantId, (t) =>
-        this.datasets.source(t, job.projectId, opts),
-      );
+      const { src, locale } = await this.repo.inTenant(tenantId, async (t) => ({
+        src: await this.datasets.source(t, job.projectId, opts),
+        locale: await t.formatLocale(),
+      }));
+      // Readable files (CSV and Excel with labels) write moments and numbers the way the
+      // organisation chose; the data formats and files with codes keep theirs.
+      const readable: ReadableFormat | undefined =
+        opts.labels === 'labels' && locale ? { locale, timeZone: src.tz } : undefined;
       const builder = new TableBuilder(src.compiled, {
         rosters: opts.rosters,
         paradata: opts.paradata,
@@ -377,7 +398,17 @@ export class ExportsService implements OnModuleInit {
         interviews += page.length;
       }
       const layout = builder.layout();
-      const tables = [layout.main, ...layout.rosters];
+      // Moments written in the project's zone say so in their label (the codebook's too).
+      const tables = [layout.main, ...layout.rosters].map((t) =>
+        readable
+          ? {
+              ...t,
+              columns: t.columns.map((c) =>
+                isMoment(c) ? { ...c, label: c.label.replace('UTC', readable.timeZone) } : c,
+              ),
+            }
+          : t,
+      );
       const rowsOf = (i: ExportInterview, t: number): Cell[][] =>
         t === 0 ? [builder.mainRow(i)] : builder.rosterRows(i, t - 1);
       // The rows of one table, batch by batch (a page of interviews each).
@@ -413,7 +444,7 @@ export class ExportsService implements OnModuleInit {
           ),
         );
       } else if (opts.format === 'xlsx' || opts.format === 'codebook') {
-        await this.workbook(out, opts, tables, rows);
+        await this.workbook(out, opts, tables, rows, readable);
       } else {
         // SPSS and Stata write sizes in the header: one pass for every table's stats.
         let stats: TableStats[] | undefined;
@@ -426,7 +457,7 @@ export class ExportsService implements OnModuleInit {
         const encoderOf = (t: number): TableEncoder => {
           const columns = tables[t]!.columns;
           if (opts.format === 'csv')
-            return csvEncoder(columns, { labels: opts.labels === 'labels' });
+            return csvEncoder(columns, { labels: opts.labels === 'labels', format: readable });
           const o = { label: src.name };
           return opts.format === 'sav'
             ? savEncoder(columns, stats![t]!, o)
@@ -524,6 +555,7 @@ export class ExportsService implements OnModuleInit {
     opts: ExportBody,
     tables: TableLayout[],
     rows: (t: number) => AsyncGenerator<Cell[][]>,
+    readable?: ReadableFormat,
   ) {
     const labels = opts.labels === 'labels';
     const sheets: XlsxStreamSheet[] = [];
@@ -533,7 +565,7 @@ export class ExportsService implements OnModuleInit {
         sheets.push({
           name: (t === 0 ? 'data' : table.name).slice(0, 31),
           freezePane: { rows: 1 },
-          rows: dataRows(table, rows(t), labels),
+          rows: dataRows(table, rows(t), labels, readable),
         });
       }
     sheets.push(...codebookSheets(tables[0]!.columns));

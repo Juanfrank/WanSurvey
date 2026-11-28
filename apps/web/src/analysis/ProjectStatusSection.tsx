@@ -6,6 +6,7 @@ import type { Project } from '../designer/ProjectPages.js';
 import { FoldedHelp } from '../designer/fields.js';
 import { localiseError, useNote } from '../i18n-messages.js';
 import { Button, ErrorText, QueryState } from '../routes/ui.js';
+import { wordsLocale } from '../format.js';
 
 type Status = 'draft' | 'active' | 'closed' | 'archived';
 type Action = 'activate' | 'close' | 'reopen' | 'archive' | 'restore' | 'backToDraft';
@@ -69,7 +70,7 @@ export function ProjectStatusSection({ project }: { project: Project }) {
     },
   });
   const date = (iso: string) =>
-    new Date(iso).toLocaleDateString(i18n.language, { dateStyle: 'medium' });
+    new Date(iso).toLocaleDateString(wordsLocale(i18n.language), { dateStyle: 'medium' });
   const c = closeout.data;
   // Items that still need attention are marked; the rest are plain.
   const items: { key: string; text: string; open: boolean }[] = c

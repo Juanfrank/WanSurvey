@@ -17,6 +17,19 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ## [Unreleased]
 
+- **Regional format of the organisation**: Administration › Organisation › Regional format
+  chooses how dates, times and numbers are written (a BCP 47 locale such as es-PE, es-ES, en-US
+  or en-GB: decimal and thousands separators, day before or after the month, 24 or 12 hours),
+  with a preview. It applies to every date and number of the app, to dates piped into the
+  respondent's form and the paper form's decimal mark, and to readable exports (CSV and Excel
+  with labels: moments in the project's time zone, the locale's decimal mark, `;` between the
+  fields where that mark is a comma, Excel dates shown the locale's way); files with codes,
+  SPSS, Stata and SQL do not change. The interface language stays each person's (dates with
+  month names keep its words). By default nothing changes: with no format chosen, dates and
+  numbers follow the language as before. The API gives `formatLocale` on `GET /tenant`, takes
+  it on `PATCH /tenant` (`tenant.manage`; `null` goes back to the language) and gives it to
+  everyone of the organisation in `GET /auth/me` and to respondents with their link.
+  **Upgrade**: migration `0034_format_locale.sql` adds `tenants.format_locale` (nullable).
 - The designer names the questionnaire once: the breadcrumb ends in its name, edited in place as the page's title, and the toolbar under it keeps only the language, save state, undo, redo and publish. With nothing chosen in the outline the editor says "Choose an item in the outline to edit it."; "Add a section to start." is left for an empty questionnaire. The questionnaire preview has a breadcrumb back to Home, and its scenario-name field no longer cuts its placeholder short on a phone. The feedback links (one per face, the e-mail code, the iframe and the printed QR) add `r=`, `embed=1` and fixed answers to a query the link already has instead of starting a second `?`.
 - The option cards of the sampling plan show their description on one line (all of it in the ⓘ), the personal-columns note of an import folds to one line, and a page title keeps its ⓘ close so its buttons fit on the account row.
 - **Review queue**: a search by case id (the API's queue takes `q`, part of the case id), and the

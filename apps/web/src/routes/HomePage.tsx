@@ -5,7 +5,7 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProjectLogo } from './ProjectLogo.js';
 import { api, type Me } from '../api.js';
-import { dateTime, number } from '../format.js';
+import { dateTime, number, wordsLocale } from '../format.js';
 import { useMe } from './AppLayout.js';
 import { Card, QueryState, PageHeader } from './ui.js';
 
@@ -473,7 +473,9 @@ function Portfolio({
   );
   /** A planned fieldwork date (a calendar day), written short in the reader's language. */
   const day = (d: string) =>
-    new Date(`${d}T12:00:00`).toLocaleDateString(i18n.language, { dateStyle: 'medium' });
+    new Date(`${d}T12:00:00`).toLocaleDateString(wordsLocale(i18n.language), {
+      dateStyle: 'medium',
+    });
   return (
     // Relative: the headers' screen-reader text (placed absolutely) stays inside the scroller
     // instead of widening the page on a phone.

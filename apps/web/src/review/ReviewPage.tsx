@@ -24,6 +24,7 @@ import {
 import { useMe } from '../routes/AppLayout.js';
 import { Button, PageHeader } from '../routes/ui.js';
 import { FlagChips, minutes } from './ReviewTab.js';
+import { locale } from '../format.js';
 
 type To = 'in_review' | 'approved' | 'returned' | 'rejected';
 
@@ -355,7 +356,7 @@ export function ReviewPage() {
                             {h.reason
                               ? ` (${t(`interview.reason.${h.reason}`, { defaultValue: h.reason })})`
                               : ''}{' '}
-                            · {new Date(h.at).toLocaleString(i18n.language)}
+                            · {new Date(h.at).toLocaleString(locale(i18n.language))}
                           </li>
                         ))}
                       </ul>
@@ -495,7 +496,7 @@ export function CommentList({
         >
           <span className="font-medium">{c.author ?? '—'}</span>{' '}
           <span className="text-xs text-slate-600">
-            {new Date(c.createdAt).toLocaleString(i18n.language, {
+            {new Date(c.createdAt).toLocaleString(locale(i18n.language), {
               dateStyle: 'short',
               timeStyle: 'short',
             })}

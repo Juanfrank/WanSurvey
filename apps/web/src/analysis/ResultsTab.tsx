@@ -18,6 +18,7 @@ import {
 } from '../routes/ui.js';
 import { fmtNum, fmtPct } from './charts.js';
 import { ToplineItems, type ToplineItem } from './Topline.js';
+import { locale } from '../format.js';
 
 export interface DataFilters {
   questionnaireId?: string;
@@ -124,7 +125,7 @@ export function useDataFilterChips(
   const { t, i18n } = useTranslation();
   const qs = useDataQuestionnaires(projectId);
   const day = (d: string) =>
-    new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, { timeZone: 'UTC' });
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(locale(i18n.language), { timeZone: 'UTC' });
   const q = qs.data?.find((x) => x.id === value.questionnaireId);
   // The first questionnaire is the one shown when none is chosen: choosing it narrows nothing.
   const narrowed = !!value.questionnaireId && value.questionnaireId !== qs.data?.[0]?.id;
@@ -658,7 +659,7 @@ function ShareLinks({ projectId }: { projectId: string }) {
       api(`/projects/${projectId}/share-links/${id}/revoke`, { method: 'POST' }),
     onSuccess: refresh,
   });
-  const date = (iso: string) => new Date(iso).toLocaleDateString(i18n.language);
+  const date = (iso: string) => new Date(iso).toLocaleDateString(locale(i18n.language));
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-slate-600">{t('analysis.results.share.help')}</p>

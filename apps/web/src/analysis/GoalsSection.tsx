@@ -10,6 +10,7 @@ import { localiseError } from '../i18n-messages.js';
 import { Button, Drawer, ErrorText } from '../routes/ui.js';
 import { CloseIcon } from '../routes/icons.js';
 import { InfoTip } from '../cases/samplingControls.js';
+import { wordsLocale } from '../format.js';
 
 const FREQUENCIES = ['period', 'daily', 'business_days', 'weekly', 'monthly'] as const;
 type Frequency = (typeof FREQUENCIES)[number];
@@ -118,13 +119,15 @@ export function GoalsSection({
   const qName = (id: string | null) =>
     id ? (questionnaires.data?.find((q) => q.id === id)?.name ?? '…') : t('analysis.goals.anyQ');
   const date = (d: string) =>
-    new Date(`${d}T12:00:00`).toLocaleDateString(i18n.language, { dateStyle: 'medium' });
+    new Date(`${d}T12:00:00`).toLocaleDateString(wordsLocale(i18n.language), {
+      dateStyle: 'medium',
+    });
   const who = (g: Goal) => g.name ?? t('analysis.goals.team');
   const list = goals.data ?? [];
   // Two dates in the year of the second: "28 nov – 4 dic 2026".
   const range = (from: string, to: string) =>
     from.slice(0, 4) === to.slice(0, 4)
-      ? `${new Date(`${from}T12:00:00`).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' })} – ${date(to)}`
+      ? `${new Date(`${from}T12:00:00`).toLocaleDateString(wordsLocale(i18n.language), { day: 'numeric', month: 'short' })} – ${date(to)}`
       : `${date(from)} – ${date(to)}`;
   // The current window of a recurring goal, and how many were due by today.
   const detail = (g: Goal) =>

@@ -39,7 +39,7 @@ import { inputCls } from './fields.js';
 import { Dialog } from './Dialog.js';
 import { below, Menu, type MenuEntry } from './Menu.js';
 import { useCan } from './hooks.js';
-import { dateTime } from '../format.js';
+import { dateTime, locale } from '../format.js';
 import { DeviceStatusLink } from '../device/status.js';
 
 export interface Project {
@@ -448,7 +448,7 @@ function QuestionnairesSection({
   const pct = (v: number | null) =>
     v === null
       ? '–'
-      : new Intl.NumberFormat(i18n.language, {
+      : new Intl.NumberFormat(locale(i18n.language), {
           style: 'percent',
           maximumFractionDigits: 0,
         }).format(v);

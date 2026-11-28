@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
+import { locale, wordsLocale } from '../format.js';
 
 export const fmtPct = (lang: string, v: number | null | undefined, digits = 0) =>
   v === null || v === undefined
     ? '–'
-    : new Intl.NumberFormat(lang, {
+    : new Intl.NumberFormat(locale(lang), {
         style: 'percent',
         maximumFractionDigits: digits,
       }).format(v);
@@ -11,7 +12,7 @@ export const fmtPct = (lang: string, v: number | null | undefined, digits = 0) =
 export const fmtNum = (lang: string, v: number | null | undefined, digits = 1) =>
   v === null || v === undefined
     ? '–'
-    : new Intl.NumberFormat(lang, { maximumFractionDigits: digits }).format(v);
+    : new Intl.NumberFormat(locale(lang), { maximumFractionDigits: digits }).format(v);
 
 export interface Bar {
   key: string;
@@ -128,7 +129,7 @@ export function DayColumns({
   const days = fillDays(given);
   const max = Math.max(1, goal?.value ?? 0, ...days.map((d) => d.completes));
   const short = (d: string) =>
-    new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, {
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(wordsLocale(i18n.language), {
       day: 'numeric',
       month: 'short',
       timeZone: 'UTC',

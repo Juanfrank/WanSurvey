@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { FoldedHelp, smallBtn } from '../designer/fields.js';
 import { InfoTip } from '../cases/samplingControls.js';
-import { dateTime } from '../format.js';
+import { dateTime, locale } from '../format.js';
 import { dispositionLabel, useNote } from '../i18n-messages.js';
 import {
   deviceState,
@@ -298,7 +298,7 @@ export function DevicePage() {
             <span className="text-xs">
               {state?.lastSync
                 ? t('device.lastSync', {
-                    time: new Date(state.lastSync).toLocaleString(i18n.language),
+                    time: new Date(state.lastSync).toLocaleString(locale(i18n.language)),
                   })
                 : t('device.never')}
             </span>

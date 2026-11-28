@@ -17,6 +17,7 @@ import {
   PageHeader,
   TableScroll,
 } from '../routes/ui.js';
+import { wordsLocale } from '../format.js';
 
 interface Key {
   id: string;
@@ -62,7 +63,10 @@ export function ApiKeysPage() {
       await refresh();
     },
   });
-  const when = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' });
+  const when = new Intl.DateTimeFormat(wordsLocale(i18n.language), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
   const state = (k: Key) =>
     k.revokedAt
       ? t('admin.apiKeysPage.revoked')

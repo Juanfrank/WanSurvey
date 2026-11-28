@@ -15,6 +15,8 @@ import { pick } from './text.js';
 export interface PaperFormProps {
   compiled: CompiledQuestionnaire;
   lang: string;
+  /** The organisation's regional format (BCP 47), for the decimal mark; the language's if left out. */
+  formatLocale?: string | null;
   /** The form's id when printed for a case: it marks where each form starts and ends. */
   formId?: string;
   /** The case the form is printed for, to fill its data into the texts. */
@@ -51,7 +53,7 @@ export function paperText(src: string, ctx: PaperContext = {}): string {
  * The questionnaire as a printable paper form (PAPI): numbered questions, codes beside
  * options, routing printed as instructions, rosters repeated.
  */
-export function PaperForm({ compiled, lang, context = {}, formId }: PaperFormProps) {
+export function PaperForm({ compiled, lang, formatLocale, context = {}, formId }: PaperFormProps) {
   // Every text on the form, in its language and with its pipes made printable.
   const tx = (text: Parameters<typeof pick>[0], l: string) => {
     const v = pick(text, l);
@@ -225,7 +227,9 @@ export function PaperForm({ compiled, lang, context = {}, formId }: PaperFormPro
             {boxes(digits, t('paper.writeNumber'))}
             {decimals ? (
               <>
-                <span className="text-xl font-bold">{(1.5).toLocaleString(lang).charAt(1)}</span>
+                <span className="text-xl font-bold">
+                  {(1.5).toLocaleString(formatLocale ?? lang).charAt(1)}
+                </span>
                 {boxes(decimals, t('paper.writeNumber'))}
               </>
             ) : null}

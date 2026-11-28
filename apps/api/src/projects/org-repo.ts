@@ -25,6 +25,8 @@ export interface TenantView {
   settings: Record<string, unknown>;
   branding: Record<string, unknown>;
   rolePermissions: Record<string, unknown>;
+  /** Regional format of dates and numbers (BCP 47); null follows the language. */
+  formatLocale: string | null;
   createdAt: Date;
 }
 
@@ -63,11 +65,12 @@ export interface ProjectChanges {
 
 export interface OrgTx {
   tenant(): Promise<TenantView | null>;
-  /** Changes name or branding, and merges `settings` into the ones there are. */
+  /** Changes name, branding or regional format, and merges `settings` into the ones there are. */
   updateTenant(v: {
     name?: string;
     branding?: Record<string, unknown>;
     settings?: Record<string, unknown>;
+    formatLocale?: string | null;
   }): Promise<TenantView | null>;
   /** Replaces the organisation's changes to what each role may do; returns what was there. */
   setRolePermissions(kept: Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -99,6 +102,7 @@ const toTenant = (t: TenantRow): TenantView => ({
   settings: t.settings,
   branding: t.branding,
   rolePermissions: t.role_permissions,
+  formatLocale: t.format_locale,
   createdAt: t.created_at,
 });
 
@@ -133,6 +137,7 @@ class MssqlOrgTx implements OrgTx {
     name?: string;
     branding?: Record<string, unknown>;
     settings?: Record<string, unknown>;
+    formatLocale?: string | null;
   }) {
     const t = await this.projectsStore.updateTenant(this.tx, this.tenantId, v);
     return t && toTenant(t);
