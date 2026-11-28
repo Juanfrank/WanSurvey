@@ -90,7 +90,7 @@ describe.skipIf(!configured)('SQL Server: Microsoft-only sign-in', () => {
 
   it('tells the sign-in page to show the Microsoft button alone, asking for the e-mail first', async () => {
     const res = await request(t.app.getHttpServer()).get('/api/v1/auth/methods').expect(200);
-    expect(res.body).toEqual({ password: false, microsoftNeedsEmail: true });
+    expect(res.body).toMatchObject({ password: false, microsoftNeedsEmail: true });
   });
 
   it('refuses every password route', async () => {

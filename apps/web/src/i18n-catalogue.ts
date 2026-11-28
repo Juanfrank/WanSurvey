@@ -111,7 +111,7 @@ const en = {
     invalid: 'That code is not valid. Try the current one.',
     setupTitle: 'Set up two-factor authentication',
     setupIntro:
-      'Your role requires a second factor. Add this key to an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password…), then enter the code it shows.',
+      'Signing in with a password needs a second factor. Add this key to an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password…), then enter the code it shows.',
     secret: 'Setup key',
     openApp: 'Open in authenticator app',
     enable: 'Turn on',
@@ -339,7 +339,7 @@ const es: Catalogue = {
     invalid: 'Ese código no es válido. Use el actual.',
     setupTitle: 'Configurar la verificación en dos pasos',
     setupIntro:
-      'Su rol requiere un segundo factor. Agregue esta clave a una aplicación de autenticación (Microsoft Authenticator, Google Authenticator, 1Password…) e ingrese el código que muestre.',
+      'El ingreso con contraseña requiere un segundo factor. Agregue esta clave a una aplicación de autenticación (Microsoft Authenticator, Google Authenticator, 1Password…) e ingrese el código que muestre.',
     secret: 'Clave de configuración',
     openApp: 'Abrir en la aplicación de autenticación',
     enable: 'Activar',

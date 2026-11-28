@@ -136,6 +136,8 @@ export async function switchTenant(tenantId: string): Promise<boolean> {
 export interface AuthMethods {
   password: boolean;
   microsoftNeedsEmail: boolean;
+  /** Who must use two-step verification with a password; `admins` only in development and tests. */
+  passwordTwoStep?: 'everyone' | 'admins';
 }
 
 /** Multipart upload (sample files); same cookies and CSRF header as `api`. */

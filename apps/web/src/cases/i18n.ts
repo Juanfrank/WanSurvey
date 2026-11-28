@@ -678,7 +678,7 @@ export const casesEn = {
     },
     reveal: 'Show interviewers the personal data of their cases automatically',
     revealHelp:
-      'Interviewers with access to personal data see names and contacts of the cases they hold without asking; only the first view of each case is recorded. This is also what goes to the tablets for working offline and what the telephone console shows. When off, all of that arrives masked (less in sight on a lost tablet) and interviewers show it case by case from the case list, each view recorded: turn it off only if they can work that way.',
+      'In an interview, interviewers with access to personal data see the personal fields the questionnaire puts in its texts (the first name in “May I speak with Rosa?”) and, face to face, those marked below as needed to reach the household; nothing else personal reaches the interview screen, the tablet’s offline copy or the telephone console, where numbers show by their last digits. Only the first view of each case is recorded. When off, even those arrive masked, and interviewers show them case by case from the case list, each view recorded: turn it off only if they can work that way.',
     mode: 'How interviewers get cases',
     assigned: 'Assigned by a supervisor or by assignment rules',
     pool: 'Open pool: interviewers take free cases themselves; the first to take a case holds it',
@@ -704,6 +704,11 @@ export const casesEn = {
       'What the respondent is told and asked (version {{version}}; it goes up when the text changes)',
     gps: 'Record the device’s location at the start and end of each interview',
     gpsNotice: 'Notice shown to interviewers about the location',
+    fieldworkTitle: 'Needed to reach the household',
+    fieldworkHelp:
+      'Personal fields shown to the interviewer during a face-to-face interview, and kept in the tablet’s offline copy, even where the questionnaire does not show them (the address, a reference). Leave unticked what the interviewer does not need.',
+    fieldworkAddress: 'The case’s addresses',
+    fieldworkNone: 'The sample has no personal fields.',
     save: 'Save settings',
     saved: 'Settings saved.',
   },
@@ -1396,7 +1401,7 @@ export const casesEs: CasesCatalogue = {
     },
     reveal: 'Mostrar automáticamente a los entrevistadores los datos personales de sus casos',
     revealHelp:
-      'Los entrevistadores con acceso a datos personales ven los nombres y contactos de sus casos sin pedirlo; solo la primera consulta de cada caso queda registrada. Es también lo que se descarga a las tabletas para trabajar sin conexión y lo que muestra la consola telefónica. Si está desactivado, todo eso llega enmascarado (menos a la vista con una tableta perdida) y los entrevistadores los muestran caso por caso desde la lista de casos, cada consulta registrada: desactívelo solo si pueden trabajar así.',
+      'En la entrevista, los entrevistadores con acceso a datos personales ven los campos personales que el cuestionario pone en sus textos (el nombre en “¿Hablo con Rosa?”) y, en persona, los marcados abajo como necesarios para llegar al hogar; ningún otro dato personal llega a la pantalla de la entrevista, a la copia sin conexión de la tableta ni a la consola telefónica, donde los números se ven por sus últimas cifras. Solo la primera consulta de cada caso queda registrada. Si está desactivado, incluso esos llegan enmascarados y los entrevistadores los muestran caso por caso desde la lista de casos, cada consulta registrada: desactívelo solo si pueden trabajar así.',
     mode: 'Cómo reciben casos los entrevistadores',
     assigned: 'Asignados por un supervisor o por reglas de asignación',
     pool: 'Bolsa abierta: los entrevistadores toman casos libres; quien toma primero un caso lo conserva',
@@ -1422,6 +1427,11 @@ export const casesEs: CasesCatalogue = {
       'Lo que se le dice y pregunta a la persona (versión {{version}}; sube cuando cambia el texto)',
     gps: 'Registrar la ubicación del dispositivo al inicio y al final de cada entrevista',
     gpsNotice: 'Aviso a los entrevistadores sobre la ubicación',
+    fieldworkTitle: 'Necesario para llegar al hogar',
+    fieldworkHelp:
+      'Campos personales que el entrevistador ve durante una entrevista en persona, y que se guardan en la copia sin conexión de la tableta, aunque el cuestionario no los muestre (la dirección, una referencia). Deje sin marcar lo que el entrevistador no necesita.',
+    fieldworkAddress: 'Las direcciones del caso',
+    fieldworkNone: 'La muestra no tiene campos personales.',
     save: 'Guardar ajustes',
     saved: 'Ajustes guardados.',
   },

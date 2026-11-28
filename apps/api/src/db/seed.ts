@@ -18,7 +18,8 @@ export const at = (d: Date) => sql`CAST(${d.toISOString()} AS datetimeoffset(3))
  * organisation "demo2" that the project manager also belongs to.
  * The demo project has the household questionnaire, published as version 1, and 50 sample
  * cases; a rule assigns the region 1 cases to the interviewer.
- * Owners and admins enrol TOTP on first login. Idempotent: does nothing if the tenant exists.
+ * Everyone enrols TOTP at the first password sign-in (only owners and admins with
+ * PASSWORD_2FA_REQUIRED=false, local demos and tests). Idempotent: does nothing if the tenant exists.
  */
 export async function seed(adminUrl: string, password: string): Promise<void> {
   const db = createOwnerDb<Record<string, never>>(adminUrl, { max: 1, requestTimeoutMs: 0 });

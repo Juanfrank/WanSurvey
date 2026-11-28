@@ -11,6 +11,14 @@ export const CapiSettings = z.object({
   gps: z.enum(['off', 'start_end']).default('off'),
   /** Shown to interviewers before the location is recorded. */
   gpsNotice: z.string().max(1000).default(''),
+  /**
+   * Personal sample fields needed to reach the household (its address): shown to the
+   * interviewer in face-to-face interviews and kept in the device's copy. Any other personal
+   * field reaches an interviewer only where the questionnaire shows it (`{{case.first_name}}`).
+   */
+  fieldworkFields: z.array(z.string().min(1).max(64)).max(50).default([]),
+  /** The case's addresses (contacts of type address), likewise. */
+  fieldworkAddress: z.boolean().default(false),
 });
 export type CapiSettings = z.infer<typeof CapiSettings>;
 

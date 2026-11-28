@@ -3,7 +3,7 @@ import { household } from '@wansurvey/fixtures';
 import { compile, createInterview, respondentFromCase } from '@wansurvey/logic';
 import { describe, expect, it } from 'vitest';
 import { sectionsOf } from '../src/interview/InterviewPage.js';
-import { AnswersSoFar, fieldLabel, SampleData } from '../src/interview/side.js';
+import { AnswersSoFar, FieldworkData, fieldLabel, SampleData } from '../src/interview/side.js';
 import i18n from 'i18next';
 
 const sample = { region: 2, city: 'Arequipa', first_name: 'Juan', zone_code: 'Z1' };
@@ -39,5 +39,19 @@ describe('interviewer side panel', () => {
     expect(screen.queryByTestId('answers-so-far')).toBeNull();
     expect(screen.getByTestId('prefilled-answers').textContent).toContain('E5_REGION');
     expect(screen.getByText('Sample data to confirm')).toBeTruthy();
+  });
+
+  it('lists, apart, only what the project marks as needed to reach the household', () => {
+    render(
+      <FieldworkData
+        data={{ address: 'Jr. Las Flores 123' }}
+        addresses={[{ value: 'Av. Sol 456', label: null }]}
+      />,
+    );
+    const box = screen.getByTestId('fieldwork-data');
+    expect(box.textContent).toContain('To reach the household');
+    expect(box.textContent).toContain('Address');
+    expect(box.textContent).toContain('Jr. Las Flores 123');
+    expect(box.textContent).toContain('Av. Sol 456');
   });
 });

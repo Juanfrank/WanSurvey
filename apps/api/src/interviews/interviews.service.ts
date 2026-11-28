@@ -7,8 +7,10 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
+  caseFieldsUsed,
   createInterview,
   respondentFromCase,
+  type CaseFieldsUsed,
   verifySubmission,
   type CompiledQuestionnaire,
   type InterviewOptions,
@@ -28,6 +30,7 @@ import { closedCode } from '../questionnaires/state.js';
 import { type CaseFull, type InterviewRow, type InterviewsTx } from './interviews-repo.js';
 import type { StartBody, SubmitBody, SyncItem } from './schemas.js';
 import { compiledCache, Lru } from './compiled-cache.js';
+import { minimizeCase } from './minimize.js';
 
 export type { InterviewRow } from './interviews-repo.js';
 
@@ -35,10 +38,27 @@ export type { InterviewRow } from './interviews-repo.js';
 export interface StoredContext {
   externalId?: string;
   case?: Record<string, unknown>;
+  /** Personal fields in `case` because the questionnaire shows them (not listed on screen). */
+  personal?: string[];
+  /** Personal fields in `case` to reach the household, face to face (listed on screen). */
+  fieldwork?: string[];
+  /** Face to face, when the project marks addresses as needed in the field. */
+  addresses?: { value: string; label: string | null }[];
+  /** Interviews started before data minimisation kept every contact; never sent on. */
   contacts?: { type: string; value: string; label: string | null }[];
   /** The link's parameters (web surveys). */
   params?: Record<string, string>;
   [key: string]: unknown;
+}
+
+/** What a version reads of the case (versions never change), by version id, per process. */
+const usedCache = new Lru<string, CaseFieldsUsed>(200);
+
+/** The interview's questionnaire version (what it reads of the case) and its mode. */
+export interface CaseUse {
+  versionId: string;
+  compiled: unknown;
+  mode: string;
 }
 
 /** A version's number and questionnaire, by version id (immutable rows), per process. */
@@ -181,7 +201,11 @@ export class InterviewsService {
           message: 'This case belongs to another questionnaire',
         });
       const version = await this.latestVersion(t, projectId, body.questionnaireId, body.mode);
-      const context = await this.caseContext(t, ctx, projectId, c, settings.revealToInterviewers);
+      const context = await this.caseContext(t, ctx, projectId, c, settings, {
+        versionId: version.id,
+        compiled: version.compiled,
+        mode: body.mode,
+      });
       row = await t.insertInterview({
         id: body.id,
         projectId,
@@ -510,19 +534,49 @@ export class InterviewsService {
     return compiled;
   }
 
-  /** Case data for the engine and the screen, masked as the interviewer would see it. */
+  /** What a questionnaire version reads of the case (`case.*`, `respondent.*`), cached. */
+  caseFieldsOf(versionId: string, compiled: unknown): CaseFieldsUsed {
+    const hit = usedCache.get(versionId);
+    if (hit) return hit;
+    const used = caseFieldsUsed(compiled);
+    usedCache.set(versionId, used);
+    return used;
+  }
+
+  /**
+   * Case data for the engine and the interviewer's screen and device, minimised: personal sample
+   * fields only where the questionnaire shows them, or, face to face, when the project marks them
+   * (and the addresses) as needed to reach the household; masked as the interviewer would see
+   * them. No contacts: a call gets its numbers from the calls workspace. `settings` null: no
+   * person sees it (a scanned paper form), nothing personal is revealed.
+   */
   async caseContext(
     tx: InterviewsTx,
     ctx: AuthContext | null,
     projectId: string,
     c: CaseFull,
-    reveal: boolean,
+    settings: ProjectSettings | null,
+    use: CaseUse,
   ) {
     const t = tx;
-    const show = !!ctx && reveal && this.cases.canSeePii(ctx, projectId);
+    const show = !!ctx && !!settings?.revealToInterviewers && this.cases.canSeePii(ctx, projectId);
     const pii = await this.cases.piiFields(t, projectId);
-    const cs = await t.contacts(c.id);
-    if (show && ctx)
+    const capi = use.mode === 'CAPI' && settings ? settings.capi : null;
+    const minimal = minimizeCase(this.cases.pii.read(c), {
+      pii,
+      used: this.caseFieldsOf(use.versionId, use.compiled),
+      fieldwork: capi?.fieldworkFields ?? [],
+    });
+    const addresses = capi?.fieldworkAddress
+      ? (await t.contacts(c.id))
+          .filter((x) => x.type === 'address')
+          .map((x) => {
+            const m = maskContact(x, show);
+            return { value: m.value, label: m.label };
+          })
+      : [];
+    const personal = minimal.personal.length + minimal.fieldwork.length + addresses.length > 0;
+    if (show && ctx && personal)
       await this.cases.recordAutoViews(
         t,
         ctx,
@@ -532,8 +586,45 @@ export class InterviewsService {
       );
     return {
       externalId: c.externalId,
-      case: maskSample(this.cases.pii.read(c), pii, show),
-      contacts: cs.map((x) => maskContact(x, show)),
+      case: maskSample(minimal.case, pii, show),
+      personal: minimal.personal,
+      fieldwork: minimal.fieldwork,
+      ...(addresses.length ? { addresses } : {}),
+    };
+  }
+
+  /**
+   * The context of an interview as an interviewer's screen or device gets it: interviews started
+   * before data minimisation kept every personal field and contact, so the same rule is applied
+   * again here (a web respondent's own context is left as it is).
+   */
+  async sentContext(
+    t: InterviewsTx,
+    row: InterviewRow,
+    compiled: unknown,
+    settings: ProjectSettings,
+  ): Promise<StoredContext> {
+    const context = this.contextOf(row);
+    if (row.mode === 'CAWI') return context;
+    const { contacts, addresses: kept, ...rest } = context;
+    const capi = row.mode === 'CAPI' ? settings.capi : null;
+    // Older contexts kept the addresses among every contact.
+    const addresses =
+      kept ??
+      (contacts ?? [])
+        .filter((x) => x.type === 'address')
+        .map((x) => ({ value: x.value, label: x.label }));
+    const minimal = minimizeCase(context.case ?? {}, {
+      pii: await this.cases.piiFields(t, row.projectId),
+      used: this.caseFieldsOf(row.questionnaireVersionId, compiled),
+      fieldwork: capi?.fieldworkFields ?? [],
+    });
+    return {
+      ...rest,
+      case: minimal.case,
+      personal: minimal.personal,
+      fieldwork: minimal.fieldwork,
+      ...(capi?.fieldworkAddress && addresses?.length ? { addresses } : {}),
     };
   }
 
@@ -579,6 +670,7 @@ export class InterviewsService {
     const v = await this.versionOf(t, row.questionnaireVersionId);
     const compiled = await this.compiledOf(t, row.questionnaireVersionId);
     const who = row.interviewerId ? await t.userName(row.interviewerId) : null;
+    const projectSettings = settings ?? (await this.cases.settings(t, row.projectId));
     return {
       interview: {
         id: row.id,
@@ -603,16 +695,14 @@ export class InterviewsService {
         entryPass: row.entryPass,
         interviewer: who,
       },
-      context: this.contextOf(row),
+      context: await this.sentContext(t, row, compiled, projectSettings),
       compiled,
-      settings: await (
-        settings ? Promise.resolve(settings) : this.cases.settings(t, row.projectId)
-      ).then((x) => ({
-        capi: x.capi,
-        shortcuts: x.shortcuts,
+      settings: {
+        capi: projectSettings.capi,
+        shortcuts: projectSettings.shortcuts,
         // Recording is asked for only when the project has it on and this interview was drawn.
-        audio: drawFor(row.id, x.audio, row.mode),
-      })),
+        audio: drawFor(row.id, projectSettings.audio, row.mode),
+      },
       lastSeq: seq ?? 0,
       serverTime: new Date().toISOString(),
     };

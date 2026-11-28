@@ -115,6 +115,11 @@
     "slotSetting": false
   },
   {
+    "name": "PASSWORD_2FA_REQUIRED",
+    "value": "true",
+    "slotSetting": false
+  },
+  {
     "name": "ENTRA_TENANT_ID",
     "value": "<CONDITIONAL — required when sign-in is Microsoft only (PASSWORD_LOGIN=false) or the deployment has its own directory; ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET and ENTRA_REDIRECT_URI: all four or none; directory (tenant) id, a GUID>",
     "slotSetting": false

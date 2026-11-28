@@ -41,6 +41,7 @@ export {
   type CompiledQuestionnaire,
 } from './compile.js';
 export * from './engine.js';
+export { caseFieldsUsed, type CaseFieldsUsed } from './context-fields.js';
 export { sha256, stableStringify, seededRandom } from './hash.js';
 export { orderItems } from './order.js';
 export {

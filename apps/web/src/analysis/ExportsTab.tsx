@@ -132,8 +132,9 @@ export function ExportsTab({ projectId }: { projectId: string }) {
   const repeat = (e: ExportRow) =>
     request.mutate({
       ...e.options,
-      // Older exports did not say: keep what the file had.
-      personalData: e.options.personalData ?? (e.personal ? 'include' : 'exclude'),
+      // What the file had (an older request may say `include` for a file made without them),
+      // and only for someone allowed to see personal data: the API refuses it otherwise.
+      personalData: pii && e.personal ? 'include' : 'exclude',
     });
   const fileUrl = (e: ExportRow) => `/api/v1/projects/${projectId}/exports/${e.id}/file`;
   const canDownload = (e: ExportRow) => e.status === 'done' && !(e.personal && !pii);

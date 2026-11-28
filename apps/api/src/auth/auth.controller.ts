@@ -59,13 +59,18 @@ export class AuthController {
     });
   }
 
-  /** What the sign-in page offers: the password form, and whether Microsoft needs the e-mail. */
+  /**
+   * What the sign-in page offers: the password form, and whether Microsoft needs the e-mail;
+   * and who must use two-step verification with a password (`everyone`, or only owners and
+   * administrators where the server relaxes it for development and tests).
+   */
   @Public()
   @Get('methods')
   methods() {
     return {
       password: this.config.PASSWORD_LOGIN,
       microsoftNeedsEmail: true,
+      passwordTwoStep: this.config.PASSWORD_2FA_REQUIRED ? 'everyone' : 'admins',
     };
   }
 

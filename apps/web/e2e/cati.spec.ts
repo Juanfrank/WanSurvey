@@ -58,6 +58,18 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await expect(form).toBeVisible();
     const caseId = (await form.getAttribute('data-case'))!;
     await expect(form.getByTestId('script')).toContainText('Buenos días');
+    // The script greets the person by the name it pipes; the case's other personal data stays
+    // out, and the number reads masked while the Call link dials it whole.
+    await expect(form.getByTestId('script')).toContainText(/puedo hablar con [^,•{]+\?/);
+    const phone = form.getByTestId('phone').first();
+    await expect(phone).toContainText(/••\d{4}/);
+    await expect(phone.getByRole('link', { name: /^Call ••\d{4}$/ })).toHaveAttribute(
+      'href',
+      /^tel:\+51\d{9}$/,
+    );
+    await expect(phone).not.toContainText(/\+51\d{9}/);
+    await expect(form.getByTestId('case-sample')).not.toContainText('first_name');
+    await expect(form.getByTestId('case-sample')).not.toContainText('last_name');
     await expect(form.getByTestId('call-timer')).toBeVisible();
     // The save button says why it waits; 0 chooses the tenth outcome.
     await expect(form.locator('#save-why')).toHaveText('Choose what happened.');

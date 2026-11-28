@@ -67,7 +67,11 @@ interface Served {
     /** Labels of the sample fields that have one. */
     fieldLabels?: Record<string, string>;
   };
-  phones: { id: string; value: string; label: string | null }[];
+  /**
+   * The case's numbers, read masked (the last digits); `dial` is the `tel:` link that hands the
+   * whole number to the phone.
+   */
+  phones: { id: string; masked: string; dial: string; label: string | null }[];
   history: CallRow[];
   callingHours: { from: string; to: string };
   earlyExit: { reasons: ExitReason[]; required: boolean };
@@ -635,7 +639,7 @@ export function CallsTab({
                         onChange={() => setPhone(i)}
                         aria-keyshortcuts={i < 3 ? `Alt+${i + 1}` : undefined}
                       />
-                      <span className="font-mono">{p.value}</span>
+                      <span className="font-mono">{p.masked}</span>
                       {p.label ? (
                         <span className="text-slate-600">
                           {kind ? t(`cati.phoneKind.${kind}`) : p.label}
@@ -648,9 +652,9 @@ export function CallsTab({
                       ) : null}
                     </label>
                     <a
-                      href={`tel:${p.value}`}
+                      href={p.dial}
                       className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 text-sm font-semibold text-on-fill hover:bg-indigo-500"
-                      aria-label={t('cati.dial', { number: p.value })}
+                      aria-label={t('cati.dial', { number: p.masked })}
                     >
                       <PhoneIcon className="h-4 w-4" />
                       {t('cati.dialShort')}

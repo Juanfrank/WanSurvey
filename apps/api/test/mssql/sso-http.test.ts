@@ -387,6 +387,18 @@ describe.skipIf(!configured)('SQL Server: Microsoft Entra ID sign-in', () => {
     expect(blocked.body.code).toBe('MFA_REQUIRED');
   });
 
+  it('does not ask a Microsoft sign-in to set up the WanSurvey code, even an owner’s', async () => {
+    const org = await ssoTenant();
+    const owner = await createUser(t.owner, org.id, [{ role: 'owner' }], {
+      email: `own-${uuidv7()}@agency.org`,
+      totp: false,
+    });
+    // Microsoft did not report MFA, and the account has no code: still no enrolment here.
+    const { agent } = await signIn(org.slug, person(owner.email));
+    expect((await agent.get('/api/v1/auth/me')).body.mfaState).toBe('ok');
+    expect((await agent.get('/api/v1/tenant')).status).toBe(200);
+  });
+
   it('finds the organisation from the e-mail domain', async () => {
     const domain = `d${uuidv7().slice(-8)}.org`;
     const org = await ssoTenant({ domains: [domain] });

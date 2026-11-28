@@ -35,7 +35,8 @@ export const interviewEn = {
   showSide: 'Show case details',
   hideSide: 'Hide case details',
   sample: 'Sample data',
-  contacts: 'Contacts',
+  fieldwork: 'To reach the household',
+  address: 'Address',
   answers: 'Answers so far',
   noAnswers: 'No answers yet.',
   prefilled: 'Sample data to confirm',
@@ -65,11 +66,6 @@ export const interviewEn = {
     telefono: 'Phone',
     email: 'Email',
     sede: 'Site',
-  },
-  contactType: {
-    phone: 'Phone',
-    email: 'Email',
-    address: 'Address',
   },
   resumed: {
     title: 'Picking up where you stopped',
@@ -214,7 +210,8 @@ export const interviewEs: InterviewCatalogue = {
   showSide: 'Mostrar datos del caso',
   hideSide: 'Ocultar datos del caso',
   sample: 'Datos de muestra',
-  contacts: 'Contactos',
+  fieldwork: 'Para llegar al hogar',
+  address: 'Dirección',
   answers: 'Respuestas hasta ahora',
   noAnswers: 'Aún no hay respuestas.',
   prefilled: 'Datos de muestra a confirmar',
@@ -244,11 +241,6 @@ export const interviewEs: InterviewCatalogue = {
     telefono: 'Teléfono',
     email: 'Correo',
     sede: 'Sede',
-  },
-  contactType: {
-    phone: 'Teléfono',
-    email: 'Correo',
-    address: 'Dirección',
   },
   resumed: {
     title: 'Retoma donde se quedó',

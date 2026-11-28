@@ -10,6 +10,7 @@ import {
   externalAccessOpened,
   ROLE_RANK,
   roleMatrix,
+  twoStepRequired,
   type Role,
   type RoleMatrix,
 } from '@wansurvey/schema';
@@ -73,6 +74,17 @@ export class UsersService {
           .map((g) => ({ role: g.role, projectId: g.projectId })),
         /** Signed in (e.g. with Microsoft) but no role assigned yet. */
         awaitingRole: u.status === 'active' && !grants.some((g) => g.userId === u.id),
+        /**
+         * Must set up two-step verification: they may sign in with a password (Microsoft
+         * sign-in brings its own MFA), and every password sign-in needs it.
+         */
+        twoStepRequired:
+          this.config.PASSWORD_LOGIN &&
+          u.hasPassword &&
+          twoStepRequired(
+            grants.filter((g) => g.userId === u.id).map((g) => g.role),
+            this.config.PASSWORD_2FA_REQUIRED,
+          ),
         /** Open cases per project, and how many are on a device: to reassign before leaving. */
         workload: workload
           .filter((w) => w.userId === u.id)

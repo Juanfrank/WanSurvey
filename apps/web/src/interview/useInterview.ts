@@ -56,7 +56,12 @@ export interface InterviewPayload {
   context: {
     externalId?: string;
     case?: Record<string, unknown>;
-    contacts?: { type: string; value: string; label: string | null }[];
+    /** Personal fields the questionnaire shows: piped where it puts them, never listed. */
+    personal?: string[];
+    /** Face to face: personal fields needed to reach the household, listed apart. */
+    fieldwork?: string[];
+    /** Face to face, when the project marks addresses as needed in the field. */
+    addresses?: { value: string; label: string | null }[];
   };
   compiled: CompiledQuestionnaire;
   settings?: {

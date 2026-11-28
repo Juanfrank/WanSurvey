@@ -285,7 +285,11 @@ export class ScansService implements OnModuleInit {
     // The interview, as if keyed by whoever uploaded the scans.
     const interviewId = uuidv7();
     const deviceId = `scan-${formId}`;
-    const context = await this.runtime.caseContext(tx, null, batch.projectId, c, false);
+    const context = await this.runtime.caseContext(tx, null, batch.projectId, c, null, {
+      versionId: v.id,
+      compiled: v.compiled,
+      mode: 'PAPI',
+    });
     const row = await tx.insertInterview({
       id: interviewId,
       projectId: batch.projectId,

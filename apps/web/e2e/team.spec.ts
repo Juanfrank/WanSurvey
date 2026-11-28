@@ -438,7 +438,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(page).toHaveURL(/twoStep=required/);
   await expect(
     page.getByRole('button', {
-      name: 'Remove filter: Two-step sign-in Required by their role, not set up',
+      name: 'Remove filter: Two-step sign-in Must set it up (signs in with a password)',
     }),
   ).toBeVisible();
   await expect(team.locator('tbody tr')).toHaveCount(missing);

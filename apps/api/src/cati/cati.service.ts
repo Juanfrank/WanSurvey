@@ -28,7 +28,9 @@ import {
   caseTimezone,
   eligibleInOrder,
   ineligible,
+  lastDigits,
   nextEligible,
+  telLink,
   type QueueCase,
 } from './queue.js';
 
@@ -68,8 +70,6 @@ export const OutcomeBody = z.strictObject({
     .optional(),
 });
 export type OutcomeBody = z.infer<typeof OutcomeBody>;
-
-const lastDigits = (v: string) => `••${v.replace(/\D/g, '').slice(-4)}`;
 
 /**
  * Telephone interviewing: serves the next case to call, records what happened on each call
@@ -313,15 +313,39 @@ export class CatiService implements OnModuleInit {
       (c.sample as Record<string, unknown>).timezone,
       await this.projectTimezone(t, projectId),
     );
-    const context = await this.runtime.caseContext(
-      t,
-      ctx,
-      projectId,
-      c,
-      settings.revealToInterviewers,
-    );
-    // The caller needs the numbers to dial; showing them is recorded once per case (K5).
-    const phones = await t.phones(c.id);
+    const qs = await this.usable(t, projectId);
+    // A case belongs to one questionnaire; the one asked for only counts for cases without.
+    const qid =
+      qs.find((q) => q.id === c.questionnaireId)?.id ??
+      qs.find((q) => q.id === questionnaireId)?.id ??
+      qs[0]?.id ??
+      null;
+    let openInterview: InterviewRow | undefined;
+    if (attempt.interviewId) openInterview = (await t.interview(attempt.interviewId)) ?? undefined;
+    // An interview under way keeps its own version (what it pipes); otherwise the latest.
+    const resumed = openInterview?.status === 'in_progress' ? openInterview : undefined;
+    const version = resumed
+      ? {
+          id: resumed.questionnaireVersionId,
+          compiled: await this.runtime.compiledOf(t, resumed.questionnaireVersionId),
+        }
+      : qid
+        ? await this.runtime.latestVersion(t, projectId, qid, undefined, { readOnly: true })
+        : null;
+    // Personal fields only as far as the questionnaire's texts and scripts use them.
+    const context = await this.runtime.caseContext(t, ctx, projectId, c, settings, {
+      versionId: version?.id ?? '',
+      compiled: version?.compiled ?? null,
+      mode: 'CATI',
+    });
+    // The caller dials the numbers but reads them masked (all but the last digits): the dial
+    // link carries the number to the phone. Serving them is recorded once per case (K5).
+    const phones = (await t.phones(c.id)).map((p) => ({
+      id: p.id,
+      label: p.label,
+      masked: lastDigits(p.value),
+      dial: telLink(p.value),
+    }));
     await this.cases.recordAutoViews(
       t,
       ctx,
@@ -334,15 +358,6 @@ export class CatiService implements OnModuleInit {
     const fieldLabels = Object.fromEntries(
       (await t.fields(projectId)).filter((f) => f.label).map((f) => [f.name, f.label!]),
     );
-    const qs = await this.usable(t, projectId);
-    // A case belongs to one questionnaire; the one asked for only counts for cases without.
-    const qid =
-      qs.find((q) => q.id === c.questionnaireId)?.id ??
-      qs.find((q) => q.id === questionnaireId)?.id ??
-      qs[0]?.id ??
-      null;
-    let openInterview: InterviewRow | undefined;
-    if (attempt.interviewId) openInterview = (await t.interview(attempt.interviewId)) ?? undefined;
     return {
       attempt: {
         id: attempt.id,
@@ -359,7 +374,11 @@ export class CatiService implements OnModuleInit {
         attempts: c.attempts,
         nextContactAt: c.nextContactAt,
         timezone: tz,
-        sample: (context as { case: Record<string, unknown> }).case,
+        // On screen, the sample's fields that are not personal: personal ones appear only
+        // where the questionnaire's texts and scripts put them.
+        sample: Object.fromEntries(
+          Object.entries(context.case).filter(([k]) => !context.personal.includes(k)),
+        ),
         fieldLabels,
       },
       phones,
@@ -368,7 +387,10 @@ export class CatiService implements OnModuleInit {
       earlyExit: settings.earlyExit,
       questionnaires: qs,
       questionnaireId: qid,
-      scripts: qid ? await this.scripts(t, ctx, projectId, qid, context.case) : null,
+      scripts:
+        version && qid
+          ? await this.scripts(t, ctx, { ...version, questionnaireId: qid }, context.case)
+          : null,
     };
   }
 
@@ -381,18 +403,14 @@ export class CatiService implements OnModuleInit {
   private async scripts(
     t: CatiTx,
     ctx: AuthContext,
-    projectId: string,
-    questionnaireId: string,
+    v: { compiled: unknown; questionnaireId: string },
     sample: Record<string, unknown>,
   ) {
-    const v = await this.runtime.latestVersion(t, projectId, questionnaireId, undefined, {
-      readOnly: true,
-    });
     const compiled = v.compiled as CompiledQuestionnaire;
     const s = createInterview(compiled, {
       mode: 'CATI',
       language: compiled.questionnaire.defaultLanguage,
-      seed: questionnaireId,
+      seed: v.questionnaireId,
       now: () => new Date(),
       context: { case: sample, ...(await this.people(t, ctx, sample)) },
     });

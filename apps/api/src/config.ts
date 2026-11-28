@@ -164,6 +164,16 @@ const Env = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   /**
+   * Two-step verification (TOTP) for every account that signs in with a password ('true', the
+   * default). Microsoft sign-in never asks for it: the directory applies its own MFA. 'false'
+   * relaxes it to owners and administrators, for development, demos and tests only: refused
+   * when NODE_ENV=production.
+   */
+  PASSWORD_2FA_REQUIRED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /**
    * Whether organisations may create the account (no role) of whoever first signs in with Microsoft
    * from their domains. Each organisation chooses on its own Organisation page (default: yes);
    * 'false' here forbids it for all of them: only people already added or invited get in, anyone
@@ -404,6 +414,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (d.NODE_ENV === 'production' && d.WEBHOOK_ALLOW_PRIVATE_URLS === 'true')
       throw new Error(
         'Invalid configuration:\n  WEBHOOK_ALLOW_PRIVATE_URLS: must not be true in production',
+      );
+    if (d.NODE_ENV === 'production' && !d.PASSWORD_2FA_REQUIRED)
+      throw new Error(
+        'Invalid configuration:\n  PASSWORD_2FA_REQUIRED: must not be false in production',
       );
     if (!!d.VAPID_PUBLIC_KEY !== !!d.VAPID_PRIVATE_KEY || (d.VAPID_PUBLIC_KEY && !d.VAPID_SUBJECT))
       throw new Error(

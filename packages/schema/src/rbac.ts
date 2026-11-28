@@ -152,30 +152,21 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
 };
 
-/** Roles that must enrol TOTP before using the app, whatever the organisation decides. */
+/**
+ * Roles that must enrol TOTP when they sign in with a password even where the requirement for
+ * everyone is relaxed (`PASSWORD_2FA_REQUIRED=false`, development and tests only).
+ */
 export const ROLES_REQUIRING_2FA: readonly Role[] = ['owner', 'admin'];
 
-/** Roles an organisation may add to those that must enrol TOTP (its two-step policy). */
-export const OPTIONAL_2FA_ROLES = ROLES.filter((r) => !ROLES_REQUIRING_2FA.includes(r));
-
-/** The organisation's list of extra roles that must use two-step verification. */
-export const TwoFactorRoles = z
-  .array(z.enum(OPTIONAL_2FA_ROLES as [Role, ...Role[]]))
-  .max(ROLES.length)
-  .refine((list) => new Set(list).size === list.length, 'Repeated role');
-
 /**
- * Every role that must enrol TOTP in an organisation: the fixed ones plus those its settings
- * add (`settings.twoFactorRoles`). Unknown or malformed entries are ignored.
+ * Whether signing in with a password requires two-step verification (TOTP). Every account does
+ * (`everyone`, the rule in production): where access is by Microsoft sign-in, the password is
+ * the exception and gets a second factor of its own. Only when the server relaxes it (tests,
+ * development) does it fall back to owners and administrators. A Microsoft sign-in never needs
+ * it here: the directory applies its own MFA.
  */
-export function rolesRequiring2fa(settings?: unknown): Role[] {
-  const extra = (settings && typeof settings === 'object' ? settings : {}) as {
-    twoFactorRoles?: unknown;
-  };
-  const list = Array.isArray(extra.twoFactorRoles)
-    ? extra.twoFactorRoles.filter((r): r is Role => OPTIONAL_2FA_ROLES.includes(r as Role))
-    : [];
-  return [...new Set<Role>([...ROLES_REQUIRING_2FA, ...list])];
+export function twoStepRequired(roles: readonly string[], everyone: boolean): boolean {
+  return everyone || roles.some((r) => ROLES_REQUIRING_2FA.includes(r as Role));
 }
 
 /**

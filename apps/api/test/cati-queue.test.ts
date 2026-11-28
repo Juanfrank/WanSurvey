@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   caseTimezone,
   eligibleInOrder,
+  lastDigits,
+  telLink,
   ineligible,
   nextEligible,
   type QueueCase,
@@ -108,5 +110,14 @@ describe('call queue', () => {
     expect(nextEligible([mk('a', { timezone: 'Asia/Tokyo' })], o)).toEqual({
       reason: 'outside_hours',
     });
+  });
+});
+
+describe('numbers on the calls screen', () => {
+  it('reads by the last digits and dials the whole number, extension apart', () => {
+    expect(lastDigits('+51 987 654 321')).toBe('••4321');
+    expect(telLink('+51 987 654 321')).toBe('tel:+51987654321');
+    expect(telLink('(01) 234-5678 x12')).toBe('tel:012345678;ext=12');
+    expect(telLink('+51 1 234 5678 anexo 305')).toBe('tel:+5112345678;ext=305');
   });
 });

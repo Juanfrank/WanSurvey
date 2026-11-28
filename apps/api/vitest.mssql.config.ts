@@ -24,6 +24,9 @@ export default defineConfig({
       LOGIN_RATE_LIMIT: '1000',
       RATE_LIMIT_PER_IP: '100000',
       LOGIN_LOCK_AFTER: '3',
+      // Most tests sign people in without a second factor; auth-enrol-http starts an app with
+      // the rule for every password sign-in (the default, and the only value in production).
+      PASSWORD_2FA_REQUIRED: 'false',
       JOB_RETRY_MS: '0',
       DATA_DIR: join(tmpdir(), 'wansurvey-test-exports'),
     },

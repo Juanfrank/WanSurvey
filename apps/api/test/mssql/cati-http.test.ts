@@ -130,9 +130,11 @@ describe.skipIf(!configured)('SQL Server: telephone interviewing over HTTP', () 
     // With a call open, the preview names it: "Next case" serves it again.
     const openPeek = await get(me!, `/projects/${project}/cati/peek`);
     expect(openPeek.body.next).toMatchObject({ kind: 'open', externalId: a.body.case.externalId });
+    // The number is read masked; the dial link hands the whole number to the phone.
     expect(a.body.phones).toEqual([
-      expect.objectContaining({ value: '+51987654321', label: 'Móvil' }),
+      expect.objectContaining({ masked: '••4321', dial: 'tel:+51987654321', label: 'Móvil' }),
     ]);
+    expect(a.body.phones[0].value).toBeUndefined();
     expect(a.body.scripts.intro).toEqual([{ id: 'HELLO', text: 'Buenos días, llamo a Lima.' }]);
     expect(a.body.scripts.outcomes.refusal[0].text).toBe('Gracias por su tiempo.');
     // Showing the numbers is recorded once per case (K5).

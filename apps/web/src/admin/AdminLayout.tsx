@@ -1,4 +1,3 @@
-import { rolesRequiring2fa, type Role } from '@wansurvey/schema';
 import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
@@ -130,7 +129,8 @@ interface MemberRow {
   status: 'active' | 'invited' | 'deactivated';
   totpEnabled: boolean;
   awaitingRole: boolean;
-  memberships: { role: string }[];
+  /** May sign in with a password, so must set up two-step verification (computed by the API). */
+  twoStepRequired?: boolean;
 }
 
 interface KeyRow {
@@ -161,17 +161,11 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
     queryFn: () => api<MemberRow[]>('/users'),
     enabled: can('users.read'),
   });
-  const tenant = useQuery({
-    queryKey: ['tenant', tenantId],
-    queryFn: () => api<{ settings?: unknown }>('/tenant'),
-    enabled: can('users.read'),
-  });
   const keys = useQuery({
     queryKey: ['api-keys', tenantId],
     queryFn: () => api<KeyRow[]>('/api-keys'),
     enabled: can('apikeys.manage') || can('audit.read'),
   });
-  const required: Role[] = rolesRequiring2fa(tenant.data?.settings);
   const members = (people.data ?? []).filter((m) => m.status !== 'deactivated');
   const soon = Date.now() + KEY_WARNING_DAYS * 86_400_000;
   const candidates: (Tile | false | undefined)[] = [
@@ -187,18 +181,13 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
       to: '/admin/users',
       search: { status: 'invited' },
     },
-    people.data &&
-      tenant.data && {
-        key: 'without2fa',
-        n: members.filter(
-          (m) =>
-            m.status === 'active' &&
-            !m.totpEnabled &&
-            m.memberships.some((g) => required.includes(g.role as Role)),
-        ).length,
-        to: '/admin/users',
-        search: { twoStep: 'required' },
-      },
+    // Everyone who signs in with a password must set it up (Microsoft sign-in has its own MFA).
+    people.data && {
+      key: 'without2fa',
+      n: members.filter((m) => m.status === 'active' && m.twoStepRequired && !m.totpEnabled).length,
+      to: '/admin/users',
+      search: { twoStep: 'required' },
+    },
     keys.data && {
       key: 'keysExpiring',
       n: keys.data.filter((k) => {

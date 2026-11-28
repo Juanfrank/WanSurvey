@@ -32,7 +32,7 @@ No cookie and no CSRF header are used; a session cookie is not accepted on these
 
 Lists are paged with a cursor: pass the `next` of a page as `after` of the next request; `next` is `null` on the last page (`limit` up to 1000, default 200). Cases are ordered by their id (creation order) and interviews by start time.
 
-**Personal data never leaves through a key.** Personal sample fields come masked (`•••`), contacts are not exposed, and interviews come without answers. Answers and the full data set are obtained with the data exports (Analysis → Export), which a person with the right permission runs and audits; reading answers through keys needs a decision about personal variables (their masking by questionnaire version) and is left for a later step, together with the `exports:read` scope.
+**Personal data never leaves through a key.** Personal sample fields come masked (`•••`), contacts are not exposed, and interviews come without answers. As in the data exports, personal data is left out unless asked for (`personalData=include`), and no key holds the permission to see it: `GET /ext/v1/projects/:id/cases?personalData=include` answers `403 PERSONAL_DATA_FORBIDDEN` (`personalData=exclude`, the default, is accepted). Answers and the full data set are obtained with the data exports (Analysis → Export), which a person with the right permission runs and audits; reading answers through keys needs a decision about personal variables (their masking by questionnaire version) and is left for a later step, together with the `exports:read` scope.
 
 The shapes only grow: new fields may appear, none changes or disappears within `v1`.
 

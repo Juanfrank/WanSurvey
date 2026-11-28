@@ -97,7 +97,7 @@ Questionnaires are written and conducted in Spanish; other languages can be adde
 
    Sign in, then open **Projects → Household Survey 2026**. Its tabs hold the questionnaires, the 50 seeded cases, **Import sample** (CSV or Excel with one row per case) and **Assignments**. Open a questionnaire to edit the seeded questionnaire in the designer, or **Questionnaire preview** to run the samples (or your own JSON) in any mode.
 
-Seeded accounts log in with their e-mail only, for example `project.manager@demo.wansurvey.test`. That account belongs to two organisations, `demo` and `demo2`, and can switch between them. The owner and admin accounts must enrol TOTP on their first login.
+Seeded accounts log in with their e-mail only, for example `project.manager@demo.wansurvey.test`. That account belongs to two organisations, `demo` and `demo2`, and can switch between them. Every account that signs in with a password must set up two-step verification (TOTP, an authenticator app) at its first sign-in. For a local demo, `PASSWORD_2FA_REQUIRED=false` in `apps/api/.env` asks it only of the owner and admin accounts; the setting is refused in production (`NODE_ENV=production`), and the end-to-end tests run with it.
 
 ## Checks
 

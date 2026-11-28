@@ -28,14 +28,15 @@ export const adminEn = {
       invited_one: 'invitation not accepted yet',
       invited_other: 'invitations not accepted yet',
       without2fa_one:
-        'person whose role requires two-step verification, with no authenticator app set up',
+        'person who signs in with a password and has not set up two-step verification',
       without2fa_other:
-        'people whose role requires two-step verification, with no authenticator app set up',
+        'people who sign in with a password and have not set up two-step verification',
       keysExpiring_one: 'API key ends within {{days}} days',
       keysExpiring_other: 'API keys end within {{days}} days',
     },
     without2faTerm: 'Two-step verification',
-    without2faInfo: 'A Microsoft sign-in with MFA also counts.',
+    without2faInfo:
+      'Everyone who signs in with a password must set it up, and is asked to at the next sign-in. Signing in with Microsoft does not ask for it: the directory applies its own MFA.',
   },
   apiKeysPage: {
     intro:
@@ -386,13 +387,15 @@ export const adminEn = {
     },
     security: {
       title: 'Sign-in security',
-      intro:
-        'Owners and administrators always use two-step verification. Tick the other roles that must turn it on too: they are asked to at their next sign-in.',
-      always: 'always',
-      personalData: 'sees personal data',
-      exports: 'exports data',
-      save: 'Save the policy',
-      saved: 'Policy saved.',
+      intro: 'The same for every role; there is nothing to choose here.',
+      password:
+        'Everyone who signs in with a password uses two-step verification (an authenticator app). Whoever has not set it up is asked to at their next sign-in, before anything else.',
+      microsoft:
+        'Signing in with Microsoft does not ask for it: the directory applies its own multi-factor authentication.',
+      relaxed:
+        'This server asks it only of owners and administrators (a setting for development and tests).',
+      pending_one: '{{count}} person still has to set it up',
+      pending_other: '{{count}} people still have to set it up',
     },
     bi: {
       title: 'Analysis model refresh',
@@ -526,14 +529,15 @@ export const adminEs: typeof adminEn = {
       invited_one: 'invitación aún sin aceptar',
       invited_other: 'invitaciones aún sin aceptar',
       without2fa_one:
-        'persona cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada',
+        'persona que entra con contraseña y no ha configurado la verificación en dos pasos',
       without2fa_other:
-        'personas cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada',
+        'personas que entran con contraseña y no han configurado la verificación en dos pasos',
       keysExpiring_one: 'clave de API vence en menos de {{days}} días',
       keysExpiring_other: 'claves de API vencen en menos de {{days}} días',
     },
     without2faTerm: 'Verificación en dos pasos',
-    without2faInfo: 'El ingreso con Microsoft con MFA también vale.',
+    without2faInfo:
+      'Toda persona que entra con contraseña debe configurarla, y se le pide en su próximo ingreso. El ingreso con Microsoft no la pide: el directorio aplica su propia MFA.',
   },
   apiKeysPage: {
     intro:
@@ -885,13 +889,15 @@ export const adminEs: typeof adminEn = {
     },
     security: {
       title: 'Seguridad del inicio de sesión',
-      intro:
-        'Propietarios y administradores siempre usan la verificación en dos pasos. Marque los demás roles que también deben activarla: se les pedirá en su próximo ingreso.',
-      always: 'siempre',
-      personalData: 've datos personales',
-      exports: 'exporta datos',
-      save: 'Guardar la política',
-      saved: 'Política guardada.',
+      intro: 'Es igual para todos los roles; aquí no hay nada que elegir.',
+      password:
+        'Toda persona que entra con contraseña usa la verificación en dos pasos (una app de autenticación). A quien no la tiene se le pide configurarla en su próximo ingreso, antes de nada más.',
+      microsoft:
+        'El ingreso con Microsoft no la pide: el directorio aplica su propia autenticación multifactor.',
+      relaxed:
+        'Este servidor la pide solo a propietarios y administradores (un ajuste para desarrollo y pruebas).',
+      pending_one: '{{count}} persona aún debe configurarla',
+      pending_other: '{{count}} personas aún deben configurarla',
     },
     bi: {
       title: 'Actualización del modelo de análisis',

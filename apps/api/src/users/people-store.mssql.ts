@@ -16,6 +16,8 @@ export interface Member {
   phone: string | null;
   languages: string[];
   totpEnabled: boolean;
+  /** The account has a password (it may sign in with one), not only Microsoft sign-in. */
+  hasPassword: boolean;
   status: string;
   idCode: string | null;
   phoneExtension: string | null;
@@ -54,6 +56,7 @@ export class PeopleStore {
         'u.phone',
         'u.languages',
         'u.totp_enabled',
+        sql<number>`CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END`.as('has_password'),
         'm.status',
         'm.id_code',
         'm.phone_extension',
@@ -70,6 +73,7 @@ export class PeopleStore {
       phone: r.phone,
       languages: JSON.parse(r.languages) as string[],
       totpEnabled: !!r.totp_enabled,
+      hasPassword: !!r.has_password,
       status: r.status,
       idCode: r.id_code,
       phoneExtension: r.phone_extension,

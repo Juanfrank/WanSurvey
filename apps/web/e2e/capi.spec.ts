@@ -41,7 +41,19 @@ test('download cases, interview offline after a reload, and everything arrives o
     await expect(boxes.first()).toBeVisible();
     const n = await boxes.count();
     for (let i = n - 3; i < n; i++) await boxes.nth(i).check();
+    const checkout = page.waitForResponse((r) => r.url().includes('/capi/checkout'));
     await page.getByRole('button', { name: 'Download selected' }).click();
+    // The device's copy holds only the personal fields the questionnaire uses (the first name
+    // it greets with): no surname, no contacts.
+    const copy = (await (await checkout).json()) as {
+      cases: { context: { case: object; personal: string[]; contacts?: unknown } }[];
+    };
+    expect(copy.cases).toHaveLength(3);
+    for (const c of copy.cases) {
+      expect(Object.keys(c.context.case)).not.toContain('last_name');
+      expect(c.context.personal).toEqual(['first_name']);
+      expect(c.context.contacts).toBeUndefined();
+    }
     await expect(page.getByTestId('device-message')).toContainText('3 cases downloaded.');
     const rows = page.getByTestId('device-cases').locator('tbody tr');
     await expect(rows).toHaveCount(3);
