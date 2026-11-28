@@ -82,9 +82,35 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await expect(
     sup.getByTestId('review-queue').locator('tbody tr').filter({ hasNotText: 'Demo interviewer' }),
   ).toHaveCount(0);
+  // The person chosen is also a filter that is on, with its chip.
+  await expect(
+    sup.getByRole('button', { name: 'Remove filter: Interviewer Demo interviewer' }),
+  ).toBeVisible();
   await shot(sup, 'review-queue');
   await people.getByRole('button', { name: /^Demo interviewer/ }).click();
+  // The other filters wait in the Filters panel, beside the Status kept in view.
+  await expect(sup.getByRole('combobox', { name: 'Status' })).toBeVisible();
+  await openFilters(sup);
+  await sup.getByRole('combobox', { name: 'Flag' }).selectOption('speeding');
+  await expect(sup.getByRole('button', { name: 'Filters · 1' })).toBeVisible();
+  await shot(sup, 'p2-review-queue-filters', { fullPage: false });
   await expectAccessible(sup);
+  await sup.getByRole('combobox', { name: 'Flag' }).selectOption('');
+  await closeFilters(sup);
+  await expect(queued).toBeVisible();
+  // The queue shows 20 interviews at a time.
+  const queueRows = sup.getByTestId('review-queue').locator('tbody tr');
+  await expect(queueRows).toHaveCount(20);
+  await sup.getByRole('button', { name: /^Show \d+ more \(\d+ left\)$/ }).click();
+  await expect.poll(() => queueRows.count()).toBeGreaterThan(20);
+  await expectAccessible(sup);
+  // The coding of "other" answers has its own tab beside the queue.
+  const sections = sup.getByRole('tablist', { name: 'Supervision sections' });
+  await sections.getByRole('tab', { name: /^“Other” coding/ }).click();
+  await expect(sup.getByRole('heading', { name: 'Coding of “other” answers' })).toBeVisible();
+  await shot(sup, 'p2-review-coding');
+  await expectAccessible(sup);
+  await sections.getByRole('tab', { name: 'Review queue', exact: true }).click();
   await queued.getByRole('button', { name: `Review ${caseId}` }).click();
   const screen = sup.getByTestId('review-screen');
   await expect(screen.locator('[data-qkey="A2_AGE"] [data-testid="answer"]')).toHaveText('15');
@@ -92,7 +118,7 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   const crumbs = sup.getByRole('navigation', { name: 'Breadcrumb' });
   await expect(crumbs.getByRole('link', { name: 'Household Survey 2026' })).toBeVisible();
   await expect(crumbs.getByRole('link', { name: 'Supervision' })).toBeVisible();
-  await expect(crumbs.locator('[aria-current="page"]')).toHaveText(`Case ${caseId}`);
+  await expect(crumbs.getByRole('heading', { level: 1 })).toHaveText(`Review · case ${caseId}`);
   await shot(sup, 'v2-review-breadcrumbs', { fullPage: false });
   await screen.getByRole('button', { name: 'Comment A2_AGE' }).click();
   await overlaysSettled(sup, 1);

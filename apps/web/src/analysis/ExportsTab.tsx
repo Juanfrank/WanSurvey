@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
-import { Button, Card, ErrorText, TableScroll } from '../routes/ui.js';
-import { FilterBar, type DataFilters } from './ResultsTab.js';
+import { Button, Drawer, ErrorText, MoreMenu, TableScroll, type MenuEntry } from '../routes/ui.js';
+import { DataFilterFields, type DataFilters } from './ResultsTab.js';
 import { fileSize } from '../format.js';
 import { useCan } from '../designer/hooks.js';
 
@@ -46,6 +46,14 @@ interface ExportRow {
 
 const kb = (n: number | null) => (n === null ? '–' : fileSize(n));
 
+/** The file's kind on its download button: "CSV", "SAV", "ZIP"… */
+const kind = (e: ExportRow) => {
+  const ext = e.fileName?.includes('.') ? e.fileName.split('.').pop()! : e.options.format;
+  return ext.toUpperCase().slice(0, 5);
+};
+
+const TAG = 'whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800';
+
 /** Data exports (M6): request a file, watch it being built, download it. */
 export function ExportsTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation();
@@ -61,6 +69,9 @@ export function ExportsTab({ projectId }: { projectId: string }) {
   const [filters, setFilters] = useState<DataFilters>({});
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // The form opens in a side panel; the list keeps the page.
+  const [creating, setCreating] = useState(false);
+  const formId = useId();
   const list = useQuery({
     queryKey: ['exports', projectId],
     queryFn: () => api<ExportRow[]>(`/projects/${projectId}/exports`),
@@ -80,11 +91,13 @@ export function ExportsTab({ projectId }: { projectId: string }) {
       api(`/projects/${projectId}/exports`, { method: 'POST', body }),
     onSuccess: async () => {
       setError(null);
+      setCreating(false);
       setMessage(t('analysis.exports.requested'));
       await qc.invalidateQueries({ queryKey: ['exports', projectId] });
     },
     onError: (e) => setError(localiseError(t, e)),
   });
+  const dateOnly = (iso: string) => new Date(iso).toLocaleDateString(i18n.language);
   const when = (iso: string) =>
     new Date(iso).toLocaleString(i18n.language, { dateStyle: 'short', timeStyle: 'short' });
   /** The options of an export in words: enough to tell two files apart and to reproduce one. */
@@ -98,7 +111,8 @@ export function ExportsTab({ projectId }: { projectId: string }) {
         : null,
       o.rosters === 'long' ? t('analysis.exports.rosterOptions.long') : null,
       o.paradata ? t('analysis.exports.withParadata') : null,
-      o.approvedOnly ? t('analysis.exports.onlyApproved') : t('analysis.exports.allCompletes'),
+      // All the completes is the default: only the narrower choice is shown.
+      o.approvedOnly ? t('analysis.exports.onlyApproved') : null,
       o.mode ? t(`analysis.modes.${o.mode}`, { defaultValue: o.mode }) : null,
       o.from || o.to
         ? t('analysis.exports.dates', {
@@ -113,10 +127,48 @@ export function ExportsTab({ projectId }: { projectId: string }) {
         : o.format === 'csv' && o.codebook
           ? t('analysis.exports.withCodebookZip')
           : null,
-    ]
-      .filter(Boolean)
-      .join(' · ');
+    ].filter((x): x is string => !!x);
   };
+  const repeat = (e: ExportRow) =>
+    request.mutate({
+      ...e.options,
+      // Older exports did not say: keep what the file had.
+      personalData: e.options.personalData ?? (e.personal ? 'include' : 'exclude'),
+    });
+  const fileUrl = (e: ExportRow) => `/api/v1/projects/${projectId}/exports/${e.id}/file`;
+  const canDownload = (e: ExportRow) => e.status === 'done' && !(e.personal && !pii);
+  /** The row's other actions: export again with the same options, copy the file's address. */
+  const entries = (e: ExportRow): MenuEntry[] => [
+    ...(e.status === 'done' || e.status === 'failed' || e.status === 'expired'
+      ? [
+          {
+            type: 'item' as const,
+            id: 'repeat',
+            label: t('analysis.exports.repeat'),
+            disabled: request.isPending,
+            onSelect: () => repeat(e),
+          },
+        ]
+      : []),
+    ...(canDownload(e)
+      ? [
+          {
+            type: 'item' as const,
+            id: 'copy',
+            label: t('analysis.exports.copyLink'),
+            onSelect: () => {
+              const url = new URL(fileUrl(e), window.location.href).toString();
+              // Copying refused or impossible (plain http): the address is shown to copy by hand.
+              if (!navigator.clipboard) return setMessage(url);
+              navigator.clipboard.writeText(url).then(
+                () => setMessage(t('analysis.exports.copied')),
+                () => setMessage(url),
+              );
+            },
+          },
+        ]
+      : []),
+  ];
   const radio = <T extends string>(
     name: string,
     value: T,
@@ -134,108 +186,127 @@ export function ExportsTab({ projectId }: { projectId: string }) {
     </div>
   );
 
+  const form = (
+    <form
+      id={formId}
+      className="flex flex-col gap-4 text-sm"
+      onSubmit={(e) => {
+        e.preventDefault();
+        request.mutate({
+          format,
+          labels,
+          rosters,
+          paradata,
+          ...(format === 'csv' && withBook ? { codebook: true } : {}),
+          personalData: pii ? personalData : 'exclude',
+          approvedOnly: !!filters.approvedOnly,
+          ...(filters.questionnaireId ? { questionnaireId: filters.questionnaireId } : {}),
+          ...(filters.mode ? { mode: filters.mode } : {}),
+          ...(filters.from ? { from: filters.from } : {}),
+          ...(filters.to ? { to: filters.to } : {}),
+        });
+      }}
+    >
+      <label className="flex flex-col gap-1">
+        {t('analysis.exports.format')}
+        <select
+          className={`${controlCls} w-60`}
+          value={format}
+          onChange={(e) => setFormat(e.target.value as (typeof FORMATS)[number])}
+        >
+          {FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {t(`analysis.exports.formats.${f}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {format === 'sql' ? (
+        <p className="max-w-3xl text-slate-600">{t('analysis.exports.sqlHint')}</p>
+      ) : null}
+      {format === 'csv' || format === 'xlsx' || format === 'sql' ? (
+        <fieldset className="flex flex-col gap-1">
+          <legend className="mb-1">{t('analysis.exports.labels')}</legend>
+          {radio('labels', labels, setLabels, ['codes', 'labels'] as const, (v) =>
+            t(`analysis.exports.labelOptions.${v}`),
+          )}
+        </fieldset>
+      ) : null}
+      <fieldset className="flex flex-col gap-1">
+        <legend className="mb-1">{t('analysis.exports.rosters')}</legend>
+        {radio('rosters', rosters, setRosters, ['wide', 'long'] as const, (v) =>
+          t(`analysis.exports.rosterOptions.${v}`),
+        )}
+      </fieldset>
+      {format === 'csv' ? (
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={withBook}
+            onChange={(e) => setWithBook(e.target.checked)}
+          />
+          {t('analysis.exports.codebookZip')}
+        </label>
+      ) : null}
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={paradata} onChange={(e) => setParadata(e.target.checked)} />
+        {t('analysis.exports.paradata')}
+      </label>
+      {pii ? (
+        <fieldset className="flex flex-col gap-1">
+          <legend className="mb-1">{t('analysis.exports.personalData')}</legend>
+          {radio(
+            'personalData',
+            personalData,
+            setPersonalData,
+            ['exclude', 'include'] as const,
+            (v) => t(`analysis.exports.personalOptions.${v}`),
+          )}
+        </fieldset>
+      ) : (
+        <p className="text-slate-600">{t('analysis.exports.personalLeftOut')}</p>
+      )}
+      <DataFilterFields projectId={projectId} value={filters} onChange={setFilters} />
+      <ErrorText>{error}</ErrorText>
+      <p className="text-xs text-slate-600">{t('analysis.exports.audited')}</p>
+    </form>
+  );
+
   return (
-    <div className="flex flex-col gap-6 text-sm" data-testid="exports">
-      <Card className="flex flex-col gap-4">
-        {/* The printable summary (PDF) is in Results, with the links for clients. */}
-        <h2 className="text-lg font-semibold">{t('analysis.exports.title')}</h2>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            request.mutate({
-              format,
-              labels,
-              rosters,
-              paradata,
-              ...(format === 'csv' && withBook ? { codebook: true } : {}),
-              personalData: pii ? personalData : 'exclude',
-              approvedOnly: !!filters.approvedOnly,
-              ...(filters.questionnaireId ? { questionnaireId: filters.questionnaireId } : {}),
-              ...(filters.mode ? { mode: filters.mode } : {}),
-              ...(filters.from ? { from: filters.from } : {}),
-              ...(filters.to ? { to: filters.to } : {}),
-            });
+    <div className="flex flex-col gap-3 text-sm" data-testid="exports">
+      {/* The printable summary (PDF) is in Results, with the links for clients. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">{t('analysis.exports.list')}</h2>
+        <p role="status" aria-live="polite" className="mr-auto text-slate-700">
+          {message}
+        </p>
+        <Button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setCreating(true);
           }}
         >
-          <label className="flex flex-col gap-1">
-            {t('analysis.exports.format')}
-            <select
-              className={`${controlCls} w-60`}
-              value={format}
-              onChange={(e) => setFormat(e.target.value as (typeof FORMATS)[number])}
-            >
-              {FORMATS.map((f) => (
-                <option key={f} value={f}>
-                  {t(`analysis.exports.formats.${f}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {format === 'sql' ? (
-            <p className="max-w-3xl text-slate-600">{t('analysis.exports.sqlHint')}</p>
-          ) : null}
-          {format === 'csv' || format === 'xlsx' || format === 'sql' ? (
-            <fieldset className="flex flex-col gap-1">
-              <legend className="mb-1">{t('analysis.exports.labels')}</legend>
-              {radio('labels', labels, setLabels, ['codes', 'labels'] as const, (v) =>
-                t(`analysis.exports.labelOptions.${v}`),
-              )}
-            </fieldset>
-          ) : null}
-          <fieldset className="flex flex-col gap-1">
-            <legend className="mb-1">{t('analysis.exports.rosters')}</legend>
-            {radio('rosters', rosters, setRosters, ['wide', 'long'] as const, (v) =>
-              t(`analysis.exports.rosterOptions.${v}`),
-            )}
-          </fieldset>
-          {format === 'csv' ? (
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={withBook}
-                onChange={(e) => setWithBook(e.target.checked)}
-              />
-              {t('analysis.exports.codebookZip')}
-            </label>
-          ) : null}
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={paradata}
-              onChange={(e) => setParadata(e.target.checked)}
-            />
-            {t('analysis.exports.paradata')}
-          </label>
-          {pii ? (
-            <fieldset className="flex flex-col gap-1">
-              <legend className="mb-1">{t('analysis.exports.personalData')}</legend>
-              {radio(
-                'personalData',
-                personalData,
-                setPersonalData,
-                ['exclude', 'include'] as const,
-                (v) => t(`analysis.exports.personalOptions.${v}`),
-              )}
-            </fieldset>
-          ) : (
-            <p className="text-slate-600">{t('analysis.exports.personalLeftOut')}</p>
-          )}
-          <FilterBar projectId={projectId} value={filters} onChange={setFilters} />
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={request.isPending}>
+          <span aria-hidden="true">+ </span>
+          {t('analysis.exports.new')}
+        </Button>
+      </div>
+      {/* A repeated export that fails says so here (the form's own errors show in it). */}
+      {!creating ? <ErrorText>{error}</ErrorText> : null}
+      {creating ? (
+        <Drawer
+          title={t('analysis.exports.new')}
+          onClose={() => setCreating(false)}
+          footer={
+            <Button type="submit" form={formId} busy={request.isPending}>
               {t('analysis.exports.request')}
             </Button>
-            <p role="status" aria-live="polite">
-              {message}
-            </p>
-          </div>
-          <ErrorText>{error}</ErrorText>
-          <p className="text-slate-600">{t('analysis.exports.audited')}</p>
-        </form>
-      </Card>
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">{t('analysis.exports.list')}</h2>
+          }
+        >
+          {form}
+        </Drawer>
+      ) : null}
+      <section>
         {list.data?.length ? (
           <TableScroll
             label={t('analysis.exports.list')}
@@ -244,25 +315,25 @@ export function ExportsTab({ projectId }: { projectId: string }) {
             <table className="min-w-full text-sm" data-testid="exports-list">
               <thead className="bg-slate-50 text-left">
                 <tr>
-                  <th scope="col" className="px-3 py-2">
+                  <th scope="col" className="px-2.5 py-2">
                     {t('analysis.exports.when')}
                   </th>
-                  <th scope="col" className="px-3 py-2">
+                  <th scope="col" className="px-2.5 py-2">
                     {t('analysis.exports.format')}
                   </th>
-                  <th scope="col" className="px-3 py-2">
+                  <th scope="col" className="px-2.5 py-2">
                     {t('analysis.exports.params')}
                   </th>
-                  <th scope="col" className="px-3 py-2">
+                  <th scope="col" className="px-2.5 py-2">
                     {t('analysis.exports.status')}
                   </th>
-                  <th scope="col" className="px-3 py-2 text-right">
+                  <th scope="col" className="px-2.5 py-2 text-right">
                     {t('analysis.exports.rows')}
                   </th>
-                  <th scope="col" className="px-3 py-2 text-right">
+                  <th scope="col" className="px-2.5 py-2 text-right">
                     {t('analysis.exports.size')}
                   </th>
-                  <th scope="col" className="px-3 py-2">
+                  <th scope="col" className="px-2.5 py-2">
                     {t('analysis.exports.file')}
                   </th>
                 </tr>
@@ -270,71 +341,91 @@ export function ExportsTab({ projectId }: { projectId: string }) {
               <tbody className="divide-y divide-slate-100">
                 {list.data.map((e) => (
                   <tr key={e.id} data-status={e.status}>
-                    <td className="px-3 py-2">
-                      {new Date(e.createdAt).toLocaleString(i18n.language, {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })}
-                    </td>
-                    <td className="px-3 py-2">
+                    <td className="whitespace-nowrap px-2.5 py-2">{when(e.createdAt)}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2">
                       {t(`analysis.exports.formats.${e.options.format}`)}
                     </td>
-                    <td className="min-w-56 px-3 py-2 text-slate-700" data-testid="export-params">
-                      {params(e.options)}
+                    <td className="min-w-[18rem] px-2.5 py-2" data-testid="export-params">
+                      <ul className="flex flex-wrap gap-1">
+                        {params(e.options).map((x) => (
+                          <li key={x} className={TAG}>
+                            {x}
+                          </li>
+                        ))}
+                        {e.personal ? (
+                          <li
+                            className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-ink-900"
+                            title={t('analysis.exports.personal')}
+                          >
+                            {t('analysis.exports.personalTag')}
+                            <span className="sr-only">: {t('analysis.exports.personal')}</span>
+                          </li>
+                        ) : null}
+                      </ul>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="whitespace-nowrap px-2.5 py-2">
                       {t(`analysis.exports.statuses.${e.status}`)}
-                      {e.error ? <span className="block text-red-ink-700">{e.error}</span> : null}
+                      {e.error ? (
+                        <span
+                          className="block max-w-[16rem] truncate text-xs text-red-ink-700"
+                          title={e.error}
+                        >
+                          {e.error}
+                        </span>
+                      ) : null}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{e.rows ?? '–'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{kb(e.size)}</td>
-                    <td className="px-3 py-2">
-                      {e.personal && !pii ? (
-                        <span className="text-slate-600">{t('analysis.exports.personal')}</span>
-                      ) : e.status === 'done' ? (
-                        <a
-                          className="font-medium text-indigo-ink-700 hover:underline"
-                          href={`/api/v1/projects/${projectId}/exports/${e.id}/file`}
-                          download={e.fileName ?? undefined}
-                        >
-                          {t('analysis.exports.download')} {e.fileName}
-                        </a>
-                      ) : null}
-                      {e.personal && pii ? (
-                        <span className="block text-slate-600">
-                          {t('analysis.exports.personal')}
+                    <td className="px-2.5 py-2 text-right tabular-nums">{e.rows ?? '–'}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">
+                      {kb(e.size)}
+                    </td>
+                    <td className="whitespace-nowrap px-2.5 py-2">
+                      <span className="flex items-center gap-1.5">
+                        {canDownload(e) ? (
+                          <a
+                            className="inline-flex items-center gap-1 rounded-md border border-indigo-600 bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-on-fill hover:bg-indigo-500"
+                            href={fileUrl(e)}
+                            download={e.fileName ?? undefined}
+                            aria-label={`${t('analysis.exports.download')} ${e.fileName ?? ''}`}
+                            title={e.fileName ?? undefined}
+                          >
+                            <span aria-hidden="true">⬇</span> {kind(e)}
+                          </a>
+                        ) : null}
+                        <MoreMenu
+                          label={t('analysis.exports.actions', { when: when(e.createdAt) })}
+                          entries={entries(e)}
+                          className="px-2 py-0.5"
+                        />
+                      </span>
+                      {e.availableUntil || e.downloads?.last ? (
+                        <span className="mt-0.5 block text-xs text-slate-600">
+                          {e.availableUntil
+                            ? t('analysis.exports.until', { date: dateOnly(e.availableUntil) })
+                            : null}
+                          {e.availableUntil && e.downloads?.last ? ' · ' : null}
+                          {e.downloads?.last ? (
+                            <span
+                              data-testid="export-downloads"
+                              title={t('analysis.exports.downloaded', {
+                                count: e.downloads.count,
+                                by: e.downloads.last.by ?? '–',
+                                date: when(e.downloads.last.at),
+                              })}
+                            >
+                              {t('analysis.exports.downloads', { count: e.downloads.count })}
+                              <span className="sr-only">
+                                {' '}
+                                (
+                                {t('analysis.exports.downloaded', {
+                                  count: e.downloads.count,
+                                  by: e.downloads.last.by ?? '–',
+                                  date: when(e.downloads.last.at),
+                                })}
+                                )
+                              </span>
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
-                      {e.availableUntil ? (
-                        <span className="block text-slate-600">
-                          {t('analysis.exports.until', { date: when(e.availableUntil) })}
-                        </span>
-                      ) : null}
-                      {e.downloads?.last ? (
-                        <span className="block text-slate-600" data-testid="export-downloads">
-                          {t('analysis.exports.downloaded', {
-                            count: e.downloads.count,
-                            by: e.downloads.last.by ?? '–',
-                            date: when(e.downloads.last.at),
-                          })}
-                        </span>
-                      ) : null}
-                      {e.status === 'done' || e.status === 'failed' || e.status === 'expired' ? (
-                        <button
-                          type="button"
-                          className={`${smallBtn} mt-1`}
-                          disabled={request.isPending}
-                          onClick={() =>
-                            request.mutate({
-                              ...e.options,
-                              // Older exports did not say: keep what the file had.
-                              personalData:
-                                e.options.personalData ?? (e.personal ? 'include' : 'exclude'),
-                            })
-                          }
-                        >
-                          {t('analysis.exports.repeat')}
-                        </button>
                       ) : null}
                     </td>
                   </tr>

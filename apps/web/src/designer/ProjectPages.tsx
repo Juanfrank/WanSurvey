@@ -27,7 +27,7 @@ import { SettingsTab } from '../cases/SettingsTab.js';
 import { ProjectPeople } from '../team/ProjectPeople.js';
 import { CallsTab } from '../cati/CallsTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
-import { ReviewTab } from '../review/ReviewTab.js';
+import { CodingTab, CodingTabLabel, ReviewTab, useCanCode } from '../review/ReviewTab.js';
 import { DashboardTab } from '../analysis/DashboardTab.js';
 import { RetentionNotice } from '../analysis/RetentionNotice.js';
 import { GoalsSection } from '../analysis/GoalsSection.js';
@@ -1004,8 +1004,8 @@ type ProjectTab =
   | 'people'
   | 'settings';
 type DistributionSub = 'web' | 'paper';
-/** Field supervision: the review queue and the interviewers' metrics. */
-type ReviewSub = 'queue' | 'metrics';
+/** Field supervision: the review queue, the interviewers' metrics, the coding of "other". */
+type ReviewSub = 'queue' | 'metrics' | 'coding';
 
 /** Old and current `?tab=` values: each lands in its tab and sub-tab. */
 const FROM_SEARCH: Record<
@@ -1027,6 +1027,7 @@ const FROM_SEARCH: Record<
   calls: { tab: 'calls' },
   review: { tab: 'review', review: 'queue' },
   metrics: { tab: 'review', review: 'metrics' },
+  coding: { tab: 'review', review: 'coding' },
   results: { tab: 'results' },
   exports: { tab: 'exports' },
   people: { tab: 'people' },
@@ -1077,6 +1078,7 @@ export function ProjectPage() {
   const canMetricsOwn = useCan('metrics.own', projectId);
   const canMetrics = canMetricsTeam || canMetricsOwn;
   const canExport = useCan('exports.run', projectId);
+  const canCode = useCanCode(projectId);
   const canPaperRole = canKeyForms || canReview || canCasesAll;
   const canPaper =
     canPaperRole &&
@@ -1095,6 +1097,8 @@ export function ProjectPage() {
   const reviewSubs: ReviewSub[] = [
     ...(canReview || canApprove ? (['queue'] as const) : []),
     ...(canMetrics ? (['metrics'] as const) : []),
+    // The coding of "other" answers, beside the queue it used to sit under.
+    ...(canCode && (canReview || canApprove) ? (['coding'] as const) : []),
   ];
   // Web surveys for who sends them; paper forms for who keys, scans or reviews them.
   const distributionSubs: DistributionSub[] = [
@@ -1223,7 +1227,9 @@ export function ProjectPage() {
       : x === 'review'
         ? reviewSubs.length > 1
           ? t('cases.tabs.supervision')
-          : t(`cases.tabs.${reviewSubs[0] === 'queue' ? 'review' : 'metrics'}`)
+          : reviewSubs[0] === 'coding'
+            ? t('review.coding.tab')
+            : t(`cases.tabs.${reviewSubs[0] === 'queue' ? 'review' : 'metrics'}`)
         : x === 'distribution' && distributionSubs.length === 1
           ? t(`cases.tabs.${distributionSubs[0]!}`)
           : t(`cases.tabs.${x}`);
@@ -1346,11 +1352,18 @@ export function ProjectPage() {
                 >
                   {reviewSubs.map((x) => (
                     <Tabs.Trigger key={x} value={x} className={subTabCls}>
-                      {t(`cases.tabs.${x}`)}
+                      {x === 'coding' ? (
+                        <CodingTabLabel projectId={projectId} />
+                      ) : (
+                        t(`cases.tabs.${x}`)
+                      )}
                     </Tabs.Trigger>
                   ))}
                 </Tabs.List>
               ) : null}
+              <Tabs.Content value="coding">
+                {review === 'coding' ? <CodingTab projectId={projectId} /> : null}
+              </Tabs.Content>
               <Tabs.Content value="queue">
                 <ReviewTab projectId={projectId} />
               </Tabs.Content>
@@ -1392,11 +1405,13 @@ function ProjectOverview({
   onGoals?: () => void;
 }) {
   const { t } = useTranslation();
+  // Who follows the team sees the goals on the dashboard (its goals card); the others, theirs.
+  const teamGoals = useCan('metrics.team', projectId);
   return (
-    <div className="flex flex-col gap-8" data-testid="project-overview">
+    <div className="flex flex-col gap-6" data-testid="project-overview">
       <RetentionNotice projectId={projectId} />
-      <DashboardTab projectId={projectId} />
-      {goals ? (
+      <DashboardTab projectId={projectId} onGoals={goals ? onGoals : undefined} />
+      {goals && !teamGoals ? (
         <div className="flex flex-col gap-2">
           <GoalsSection projectId={projectId} />
           {onGoals ? (

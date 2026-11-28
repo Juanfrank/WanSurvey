@@ -321,8 +321,10 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
 
   // 9. The data for SPSS, with the case code beside the internal id.
   await page.getByRole('tab', { name: 'Exportar', exact: true }).click();
-  await page.getByLabel('Formato').selectOption({ label: 'SPSS (.sav)' });
-  await page.getByRole('button', { name: 'Exportar', exact: true }).click();
+  await page.getByRole('button', { name: 'Nueva exportación' }).click();
+  const exportForm = page.getByRole('dialog', { name: 'Nueva exportación' });
+  await exportForm.getByLabel('Formato').selectOption({ label: 'SPSS (.sav)' });
+  await exportForm.getByRole('button', { name: 'Exportar', exact: true }).click();
   const download = page.waitForEvent('download');
   await page
     .getByRole('link', { name: /^Descargar/ })

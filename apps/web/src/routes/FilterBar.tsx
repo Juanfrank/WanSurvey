@@ -48,9 +48,13 @@ export interface ActiveFilter {
  *   </FilterBar>
  *
  * Without `children` there is no Filters button (a search alone).
+ *
+ * `lead`: the one filter used most, kept in view before the Filters button (the review queue's
+ * Status). It is a control of its own, with its visible label; it gets no chip.
  */
 export function FilterBar({
   search,
+  lead,
   active = [],
   activeCount,
   count,
@@ -67,6 +71,8 @@ export function FilterBar({
     /** Width class of the field (default: 20 rem, the whole width on a phone). */
     className?: string;
   };
+  /** A filter kept in view, before the Filters button (label + control). */
+  lead?: ReactNode;
   /** The filters that are on, as chips. */
   active?: ActiveFilter[];
   /** The number on the button, when it is not the number of chips. */
@@ -141,6 +147,7 @@ export function FilterBar({
           className={`min-w-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm placeholder:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus ${search.className ?? 'w-full sm:w-80'}`}
         />
       ) : null}
+      {lead}
       {children ? (
         <button
           ref={button}

@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
-import { Button } from '../routes/ui.js';
+import { Button, FilterBar, type ActiveFilter } from '../routes/ui.js';
 
 export const FLAG_KINDS = [
   'speeding',
@@ -47,6 +47,9 @@ interface InterviewerCount {
 
 /** The results a reviewer most often sorts by: complete interviews apart from the rest. */
 const DISPOSITIONS = ['COMPLETE', 'PARTIAL', 'SCREENED_OUT', 'REFUSAL', 'BREAK_OFF', 'QUOTA_FULL'];
+
+/** Rows of the queue shown at a time. */
+const BLOCK = 20;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -93,15 +96,53 @@ export function FlagChips({ flags }: { flags: Record<string, unknown> }) {
   );
 }
 
-/** The review queue and the coding of "other" answers (R2, R6). */
+/** The review queue (R2); the coding of "other" answers has a tab of its own (`CodingTab`). */
 export function ReviewTab({ projectId }: { projectId: string }) {
-  const canCode = useCan('interviews.correct', projectId) || false;
-  const canReview = useCan('interviews.review', projectId);
   return (
     <div className="flex flex-col gap-8 text-sm">
       <Queue projectId={projectId} />
-      {canCode || canReview ? <Coding projectId={projectId} /> : null}
     </div>
+  );
+}
+
+/** The coding of "other" answers (R6), a tab beside the review queue. */
+export function CodingTab({ projectId }: { projectId: string }) {
+  return (
+    <div className="text-sm">
+      <Coding projectId={projectId} />
+    </div>
+  );
+}
+
+/** Who may code "other" answers: correctors and reviewers. */
+export function useCanCode(projectId: string) {
+  const canCode = useCan('interviews.correct', projectId);
+  const canReview = useCan('interviews.review', projectId);
+  return !!(canCode || canReview);
+}
+
+const useCodingOverview = (projectId: string) =>
+  useQuery({
+    queryKey: ['coding', projectId],
+    queryFn: () =>
+      api<{ variable: string; total: number; uncoded: number }[]>(`/projects/${projectId}/coding`),
+  });
+
+/** The coding tab's name, with how many "other" texts still wait for a code. */
+export function CodingTabLabel({ projectId }: { projectId: string }) {
+  const { t } = useTranslation();
+  const overview = useCodingOverview(projectId);
+  const pending = (overview.data ?? []).reduce((n, v) => n + v.uncoded, 0);
+  return (
+    <>
+      {t('review.coding.tab')}
+      {pending ? (
+        <span className="tabular-nums" data-testid="coding-pending">
+          {' · '}
+          {pending}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -145,7 +186,8 @@ function Queue({ projectId }: { projectId: string }) {
   const [byRisk, setByRisk] = useState(false);
   const [active, setActive] = useState(0);
   const table = useRef<HTMLTableSectionElement>(null);
-  const params = new URLSearchParams({ status });
+  // Up to 200 at once, shown 20 at a time.
+  const params = new URLSearchParams({ status, limit: '200' });
   if (flag) params.set('flag', flag);
   if (mode) params.set('mode', mode);
   if (disposition) params.set('disposition', disposition);
@@ -161,6 +203,11 @@ function Queue({ projectId }: { projectId: string }) {
   });
   const rows = q.data?.rows ?? [];
   const people = q.data?.interviewers ?? [];
+  // The queue is shown by blocks of 20; a change of filters starts again from the first.
+  const [visible, setVisible] = useState(BLOCK);
+  const filtersKey = params.toString();
+  useEffect(() => setVisible(BLOCK), [filtersKey]);
+  const shown = rows.slice(0, visible);
   const open = (id: string) =>
     navigate({
       to: '/projects/$projectId/review/$interviewId',
@@ -171,112 +218,194 @@ function Queue({ projectId }: { projectId: string }) {
     table.current?.querySelector<HTMLElement>(`[data-row="${active}"] button`)?.focus();
   }, [active]);
 
+  const selectCls = `${controlCls} w-auto`;
+  const chips: ActiveFilter[] = [
+    ...(flag
+      ? [
+          {
+            id: 'flag',
+            label: t('review.queue.flag'),
+            value: t(`review.flags.${flag}`),
+            onRemove: () => setFlag(''),
+          },
+        ]
+      : []),
+    ...(mode
+      ? [
+          {
+            id: 'mode',
+            label: t('review.queue.mode'),
+            value: modeLabel(t, mode),
+            onRemove: () => setMode(''),
+          },
+        ]
+      : []),
+    ...(disposition
+      ? [
+          {
+            id: 'result',
+            label: t('review.queue.result'),
+            value: dispositionLabel(t, disposition),
+            onRemove: () => setDisposition(''),
+          },
+        ]
+      : []),
+    ...(interviewer
+      ? [
+          {
+            id: 'interviewer',
+            label: t('review.queue.interviewer'),
+            value:
+              people.find((p) => p.id === interviewer)?.name ?? t('review.queue.chosenInterviewer'),
+            onRemove: () => setInterviewer(''),
+          },
+        ]
+      : []),
+    ...(sampled
+      ? [
+          {
+            id: 'sampled',
+            label: t('review.queue.sampleChip'),
+            value: t('review.queue.sampleOnly'),
+            onRemove: () => setSampled(false),
+          },
+        ]
+      : []),
+    ...(byRisk
+      ? [
+          {
+            id: 'risk',
+            label: t('review.queue.order'),
+            value: t('review.queue.byRisk'),
+            onRemove: () => setByRisk(false),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <section aria-labelledby="review-queue" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <h2 id="review-queue" className="text-base font-semibold">
           {t('review.queue.title')}
         </h2>
-        <label className="flex flex-col gap-1">
-          <span>{t('review.queue.status')}</span>
-          <select
-            className={`${controlCls} w-auto`}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {t(`review.queue.statuses.${s}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span>{t('review.queue.flag')}</span>
-          <select
-            className={`${controlCls} w-auto`}
-            value={flag}
-            onChange={(e) => setFlag(e.target.value)}
-          >
-            <option value="">{t('review.queue.anyFlag')}</option>
-            {FLAG_KINDS.map((f) => (
-              <option key={f} value={f}>
-                {t(`review.flags.${f}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span>{t('review.queue.mode')}</span>
-          <select
-            className={`${controlCls} w-auto`}
-            value={mode}
-            onChange={(e) => setMode(e.target.value)}
-          >
-            <option value="">{t('review.queue.anyMode')}</option>
-            {['CATI', 'CAPI', 'CAWI', 'PAPI'].map((m) => (
-              <option key={m} value={m}>
-                {modeLabel(t, m)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span>{t('review.queue.result')}</span>
-          <select
-            className={`${controlCls} w-auto`}
-            value={disposition}
-            onChange={(e) => setDisposition(e.target.value)}
-          >
-            <option value="">{t('review.queue.anyResult')}</option>
-            {DISPOSITIONS.map((d) => (
-              <option key={d} value={d}>
-                {dispositionLabel(t, d)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span>{t('review.queue.interviewer')}</span>
-          <select
-            className={`${controlCls} w-auto`}
-            value={interviewer}
-            onChange={(e) => setInterviewer(e.target.value)}
-          >
-            <option value="">{t('review.queue.anyInterviewer')}</option>
-            {/* Chosen in a link (from Metrics) but with nothing under these filters. */}
-            {interviewer && !people.some((p) => p.id === interviewer) ? (
-              <option value={interviewer}>{t('review.queue.chosenInterviewer')}</option>
-            ) : null}
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name ?? '—'}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 self-end">
-          <input type="checkbox" checked={byRisk} onChange={(e) => setByRisk(e.target.checked)} />
-          {t('review.queue.byRisk')}
-        </label>
-        <label className="flex items-center gap-2 pb-2">
-          <input type="checkbox" checked={sampled} onChange={(e) => setSampled(e.target.checked)} />
-          {t('review.queue.sampled')}
-        </label>
-        <span className="pb-2 text-slate-600">
-          {t('review.queue.total', { count: q.data?.total ?? 0 })} · {t('review.queue.keys')}
-        </span>
+        <FilterBar
+          className="min-w-0 flex-1"
+          lead={
+            <label className="flex items-center gap-2">
+              <span>{t('review.queue.status')}</span>
+              <select
+                className={selectCls}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {t(`review.queue.statuses.${s}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
+          active={chips}
+          count={t('review.queue.total', { count: q.data?.total ?? 0 })}
+        >
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('review.queue.flag')}</span>
+            <select className={selectCls} value={flag} onChange={(e) => setFlag(e.target.value)}>
+              <option value="">{t('review.queue.anyFlag')}</option>
+              {FLAG_KINDS.map((f) => (
+                <option key={f} value={f}>
+                  {t(`review.flags.${f}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('review.queue.mode')}</span>
+            <select className={selectCls} value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="">{t('review.queue.anyMode')}</option>
+              {['CATI', 'CAPI', 'CAWI', 'PAPI'].map((m) => (
+                <option key={m} value={m}>
+                  {modeLabel(t, m)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('review.queue.result')}</span>
+            <select
+              className={selectCls}
+              value={disposition}
+              onChange={(e) => setDisposition(e.target.value)}
+            >
+              <option value="">{t('review.queue.anyResult')}</option>
+              {DISPOSITIONS.map((d) => (
+                <option key={d} value={d}>
+                  {dispositionLabel(t, d)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('review.queue.interviewer')}</span>
+            <select
+              className={selectCls}
+              value={interviewer}
+              onChange={(e) => setInterviewer(e.target.value)}
+            >
+              <option value="">{t('review.queue.anyInterviewer')}</option>
+              {/* Chosen in a link (from Metrics) but with nothing under these filters. */}
+              {interviewer && !people.some((p) => p.id === interviewer) ? (
+                <option value={interviewer}>{t('review.queue.chosenInterviewer')}</option>
+              ) : null}
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name ?? '—'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex flex-col gap-2 pb-1">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={byRisk}
+                onChange={(e) => setByRisk(e.target.checked)}
+              />
+              {t('review.queue.byRisk')}
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={sampled}
+                onChange={(e) => setSampled(e.target.checked)}
+              />
+              {t('review.queue.sampled')}
+            </label>
+          </div>
+        </FilterBar>
       </div>
       {people.length > 1 || interviewer ? (
-        <div className="flex flex-col gap-1" data-testid="queue-interviewers">
-          <h3 className="text-sm font-medium">{t('review.queue.byInterviewer')}</h3>
-          <ul className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 items-center gap-2" data-testid="queue-interviewers">
+          <h3
+            id="queue-people"
+            className="shrink-0 text-sm font-medium"
+            title={t('review.queue.byInterviewerHint')}
+          >
+            {t('review.queue.byInterviewer')}
+          </h3>
+          {/* One line: the people who do not fit are a sideways scroll away. */}
+          <ul
+            aria-labelledby="queue-people"
+            className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto py-0.5"
+          >
             {people.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="shrink-0">
                 <button
                   type="button"
                   aria-pressed={interviewer === p.id}
-                  className="rounded-full border border-slate-300 bg-white px-3 py-1 text-left text-xs hover:bg-indigo-50 aria-[pressed=true]:border-indigo-500 aria-[pressed=true]:bg-indigo-100"
+                  className="whitespace-nowrap rounded-full border border-slate-300 bg-white px-3 py-1 text-left text-xs hover:bg-indigo-50 aria-[pressed=true]:border-indigo-500 aria-[pressed=true]:bg-indigo-100"
                   data-interviewer={p.id}
                   onClick={() => setInterviewer(interviewer === p.id ? '' : p.id)}
                 >
@@ -297,8 +426,8 @@ function Queue({ projectId }: { projectId: string }) {
       ) : null}
       {rows.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full" data-testid="review-queue">
-            <thead className="text-left text-slate-600">
+          <table className="w-full whitespace-nowrap" data-testid="review-queue">
+            <thead className="text-left text-slate-600 [&_th]:pr-4">
               <tr>
                 <th scope="col">{t('review.queue.case')}</th>
                 <th scope="col">{t('review.queue.interviewer')}</th>
@@ -311,19 +440,19 @@ function Queue({ projectId }: { projectId: string }) {
             </thead>
             <tbody
               ref={table}
-              className="divide-y divide-slate-100"
+              className="divide-y divide-slate-100 [&_td]:pr-4"
               onKeyDown={(e) => {
                 if ((e.target as HTMLElement).closest('input, select, textarea')) return;
                 if (e.key === 'j' || e.key === 'ArrowDown') {
                   e.preventDefault();
-                  setActive((a) => Math.min(rows.length - 1, a + 1));
+                  setActive((a) => Math.min(shown.length - 1, a + 1));
                 } else if (e.key === 'k' || e.key === 'ArrowUp') {
                   e.preventDefault();
                   setActive((a) => Math.max(0, a - 1));
                 }
               }}
             >
-              {rows.map((r, i) => (
+              {shown.map((r, i) => (
                 <tr
                   key={r.id}
                   data-row={i}
@@ -387,6 +516,26 @@ function Queue({ projectId }: { projectId: string }) {
               ))}
             </tbody>
           </table>
+          {rows.length > shown.length ? (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                className={smallBtn}
+                data-testid="queue-more"
+                onClick={() => setVisible((v) => v + BLOCK)}
+              >
+                {t('review.queue.more', {
+                  n: Math.min(BLOCK, rows.length - shown.length),
+                  count: rows.length - shown.length,
+                })}
+              </button>
+            </div>
+          ) : (q.data?.total ?? 0) > rows.length ? (
+            <p className="mt-3 text-slate-700" data-testid="queue-capped">
+              {t('review.queue.capped', { n: rows.length })}
+            </p>
+          ) : null}
+          <p className="mt-2 text-xs text-slate-600">{t('review.queue.keys')}</p>
         </div>
       ) : (
         <p className="text-slate-600">{t('review.queue.none')}</p>
@@ -404,11 +553,7 @@ interface CodingDetail {
 function Coding({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const overview = useQuery({
-    queryKey: ['coding', projectId],
-    queryFn: () =>
-      api<{ variable: string; total: number; uncoded: number }[]>(`/projects/${projectId}/coding`),
-  });
+  const overview = useCodingOverview(projectId);
   const [variable, setVariable] = useState('');
   const current = variable || overview.data?.[0]?.variable || '';
   const detail = useQuery({

@@ -182,7 +182,7 @@ export function ReviewPage() {
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="review-screen">
-      {/* The breadcrumb, with the case as the page's title, on the app's top row. */}
+      {/* The breadcrumb is the title, on the top row beside the account. */}
       <PageHeader
         parents={[
           <Link
@@ -212,16 +212,11 @@ export function ReviewPage() {
             {metricsTeam || metricsOwn ? t('cases.tabs.supervision') : t('cases.tabs.review')}
           </Link>,
         ]}
-        title={
-          <span aria-current="page">
-            {t('review.screen.crumb', {
-              id: d.interview.externalId ?? d.interview.id.slice(0, 8),
-            })}
-          </span>
-        }
+        title={t('review.screen.title', {
+          id: d.interview.externalId ?? d.interview.id.slice(0, 8),
+        })}
       />
-      {/* One slim line, not a card: who, how, where it stands, and the decisions. */}
-      <header className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <header className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
         <span>{d.interview.interviewer ?? '—'}</span>
         <span>{modeLabel(t, d.interview.mode)}</span>
         <span data-testid="review-status" data-status={d.interview.status}>
