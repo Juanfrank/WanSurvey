@@ -6,7 +6,7 @@ import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
-import { controlCls, NumberField, smallBtn, TextField } from '../designer/fields.js';
+import { controlCls, FoldedHelp, NumberField, smallBtn, TextField } from '../designer/fields.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { caseVariables } from '../designer/vars.js';
 import { Button, Card, ErrorText, TableScroll } from '../routes/ui.js';
@@ -53,6 +53,9 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
   const [moveFrom, setMoveFrom] = useState('');
   const [moveTo, setMoveTo] = useState('');
   const [moved, setMoved] = useState('');
+  // The two long forms (move someone's cases, add a rule) wait behind a button each.
+  const [moving, setMoving] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ['rules', projectId] });
@@ -92,6 +95,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
       setFilter(undefined);
       setQuota(undefined);
       setError(null);
+      setAdding(false);
       await refresh();
     },
     onError: fail,
@@ -168,7 +172,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
         {people.data?.length ? (
           <TableScroll label={t('cases.rules.workload')}>
             <table className="w-full text-sm" data-testid="workload">
-              <thead className="text-left text-xs text-slate-600">
+              <thead className="text-left text-xs whitespace-nowrap text-slate-600">
                 <tr>
                   <th scope="col" className="py-1 pr-2">
                     {t('cases.rules.person')}
@@ -197,11 +201,14 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {people.data.map((p) => (
-                  <tr key={p.userId} data-person={p.email}>
-                    <th scope="row" className="py-1.5 pr-2 text-left font-medium">
+                  <tr key={p.userId} data-person={p.email} className="whitespace-nowrap">
+                    <th scope="row" className="py-1 pr-2 text-left font-medium">
                       {p.name}
                     </th>
-                    <td className="px-2 text-slate-700">
+                    <td
+                      className="max-w-[12rem] truncate px-2 text-slate-700"
+                      title={p.teams?.map((tm) => tm.name).join(', ') || undefined}
+                    >
                       {p.teams?.map((tm) => tm.name).join(', ') || '—'}
                     </td>
                     {STATUSES.filter((s) => s !== 'fresh').map((s) => (
@@ -233,8 +240,21 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
           <p className="text-sm text-slate-600">{t('cases.rules.noPeople')}</p>
         )}
         {(people.data?.length ?? 0) > 1 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            <button
+              type="button"
+              className={smallBtn}
+              aria-expanded={moving}
+              onClick={() => setMoving((m) => !m)}
+            >
+              {t('cases.rules.move')} <span aria-hidden="true">{moving ? '▴' : '▾'}</span>
+            </button>
+            {!moving && moved ? <span role="status">{moved}</span> : null}
+          </div>
+        ) : null}
+        {(people.data?.length ?? 0) > 1 && moving ? (
           <form
-            className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-3 text-sm"
+            className="mt-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3 text-sm"
             aria-label={t('cases.rules.move')}
             onSubmit={(e) => {
               e.preventDefault();
@@ -252,8 +272,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
                 move.mutate();
             }}
           >
-            <h3 className="font-semibold">{t('cases.rules.move')}</h3>
-            <p className="text-slate-700">{t('cases.rules.moveHint')}</p>
+            <FoldedHelp className="max-w-prose">{t('cases.rules.moveHint')}</FoldedHelp>
             <div className="flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-slate-700">{t('cases.rules.moveFrom')}</span>
@@ -311,7 +330,7 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
 
       <Card className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">{t('cases.rules.rules')}</h2>
-        <p className="text-sm text-slate-700">{t('cases.rules.intro')}</p>
+        <FoldedHelp className="-mt-2 max-w-prose">{t('cases.rules.intro')}</FoldedHelp>
         {rules.data?.length ? (
           <ul className="flex flex-col gap-2" data-testid="rules">
             {rules.data.map((r, i) => {
@@ -372,56 +391,76 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
           <span role="status" aria-live="polite" className="text-sm">
             {message}
           </span>
+          {/* Errors of the rules, the move and applying them; the add form shows its own. */}
+          {adding ? null : <ErrorText>{error}</ErrorText>}
+          <Button
+            type="button"
+            className="ml-auto"
+            aria-expanded={adding}
+            onClick={() => setAdding((a) => !a)}
+          >
+            + {t('cases.rules.add')}
+          </Button>
         </div>
       </Card>
 
-      <Card>
-        <form
-          className="flex max-w-3xl flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (userId && filter) create.mutate();
-          }}
-        >
-          <h2 className="text-lg font-semibold">{t('cases.rules.add')}</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <TextField label={t('cases.rules.name')} value={name} onChange={setName} />
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">{t('cases.rules.who')}</span>
-              <select
-                className={controlCls}
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-              >
-                <option value="">{t('cases.list.pickPerson')}</option>
-                {(people.data ?? []).map((p) => (
-                  <option key={p.userId} value={p.userId}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <NumberField label={t('cases.rules.quota')} integer value={quota} onChange={setQuota} />
-          </div>
-          <ConditionBuilder
-            label={t('cases.rules.when')}
-            value={filter}
-            variables={variables}
-            onChange={setFilter}
-          />
-          {preview ? (
-            <p className="text-sm" data-testid="rule-preview">
-              {t('cases.rules.preview', preview)}
-            </p>
-          ) : null}
-          <ErrorText>{error}</ErrorText>
-          <div>
-            <Button type="submit" disabled={!userId || !filter || create.isPending}>
-              {t('cases.rules.add')}
-            </Button>
-          </div>
-        </form>
-      </Card>
+      {adding ? (
+        <Card>
+          <form
+            aria-label={t('cases.rules.add')}
+            className="flex max-w-3xl flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (userId && filter) create.mutate();
+            }}
+          >
+            <div className="grid gap-3 sm:grid-cols-3">
+              <TextField label={t('cases.rules.name')} value={name} onChange={setName} />
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-700">{t('cases.rules.who')}</span>
+                <select
+                  className={controlCls}
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                >
+                  <option value="">{t('cases.list.pickPerson')}</option>
+                  {(people.data ?? []).map((p) => (
+                    <option key={p.userId} value={p.userId}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <NumberField
+                label={t('cases.rules.quota')}
+                integer
+                value={quota}
+                onChange={setQuota}
+              />
+            </div>
+            <ConditionBuilder
+              label={t('cases.rules.when')}
+              value={filter}
+              variables={variables}
+              onChange={setFilter}
+            />
+            {preview ? (
+              <p className="text-sm" data-testid="rule-preview">
+                {t('cases.rules.preview', preview)}
+              </p>
+            ) : null}
+            <ErrorText>{error}</ErrorText>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={!userId || !filter || create.isPending}>
+                {t('cases.rules.add')}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setAdding(false)}>
+                {t('cases.rules.cancel')}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { subTabCls } from '../routes/tabs.js';
@@ -175,9 +175,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                     />
                     {t('cases.settings.reveal')}
                   </label>
-                  <p id="settings-reveal-help" className="ml-6 max-w-prose text-slate-600">
+                  <FoldedHelp id="settings-reveal-help" className="ml-6 max-w-prose">
                     {t('cases.settings.revealHelp')}
-                  </p>
+                  </FoldedHelp>
                 </div>
                 <fieldset className="flex flex-col gap-1.5" aria-describedby="settings-mode-help">
                   <legend className="mb-1 font-medium">{t('cases.settings.mode')}</legend>
@@ -194,9 +194,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                       {t(`cases.settings.${m}`)}
                     </label>
                   ))}
-                  <p id="settings-mode-help" className="ml-6 max-w-prose text-slate-600">
+                  <FoldedHelp id="settings-mode-help" className="ml-6 max-w-prose">
                     {t('cases.settings.poolHelp')}
-                  </p>
+                  </FoldedHelp>
                 </fieldset>
                 <div className="flex flex-col gap-1">
                   <div className="flex flex-wrap items-center gap-2 font-medium">
@@ -248,9 +248,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                       <option value="days">{t('cases.settings.days')}</option>
                     </select>
                   </div>
-                  <p id="settings-expiry-help" className="max-w-prose text-slate-600">
+                  <FoldedHelp id="settings-expiry-help" className="max-w-prose">
                     {t('cases.settings.expiryHelp')}
-                  </p>
+                  </FoldedHelp>
                 </div>
               </>,
             )}
@@ -300,9 +300,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                       />
                     </label>
                   </div>
-                  <p id="settings-hours-help" className="max-w-prose text-slate-600">
+                  <FoldedHelp id="settings-hours-help" className="max-w-prose">
                     {t('cati.settings.hoursHelp')}
-                  </p>
+                  </FoldedHelp>
                   <fieldset className="flex flex-wrap gap-4">
                     <legend className="mb-1">{t('cati.settings.retry')}</legend>
                     {(['no_answer', 'busy', 'voicemail'] as const).map((k) => (
@@ -371,9 +371,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                 </fieldset>
                 <fieldset className="flex flex-col gap-2" data-testid="audio-settings">
                   <legend className="mb-1 font-medium">{t('cases.settings.audioTitle')}</legend>
-                  <p className="max-w-3xl text-sm text-slate-600">
-                    {t('cases.settings.audioHelp')}
-                  </p>
+                  <FoldedHelp className="max-w-prose">{t('cases.settings.audioHelp')}</FoldedHelp>
                   <label className="flex items-start gap-2">
                     <input
                       type="checkbox"
@@ -549,7 +547,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                     />
                     {t('cases.settings.approvalRequired')}
                   </label>
-                  <p className="max-w-prose text-slate-600">{t('cases.settings.approvalHelp')}</p>
+                  <FoldedHelp className="max-w-prose">
+                    {t('cases.settings.approvalHelp')}
+                  </FoldedHelp>
                 </fieldset>
               </>,
             )}
@@ -600,7 +600,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                         </label>
                       ))}
                     </div>
-                    <p className="max-w-prose text-slate-600">{t('analysis.settings.planHelp')}</p>
+                    <FoldedHelp className="max-w-prose">
+                      {t('analysis.settings.planHelp')}
+                    </FoldedHelp>
                   </fieldset>
                 </>,
               )}
@@ -686,7 +688,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
               <>
                 <fieldset className="flex flex-col gap-2" data-testid="basis-settings">
                   <legend className="mb-1 font-medium">{t('cases.privacy.basisTitle')}</legend>
-                  <p className="max-w-prose text-slate-600">{t('cases.privacy.basisHelp')}</p>
+                  <FoldedHelp className="max-w-prose">{t('cases.privacy.basisHelp')}</FoldedHelp>
                   {(['phone', 'visit'] as const).map((ch) => (
                     <label key={ch} className="flex flex-wrap items-center gap-2">
                       <span className="w-48">
@@ -765,7 +767,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                       </button>
                     ))}
                   </div>
-                  <p className="max-w-prose text-slate-600">{t('cases.privacy.retentionHelp')}</p>
+                  <FoldedHelp className="max-w-prose">
+                    {t('cases.privacy.retentionHelp')}
+                  </FoldedHelp>
                   {form.retention.anonymiseAfterDays === null ? (
                     <p role="alert" className="max-w-prose font-medium text-amber-ink-900">
                       {t('cases.privacy.retentionNone')}
@@ -779,7 +783,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                 </fieldset>
                 <fieldset className="flex flex-col gap-2" data-testid="notice-settings">
                   <legend className="mb-1 font-medium">{t('cases.privacy.noticeTitle')}</legend>
-                  <p className="max-w-prose text-slate-600">{t('cases.privacy.noticeHelp')}</p>
+                  <FoldedHelp className="max-w-prose">{t('cases.privacy.noticeHelp')}</FoldedHelp>
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -822,9 +826,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                       />
                     ) : null}
                   </label>
-                  <p className="max-w-prose text-sm text-slate-600">
-                    {t('cases.privacy.minAgeHelp')}
-                  </p>
+                  <FoldedHelp className="max-w-prose">{t('cases.privacy.minAgeHelp')}</FoldedHelp>
                 </fieldset>
               </>,
             )}

@@ -1,6 +1,6 @@
 import './sampling-i18n.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api, upload } from '../api.js';
@@ -93,12 +93,18 @@ export function ImportTab({
   onDone,
   target = 'cases',
   sourceLabel,
+  inPanel = false,
+  onBusy,
 }: {
   projectId: string;
   onDone(): void;
   /** frame: the rows become units of the sampling frame (S1), not cases. */
   target?: 'cases' | 'frame';
   sourceLabel?: string;
+  /** In a side panel (Drawer) that is titled already: steps as plain sections, not cards. */
+  inPanel?: boolean;
+  /** Told whether a file is uploaded and not loaded yet (closing would lose the mapping). */
+  onBusy?(busy: boolean): void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -108,6 +114,8 @@ export function ImportTab({
   const [report, setReport] = useState<Report | null>(null);
   const [summary, setSummary] = useState<Record<string, number> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const busy = !!uploaded && !summary;
+  useEffect(() => onBusy?.(busy), [busy, onBusy]);
   const questionnaire = useQuestionnaireScope();
   const scoped = useScoped();
   const history = useQuery({
@@ -195,10 +203,11 @@ export function ImportTab({
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  const Box = inPanel ? PanelBox : Card;
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">{t('cases.import.title')}</h2>
+    <div className={`flex flex-col ${inPanel ? 'gap-4' : 'gap-6'}`}>
+      <Box className="flex flex-col gap-3">
+        {inPanel ? null : <h2 className="text-lg font-semibold">{t('cases.import.title')}</h2>}
         <p className="text-sm text-slate-700">{t('cases.import.intro')}</p>
         {!uploaded ? (
           <form
@@ -232,10 +241,10 @@ export function ImportTab({
           </p>
         ) : null}
         <ErrorText>{error}</ErrorText>
-      </Card>
+      </Box>
 
       {uploaded && mapping && !summary ? (
-        <Card className="flex flex-col gap-4">
+        <Box className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">{t('cases.import.stepMap')}</h2>
           <p className="text-sm text-slate-600" data-testid="pii-help">
             {t('cases.import.piiHelp')}
@@ -404,11 +413,11 @@ export function ImportTab({
               {t('cases.import.validate')}
             </Button>
           </div>
-        </Card>
+        </Box>
       ) : null}
 
       {report && mapping && uploaded && !summary ? (
-        <Card className="flex flex-col gap-4">
+        <Box className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">{t('cases.import.report.title')}</h2>
           <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4" data-testid="import-report">
             {(
@@ -530,11 +539,11 @@ export function ImportTab({
                   : t('cases.import.commit', { count: report.toCreate })}
             </Button>
           </div>
-        </Card>
+        </Box>
       ) : null}
 
       {summary ? (
-        <Card className="flex flex-col gap-3">
+        <Box className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">{t('cases.import.stepDone')}</h2>
           <p role="status" className="text-sm" data-testid="import-done">
             {target === 'frame'
@@ -555,10 +564,10 @@ export function ImportTab({
               {t('cases.import.another')}
             </Button>
           </div>
-        </Card>
+        </Box>
       ) : null}
 
-      <Card>
+      <Box>
         <h2 className="mb-2 font-semibold">{t('cases.import.history')}</h2>
         {history.data?.length ? (
           <ul className="divide-y divide-slate-100 text-sm">
@@ -574,7 +583,16 @@ export function ImportTab({
         ) : (
           <p className="text-sm text-slate-600">{t('cases.import.noHistory')}</p>
         )}
-      </Card>
+      </Box>
     </div>
+  );
+}
+
+/** A step of the import inside a side panel: separated by a rule instead of a card. */
+function PanelBox({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <section className={`border-t border-slate-200 pt-4 first:border-t-0 first:pt-0 ${className}`}>
+      {children}
+    </section>
   );
 }

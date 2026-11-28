@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, upload } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
-import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Shell } from '../respondent/RespondentPage.js';
 import { themeProblems } from '../respondent/theme.js';
@@ -77,7 +77,7 @@ export function BrandingSettings({ project }: { project: Project }) {
         <h3 id="look-logo" className="text-base font-semibold">
           {t('cases.look.logo')}
         </h3>
-        <p className="text-slate-600">{t('cases.look.logoHelp')}</p>
+        <FoldedHelp className="max-w-prose">{t('cases.look.logoHelp')}</FoldedHelp>
         <div className="flex flex-wrap items-center gap-3">
           {project.logoUpdatedAt ? (
             <span className="rounded-md border border-slate-200 bg-white p-2">
@@ -125,7 +125,7 @@ export function BrandingSettings({ project }: { project: Project }) {
         <h3 id="look-theme" className="text-base font-semibold">
           {t('cases.look.theme')}
         </h3>
-        <p className="text-slate-600">{t('cases.look.themeHelp')}</p>
+        <FoldedHelp className="max-w-prose">{t('cases.look.themeHelp')}</FoldedHelp>
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex flex-col gap-1">
             <span className="font-medium">{t('cases.look.primary')}</span>

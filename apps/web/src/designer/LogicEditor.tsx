@@ -19,6 +19,7 @@ import {
   LocalizedField,
   SelectField,
   smallBtn,
+  FoldedHelp,
 } from './fields.js';
 import { flatten, isSection, locate, type Draft, type TreeNode } from './tree.js';
 import { nodeLabel, nodeName, type VarOption } from './vars.js';
@@ -352,7 +353,7 @@ export function LogicEditor({
       ) : null}
       {shown.data ? (
         <Group title={t('designer.logic.fromData')}>
-          <p className="text-xs text-slate-600">{t('designer.logic.fromDataHelp')}</p>
+          <FoldedHelp>{t('designer.logic.fromDataHelp')}</FoldedHelp>
           {variables.some((v) => v.kind === 'case') ? (
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">{t('designer.logic.caseField')}</span>

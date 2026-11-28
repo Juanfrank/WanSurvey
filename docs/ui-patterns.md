@@ -146,7 +146,24 @@ With visible text (`children`), start `label` with that text.
 
 The modal `Dialog` laid out against the right edge (full screen on a phone): focus trapped,
 Escape and ✕ close it, focus returns to the button that opened it, named by its title. Use it
-instead of a form card above the list or a form at the bottom of the page.
+instead of a form card above the list or a form at the bottom of the page. `wide` makes it up to
+48rem wide instead of 28rem, for a form with a table (the sample import's column mapping).
+
+## Long explanations: FoldedHelp
+
+A paragraph of grey help that is always on screen goes in `FoldedHelp` (`designer/fields.tsx`):
+one line with an (i) in front; a click unfolds the whole text. The text stays in the page, so an
+`id` on it still works for `aria-describedby`. Do not put it inside a `<label>` (it is a
+disclosure); important warnings stay as they are.
+
+```tsx
+<FoldedHelp id="settings-expiry-help" className="max-w-prose">
+  {t('cases.settings.expiryHelp')}
+</FoldedHelp>
+```
+
+Inside `FoldHintsContext` (the designer sets it), every `Hint` longer than 90 characters folds
+the same way.
 
 ## End-to-end tests
 

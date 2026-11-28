@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LAWFUL_BASES, type CawiSettings, type LawfulBasis } from '@wansurvey/schema';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
-import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
+import { Dialog } from '../designer/Dialog.js';
+import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { LinkBuilder } from './LinkBuilder.js';
 import { maskLink } from './linkParams.js';
-import { Button } from '../routes/ui.js';
+import { Button, Drawer, MoreMenu, type MenuEntry } from '../routes/ui.js';
 
 interface TemplateRow {
   kind: 'invitation' | 'reminder';
@@ -161,10 +162,10 @@ function SendingSettings({ project }: { project: Project }) {
             </option>
           ))}
         </select>
-        <span id="cawi-lawful-help" className="text-slate-600">
-          {t('cawi.settings.lawfulHelp')}
-        </span>
       </label>
+      <FoldedHelp id="cawi-lawful-help" className="-mt-2 max-w-prose">
+        {t('cawi.settings.lawfulHelp')}
+      </FoldedHelp>
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -173,7 +174,7 @@ function SendingSettings({ project }: { project: Project }) {
         />
         <span>{t('cawi.settings.trackOpens')}</span>
       </label>
-      <p className="max-w-prose text-sm text-slate-600">{t('cawi.settings.trackOpensHelp')}</p>
+      <FoldedHelp className="-mt-2 max-w-prose">{t('cawi.settings.trackOpensHelp')}</FoldedHelp>
       <label className="flex flex-col gap-1">
         <span className="font-medium">{t('cawi.settings.senderName')}</span>
         <input
@@ -192,10 +193,10 @@ function SendingSettings({ project }: { project: Project }) {
           maxLength={2000}
           onChange={(e) => setForm({ ...form, completionMessage: e.target.value })}
         />
-        <span id="cawi-completion-help" className="text-slate-600">
-          {t('cawi.settings.completionHelp')}
-        </span>
       </label>
+      <FoldedHelp id="cawi-completion-help" className="-mt-2 max-w-prose">
+        {t('cawi.settings.completionHelp')}
+      </FoldedHelp>
       <label className="flex flex-col gap-1">
         <span className="font-medium">{t('cawi.settings.redirectUrl')}</span>
         <input
@@ -268,7 +269,7 @@ function TemplatesSection({ projectId }: { projectId: string }) {
       <h2 id="cawi-templates" className="text-base font-semibold">
         {t('cawi.templates.title')}
       </h2>
-      <p className="text-slate-600">{t('cawi.templates.help', LITERAL)}</p>
+      <FoldedHelp className="max-w-prose">{t('cawi.templates.help', LITERAL)}</FoldedHelp>
       <div className="flex flex-wrap gap-4">
         <label className="flex flex-col gap-1">
           <span className="font-medium">{t('cawi.templates.kind')}</span>
@@ -387,6 +388,9 @@ function WavesSection({
   const [channel, setChannel] = useState<'email' | 'sms' | 'links'>('email');
   const [linksOf, setLinksOf] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  // "New outreach" opens its form in a side panel; it closes once the outreach is made.
+  const [creating, setCreating] = useState(false);
+  const formId = useId();
   const create = useMutation({
     mutationFn: () =>
       api<Wave>(`/projects/${projectId}/waves`, {
@@ -409,9 +413,10 @@ function WavesSection({
       setMessage(t('cawi.waves.created'));
       setName('');
       setExpires('');
+      setCreating(false);
       await qc.invalidateQueries({ queryKey: ['waves', projectId] });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    // Shown in the side panel, which stays open.
   });
   const send = useMutation({
     mutationFn: ({ id, confirm }: { id: string; confirm?: boolean }) =>
@@ -467,9 +472,23 @@ function WavesSection({
 
   return (
     <section aria-labelledby="cawi-waves" className="flex flex-col gap-4">
-      <h2 id="cawi-waves" className="text-base font-semibold">
-        {t('cawi.waves.title')}
-      </h2>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 id="cawi-waves" className="text-base font-semibold">
+          {t('cawi.waves.title')}
+        </h2>
+        <Button
+          type="button"
+          size="sm"
+          className="ml-auto"
+          aria-haspopup="dialog"
+          onClick={() => {
+            create.reset();
+            setCreating(true);
+          }}
+        >
+          + {t('cawi.waves.new')}
+        </Button>
+      </div>
       <p role="status" aria-live="polite" className="empty:hidden" data-testid="waves-message">
         {message}
       </p>
@@ -534,96 +553,116 @@ function WavesSection({
       ) : (
         <p className="text-slate-600">{t('cawi.waves.none')}</p>
       )}
-      <form
-        className="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"
-        aria-labelledby="cawi-new-wave"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setMessage('');
-          create.mutate();
-        }}
-      >
-        <h3 id="cawi-new-wave" className="font-semibold">
-          {t('cawi.waves.new')}
-        </h3>
-        <div className="flex flex-wrap gap-4">
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('cawi.waves.name')}</span>
-            <input
-              className={controlCls}
-              value={name}
-              required
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('cawi.waves.filter')}</span>
-            <input
-              className={`${controlCls} font-mono`}
-              value={filter}
-              placeholder={t('cawi.waves.filterHelp')}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </label>
-          <label className={`flex flex-col gap-1 ${channel === 'links' ? 'hidden' : ''}`}>
-            <span className="font-medium">{t('cawi.waves.reminders')}</span>
-            <input
-              className={controlCls}
-              value={reminders}
-              aria-describedby="cawi-reminders-help"
-              onChange={(e) => setReminders(e.target.value)}
-            />
-            <span id="cawi-reminders-help" className="text-xs text-slate-600">
-              {t('cawi.waves.remindersHelp')}
-            </span>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('cawi.links.expires')}</span>
-            <input
-              type="date"
-              className={controlCls}
-              value={expires}
-              min={localDay(new Date().toISOString())}
-              aria-describedby="cawi-expires-help"
-              onChange={(e) => setExpires(e.target.value)}
-            />
-            <span id="cawi-expires-help" className="text-xs text-slate-600">
-              {t('cawi.links.expiresHelp')}
-            </span>
-          </label>
-        </div>
-        <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1 font-medium">{t('cawi.links.channel')}</legend>
-          {(['email', 'sms', 'links'] as const).map((c) => (
-            <label key={c} className="flex items-start gap-2">
-              <input
-                type="radio"
-                className="mt-1"
-                name="wave-channel"
-                checked={channel === c}
-                onChange={() => setChannel(c)}
-              />
-              <span>
-                <span className="font-medium">{t(`cawi.links.channels.${c}`)}</span>
-                <span className="block text-xs text-slate-600">
-                  {t(`cawi.links.channelHints.${c}`)}
+      {creating ? (
+        <Drawer
+          title={t('cawi.waves.new')}
+          onClose={() => setCreating(false)}
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={() => setCreating(false)}>
+                {t('cawi.links.cancel')}
+              </Button>
+              <Button
+                type="submit"
+                form={formId}
+                disabled={create.isPending || !name.trim() || !published}
+              >
+                {t('cawi.waves.create')}
+              </Button>
+            </>
+          }
+        >
+          <form
+            id={formId}
+            className="flex flex-col gap-4 text-sm"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setMessage('');
+              create.mutate();
+            }}
+          >
+            <p role="alert" className="text-red-ink-700 empty:hidden">
+              {create.isError ? localiseError(t, create.error) : ''}
+            </p>
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1">
+                <span className="font-medium">{t('cawi.waves.name')}</span>
+                <input
+                  className={controlCls}
+                  value={name}
+                  required
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="font-medium">{t('cawi.waves.filter')}</span>
+                <input
+                  className={`${controlCls} font-mono`}
+                  value={filter}
+                  placeholder={t('cawi.waves.filterHelp')}
+                  onChange={(e) => setFilter(e.target.value)}
+                />
+              </label>
+              <label className={`flex flex-col gap-1 ${channel === 'links' ? 'hidden' : ''}`}>
+                <span className="font-medium">{t('cawi.waves.reminders')}</span>
+                <input
+                  className={controlCls}
+                  value={reminders}
+                  aria-describedby="cawi-reminders-help"
+                  onChange={(e) => setReminders(e.target.value)}
+                />
+                <span id="cawi-reminders-help" className="text-xs text-slate-600">
+                  {t('cawi.waves.remindersHelp')}
                 </span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        {channel === 'email' || channel === 'sms' ? (
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={toCati} onChange={(e) => setToCati(e.target.checked)} />
-            {t('cawi.waves.bouncesToCati')}
-          </label>
-        ) : null}
-        <div>
-          <Button type="submit" disabled={create.isPending || !name.trim() || !published}>
-            {t('cawi.waves.create')}
-          </Button>
-        </div>
-      </form>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="font-medium">{t('cawi.links.expires')}</span>
+                <input
+                  type="date"
+                  className={controlCls}
+                  value={expires}
+                  min={localDay(new Date().toISOString())}
+                  aria-describedby="cawi-expires-help"
+                  onChange={(e) => setExpires(e.target.value)}
+                />
+                <span id="cawi-expires-help" className="text-xs text-slate-600">
+                  {t('cawi.links.expiresHelp')}
+                </span>
+              </label>
+            </div>
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="mb-1 font-medium">{t('cawi.links.channel')}</legend>
+              {(['email', 'sms', 'links'] as const).map((c) => (
+                <label key={c} className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    className="mt-1"
+                    name="wave-channel"
+                    checked={channel === c}
+                    onChange={() => setChannel(c)}
+                  />
+                  <span>
+                    <span className="font-medium">{t(`cawi.links.channels.${c}`)}</span>
+                    <span className="block text-xs text-slate-600">
+                      {t(`cawi.links.channelHints.${c}`)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            {channel === 'email' || channel === 'sms' ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={toCati}
+                  onChange={(e) => setToCati(e.target.checked)}
+                />
+                {t('cawi.waves.bouncesToCati')}
+              </label>
+            ) : null}
+          </form>
+        </Drawer>
+      ) : null}
     </section>
   );
 }
@@ -637,18 +676,25 @@ type WaveLink = {
   revokedAt: string | null;
 };
 
+/** How many personal links are listed at first, and added by "Show 20 more". */
+const LINKS_STEP = 20;
+
 /**
  * The personal links of a "links only" wave: one per case, to hand out by any channel. Link
- * parameters can be added to all of them (e.g. ?sede=2 for a branch). Each link opens a person's
- * survey, so they are handled like passwords: cut short on screen, shown or copied one by one,
- * and every listing and download is logged.
+ * parameters can be added to all of them (e.g. ?sede=2 for a branch), behind "Link parameters".
+ * Each link opens a person's survey, so they are handled like passwords: cut short on screen,
+ * shown or copied one by one, and every listing and download is logged. The list shows 20 at a
+ * time; each row's actions (show, copy, change the expiry date, revoke) are in its "⋯".
  */
 function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
   const { t } = useTranslation();
   const [extra, setExtra] = useState('');
   const [shown, setShown] = useState<ReadonlySet<string>>(new Set());
-  const [copied, setCopied] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
+  const [limit, setLimit] = useState(LINKS_STEP);
+  const [paramsOpen, setParamsOpen] = useState(false);
+  const [dating, setDating] = useState<WaveLink | null>(null);
+  const paramsId = useId();
   // Kept as a message key, so it follows a change of interface language.
   const [note, setNote] = useState<{ key: string; values: Record<string, string> } | null>(null);
   const qc = useQueryClient();
@@ -670,12 +716,13 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
         method: 'PATCH',
         body: { expiresAt: day ? endOfDay(day) : null },
       }),
-    onSuccess: (_, { l, day }) =>
+    onSuccess: (_, { l, day }) => {
+      setDating(null);
       changed(day ? 'cawi.links.expirySet' : 'cawi.links.expiryCleared', {
         id: l.externalId,
         day,
-      }),
-    onError: (e) => setProblem(localiseError(t, e)),
+      });
+    },
   });
   const links = useQuery({
     queryKey: ['wave-links', wave.id],
@@ -718,44 +765,105 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
       // Missing on pages not served over HTTPS: say so rather than pretend.
       if (!navigator.clipboard) throw new Error('no clipboard');
       await navigator.clipboard.writeText(withParams(l.url));
-      setCopied(l.externalId);
+      setNote({ key: 'cawi.links.copiedOne', values: { id: l.externalId } });
     } catch {
-      setCopied(null);
+      setNote(null);
       setProblem(t('cawi.links.copyFailed'));
     }
   };
+  const closed = (l: WaveLink) => !!l.revokedAt || l.status === 'completed';
+  const entriesFor = (l: WaveLink): MenuEntry[] => [
+    {
+      type: 'item',
+      id: 'show',
+      label: t(shown.has(l.externalId) ? 'cawi.links.hideOne' : 'cawi.links.showOne', {
+        id: l.externalId,
+      }),
+      onSelect: () =>
+        setShown((s) => {
+          const next = new Set(s);
+          if (!next.delete(l.externalId)) next.add(l.externalId);
+          return next;
+        }),
+    },
+    {
+      type: 'item',
+      id: 'copy',
+      label: t('cawi.links.copyOne', { id: l.externalId }),
+      onSelect: () => void copy(l),
+    },
+    {
+      type: 'item',
+      id: 'expiry',
+      label: t('cawi.links.changeExpiry'),
+      disabled: closed(l),
+      onSelect: () => {
+        expiry.reset();
+        setDating(l);
+      },
+    },
+    { type: 'separator' },
+    {
+      type: 'item',
+      id: 'revoke',
+      label: t('cawi.links.revokeOne', { id: l.externalId }),
+      disabled: closed(l) || revoke.isPending,
+      onSelect: () => {
+        if (window.confirm(t('cawi.links.revokeConfirm', { id: l.externalId }))) revoke.mutate(l);
+      },
+    },
+  ];
+  const all = links.data ?? [];
+  const rows = all.slice(0, limit);
   return (
     <div className="mb-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3" data-testid="wave-links">
-      <p className="text-sm text-slate-600">{t('cawi.links.help')}</p>
       <p className="text-sm font-medium text-amber-ink-900" role="note">
         {t('cawi.links.secret')}
       </p>
-      <LinkBuilder
-        projectId={projectId}
-        questionnaireId={wave.questionnaireId}
-        baseUrl={links.data?.[0]?.url ?? null}
-        onQueryChange={setBuilt}
-        segments={false}
-      />
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">{t('cawi.links.params')}</span>
-          <input
-            className={`${controlCls} font-mono`}
-            value={extra}
-            placeholder="sede=2"
-            onChange={(e) => setExtra(e.target.value)}
-          />
-        </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          className={smallBtn}
+          aria-expanded={paramsOpen}
+          aria-controls={paramsId}
+          onClick={() => setParamsOpen((o) => !o)}
+        >
+          {t('cawi.links.paramsOpen')}
+          {params ? ` · ${params.split('&').filter(Boolean).length}` : ''}{' '}
+          <span aria-hidden="true">{paramsOpen ? '▴' : '▾'}</span>
+        </button>
         <Button type="button" size="sm" onClick={() => void csv()}>
           {t('cawi.links.download')}
         </Button>
+        <span className="text-xs text-slate-600">
+          {t('cawi.links.shown', { shown: rows.length, total: all.length })}
+        </span>
         <p role="alert" className="text-sm text-red-ink-700 empty:hidden">
           {problem}
         </p>
         <p role="status" className="text-sm text-slate-700 empty:hidden" data-testid="links-note">
           {note ? t(note.key, note.values) : ''}
         </p>
+      </div>
+      {/* Folded, not unmounted: the builder keeps its choices while it is closed. */}
+      <div id={paramsId} hidden={!paramsOpen} className="flex flex-col gap-2">
+        <FoldedHelp className="text-sm">{t('cawi.links.help')}</FoldedHelp>
+        <LinkBuilder
+          projectId={projectId}
+          questionnaireId={wave.questionnaireId}
+          baseUrl={links.data?.[0]?.url ?? null}
+          onQueryChange={setBuilt}
+          segments={false}
+        />
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">{t('cawi.links.params')}</span>
+          <input
+            className={`${controlCls} max-w-md font-mono`}
+            value={extra}
+            placeholder="sede=2"
+            onChange={(e) => setExtra(e.target.value)}
+          />
+        </label>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -764,8 +872,12 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
               <th scope="col" className="pr-4">
                 {t('cawi.links.case')}
               </th>
-              <th scope="col">{t('cawi.links.url')}</th>
-              <th scope="col">{t('cawi.links.status')}</th>
+              <th scope="col" className="pr-4">
+                {t('cawi.links.url')}
+              </th>
+              <th scope="col" className="pr-4">
+                {t('cawi.links.status')}
+              </th>
               <th scope="col" className="pr-2">
                 {t('cawi.links.expiresCol')}
               </th>
@@ -775,79 +887,108 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
             </tr>
           </thead>
           <tbody>
-            {(links.data ?? []).slice(0, 200).map((l) => (
-              <tr key={l.externalId} data-link={l.externalId}>
-                <td className="pr-4 font-mono">{l.externalId}</td>
-                <td className="break-all font-mono text-xs">
+            {rows.map((l) => (
+              <tr key={l.externalId} data-link={l.externalId} className="whitespace-nowrap">
+                <td className="py-0.5 pr-4 font-mono">{l.externalId}</td>
+                <td className="max-w-[28rem] truncate pr-4 font-mono text-xs" data-link-url="">
                   {shown.has(l.externalId) ? withParams(l.url) : maskLink(withParams(l.url))}
                 </td>
-                <td>{t(`cawi.links.statuses.${l.status}`)}</td>
-                <td className="py-0.5 pr-2">
-                  <input
-                    // Read again after a change (saved or not), so it shows what is stored.
-                    key={`${l.id}-${l.expiresAt ?? ''}-${expiry.isError ? 'e' : ''}`}
-                    type="date"
-                    className={`${controlCls} w-auto py-0.5 text-xs`}
-                    aria-label={t('cawi.links.expiresOne', { id: l.externalId })}
-                    disabled={!!l.revokedAt || l.status === 'completed'}
-                    defaultValue={localDay(l.expiresAt)}
-                    onBlur={(e) => {
-                      // Saved on leaving the field, so a date being typed is not saved half-way.
-                      const day = e.target.value;
-                      if (day !== localDay(l.expiresAt)) expiry.mutate({ l, day });
-                    }}
-                  />
+                <td className="pr-4">{t(`cawi.links.statuses.${l.status}`)}</td>
+                <td className="pr-2 tabular-nums" data-testid="link-expiry">
+                  {l.expiresAt ? localDay(l.expiresAt) : t('cawi.links.noExpiry')}
                 </td>
-                <td className="whitespace-nowrap py-0.5 text-right">
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    aria-label={t(
-                      shown.has(l.externalId) ? 'cawi.links.hideOne' : 'cawi.links.showOne',
-                      { id: l.externalId },
-                    )}
-                    onClick={() =>
-                      setShown((s) => {
-                        const next = new Set(s);
-                        if (!next.delete(l.externalId)) next.add(l.externalId);
-                        return next;
-                      })
-                    }
-                  >
-                    {t(shown.has(l.externalId) ? 'cawi.links.hide' : 'cawi.links.reveal')}
-                  </button>{' '}
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    aria-label={t('cawi.links.copyOne', { id: l.externalId })}
-                    onClick={() => void copy(l)}
-                  >
-                    {copied === l.externalId ? t('cawi.links.copied') : t('cawi.links.copy')}
-                  </button>{' '}
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    aria-label={t('cawi.links.revokeOne', { id: l.externalId })}
-                    disabled={!!l.revokedAt || l.status === 'completed' || revoke.isPending}
-                    onClick={() => {
-                      if (window.confirm(t('cawi.links.revokeConfirm', { id: l.externalId })))
-                        revoke.mutate(l);
-                    }}
-                  >
-                    {t('cawi.links.revoke')}
-                  </button>
+                <td className="py-0.5 text-right">
+                  <MoreMenu
+                    label={t('cawi.links.actionsOne', { id: l.externalId })}
+                    entries={entriesFor(l)}
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {(links.data?.length ?? 0) > 200 ? (
-        <p className="text-xs text-slate-600">
-          {t('cawi.links.more', { count: (links.data?.length ?? 0) - 200 })}
-        </p>
+      {all.length > rows.length ? (
+        <div>
+          <button
+            type="button"
+            className={smallBtn}
+            onClick={() => setLimit((n) => n + LINKS_STEP)}
+          >
+            {t('cawi.links.showMore', { count: all.length - rows.length })}
+          </button>
+        </div>
+      ) : null}
+      {dating ? (
+        <ExpiryDialog
+          link={dating}
+          pending={expiry.isPending}
+          error={expiry.isError ? localiseError(t, expiry.error) : ''}
+          onClose={() => setDating(null)}
+          onSave={(day) => expiry.mutate({ l: dating, day })}
+        />
       ) : null}
     </div>
+  );
+}
+
+/** Changes (or clears) the end date of one personal link. */
+function ExpiryDialog({
+  link,
+  pending,
+  error,
+  onClose,
+  onSave,
+}: {
+  link: WaveLink;
+  pending: boolean;
+  error: string;
+  onClose(): void;
+  onSave(day: string): void;
+}) {
+  const { t } = useTranslation();
+  const [day, setDay] = useState(localDay(link.expiresAt));
+  const helpId = useId();
+  return (
+    <Dialog
+      title={t('cawi.links.expiryTitle', { id: link.externalId })}
+      onClose={onClose}
+      closeLabel={t('app.close')}
+    >
+      <form
+        className="flex flex-col gap-3 text-sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave(day);
+        }}
+      >
+        <label className="flex flex-col gap-1">
+          <span className="font-medium">{t('cawi.links.expiresCol')}</span>
+          <input
+            type="date"
+            className={`${controlCls} w-auto self-start`}
+            aria-label={t('cawi.links.expiresOne', { id: link.externalId })}
+            aria-describedby={helpId}
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+          />
+          <span id={helpId} className="text-xs text-slate-600">
+            {t('cawi.links.expiryEmpty')}
+          </span>
+        </label>
+        <p role="alert" className="text-red-ink-700 empty:hidden">
+          {error}
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('cawi.links.cancel')}
+          </Button>
+          <Button type="submit" disabled={pending || day === localDay(link.expiresAt)}>
+            {t('cawi.links.save')}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -857,7 +998,7 @@ function FunnelChart({ name, funnel }: { name: string; funnel: Funnel }) {
   const total = Math.max(1, funnel.total);
   return (
     <figure aria-label={t('cawi.waves.funnel', { name })} data-testid="funnel">
-      <dl className="grid grid-cols-[9rem_minmax(0,1fr)_6rem] items-center gap-x-3 gap-y-1">
+      <dl className="grid grid-cols-[11rem_minmax(0,1fr)_6rem] items-center gap-x-3 gap-y-1">
         {STEPS.map((s) => {
           const n = funnel[s];
           return (
@@ -917,6 +1058,9 @@ function OpenLinkSection({
     onSuccess: (r) => qc.setQueryData(['open-link', projectId], r),
   });
   const l = link.data?.link;
+  // The link builder (answers and segments in the link) waits behind a button.
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const builderId = useId();
   return (
     <section aria-labelledby="cawi-open" className="flex flex-col gap-2">
       <h2 id="cawi-open" className="text-base font-semibold">
@@ -944,12 +1088,25 @@ function OpenLinkSection({
               {l.url}
             </a>
           </p>
-          <LinkBuilder
-            projectId={projectId}
-            questionnaireId={questionnaireId}
-            baseUrl={l.url}
-            shortLink
-          />
+          <div>
+            <button
+              type="button"
+              className={smallBtn}
+              aria-expanded={builderOpen}
+              aria-controls={builderId}
+              onClick={() => setBuilderOpen((o) => !o)}
+            >
+              {t('cawi.links.paramsOpen')} <span aria-hidden="true">{builderOpen ? '▴' : '▾'}</span>
+            </button>
+          </div>
+          <div id={builderId} hidden={!builderOpen}>
+            <LinkBuilder
+              projectId={projectId}
+              questionnaireId={questionnaireId}
+              baseUrl={l.url}
+              shortLink
+            />
+          </div>
         </>
       ) : null}
     </section>

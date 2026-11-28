@@ -13,7 +13,8 @@ test('the project manager gives someone a role in the project, from the project'
   await gotoTab(page, 'People');
   await expect(page.getByRole('heading', { name: 'Users of the project' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Add a user' }).click();
+  // "Add a user" opens a side panel.
+  await page.getByRole('button', { name: '+ Add a user' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a user' });
   // A manager gives roles from supervisor down.
   await expect(dialog.getByRole('radio', { name: /^Project manager/ })).toHaveCount(0);
@@ -39,7 +40,10 @@ test('the project manager gives someone a role in the project, from the project'
   await expectAccessible(page);
 
   // Back as it was for the other tests.
-  await row.getByRole('button', { name: 'Remove Demo client_viewer from the project' }).click();
+  // Change role and Remove are in the row's "⋯".
+  await row.getByRole('button', { name: 'Actions for Demo client_viewer' }).click();
+  await shot(page, 'p2-project-people-row-menu', { fullPage: false });
+  await page.getByRole('menuitem', { name: 'Remove Demo client_viewer from the project' }).click();
   const confirm = page.getByRole('dialog', {
     name: 'Remove Demo client_viewer from this project?',
   });

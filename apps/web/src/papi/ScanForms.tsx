@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, upload } from '../api.js';
-import { smallBtn } from '../designer/fields.js';
+import { FoldedHelp, smallBtn } from '../designer/fields.js';
 import { dateTime } from '../format.js';
 import { localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
@@ -102,7 +102,7 @@ export function ScanForms({
       <h2 id="papi-scans" className="text-base font-semibold">
         {t('papi.scans.title')}
       </h2>
-      <p className="max-w-4xl text-slate-600">{t('papi.scans.help')}</p>
+      <FoldedHelp className="max-w-4xl">{t('papi.scans.help')}</FoldedHelp>
       <form
         className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {

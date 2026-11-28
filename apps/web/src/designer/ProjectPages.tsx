@@ -687,7 +687,7 @@ function QuestionnairesSection({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {(list.data ?? []).map((q) => (
-                  <tr key={q.id}>
+                  <tr key={q.id} className="whitespace-nowrap [&>td]:pr-4">
                     <td className="py-2">
                       <Link
                         to="/projects/$projectId/questionnaires/$qid"
@@ -719,7 +719,7 @@ function QuestionnairesSection({
                         ? t(`designer.versions.${q.latestVersion.status}`)
                         : t('designer.unpublished')}
                       {q.state === 'completed' && q.successorId ? (
-                        <span className="block text-xs text-slate-600">
+                        <span className="ml-1 text-xs text-slate-600">
                           →{' '}
                           {t('designer.qActions.continuesIn', {
                             name: list.data?.find((x) => x.id === q.successorId)?.name ?? '…',
@@ -746,7 +746,7 @@ function QuestionnairesSection({
                 {(feedback.data ?? []).map((p) => {
                   const total = Object.values(p.counts).reduce((a, b) => a + b, 0);
                   return (
-                    <tr key={p.id} data-feedback={p.name}>
+                    <tr key={p.id} data-feedback={p.name} className="whitespace-nowrap [&>td]:pr-4">
                       <td className="py-2">
                         <button
                           type="button"

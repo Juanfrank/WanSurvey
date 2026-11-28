@@ -1,6 +1,6 @@
 import type { EarlyExitSettings } from '@wansurvey/schema';
 import { useTranslation } from 'react-i18next';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
 
 /**
  * The reasons an interview can be closed early with (telephone calls interrupted), in Spanish and
@@ -24,7 +24,7 @@ export function ExitReasonsEditor({
   return (
     <fieldset className="flex flex-col gap-3" data-testid="exit-reasons">
       <legend className="mb-1 font-medium">{t('cases.exitReasons.title')}</legend>
-      <p className="max-w-prose text-slate-600">{t('cases.exitReasons.help')}</p>
+      <FoldedHelp className="max-w-prose">{t('cases.exitReasons.help')}</FoldedHelp>
       <label className="flex items-start gap-2">
         <input
           type="checkbox"

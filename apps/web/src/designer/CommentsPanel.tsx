@@ -45,6 +45,7 @@ export function CommentsPanel({
   itemId,
   canWrite,
   onGoTo,
+  bare = false,
 }: {
   projectId: string;
   qid: string;
@@ -52,6 +53,8 @@ export function CommentsPanel({
   itemId: string | null;
   canWrite: boolean;
   onGoTo(itemId: string | null): void;
+  /** Inside a panel that already says what it is (the designer's Drawer): no card, no heading. */
+  bare?: boolean;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -101,13 +104,20 @@ export function CommentsPanel({
 
   return (
     <section
-      aria-labelledby="comments-h"
-      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm"
+      aria-labelledby={bare ? undefined : 'comments-h'}
+      aria-label={bare ? title : undefined}
+      className={
+        bare
+          ? 'flex flex-col gap-3 text-sm'
+          : 'flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm'
+      }
       data-testid="comments"
     >
-      <h2 id="comments-h" className="font-semibold">
-        {t('designer.comments.title')} · <span className="font-normal">{title}</span>
-      </h2>
+      {bare ? null : (
+        <h2 id="comments-h" className="font-semibold">
+          {t('designer.comments.title')} · <span className="font-normal">{title}</span>
+        </h2>
+      )}
       {shown.length ? (
         <ol className="flex flex-col gap-3">
           {shown.map((c) => (

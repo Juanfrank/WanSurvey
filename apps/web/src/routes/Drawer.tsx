@@ -29,6 +29,7 @@ export function Drawer({
   children,
   footer,
   header,
+  wide = false,
 }: {
   /** The panel's heading, which also names it for screen readers. */
   title: ReactNode;
@@ -39,11 +40,14 @@ export function Drawer({
   footer?: ReactNode;
   /** Shown under the title, outside the scrolling body (a summary, tabs). */
   header?: ReactNode;
+  /** Wider (up to 48rem instead of 28rem), for a form with a table (an import's column mapping). */
+  wide?: boolean;
 }) {
   const { t } = useTranslation();
   return (
     <Dialog
       side
+      wide={wide}
       title={title}
       onClose={onClose}
       closeLabel={t('app.close')}
