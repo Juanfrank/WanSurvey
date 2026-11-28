@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { SAMPLES } from '@wansurvey/fixtures';
 import { MODES, type Mode, type ProjectSettings } from '@wansurvey/schema';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProjectLogo } from '../routes/ProjectLogo.js';
 import { subTabCls, tabCls } from '../routes/tabs.js';
@@ -28,6 +28,7 @@ import { CallsTab } from '../cati/CallsTab.js';
 import { PaperTab } from '../papi/PaperTab.js';
 import { ReviewTab } from '../review/ReviewTab.js';
 import { DashboardTab } from '../analysis/DashboardTab.js';
+import { RetentionNotice } from '../analysis/RetentionNotice.js';
 import { GoalsSection } from '../analysis/GoalsSection.js';
 import { CawiTab } from '../cawi/CawiTab.js';
 import { ExportsTab } from '../analysis/ExportsTab.js';
@@ -1042,6 +1043,7 @@ export function ProjectPage() {
     notice?: string;
     call?: string;
     q?: string;
+    topic?: string;
   };
   const { t } = useTranslation();
   const project = useQuery({
@@ -1121,8 +1123,8 @@ export function ProjectPage() {
   );
   const navigate = useNavigate();
   const [panel, setPanel] = useState<QPanel>(null);
-  // The settings topic to open (the goals, from the overview).
-  const [settingsTopic, setSettingsTopic] = useState<string | undefined>();
+  // The settings topic to open (the goals, from the overview; or `?topic=` in a link).
+  const [settingsTopic, setSettingsTopic] = useState<string | undefined>(search.topic);
   // Who designs starts at the overview once a questionnaire is out (at the questionnaires
   // before); callers at their calls, other interviewers and clerks at their cases.
   const qList = useQuery({
@@ -1166,21 +1168,42 @@ export function ProjectPage() {
           : current === 'questionnaires' && panel
             ? panel.kind
             : current;
+  // The tabs this page wrote to the address and has not seen come back yet.
+  const written = useRef(new Set<string>());
   useEffect(() => {
     if (!place || place === search.tab) return;
+    written.current.add(place);
     void navigate({
       to: '/projects/$projectId',
       params: { projectId },
-      // An open case belongs to the case list.
-      search: ({ case: open, ...s }: Record<string, unknown>) => ({
+      // An open case belongs to the case list; a settings topic to the settings.
+      search: ({ case: open, topic, ...s }: Record<string, unknown>) => ({
         ...s,
         ...(place === 'cases' && typeof open === 'string' ? { case: open } : {}),
+        ...(place === 'settings' && typeof topic === 'string' ? { topic } : {}),
         tab: place,
       }),
       replace: true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the tab only when it changes
   }, [place]);
+  // A link within the page (from Metrics to the review queue, to a settings topic) changes the
+  // address: the tab follows it, not only when the page opens.
+  useEffect(() => {
+    // The page's own change coming back (perhaps after a quicker second click): not a link.
+    if (search.tab && written.current.has(search.tab)) {
+      written.current.clear();
+      return;
+    }
+    const to = search.tab ? FROM_SEARCH[search.tab] : undefined;
+    if (!to || search.tab === place) return;
+    setTab(to.tab);
+    if (to.cases) setCasesSub(to.cases);
+    if (to.review) setReviewSub(to.review);
+    if (to.distribution) setDistributionSub(to.distribution);
+    if (search.topic) setSettingsTopic(search.topic);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the address only when it changes
+  }, [search.tab, search.topic]);
   const openDistribution = (qid: string, sub: DistributionSub) => {
     setDistributionSub(sub);
     setTab('distribution');
@@ -1376,6 +1399,7 @@ function ProjectOverview({
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-8" data-testid="project-overview">
+      <RetentionNotice projectId={projectId} />
       <DashboardTab projectId={projectId} />
       {goals ? (
         <div className="flex flex-col gap-2">

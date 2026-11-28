@@ -51,6 +51,8 @@ export const ExportBody = DataFilter.extend({
   rosters: z.enum(['wide', 'long']).default('wide'),
   paradata: z.boolean().default(false),
   approvedOnly: z.boolean().default(false),
+  /** CSV: the codebook (variables and coded values) alongside the data, all in a ZIP. */
+  codebook: z.boolean().optional(),
   /**
    * Answers marked personal: in the file (for people allowed to see personal data), or left out.
    * The app asks to leave them out unless chosen; the API keeps including them by default.
@@ -135,6 +137,47 @@ async function* dataRows(
         return v;
       }) as SheetCell[];
 }
+
+/** A column of text, for the codebook written as CSV. */
+const textColumn = (name: string): TableLayout['columns'][number] => ({
+  name,
+  label: name,
+  type: 'string',
+});
+
+/**
+ * The codebook as two CSV files, for a CSV export: the variables of every table, and the coded
+ * values of each, both naming the table they belong to.
+ */
+export function codebookCsv(tables: TableLayout[]): { variables: Uint8Array; values: Uint8Array } {
+  const entries = tables.flatMap((t) =>
+    codebook({ ...t, rows: [] }).map((e) => ({ table: t.name, ...e })),
+  );
+  const file = (names: string[], rows: Cell[][]) => {
+    const enc = csvEncoder(names.map(textColumn));
+    const head = enc.head();
+    const body = enc.rows(rows);
+    const out = new Uint8Array(head.length + body.length);
+    out.set(head);
+    out.set(body, head.length);
+    return out;
+  };
+  return {
+    variables: file(
+      ['table', 'name', 'label', 'type', 'measure'],
+      entries.map((e) => [e.table, e.name, e.label, e.type, e.measure]),
+    ),
+    values: file(
+      ['table', 'name', 'code', 'label', 'missing'],
+      entries.flatMap((e) =>
+        e.values.map((v): Cell[] => [e.table, e.name, v.code, v.label, v.missing ? 'yes' : '']),
+      ),
+    ),
+  };
+}
+
+/** Only CSV takes the codebook in a zip: Excel, SPSS and Stata carry it in the file. */
+const withCodebook = (opts: ExportBody) => opts.format === 'csv' && !!opts.codebook;
 
 const isPersonal = (options: unknown) => (options as { personal?: boolean }).personal === true;
 
@@ -389,7 +432,7 @@ export class ExportsService implements OnModuleInit {
             ? savEncoder(columns, stats![t]!, o)
             : dtaEncoder(columns, stats![t]!, o);
         };
-        const zip = tables.length > 1 ? new ZipStream() : undefined;
+        const zip = file.entries.length ? new ZipStream() : undefined;
         for (let t = 0; t < tables.length; t++) {
           const enc = encoderOf(t);
           const put = zip ? (b: Uint8Array) => out(zip.data(b)) : out;
@@ -398,6 +441,15 @@ export class ExportsService implements OnModuleInit {
           for await (const batch of rows(t)) await put(enc.rows(batch));
           await put(enc.tail());
           if (zip) await out(zip.close());
+        }
+        // The codebook goes with a CSV when asked: the last two entries of the zip.
+        if (zip && withCodebook(opts)) {
+          const book = codebookCsv(tables);
+          for (const [k, data] of [book.variables, book.values].entries()) {
+            await out(zip.open(file.entries[tables.length + k]!));
+            await out(zip.data(data));
+            await out(zip.close());
+          }
         }
         if (zip) await out(zip.finish());
       }
@@ -447,13 +499,17 @@ export class ExportsService implements OnModuleInit {
         entries: [],
       };
     const ext = opts.format;
-    if (tables.length === 1)
+    const book = withCodebook(opts);
+    if (tables.length === 1 && !book)
       return { fileName: `${base}.${ext}`, contentType: CONTENT_TYPES[ext], entries: [] };
-    // Long rosters: one file per table, in a zip.
+    // Long rosters: one file per table, in a zip; a CSV's codebook after them.
     return {
       fileName: `${base}.zip`,
       contentType: CONTENT_TYPES.zip,
-      entries: tables.map((t, k) => (k === 0 ? `${base}.${ext}` : `${base}_${t.name}.${ext}`)),
+      entries: [
+        ...tables.map((t, k) => (k === 0 ? `${base}.${ext}` : `${base}_${t.name}.${ext}`)),
+        ...(book ? [`${base}_codebook_variables.csv`, `${base}_codebook_values.csv`] : []),
+      ],
     };
   }
 

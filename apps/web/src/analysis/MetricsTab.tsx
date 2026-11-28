@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls } from '../designer/fields.js';
+import { useCan } from '../designer/hooks.js';
 import { TableScroll } from '../routes/ui.js';
 import { fmtNum, fmtPct } from './charts.js';
 import { GoalsSection } from './GoalsSection.js';
@@ -77,16 +79,24 @@ export function MetricsTab({ projectId }: { projectId: string }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [mode, setMode] = useState('');
+  // The team chosen, with its name: kept in the list even when nobody of it worked in the period.
+  const [team, setTeam] = useState<{ id: string; name: string } | null>(null);
+  const teamId = team?.id ?? '';
+  // Who reviews can open one person's interviews in the review queue.
+  const canReviewQueue = useCan('interviews.review', projectId);
+  const canApprove = useCan('interviews.approve', projectId);
+  const canReview = canReviewQueue || canApprove;
   const [sort, setSort] = useState<{ key: Key; desc: boolean }>({ key: 'completes', desc: true });
   const qs = new URLSearchParams({
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
     ...(mode ? { mode } : {}),
+    ...(teamId ? { teamId } : {}),
   });
   const data = useQuery({
     queryKey: ['metrics', projectId, qs.toString()],
     queryFn: () =>
-      api<{ team: boolean; interviewers: Row[] }>(
+      api<{ team: boolean; teams?: { id: string; name: string }[]; interviewers: Row[] }>(
         `/projects/${projectId}/metrics/interviewers?${qs}`,
       ),
   });
@@ -152,6 +162,33 @@ export function MetricsTab({ projectId }: { projectId: string }) {
             ))}
           </select>
         </label>
+        {/* Teams of the organisation with people here: one crew or shift at a time. */}
+        {data.data?.teams?.length || teamId ? (
+          <label className="flex flex-col gap-1">
+            {t('analysis.metrics.team')}
+            <select
+              className={controlCls}
+              value={teamId}
+              onChange={(e) =>
+                setTeam(
+                  e.target.value
+                    ? { id: e.target.value, name: e.target.selectedOptions[0]?.text ?? '' }
+                    : null,
+                )
+              }
+            >
+              <option value="">{t('analysis.metrics.anyTeam')}</option>
+              {[
+                ...(team && !data.data?.teams?.some((x) => x.id === team.id) ? [team] : []),
+                ...(data.data?.teams ?? []),
+              ].map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
       {!rows.length ? (
         <p className="text-slate-600">{data.isLoading ? '…' : t('analysis.metrics.none')}</p>
@@ -203,7 +240,20 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                       scope="row"
                       className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left font-medium"
                     >
-                      {r.name}
+                      {data.data?.team && canReview ? (
+                        <Link
+                          to="/projects/$projectId"
+                          params={{ projectId }}
+                          search={{ tab: 'review', interviewer: r.interviewerId }}
+                          className="text-indigo-ink-700 hover:underline"
+                          aria-label={t('analysis.metrics.openQueue', { name: r.name })}
+                          title={t('analysis.metrics.openQueue', { name: r.name })}
+                        >
+                          {r.name}
+                        </Link>
+                      ) : (
+                        r.name
+                      )}
                     </th>
                     {KEYS.map((k) => {
                       const o = r.outliers[k];

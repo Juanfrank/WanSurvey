@@ -97,7 +97,7 @@ describe.skipIf(!configured)('SQL Server: home summary', () => {
     const res = await get(supervisor, '/home').expect(200);
     const p = res.body.projects.find((x: { id: string }) => x.id === project);
     expect(p).toMatchObject({
-      field: { cases: 3, unassigned: 1, callbacksDue: 1 },
+      field: { cases: 3, unassigned: 1, callbacksDue: 1, lastActivityAt: expect.any(String) },
       review: { toReview: 1, tooFast: 1 },
       mine: null,
     });

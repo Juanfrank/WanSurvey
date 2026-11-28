@@ -16,6 +16,8 @@ export interface HomeTx {
   >;
   /** People with interview activity since an instant, per project. */
   activeSince(since: Date): Promise<{ projectId: string; n: number }[]>;
+  /** When an interview last changed, per project. */
+  lastActivity(): Promise<{ projectId: string; at: Date }[]>;
   /** Interviews waiting for review, and those flagged as too fast, per project. */
   reviewCounts(): Promise<{ projectId: string; toReview: number; tooFast: number }[]>;
   /** One person's open cases, callbacks due now, next callback and returned interviews. */
@@ -89,6 +91,14 @@ export class MssqlHomeTx implements HomeTx {
       WHERE interviewer_id IS NOT NULL AND updated_at > ${instant(since)}
       GROUP BY project_id`.execute(this.tx);
     return res.rows.map((r) => ({ projectId: low(r.project_id), n: r.n }));
+  }
+
+  async lastActivity() {
+    const res = await sql<{ project_id: string; at: Date }>`
+      SELECT project_id, MAX(updated_at) AS at FROM interviews GROUP BY project_id`.execute(
+      this.tx,
+    );
+    return res.rows.map((r) => ({ projectId: low(r.project_id), at: r.at }));
   }
 
   async reviewCounts() {

@@ -47,6 +47,11 @@ export const homeEn = {
     tooFast: '{{count}} too fast',
     activeNow: 'Working now',
     noGoal: '—',
+    fieldwork: 'Fieldwork',
+    dates: '{{from}} – {{to}}',
+    noDates: 'No dates set',
+    lastActivity: 'Last activity',
+    never: 'None yet',
   },
 };
 
@@ -99,5 +104,10 @@ export const homeEs: typeof homeEn = {
     tooFast: '{{count}} demasiado rápidas',
     activeNow: 'Trabajando ahora',
     noGoal: '—',
+    fieldwork: 'Trabajo de campo',
+    dates: '{{from}} – {{to}}',
+    noDates: 'Sin fechas',
+    lastActivity: 'Última actividad',
+    never: 'Ninguna aún',
   },
 };

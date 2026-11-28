@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
+import { useCan } from '../designer/hooks.js';
 import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button } from '../routes/ui.js';
@@ -103,6 +104,14 @@ export function ReviewPage() {
     queryKey: ['review', interviewId],
     queryFn: () => api<Detail>(`/review/interviews/${interviewId}`),
   });
+  // The breadcrumb: the project (shared with the project page) and the tab the queue is in,
+  // called Supervision where it also holds the metrics.
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<{ name: string }>(`/projects/${projectId}`),
+  });
+  const metricsTeam = useCan('metrics.team', projectId);
+  const metricsOwn = useCan('metrics.own', projectId);
   const [message, setMessage] = useState('');
   const [dialog, setDialog] = useState<To | null>(null);
   const [text, setText] = useState('');
@@ -174,14 +183,43 @@ export function ReviewPage() {
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="review-screen">
       <nav aria-label={t('designer.breadcrumb')} className="text-slate-600">
-        <Link
-          to="/projects/$projectId"
-          params={{ projectId }}
-          search={{ tab: 'review' }}
-          className="hover:underline"
-        >
-          {t('review.screen.back')}
-        </Link>
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>
+            <Link to="/projects" activeOptions={{ exact: true }} className="hover:underline">
+              {t('designer.projects')}
+            </Link>
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true">/</span>
+            <Link
+              to="/projects/$projectId"
+              params={{ projectId }}
+              activeOptions={{ exact: true }}
+              className="hover:underline"
+            >
+              {project.data?.name ?? '…'}
+            </Link>
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true">/</span>
+            <Link
+              to="/projects/$projectId"
+              params={{ projectId }}
+              search={{ tab: 'review' }}
+              className="hover:underline"
+            >
+              {metricsTeam || metricsOwn ? t('cases.tabs.supervision') : t('cases.tabs.review')}
+            </Link>
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true">/</span>
+            <span aria-current="page" className="font-medium text-slate-700">
+              {t('review.screen.crumb', {
+                id: d.interview.externalId ?? d.interview.id.slice(0, 8),
+              })}
+            </span>
+          </li>
+        </ol>
       </nav>
       <header className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <h1 className="text-lg font-semibold">

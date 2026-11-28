@@ -12,6 +12,7 @@ const data: HomeData = {
     { projectId: B, cases: 5, unassigned: 5, callbacksDue: 0 },
   ],
   active: [{ projectId: A, n: 3 }],
+  lastActivity: [{ projectId: A, at: new Date('2026-11-20T10:30:00Z') }],
   review: [{ projectId: A, toReview: 4, tooFast: 1 }],
   mine: [
     { projectId: A, open: 15, callbacksDue: 1, nextCallbackAt: null, returned: 1 },
@@ -27,11 +28,18 @@ describe('home summary', () => {
     expect(rows.map((r) => r.id)).toEqual([A, B]);
     expect(rows[0]).toEqual({
       id: A,
-      field: { completes: 7, cases: 50, unassigned: 10, callbacksDue: 2, activeNow: 3 },
+      field: {
+        completes: 7,
+        cases: 50,
+        unassigned: 10,
+        callbacksDue: 2,
+        activeNow: 3,
+        lastActivityAt: '2026-11-20T10:30:00.000Z',
+      },
       review: null,
       mine: null,
     });
-    expect(rows[1]!.field).toMatchObject({ completes: 0, activeNow: 0 });
+    expect(rows[1]!.field).toMatchObject({ completes: 0, activeNow: 0, lastActivityAt: null });
   });
 
   it('gives an interviewer of one project only that project and only their own work', () => {

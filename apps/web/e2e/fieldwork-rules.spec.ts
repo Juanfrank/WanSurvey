@@ -101,6 +101,9 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
     /.+/,
   );
   await shot(page, 'dashboard-pace');
+  // How long personal data is kept, and what happens then, on the overview.
+  await expect(page.getByTestId('retention-notice')).toContainText('Personal data retention');
+  await shot(page, 'v2-overview-retention', { fullPage: false });
   await expectAccessible(page);
 
   // The project's status, with what is still open before closing it (left as it is).

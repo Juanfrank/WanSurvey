@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -54,7 +55,11 @@ export function GoalsSection({
 }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
-  const canSet = useCan('cases.assign', projectId) && manage;
+  const canAssign = useCan('cases.assign', projectId);
+  const canSet = canAssign && manage;
+  // Who may change the goals reaches them in a click: the settings' Goals topic.
+  const canConfigure = useCan('projects.update', projectId);
+  const canOpenGoals = canAssign || canConfigure;
   const goals = useQuery({
     queryKey: ['goals', projectId],
     queryFn: () => api<Goal[]>(`/projects/${projectId}/goals`),
@@ -110,7 +115,24 @@ export function GoalsSection({
         {t('analysis.goals.title')}
       </h2>
       <p className="max-w-4xl text-slate-600">
-        {manage ? t('analysis.goals.help') : t('analysis.goals.progressHelp')}
+        {manage ? (
+          t('analysis.goals.help')
+        ) : canOpenGoals ? (
+          <>
+            {t('analysis.goals.progressHelpLead')}{' '}
+            <Link
+              to="/projects/$projectId"
+              params={{ projectId }}
+              search={{ tab: 'settings', topic: 'fieldwork' }}
+              className="font-medium text-indigo-ink-700 hover:underline"
+            >
+              {t('analysis.goals.progressHelpLink')}
+            </Link>
+            .
+          </>
+        ) : (
+          t('analysis.goals.progressHelp')
+        )}
       </p>
       {list.length ? (
         <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">

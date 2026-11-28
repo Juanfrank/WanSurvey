@@ -32,6 +32,7 @@ export const reviewEn = {
     result: 'Result',
     anyResult: 'Any',
     anyInterviewer: 'Anyone',
+    chosenInterviewer: 'Chosen interviewer',
     byInterviewer: 'By interviewer (click to see only theirs)',
     personCount_one: '{{count}} interview',
     personCount_other: '{{count}} interviews',
@@ -59,7 +60,7 @@ export const reviewEn = {
   },
   screen: {
     title: 'Review · case {{id}}',
-    back: 'Back to the queue',
+    crumb: 'Case {{id}}',
     status: 'Status: {{status}}',
     length: 'Active time {{time}}',
     path: 'Answers along the path',
@@ -196,6 +197,7 @@ export const reviewEs: ReviewCatalogue = {
     result: 'Resultado',
     anyResult: 'Cualquiera',
     anyInterviewer: 'Cualquiera',
+    chosenInterviewer: 'Encuestador elegido',
     byInterviewer: 'Por entrevistador (pulse para ver solo las suyas)',
     personCount_one: '{{count}} entrevista',
     personCount_other: '{{count}} entrevistas',
@@ -223,7 +225,7 @@ export const reviewEs: ReviewCatalogue = {
   },
   screen: {
     title: 'Revisión · caso {{id}}',
-    back: 'Volver a la lista',
+    crumb: 'Caso {{id}}',
     status: 'Estado: {{status}}',
     length: 'Tiempo activo {{time}}',
     path: 'Respuestas a lo largo del recorrido',

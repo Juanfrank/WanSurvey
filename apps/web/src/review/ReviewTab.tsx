@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
@@ -47,6 +47,8 @@ interface InterviewerCount {
 
 /** The results a reviewer most often sorts by: complete interviews apart from the rest. */
 const DISPOSITIONS = ['COMPLETE', 'PARTIAL', 'SCREENED_OUT', 'REFUSAL', 'BREAK_OFF', 'QUOTA_FULL'];
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const STATUSES = [
   'submitted,in_review',
@@ -106,11 +108,39 @@ export function ReviewTab({ projectId }: { projectId: string }) {
 function Queue({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  // The interviewer and result can come in the address (`?interviewer=`, `?result=`): a link
+  // from Metrics opens the queue on one person's interviews.
+  const raw = useSearch({ strict: false }) as { interviewer?: string; result?: string };
+  // Only values the queue can ask for: a mistyped link opens the whole queue, not an error.
+  const search = {
+    interviewer: UUID.test(raw.interviewer ?? '') ? raw.interviewer!.toLowerCase() : undefined,
+    result: DISPOSITIONS.includes(raw.result ?? '') ? raw.result : undefined,
+  };
   const [status, setStatus] = useState(STATUSES[0]!);
   const [flag, setFlag] = useState('');
   const [mode, setMode] = useState('');
-  const [disposition, setDisposition] = useState('');
-  const [interviewer, setInterviewer] = useState('');
+  const [disposition, setDispositionState] = useState(search.result ?? '');
+  const [interviewer, setInterviewerState] = useState(search.interviewer ?? '');
+  useEffect(() => setInterviewerState(search.interviewer ?? ''), [search.interviewer]);
+  useEffect(() => setDispositionState(search.result ?? ''), [search.result]);
+  /** A filter chosen here goes to the address too, so Back and reload keep it. */
+  const keep = (key: 'interviewer' | 'result', value: string) =>
+    void navigate({
+      to: '.',
+      search: (s: Record<string, unknown>) =>
+        key === 'interviewer'
+          ? { ...s, interviewer: value || undefined }
+          : { ...s, result: value || undefined },
+      replace: true,
+    });
+  const setInterviewer = (v: string) => {
+    setInterviewerState(v);
+    keep('interviewer', v);
+  };
+  const setDisposition = (v: string) => {
+    setDispositionState(v);
+    keep('result', v);
+  };
   const [sampled, setSampled] = useState(false);
   const [byRisk, setByRisk] = useState(false);
   const [active, setActive] = useState(0);
@@ -214,6 +244,10 @@ function Queue({ projectId }: { projectId: string }) {
             onChange={(e) => setInterviewer(e.target.value)}
           >
             <option value="">{t('review.queue.anyInterviewer')}</option>
+            {/* Chosen in a link (from Metrics) but with nothing under these filters. */}
+            {interviewer && !people.some((p) => p.id === interviewer) ? (
+              <option value={interviewer}>{t('review.queue.chosenInterviewer')}</option>
+            ) : null}
             {people.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name ?? '—'}

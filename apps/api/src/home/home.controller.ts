@@ -32,6 +32,7 @@ export class HomeController {
         active: parts.field
           ? await t.activeSince(new Date(Date.now() - ACTIVE_MINUTES * 60_000))
           : [],
+        lastActivity: parts.field ? await t.lastActivity() : [],
         review: parts.review ? await t.reviewCounts() : [],
         mine: parts.mine ? await t.mine(ctx.userId) : [],
       };
