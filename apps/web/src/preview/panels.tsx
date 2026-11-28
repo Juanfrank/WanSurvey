@@ -185,6 +185,8 @@ export function ComparePanel({
               language: options.language,
               context: options.context,
               now: () => new Date(`${options.today}T12:00:00Z`),
+              // The same seed as the preview itself, so shuffled options come in the same order.
+              seed: 'preview',
               state: session.state(),
             });
             const inMode = s.trace().find((e) => e.key === key);

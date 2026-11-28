@@ -1,5 +1,5 @@
 import type { AnswerOption, Code, LocalizedText } from '@wansurvey/schema';
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toLiteral } from './ConditionBuilder.js';
 import { inputCls, smallBtn, useShownLanguages, useSourceLanguage } from './fields.js';
@@ -37,6 +37,9 @@ export function OptionsEditor({
 }) {
   const { t } = useTranslation();
   const table = useRef<HTMLTableElement>(null);
+  const uid = useId();
+  // The same rule as the analyzer's empty_option_label / empty_row_label: no text in any language.
+  const unlabelled = (r: Row) => !Object.values(r.label ?? {}).some((v) => v.trim() !== '');
   const duplicates = new Set(
     rows.map((r) => String(r.code)).filter((c, i, all) => all.indexOf(c) !== i),
   );
@@ -134,6 +137,8 @@ export function OptionsEditor({
                     <PipeField
                       className={inputCls}
                       aria-label={t('designer.opt.labelN', { n: i + 1, lang: l })}
+                      aria-invalid={unlabelled(r) ? true : undefined}
+                      aria-describedby={unlabelled(r) ? `${uid}-nolabel-${i}` : undefined}
                       value={r.label[l] ?? ''}
                       onChange={(e) => set(i, { label: { ...r.label, [l]: e.target.value } })}
                       onKeyDown={(e) => {
@@ -143,6 +148,15 @@ export function OptionsEditor({
                         }
                       }}
                     />
+                    {unlabelled(r) && li === 0 ? (
+                      <p
+                        id={`${uid}-nolabel-${i}`}
+                        className="mt-0.5 text-xs text-red-ink-800"
+                        data-testid="option-no-label"
+                      >
+                        {t('designer.opt.noLabel', { n: String(r.code) })}
+                      </p>
+                    ) : null}
                   </td>
                 ))}
                 {flags ? (

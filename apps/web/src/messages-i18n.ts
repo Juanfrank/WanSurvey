@@ -90,6 +90,11 @@ export const messagesEn = {
     order_dependency:
       '{{name}} uses {{ref}}, which may be asked after it because {{container}} changes the order of its items',
     order_skip: 'The skip to {{target}} lands inside {{container}}, whose items change order',
+    personal_before_notice: '{{name}} asks for personal data before the information notice',
+    personal_pipe_before_notice:
+      '{{name}} shows {{fields}} before the information notice: whoever opens the link sees it',
+    quota_target_over_max:
+      'The target of quota {{name}} ({{target}}) is above its maximum ({{max}})',
   },
   scenarioCheck: {
     add_row: 'Step {{n}}: add a row to {{name}}',
@@ -117,6 +122,9 @@ export const messagesEn = {
   apiError: {
     BUSY: 'The server is busy right now. Please try again in a moment.',
     FIELDWORK_DATES: 'Fieldwork ends before it starts: check the dates.',
+    LINKS_EXPIRY_PAST: 'That end date has already passed: choose a later day.',
+    THEME_CONTRAST:
+      'Those colours would make the web survey hard to read. Choose a darker or stronger main colour.',
     CALL_OPEN: 'Finish the call in progress first.',
     NO_OFFLINE_STORAGE: 'This browser cannot store data offline.',
     STORAGE_FULL: 'This device has no space left for offline interviews. Sync and free some space.',
@@ -280,6 +288,10 @@ export const messagesEs: MessagesCatalogue = {
     order_dependency:
       '{{name}} usa {{ref}}, que puede preguntarse después porque {{container}} cambia el orden de sus ítems',
     order_skip: 'El salto a {{target}} cae dentro de {{container}}, cuyos ítems cambian de orden',
+    personal_before_notice: '{{name}} pide datos personales antes del aviso informativo',
+    personal_pipe_before_notice:
+      '{{name}} muestra {{fields}} antes del aviso informativo: lo ve quien abra el enlace',
+    quota_target_over_max: 'La meta de la cuota {{name}} ({{target}}) supera su máximo ({{max}})',
   },
   scenarioCheck: {
     add_row: 'Paso {{n}}: agregar una fila a {{name}}',
@@ -307,6 +319,9 @@ export const messagesEs: MessagesCatalogue = {
   apiError: {
     BUSY: 'El servidor está ocupado en este momento. Inténtelo de nuevo en unos segundos.',
     FIELDWORK_DATES: 'El trabajo de campo termina antes de empezar: revise las fechas.',
+    LINKS_EXPIRY_PAST: 'Esa fecha de vencimiento ya pasó: elija un día posterior.',
+    THEME_CONTRAST:
+      'Con esos colores la encuesta web costaría leerse. Elija un color principal más oscuro o intenso.',
     CALL_OPEN: 'Termine primero la llamada en curso.',
     NO_OFFLINE_STORAGE: 'Este navegador no puede guardar datos sin conexión.',
     STORAGE_FULL:

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 import type { MssqlTx } from '../db/mssql/database.js';
+import { instant } from '../db/mssql/instant.js';
 import type { MssqlSchema } from '../db/mssql/schema.js';
 
 /**
@@ -87,6 +88,8 @@ export class CawiStore {
       reminderDays?: number[];
       sendAt?: Date | null;
       bouncesToCati?: boolean;
+      /** When the personal links made for it stop opening the survey; null: they do not. */
+      linksExpireAt?: Date | null;
       createdBy: string | null;
     },
   ): Promise<string> {
@@ -106,6 +109,7 @@ export class CawiStore {
         bounces_to_cati: v.bouncesToCati ?? false,
         created_by: v.createdBy,
         sent_at: null,
+        links_expire_at: v.linksExpireAt ? instant(v.linksExpireAt) : null,
       })
       .execute();
     return id;
@@ -195,10 +199,11 @@ export class CawiStore {
       }));
       const res = await sql<{ n: number }>`
         INSERT INTO invitations (id, tenant_id, project_id, questionnaire_id, wave_id, case_id,
-          contact_id, email, token_hash, token_enc, language, status, sent_at)
+          contact_id, email, token_hash, token_enc, language, status, sent_at, expires_at)
         SELECT j.id, ${v.tenantId}, ${v.projectId}, ${v.questionnaireId}, ${v.waveId}, j.caseId,
           j.contactId, j.email, j.tokenHash, j.tokenEnc, j.language, j.status,
-          CASE WHEN j.status = 'sent' THEN SYSDATETIMEOFFSET() ELSE NULL END
+          CASE WHEN j.status = 'sent' THEN SYSDATETIMEOFFSET() ELSE NULL END,
+          (SELECT w.links_expire_at FROM waves w WHERE w.id = ${v.waveId})
         FROM OPENJSON(${JSON.stringify(rows)}) WITH (
           id uniqueidentifier, caseId uniqueidentifier, contactId uniqueidentifier,
           email nvarchar(450), tokenHash nvarchar(450), tokenEnc nvarchar(max),
@@ -284,15 +289,17 @@ export class CawiStore {
     const now = v.now.toISOString();
     const free = sql`(i.lease_until IS NULL OR i.lease_until < ${now})`;
     const active = sql`EXISTS (SELECT 1 FROM questionnaires q WHERE q.id = i.questionnaire_id AND q.state = 'active')`;
+    // A revoked or expired link is not sent, nor reminded of.
+    const live = sql`i.revoked_at IS NULL AND (i.expires_at IS NULL OR i.expires_at > ${now})`;
     const queued = await sql<{ id: string }>`
       SELECT TOP (${v.limit}) i.id FROM invitations i
       JOIN waves w ON w.id = i.wave_id
-      WHERE i.status = 'queued' AND ${free} AND (w.send_at IS NULL OR w.send_at <= ${now}) AND ${active}
+      WHERE i.status = 'queued' AND ${free} AND (w.send_at IS NULL OR w.send_at <= ${now}) AND ${active} AND ${live}
       ORDER BY i.queued_at, i.id`.execute(tx);
     const due = await sql<{ id: string }>`
       SELECT TOP (${v.limit}) i.id FROM invitations i
       JOIN waves w ON w.id = i.wave_id
-      WHERE i.status = 'sent' AND i.completed_at IS NULL AND ${free} AND ${active}
+      WHERE i.status = 'sent' AND i.completed_at IS NULL AND ${free} AND ${active} AND ${live}
         AND NOT EXISTS (SELECT 1 FROM cases c WHERE c.id = i.case_id AND c.status IN ('finalised', 'withdrawn'))
         AND i.reminders_sent < (SELECT COUNT(*) FROM OPENJSON(w.reminder_days))
         AND DATEADD(day, CAST(JSON_VALUE(w.reminder_days, CONCAT('$[', i.reminders_sent, ']')) AS int), i.sent_at) <= ${now}
@@ -303,7 +310,9 @@ export class CawiStore {
       UPDATE i SET lease_until = DATEADD(millisecond, ${v.leaseMs}, ${now})
       OUTPUT inserted.*
       FROM invitations i WITH (UPDLOCK, READPAST, ROWLOCK)
-      WHERE i.id IN (${sql.join(ids)}) AND i.status IN ('queued', 'sent') AND ${free}`.execute(tx);
+      WHERE i.id IN (${sql.join(ids)}) AND i.status IN ('queued', 'sent') AND ${free} AND ${live}`.execute(
+      tx,
+    );
     return taken.rows.map((r) => ({
       invitation: r,
       kind: r.status === 'queued' ? 'invitation' : 'reminder',
@@ -315,7 +324,7 @@ export class CawiStore {
     await sql`
       UPDATE invitations SET lease_until = NULL, last_error = NULL,
         send_attempts = send_attempts + 1,
-        status = CASE WHEN ${kind} = 'invitation' THEN 'sent' ELSE status END,
+        status = CASE WHEN ${kind} = 'invitation' AND status = 'queued' THEN 'sent' ELSE status END,
         sent_at = CASE WHEN ${kind} = 'invitation' THEN SYSDATETIMEOFFSET() ELSE sent_at END,
         reminders_sent = reminders_sent + CASE WHEN ${kind} = 'reminder' THEN 1 ELSE 0 END,
         last_reminder_at = CASE WHEN ${kind} = 'reminder' THEN SYSDATETIMEOFFSET() ELSE last_reminder_at END

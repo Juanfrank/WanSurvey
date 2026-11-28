@@ -68,6 +68,7 @@ type FieldProps = {
   placeholder?: string;
   'aria-label'?: string;
   'aria-describedby'?: string;
+  'aria-invalid'?: boolean;
   onChange(e: { target: { value: string } }): void;
   onKeyDown?(e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>): void;
   onBlur?(): void;

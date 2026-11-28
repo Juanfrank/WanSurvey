@@ -458,4 +458,68 @@ describe.skipIf(!configured)('SQL Server: web surveys by e-mail over HTTP', () =
       )!.status,
     ).toBe('started');
   });
+
+  it('personal links expire with their outreach or one by one, and can be revoked', async () => {
+    await addCases(3, 'EXP');
+    // An end date already past is refused: the links would open nothing.
+    const late = await post(pm, `/projects/${project}/waves`, {
+      name: 'Tarde',
+      questionnaireId: qid,
+      channel: 'links',
+      linksExpireAt: new Date(Date.now() - 86_400_000).toISOString(),
+    });
+    expect(late.status).toBe(400);
+    expect(late.body).toMatchObject({ code: 'LINKS_EXPIRY_PAST' });
+    const until = new Date(Date.now() + 7 * 86_400_000).toISOString();
+    const w = await post(pm, `/projects/${project}/waves`, {
+      name: 'Con vencimiento',
+      questionnaireId: qid,
+      channel: 'links',
+      linksExpireAt: until,
+    });
+    expect(w.status, JSON.stringify(w.body)).toBe(201);
+    expect(new Date(w.body.linksExpireAt).toISOString()).toBe(until);
+    expect((await post(pm, `/projects/${project}/waves/${w.body.id}/send`)).status).toBe(200);
+    type Link = { id: string; externalId: string; url: string; status: string; expiresAt: string };
+    const list = async () =>
+      ((await get(pm, `/projects/${project}/waves/${w.body.id}/links`)).body as Link[]).filter(
+        (l) => l.externalId.startsWith('EXP'),
+      );
+    const [a, b, c] = await list();
+    // Each link takes the outreach's end date.
+    expect(new Date(a!.expiresAt).toISOString()).toBe(until);
+    const open = (l: Link, device: string) =>
+      api().get(`/api/v1/public/s/${l.url.split('/s/')[1]!}?device=${device}`);
+
+    // One link gets an earlier date, already past: it no longer opens the survey.
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const set = await patch(pm, `/projects/${project}/waves/${w.body.id}/links/${a!.id}`, {
+      expiresAt: past,
+    });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+    const expired = await open(a!, 'exp-browser-1');
+    expect(expired.status).toBe(410);
+    expect(expired.body).toMatchObject({ code: 'LINK_EXPIRED' });
+
+    // Another is started, then revoked: neither opening nor sending answers works afterwards.
+    expect((await open(b!, 'exp-browser-2')).status).toBe(200);
+    const revoked = await post(pm, `/projects/${project}/waves/${w.body.id}/links/${b!.id}/revoke`);
+    expect(revoked.status, JSON.stringify(revoked.body)).toBe(200);
+    const gone = await open(b!, 'exp-browser-2');
+    expect(gone.status).toBe(410);
+    expect(gone.body).toMatchObject({ code: 'LINK_REVOKED' });
+
+    // The third, untouched, still opens.
+    expect((await open(c!, 'exp-browser-3')).status).toBe(200);
+    const after = await list();
+    expect(after.map((l) => l.status)).toEqual(['expired', 'revoked', 'started']);
+    // A link of another outreach is not found through this one.
+    expect(
+      (await post(pm, `/projects/${project}/waves/${randomUUID()}/links/${c!.id}/revoke`)).status,
+    ).toBe(404);
+    const logged = await rows(
+      sql`SELECT action FROM audit_log WHERE target_id IN (${a!.id}, ${b!.id}) ORDER BY at, id`,
+    );
+    expect(logged.map((r) => r.action)).toEqual(['cawi.link_expiry_set', 'cawi.link_revoked']);
+  });
 });

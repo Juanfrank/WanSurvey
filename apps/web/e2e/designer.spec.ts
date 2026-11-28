@@ -80,6 +80,14 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   await expect(outlineItem(page, 'A1')).toBeFocused();
   await rename(page, 'A_WORK');
   await page.getByLabel('Question wording (es)').fill('¿Trabaja?');
+  // Options without a label are marked beside their field, with the reason read out, and the
+  // item's checks are listed above its fields.
+  await expect(page.getByTestId('option-no-label')).toHaveCount(2);
+  await expect(page.getByLabel('Label of option 1 (es)')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByTestId('item-problems')).toContainText(
+    'Options 1, 2 of A_WORK have no label',
+  );
+  await shot(page, 'v2-designer-option-no-label');
   await page.getByLabel('Label of option 1 (es)').fill('Sí');
   await page.getByLabel('Label of option 2 (es)').fill('No');
 
@@ -108,13 +116,20 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
 
   // Skip A_HOURS when A_WORK is No, built with the condition rows.
   await outlineItem(page, 'A_WORK').click();
+  await expect(page.getByTestId('option-no-label')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Logic', exact: true }).click();
+  // The item's parts are a segmented control inside the editor, not another row of tabs.
+  await expect(page.getByTestId('inspector-segments')).toBeVisible();
   await page.getByRole('button', { name: 'Add skip' }).click();
   await page.getByLabel('Condition 1: value', { exact: true }).first().selectOption('2');
   await page.getByLabel('Skip 1: go to').selectOption('END');
   await expect(page.getByTestId('skip-rule')).toContainText('No');
   await saved(page);
   await shot(page, 'designer-logic');
+  await page
+    .getByTestId('inspector-segments')
+    .evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await shot(page, 'v2-designer-inspector-segments', { fullPage: false });
   await expectAccessible(page);
 
   // Reordering with Alt+arrows and undo.
@@ -233,6 +248,20 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
   // The section title has no English yet: the Spanish view says so.
   await outlineItem(page, 'SEC_A').click();
   await expect(page.getByText('Missing translation: en').first()).toBeVisible();
+  await saved(page);
+
+  // A quota's target cannot be above its maximum: the field says so, and so does the check.
+  await openSettings(page, 'Quotas');
+  await page.getByRole('button', { name: 'Add quota' }).click();
+  await page.getByLabel('Quota 1: maximum').fill('50');
+  await page.getByLabel('Quota 1: target (optional)').fill('80');
+  const target = page.getByLabel('Quota 1: target (optional)');
+  await expect(target).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByText('The target cannot be above the maximum (50).')).toBeVisible();
+  await shot(page, 'v2-designer-quota-target');
+  await target.fill('40');
+  await expect(target).not.toHaveAttribute('aria-invalid', 'true');
+  await page.getByRole('button', { name: 'Remove quota 1' }).click();
   await saved(page);
 });
 
@@ -525,9 +554,16 @@ test('the routing map, outline arcs and nested condition builder on the househol
   await page.getByRole('tab', { name: 'Routing' }).click();
   const map = page.getByTestId('routing-map');
   await expect(map).toContainText('Skips to');
+  // A skip to the end reads as part of the sentence, in lower case.
+  await expect(map).toContainText('Skips to the end of the questionnaire when');
   await expect(map).toContainText('Ends as');
   await expect(page.locator('path[data-arc]').first()).toBeVisible();
   await shot(page, 'designer-routing-map');
+  await map
+    .getByText('Skips to the end of the questionnaire when')
+    .first()
+    .scrollIntoViewIfNeeded();
+  await shot(page, 'v2-routing-map-skip-end', { fullPage: false });
   await expectAccessible(page);
   const card = map.getByTestId('routing-card').filter({ hasText: 'Asked only if' }).first();
   const id = (await card.getAttribute('data-card'))!;
@@ -559,4 +595,24 @@ test('the routing map, outline arcs and nested condition builder on the househol
   await expect(showIf.getByTestId('try-result')).toBeVisible();
   await shot(page, 'designer-condition-builder');
   await expectAccessible(page);
+
+  // The notice greets by name and city: the item lists its checks above its fields, the
+  // insertion that may come blank and the personal data shown before the notice is read.
+  await outlineItem(page, 'A0_CONSENT_TEXT').click();
+  const problems = page.getByTestId('item-problems');
+  await expect(problems).toContainText('may be blank for some cases');
+  await expect(problems).toContainText('before the information notice');
+  await problems.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await shot(page, 'v2-designer-item-problems', { fullPage: false });
+
+  // The web survey and paper forms are in the project's Distribution tab, a link away.
+  await expect(
+    page.getByRole('tablist', { name: 'Questionnaire sections' }).getByRole('tab'),
+  ).toHaveCount(2);
+  const toDistribution = page.getByTestId('designer-distribution-link');
+  await expect(toDistribution).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, 'v2-designer-distribution-link', { fullPage: false });
+  await toDistribution.click();
+  await expect(page.getByRole('tab', { name: 'Web survey', selected: true })).toBeVisible();
 });

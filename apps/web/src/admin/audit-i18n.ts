@@ -95,6 +95,8 @@ export const auditLogEn = {
     cawi: {
       links_viewed: 'Viewed the personal web links',
       links_downloaded: 'Downloaded the personal web links',
+      link_revoked: 'Revoked a personal web link',
+      link_expiry_set: 'Changed when a personal web link expires',
     },
     data: { exported: 'Exported data', downloaded: 'Downloaded an export' },
     share_link: { created: 'Shared results by link', revoked: 'Revoked a shared link' },
@@ -327,6 +329,8 @@ export const auditLogEs: typeof auditLogEn = {
     cawi: {
       links_viewed: 'Vio los enlaces web personales',
       links_downloaded: 'Descargó los enlaces web personales',
+      link_revoked: 'Revocó un enlace web personal',
+      link_expiry_set: 'Cambió el vencimiento de un enlace web personal',
     },
     data: { exported: 'Exportó datos', downloaded: 'Descargó una exportación' },
     share_link: {

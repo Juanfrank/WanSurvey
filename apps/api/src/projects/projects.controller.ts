@@ -41,6 +41,7 @@ import {
   ShortcutSettings,
   projectSettings,
 } from '@wansurvey/schema';
+import { themeProblems } from '@wansurvey/schema/cawi-theme';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, can, type AuthContext } from '../common/auth-context.js';
@@ -204,6 +205,15 @@ export class ProjectsController {
         if (next.consentText !== before.consentText && next.consentVersion <= before.consentVersion)
           body.settings.audio = { ...next, consentVersion: before.consentVersion + 1 };
       }
+      // A web survey style respondents could not read is not saved (the same rule as the form).
+      const theme = body.settings?.cawi?.theme;
+      const problems = theme ? themeProblems(theme) : [];
+      if (problems.length)
+        throw new BadRequestException({
+          code: 'THEME_CONTRAST',
+          message: 'Those colours do not keep the web survey readable',
+          problems,
+        });
       // A cleaning rule is checked as it is saved: it must read, and its patterns be valid.
       for (const r of body.settings?.cleaning?.rules ?? []) {
         const problem = ruleProblem(r.expression);

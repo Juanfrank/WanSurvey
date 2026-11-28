@@ -232,6 +232,24 @@ function contextField(node: Node): string | null {
   return OPTIONAL_NAMESPACES.has(node.object.name) ? `${node.object.name}.${node.property}` : null;
 }
 
+/** Case or respondent fields a template shows (`{{case.first_name}}`), guarded or not. */
+export function templateContextFields(segments: Segment[]): string[] {
+  const out = new Set<string>();
+  const visit = (segs: Segment[]) => {
+    for (const s of segs) {
+      if (s.type === 'expr') {
+        const field = contextField(s.expr);
+        if (field) out.add(field);
+      } else if (s.type === 'if') {
+        visit(s.then);
+        visit(s.else);
+      }
+    }
+  };
+  visit(segments);
+  return [...out];
+}
+
 /** Fields a condition shows to be present: `case.city`, `case.city != ""`, joined by `and`. */
 function presentIn(cond: Node): string[] {
   const field = contextField(cond);

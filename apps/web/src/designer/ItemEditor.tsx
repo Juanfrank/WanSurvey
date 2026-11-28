@@ -63,8 +63,12 @@ export interface EditorProps {
   select(id: string): void;
 }
 
-const tabCls =
-  '-mb-px border-b-2 border-transparent px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-navy data-[state=active]:border-indigo-600 data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-600';
+/**
+ * The inspector's parts (question, logic, modes) are a segmented control, not underlined tabs:
+ * it reads as a switch inside the editor, not as yet another level of page navigation.
+ */
+const segmentCls =
+  'rounded-md px-3 py-1 text-sm font-medium text-slate-700 hover:text-navy data-[state=active]:bg-white data-[state=active]:font-semibold data-[state=active]:text-indigo-ink-700 data-[state=active]:shadow-sm';
 
 /** Property panel for the node selected in the outline. */
 export function ItemEditor(props: EditorProps) {
@@ -557,15 +561,16 @@ function EditorTabs({
     <Tabs.Root defaultValue="basics" className="flex flex-col gap-4">
       <Tabs.List
         aria-label={t('designer.editorTabs')}
-        className="flex gap-1 border-b border-slate-200"
+        className="inline-flex gap-0.5 self-start rounded-lg border border-slate-200 bg-slate-100 p-0.5"
+        data-testid="inspector-segments"
       >
-        <Tabs.Trigger value="basics" className={tabCls}>
+        <Tabs.Trigger value="basics" className={segmentCls}>
           {t('designer.tab.basics')}
         </Tabs.Trigger>
-        <Tabs.Trigger value="logic" className={tabCls}>
+        <Tabs.Trigger value="logic" className={segmentCls}>
           {t('designer.tab.logic')}
         </Tabs.Trigger>
-        <Tabs.Trigger value="modes" className={tabCls}>
+        <Tabs.Trigger value="modes" className={segmentCls}>
           {t('designer.tab.modes')}
         </Tabs.Trigger>
       </Tabs.List>

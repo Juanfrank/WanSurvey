@@ -6,6 +6,7 @@ import {
   Inject,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -18,6 +19,7 @@ import { ZodPipe } from '../common/zod.js';
 import { CAWI_REPO, type CawiRepo } from './cawi-repo.js';
 import {
   CawiService,
+  LinkExpiryBody,
   OpenLinkBody,
   PrefilledLinkBody,
   TemplateBody,
@@ -126,6 +128,55 @@ export class CawiController {
           }),
         );
       return links;
+    });
+  }
+
+  /** A personal link's own end date (null: none), logged. */
+  @Patch('waves/:waveId/links/:linkId')
+  @RequirePermission('cawi.waves', PERM)
+  @ApiBody({ schema: z.toJSONSchema(LinkExpiryBody) as object })
+  setLinkExpiry(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('waveId', ParseUUIDPipe) waveId: string,
+    @Param('linkId', ParseUUIDPipe) linkId: string,
+    @Body(new ZodPipe(LinkExpiryBody)) body: z.infer<typeof LinkExpiryBody>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.cawi.setLinkExpiry(t, projectId, waveId, linkId, body.expiresAt);
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'cawi.link_expiry_set',
+          targetType: 'invitation',
+          targetId: linkId,
+          details: { projectId, waveId, expiresAt: body.expiresAt },
+        }),
+      );
+      return { ok: true };
+    });
+  }
+
+  /** Withdraws a personal link: it no longer opens the survey. Logged. */
+  @Post('waves/:waveId/links/:linkId/revoke')
+  @HttpCode(200)
+  @RequirePermission('cawi.waves', PERM)
+  revokeLink(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('waveId', ParseUUIDPipe) waveId: string,
+    @Param('linkId', ParseUUIDPipe) linkId: string,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      await this.cawi.revokeLink(t, ctx, projectId, waveId, linkId);
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'cawi.link_revoked',
+          targetType: 'invitation',
+          targetId: linkId,
+          details: { projectId, waveId },
+        }),
+      );
+      return { ok: true };
     });
   }
 

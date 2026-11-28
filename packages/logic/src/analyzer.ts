@@ -26,6 +26,7 @@ import {
   templateExpressions,
   templateFilterProblems,
   templateBlankableFields,
+  templateContextFields,
   hasPipes,
 } from './piping.js';
 import { typecheck, type MessageRef, type StaticType } from './typecheck.js';
@@ -83,6 +84,7 @@ export function analyze(questionnaire: Questionnaire): AnalysisResult {
   checkQuotas(model, specialCodes, add);
   checkScripts(model, specialCodes, add);
   checkItemOrders(model, add);
+  checkPersonalBeforeNotice(model, add);
 
   return { model, diagnostics, canPublish: !diagnostics.some((d) => d.severity === 'error') };
 }
@@ -1065,5 +1067,76 @@ function checkQuotas(
     }
     const { issues } = typecheck(q.expr.ast, { vars: model.vars, rosterChain: [], specialCodes });
     for (const i of issues) add({ ...i, field });
+  }
+  // The aim of a cell cannot be above its cap: the cap closes it first.
+  for (const q of model.quotas)
+    if (q.target != null && q.target > q.max)
+      add({
+        severity: 'error',
+        code: 'quota_target_over_max',
+        message: `The target of quota ${q.name} (${q.target}) is above its maximum (${q.max})`,
+        msg: {
+          id: 'quota_target_over_max',
+          params: { name: q.name, target: q.target, max: q.max },
+        },
+        field: `quotas.${q.id}.target`,
+      });
+}
+
+/**
+ * Personal data before the information notice: a question marked personal or sensitive, or a text
+ * that shows a case or respondent field ("Hola {{case.first_name}}"), up to the notice itself,
+ * reaches whoever opens the link before they are told who asks and why. Only when the
+ * questionnaire has a notice.
+ */
+function checkPersonalBeforeNotice(model: Model, add: (d: Diagnostic) => void) {
+  const notice = model.nodes.find(
+    (n) => n.kind === 'static' && (n.def as { role?: string }).role === 'consent',
+  );
+  if (!notice) return;
+  for (const node of model.nodes) {
+    if (node.index > notice.index) break;
+    const name = node.name ?? node.id;
+    const def = node.def as { personal?: boolean; sensitive?: string };
+    if (node.kind === 'question' && (def.personal || def.sensitive))
+      add({
+        severity: 'warning',
+        code: 'personal_before_notice',
+        message: `${name} asks for personal data before the information notice`,
+        msg: { id: 'personal_before_notice', params: { name } },
+        itemId: node.id,
+      });
+    const fields = new Set<string>();
+    let where: string | undefined;
+    // What the respondent reads: not the interviewer's instructions, nor wording for other modes.
+    const shown = nodeTexts(model, node).filter(
+      ({ field }) =>
+        !field.includes('interviewerInstruction') &&
+        (!field.startsWith('variants.') || field.startsWith('variants.CAWI.')),
+    );
+    for (const { field, text } of shown)
+      for (const src of Object.values(text)) {
+        if (!hasPipes(src)) continue;
+        try {
+          for (const f of templateContextFields(parseTemplate(src))) {
+            fields.add(f);
+            where ??= field;
+          }
+        } catch {
+          // Syntax errors are reported by checkTemplate.
+        }
+      }
+    if (fields.size)
+      add({
+        severity: 'warning',
+        code: 'personal_pipe_before_notice',
+        message: `${name} shows ${[...fields].join(', ')} before the information notice`,
+        msg: {
+          id: 'personal_pipe_before_notice',
+          params: { name, fields: [...fields].join(', ') },
+        },
+        itemId: node.id,
+        ...(where ? { field: where } : {}),
+      });
   }
 }

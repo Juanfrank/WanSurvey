@@ -67,6 +67,13 @@ export const WaveBody = z.strictObject({
   bouncesToCati: z.boolean().default(false),
   /** email or sms: invitations are sent; links: a personal link per case, nothing sent. */
   channel: z.enum(['email', 'sms', 'links']).default('email'),
+  /** When its personal links stop opening the survey (each link can change it); none: never. */
+  linksExpireAt: z.iso.datetime({ offset: true }).optional(),
+});
+
+/** A personal link's own end date; null: it does not expire. */
+export const LinkExpiryBody = z.strictObject({
+  expiresAt: z.iso.datetime({ offset: true }).nullable(),
 });
 
 export const OpenLinkBody = z.strictObject({
@@ -116,6 +123,14 @@ const lower = (e: string) => e.trim().toLowerCase();
  * with reminders, delivery tracking, bounces and unsubscribes, and the respondent's side of
  * the interview runtime, reached with a link token instead of a sign-in.
  */
+/** A personal link withdrawn by the project, or past its end date, no longer opens the survey. */
+function assertLinkOpens(inv: { revokedAt: Date | null; expiresAt: Date | null }) {
+  if (inv.revokedAt)
+    throw new GoneException({ code: 'LINK_REVOKED', message: 'This link was withdrawn' });
+  if (inv.expiresAt && inv.expiresAt.getTime() <= Date.now())
+    throw new GoneException({ code: 'LINK_EXPIRED', message: 'This link has expired' });
+}
+
 @Injectable()
 export class CawiService implements OnModuleInit {
   private readonly logger = new Logger('Cawi');
@@ -230,6 +245,12 @@ export class CawiService implements OnModuleInit {
     }
     if (!(await t.hasQuestionnaire(projectId, body.questionnaireId)))
       throw new BadRequestException({ code: 'NOT_FOUND', message: 'Unknown questionnaire' });
+    // Links made already expired would open nothing (and e-mails would never leave).
+    if (body.linksExpireAt && new Date(body.linksExpireAt).getTime() <= Date.now())
+      throw new BadRequestException({
+        code: 'LINKS_EXPIRY_PAST',
+        message: 'The links would expire before they are made',
+      });
     await this.runtime.latestVersion(t, projectId, body.questionnaireId, 'CAWI');
     return t.insertWave({
       projectId,
@@ -240,6 +261,7 @@ export class CawiService implements OnModuleInit {
       sendAt: body.sendAt ? new Date(body.sendAt) : null,
       bouncesToCati: body.bouncesToCati,
       channel: body.channel,
+      linksExpireAt: body.linksExpireAt ? new Date(body.linksExpireAt) : null,
       createdBy: ctx.userId,
     });
   }
@@ -518,14 +540,46 @@ export class CawiService implements OnModuleInit {
     return { queued: 0, links: rows.length, skipped: { noEmail: 0, suppressed: 0, optedOut: 0 } };
   }
 
-  /** The personal links of a wave, one per case, with how far each got. */
+  /** The personal links of a wave, one per case, with how far each got and until when it opens. */
   async waveLinks(t: CawiTx, projectId: string, waveId: string) {
     const rows = await t.waveLinkRows(projectId, waveId);
+    const now = Date.now();
     return rows.map((r) => ({
+      id: r.id,
       externalId: r.externalId,
       url: this.surveyUrl(decryptField(r.tokenEnc, this.config.ENCRYPTION_KEY)),
-      status: r.completedAt ? 'completed' : r.startedAt ? 'started' : 'notStarted',
+      status: r.completedAt
+        ? 'completed'
+        : r.revokedAt
+          ? 'revoked'
+          : r.expiresAt && r.expiresAt.getTime() <= now
+            ? 'expired'
+            : r.startedAt
+              ? 'started'
+              : 'notStarted',
+      expiresAt: r.expiresAt,
+      revokedAt: r.revokedAt,
     }));
+  }
+
+  /** A personal link's own end date (the controller logs it). */
+  async setLinkExpiry(
+    t: CawiTx,
+    projectId: string,
+    waveId: string,
+    linkId: string,
+    expiresAt: string | null,
+  ) {
+    if (!(await t.lockWave(projectId, waveId))) throw new NotFoundException('Outreach not found');
+    if (!(await t.setLinkExpiry(waveId, linkId, expiresAt ? new Date(expiresAt) : null)))
+      throw new NotFoundException('Link not found');
+  }
+
+  /** Withdraws a personal link, handed to the wrong person or forwarded (the controller logs it). */
+  async revokeLink(t: CawiTx, ctx: AuthContext, projectId: string, waveId: string, linkId: string) {
+    if (!(await t.lockWave(projectId, waveId))) throw new NotFoundException('Outreach not found');
+    if (!(await t.revokeLink(waveId, linkId, ctx.userId)))
+      throw new NotFoundException('Link not found');
   }
 
   suppressionList(t: CawiTx) {
@@ -810,6 +864,7 @@ export class CawiService implements OnModuleInit {
       if (!found) throw new NotFoundException('Link not found');
       const r = await t.lockSurvey(found.id, deviceId);
       if (!r) throw new NotFoundException('Survey not started');
+      if (r.interview.status === 'in_progress') assertLinkOpens(r.inv);
       return fn(t, r.inv, r.interview, r.lastSeq);
     });
   }
@@ -943,6 +998,8 @@ export class CawiService implements OnModuleInit {
    */
   async respondent(token: string, deviceId: string, linkQuery = '') {
     return this.byToken(token, async (tx, inv) => {
+      // A finished survey still says so; otherwise a withdrawn or expired link opens nothing.
+      if (!inv.completedAt) assertLinkOpens(inv);
       // The project once (read with the link): its settings, its logo and the interview's.
       const project = await this.cases.project(tx, inv.projectId);
       const settings = projectSettings(project.settings);

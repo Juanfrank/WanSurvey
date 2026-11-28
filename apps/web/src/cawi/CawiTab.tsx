@@ -40,7 +40,18 @@ interface Wave {
   createdAt: string;
   funnel: Funnel;
   channel: 'email' | 'sms' | 'links';
+  linksExpireAt: string | null;
 }
+
+/** A day chosen in a date field, as the end of that day where the person is. */
+const endOfDay = (day: string) => new Date(`${day}T23:59:59.999`).toISOString();
+/** An instant as the local day a date field shows. */
+const localDay = (iso: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 const STEPS = [
   'sent',
@@ -372,6 +383,7 @@ function WavesSection({
   const [filter, setFilter] = useState('');
   const [reminders, setReminders] = useState('3, 7');
   const [toCati, setToCati] = useState(false);
+  const [expires, setExpires] = useState('');
   const [channel, setChannel] = useState<'email' | 'sms' | 'links'>('email');
   const [linksOf, setLinksOf] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -390,11 +402,13 @@ function WavesSection({
             .filter((n) => Number.isInteger(n) && n > 0),
           bouncesToCati: toCati,
           channel,
+          ...(expires ? { linksExpireAt: endOfDay(expires) } : {}),
         },
       }),
     onSuccess: async () => {
       setMessage(t('cawi.waves.created'));
       setName('');
+      setExpires('');
       await qc.invalidateQueries({ queryKey: ['waves', projectId] });
     },
     onError: (e) => setMessage(localiseError(t, e)),
@@ -506,6 +520,11 @@ function WavesSection({
                     {t('cawi.links.chip')}
                   </span>
                 ) : null}
+                {w.linksExpireAt ? (
+                  <span className="text-xs text-slate-600" data-testid="wave-expiry">
+                    {t('cawi.links.expireOn', { day: localDay(w.linksExpireAt) })}
+                  </span>
+                ) : null}
               </div>
               {linksOf === w.id ? <WaveLinks projectId={projectId} wave={w} /> : null}
               <FunnelChart name={w.name} funnel={w.funnel} />
@@ -558,6 +577,20 @@ function WavesSection({
               {t('cawi.waves.remindersHelp')}
             </span>
           </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('cawi.links.expires')}</span>
+            <input
+              type="date"
+              className={controlCls}
+              value={expires}
+              min={localDay(new Date().toISOString())}
+              aria-describedby="cawi-expires-help"
+              onChange={(e) => setExpires(e.target.value)}
+            />
+            <span id="cawi-expires-help" className="text-xs text-slate-600">
+              {t('cawi.links.expiresHelp')}
+            </span>
+          </label>
         </div>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1 font-medium">{t('cawi.links.channel')}</legend>
@@ -595,7 +628,14 @@ function WavesSection({
   );
 }
 
-type WaveLink = { externalId: string; url: string; status: string };
+type WaveLink = {
+  id: string;
+  externalId: string;
+  url: string;
+  status: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+};
 
 /**
  * The personal links of a "links only" wave: one per case, to hand out by any channel. Link
@@ -609,6 +649,34 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
   const [shown, setShown] = useState<ReadonlySet<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
+  // Kept as a message key, so it follows a change of interface language.
+  const [note, setNote] = useState<{ key: string; values: Record<string, string> } | null>(null);
+  const qc = useQueryClient();
+  // Each change is logged by the server; the list is read again afterwards (and that listing too).
+  const changed = (key: string, values: Record<string, string>) => {
+    setProblem('');
+    setNote({ key, values });
+    void qc.invalidateQueries({ queryKey: ['wave-links', wave.id] });
+  };
+  const revoke = useMutation({
+    mutationFn: (l: WaveLink) =>
+      api(`/projects/${projectId}/waves/${wave.id}/links/${l.id}/revoke`, { method: 'POST' }),
+    onSuccess: (_, l) => changed('cawi.links.revoked', { id: l.externalId }),
+    onError: (e) => setProblem(localiseError(t, e)),
+  });
+  const expiry = useMutation({
+    mutationFn: ({ l, day }: { l: WaveLink; day: string }) =>
+      api(`/projects/${projectId}/waves/${wave.id}/links/${l.id}`, {
+        method: 'PATCH',
+        body: { expiresAt: day ? endOfDay(day) : null },
+      }),
+    onSuccess: (_, { l, day }) =>
+      changed(day ? 'cawi.links.expirySet' : 'cawi.links.expiryCleared', {
+        id: l.externalId,
+        day,
+      }),
+    onError: (e) => setProblem(localiseError(t, e)),
+  });
   const links = useQuery({
     queryKey: ['wave-links', wave.id],
     queryFn: () => api<WaveLink[]>(`/projects/${projectId}/waves/${wave.id}/links`),
@@ -685,6 +753,9 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
         <p role="alert" className="text-sm text-red-ink-700 empty:hidden">
           {problem}
         </p>
+        <p role="status" className="text-sm text-slate-700 empty:hidden" data-testid="links-note">
+          {note ? t(note.key, note.values) : ''}
+        </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -695,6 +766,9 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
               </th>
               <th scope="col">{t('cawi.links.url')}</th>
               <th scope="col">{t('cawi.links.status')}</th>
+              <th scope="col" className="pr-2">
+                {t('cawi.links.expiresCol')}
+              </th>
               <th scope="col">
                 <span className="sr-only">{t('cawi.links.actions')}</span>
               </th>
@@ -708,6 +782,22 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
                   {shown.has(l.externalId) ? withParams(l.url) : maskLink(withParams(l.url))}
                 </td>
                 <td>{t(`cawi.links.statuses.${l.status}`)}</td>
+                <td className="py-0.5 pr-2">
+                  <input
+                    // Read again after a change (saved or not), so it shows what is stored.
+                    key={`${l.id}-${l.expiresAt ?? ''}-${expiry.isError ? 'e' : ''}`}
+                    type="date"
+                    className={`${controlCls} w-auto py-0.5 text-xs`}
+                    aria-label={t('cawi.links.expiresOne', { id: l.externalId })}
+                    disabled={!!l.revokedAt || l.status === 'completed'}
+                    defaultValue={localDay(l.expiresAt)}
+                    onBlur={(e) => {
+                      // Saved on leaving the field, so a date being typed is not saved half-way.
+                      const day = e.target.value;
+                      if (day !== localDay(l.expiresAt)) expiry.mutate({ l, day });
+                    }}
+                  />
+                </td>
                 <td className="whitespace-nowrap py-0.5 text-right">
                   <button
                     type="button"
@@ -733,6 +823,18 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
                     onClick={() => void copy(l)}
                   >
                     {copied === l.externalId ? t('cawi.links.copied') : t('cawi.links.copy')}
+                  </button>{' '}
+                  <button
+                    type="button"
+                    className={smallBtn}
+                    aria-label={t('cawi.links.revokeOne', { id: l.externalId })}
+                    disabled={!!l.revokedAt || l.status === 'completed' || revoke.isPending}
+                    onClick={() => {
+                      if (window.confirm(t('cawi.links.revokeConfirm', { id: l.externalId })))
+                        revoke.mutate(l);
+                    }}
+                  >
+                    {t('cawi.links.revoke')}
                   </button>
                 </td>
               </tr>

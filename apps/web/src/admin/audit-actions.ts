@@ -76,6 +76,8 @@ export const AUDIT_ACTIONS = [
   'data.downloaded',
   'cawi.links_viewed',
   'cawi.links_downloaded',
+  'cawi.link_revoked',
+  'cawi.link_expiry_set',
   'share_link.created',
   'share_link.revoked',
   'library_item.created',

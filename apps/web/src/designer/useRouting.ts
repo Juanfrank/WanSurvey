@@ -72,9 +72,9 @@ export function logicSummary(
   for (const s of n.skips) {
     const target =
       s.to === 'END'
-        ? t('designer.logic.end')
+        ? t('designer.routing.toEnd')
         : s.to === 'END_ROW'
-          ? t('designer.logic.endRow')
+          ? t('designer.routing.toEndRow')
           : s.to;
     parts.push(t('designer.routing.skipTo', { to: target, c: r.describe(s.ast, s.src) }));
   }

@@ -527,6 +527,7 @@ export interface MssqlSchema {
     created_by: string | null;
     created_at: Instant;
     sent_at: InstantOrNull;
+    links_expire_at: InstantOrNull;
   };
   invitations: {
     id: string;
@@ -556,6 +557,9 @@ export interface MssqlSchema {
     lease_until: InstantOrNull;
     last_error: string | null;
     interview_id: string | null;
+    expires_at: InstantOrNull;
+    revoked_at: InstantOrNull;
+    revoked_by: string | null;
   };
   suppressions: {
     id: string;

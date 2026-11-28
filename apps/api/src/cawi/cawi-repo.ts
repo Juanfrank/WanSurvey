@@ -46,6 +46,10 @@ export interface InvitationView {
   leaseUntil: Date | null;
   lastError: string | null;
   interviewId: string | null;
+  /** After it the link no longer opens the survey; null: it does not expire. */
+  expiresAt: Date | null;
+  /** Withdrawn by project staff: the link no longer opens the survey. */
+  revokedAt: Date | null;
 }
 export interface WaveView {
   id: string;
@@ -62,6 +66,7 @@ export interface WaveView {
   createdBy: string | null;
   createdAt: Date;
   sentAt: Date | null;
+  linksExpireAt: Date | null;
 }
 export interface SuppressionView {
   id: string;
@@ -165,6 +170,7 @@ export interface CawiTx extends InterviewsTx {
     sendAt: Date | null;
     bouncesToCati: boolean;
     channel: string;
+    linksExpireAt: Date | null;
     createdBy: string;
   }): Promise<WaveView>;
   waves(projectId: string): Promise<WaveView[]>;
@@ -201,8 +207,20 @@ export interface CawiTx extends InterviewsTx {
     projectId: string,
     waveId: string,
   ): Promise<
-    { tokenEnc: string; externalId: string; startedAt: Date | null; completedAt: Date | null }[]
+    {
+      id: string;
+      tokenEnc: string;
+      externalId: string;
+      startedAt: Date | null;
+      completedAt: Date | null;
+      expiresAt: Date | null;
+      revokedAt: Date | null;
+    }[]
   >;
+  /** A link of the wave gets an end date (null: none); false when the wave has no such link. */
+  setLinkExpiry(waveId: string, id: string, expiresAt: Date | null): Promise<boolean>;
+  /** A link of the wave is withdrawn (once); false when the wave has no such link. */
+  revokeLink(waveId: string, id: string, userId: string): Promise<boolean>;
   suppressionList(): Promise<SuppressionView[]>;
 
   // Open link
@@ -319,6 +337,8 @@ function toInvitation(r: Record<string, unknown>): InvitationView {
     leaseUntil: g('lease_until'),
     lastError: g('last_error'),
     interviewId: id('interview_id'),
+    expiresAt: (r.expires_at as Date | null) ?? null,
+    revokedAt: (r.revoked_at as Date | null) ?? null,
   } as unknown as InvitationView;
 }
 
@@ -339,6 +359,7 @@ function toWave(r: Record<string, unknown>): WaveView {
     createdBy: lowOrNull((r.created_by as string | null) ?? null),
     createdAt: g('created_at'),
     sentAt: g('sent_at'),
+    linksExpireAt: (r.links_expire_at as Date | null) ?? null,
   } as unknown as WaveView;
 }
 
@@ -440,6 +461,7 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
       reminderDays: v.reminderDays,
       sendAt: v.sendAt,
       bouncesToCati: v.bouncesToCati,
+      linksExpireAt: v.linksExpireAt,
       createdBy: v.createdBy,
     });
     return (await this.wave(id))!;
@@ -609,16 +631,41 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
 
   async waveLinkRows(projectId: string, waveId: string) {
     const res = await ksql<Record<string, unknown>>`
-      SELECT i.token_enc, c.external_id, i.started_at, i.completed_at
+      SELECT i.id, i.token_enc, c.external_id, i.started_at, i.completed_at, i.expires_at,
+        i.revoked_at
       FROM invitations i JOIN cases c ON c.id = i.case_id
       WHERE i.project_id = ${projectId} AND i.wave_id = ${waveId}
       ORDER BY c.external_id`.execute(this.mctx);
     return res.rows.map((r) => ({
+      id: low(r.id as string),
       tokenEnc: r.token_enc as string,
       externalId: r.external_id as string,
       startedAt: (r.started_at as Date | null) ?? null,
       completedAt: (r.completed_at as Date | null) ?? null,
+      expiresAt: (r.expires_at as Date | null) ?? null,
+      revokedAt: (r.revoked_at as Date | null) ?? null,
     }));
+  }
+
+  async setLinkExpiry(waveId: string, id: string, expiresAt: Date | null) {
+    const r = await this.mctx
+      .updateTable('invitations')
+      .set({ expires_at: expiresAt ? instant(expiresAt) : null })
+      .where('id', '=', id)
+      .where('wave_id', '=', waveId)
+      .executeTakeFirst();
+    return Number(r.numUpdatedRows) > 0;
+  }
+
+  async revokeLink(waveId: string, id: string, userId: string) {
+    // A queued invitation that is revoked is not sent: it leaves the queue.
+    const r = await ksql`
+      UPDATE invitations
+      SET revoked_at = COALESCE(revoked_at, SYSDATETIMEOFFSET()),
+        revoked_by = COALESCE(revoked_by, ${userId}),
+        status = CASE WHEN status = 'queued' THEN 'revoked' ELSE status END
+      WHERE id = ${id} AND wave_id = ${waveId}`.execute(this.mctx);
+    return Number(r.numAffectedRows ?? 0) > 0;
   }
 
   async suppressionList() {
@@ -716,6 +763,10 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
   }
 
   async markWavesSent() {
+    // An invitation whose link expired before it went out is not sent any more: it leaves the queue.
+    await ksql`
+      UPDATE invitations SET status = 'expired'
+      WHERE status = 'queued' AND expires_at <= SYSDATETIMEOFFSET()`.execute(this.mctx);
     await ksql`
       UPDATE waves SET status = 'sent'
       WHERE status = 'sending' AND NOT EXISTS (
