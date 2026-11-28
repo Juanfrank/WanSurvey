@@ -1007,17 +1007,19 @@ function RolesDialog({
     onSuccess: onSaved,
   });
   return (
-    <Dialog title={t('team.roles.dialogTitle', { name: member.name })} onClose={onClose} wide>
-      <div className="flex flex-col gap-4">
-        <RolesEditor
-          value={grants}
-          onChange={setGrants}
-          grantable={grantable}
-          projects={projects}
-        />
-        <ExternalReason opens={opens} reason={reason} onReason={setReason} />
-        {save.isError ? <ErrorText>{errorText(save.error)}</ErrorText> : null}
-        <div className="flex justify-end gap-2">
+    <Dialog
+      title={t('team.roles.dialogTitle', { name: member.name })}
+      onClose={onClose}
+      wide
+      // Kept in view under the rows, however many roles there are.
+      footer={
+        <>
+          {/* The error beside the button that caused it, in view however far the body scrolls. */}
+          {save.isError ? (
+            <div className="mr-auto basis-full sm:basis-auto">
+              <ErrorText>{errorText(save.error)}</ErrorText>
+            </div>
+          ) : null}
           <Button type="button" variant="secondary" onClick={onClose}>
             {t('team.invite.cancel')}
           </Button>
@@ -1029,7 +1031,17 @@ function RolesDialog({
           >
             {t('team.roles.save')}
           </Button>
-        </div>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <RolesEditor
+          value={grants}
+          onChange={setGrants}
+          grantable={grantable}
+          projects={projects}
+        />
+        <ExternalReason opens={opens} reason={reason} onReason={setReason} />
       </div>
     </Dialog>
   );

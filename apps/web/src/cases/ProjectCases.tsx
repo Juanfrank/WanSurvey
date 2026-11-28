@@ -3,6 +3,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { subTabCls } from '../routes/tabs.js';
+import { controlCls } from '../designer/fields.js';
 import { api } from '../api.js';
 import { useCan } from '../designer/hooks.js';
 import { CasesTab } from './CasesTab.js';
@@ -10,6 +11,9 @@ import { SamplingTab } from './SamplingTab.js';
 import { QuestionnaireScope } from './scope.js';
 
 export type CasesSub = 'list' | 'sampling';
+
+/** Up to this many questionnaires, a row of pills; more, a drop-down list (one line either way). */
+const MAX_PILLS = 3;
 
 const pillCls =
   'rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 aria-pressed:border-indigo-500 aria-pressed:bg-indigo-50 aria-pressed:text-indigo-ink-700';
@@ -74,7 +78,23 @@ export function ProjectCases({
   return (
     <QuestionnaireScope.Provider value={current}>
       <div className="flex flex-col gap-4">
-        {qs.length > 1 ? (
+        {qs.length > MAX_PILLS ? (
+          // Too many for one row of pills: a drop-down list.
+          <label className="flex items-center gap-2 text-sm">
+            <span className="font-medium text-slate-600">{t('cases.tabs.questionnaire')}</span>
+            <select
+              className={`${controlCls} w-auto max-w-[20rem]`}
+              value={current}
+              onChange={(e) => pick(e.target.value)}
+            >
+              {qs.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : qs.length > 1 ? (
           <div
             role="group"
             aria-label={t('cases.tabs.questionnaire')}

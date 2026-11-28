@@ -26,6 +26,9 @@ interface Rule {
   assignedToUser: number;
 }
 
+/** The workload's first column, held at the left edge while the table scrolls sideways. */
+const stickyCol = 'sticky left-0 z-10 bg-white shadow-[1px_0_0_rgb(226_232_240)]';
+
 /** Workload per person, assignment rules, and applying them. */
 export function AssignmentsTab({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
@@ -171,14 +174,17 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
         <h2 className="mb-1 text-lg font-semibold">{t('cases.rules.workload')}</h2>
         {people.data?.length ? (
           <TableScroll label={t('cases.rules.workload')}>
-            <table className="w-full text-sm" data-testid="workload">
+            {/* Separate borders: with collapsed ones Chrome lets the cells scrolled under the
+                sticky column show through at its edge. The row lines go on the cells. */}
+            <table
+              className="w-full border-separate border-spacing-0 text-sm [&_tbody_tr+tr>*]:border-t [&_tbody_tr+tr>*]:border-slate-100"
+              data-testid="workload"
+            >
               <thead className="text-left text-xs whitespace-nowrap text-slate-600">
                 <tr>
-                  <th scope="col" className="py-1 pr-2">
+                  {/* The person stays in view while the figures scroll sideways. */}
+                  <th scope="col" className={`${stickyCol} py-1 pr-2`}>
                     {t('cases.rules.person')}
-                  </th>
-                  <th scope="col" className="px-2">
-                    {t('cases.rules.teams')}
                   </th>
                   {STATUSES.filter((s) => s !== 'fresh').map((s) => (
                     <th key={s} scope="col" className="px-2">
@@ -199,18 +205,22 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {people.data.map((p) => (
                   <tr key={p.userId} data-person={p.email} className="whitespace-nowrap">
-                    <th scope="row" className="py-1 pr-2 text-left font-medium">
+                    <th scope="row" className={`${stickyCol} py-1 pr-2 text-left font-medium`}>
                       {p.name}
+                      {/* Their teams, a detail under the name rather than a column of its own. */}
+                      {p.teams?.length ? (
+                        <span
+                          className="block max-w-[12rem] truncate text-xs font-normal text-slate-600"
+                          title={p.teams.map((tm) => tm.name).join(', ')}
+                          data-col="teams"
+                        >
+                          {p.teams.map((tm) => tm.name).join(', ')}
+                        </span>
+                      ) : null}
                     </th>
-                    <td
-                      className="max-w-[12rem] truncate px-2 text-slate-700"
-                      title={p.teams?.map((tm) => tm.name).join(', ') || undefined}
-                    >
-                      {p.teams?.map((tm) => tm.name).join(', ') || '—'}
-                    </td>
                     {STATUSES.filter((s) => s !== 'fresh').map((s) => (
                       <td key={s} data-status={s} className="px-2">
                         {p.workload[s] ?? 0}
