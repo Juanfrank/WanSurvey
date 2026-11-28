@@ -23,7 +23,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { api, ApiError, upload } from '../api.js';
-import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
 import { InfoTip } from '../cases/samplingControls.js';
 import { LogoMark, LogoName, OrgLogoImage, WithWanSurvey } from '../routes/Logo.js';
 import { tokenVar } from '../theme.js';
@@ -311,7 +311,7 @@ export function OrgAppearance({
           <h3 id="org-logo" className="text-base font-semibold">
             {t('admin.org.appearance.logo')}
           </h3>
-          <p className="text-sm text-slate-600">{t('admin.org.appearance.logoHelp')}</p>
+          <FoldedHelp className="text-sm">{t('admin.org.appearance.logoHelp')}</FoldedHelp>
           <label className="flex max-w-md flex-col gap-1">
             <span className="text-sm font-medium text-slate-700">
               {t('admin.org.appearance.logoAlt')}
@@ -327,9 +327,7 @@ export function OrgAppearance({
                 setSaved(null);
               }}
             />
-            <span id="org-logo-alt-help" className="text-xs text-slate-600">
-              {t('admin.org.appearance.logoAltHelp')}
-            </span>
+            <FoldedHelp id="org-logo-alt-help">{t('admin.org.appearance.logoAltHelp')}</FoldedHelp>
           </label>
           <div className="flex flex-wrap items-center gap-3">
             {logo ? (
@@ -395,7 +393,7 @@ export function OrgAppearance({
               </label>
             ))}
           </div>
-          <p className="text-xs text-slate-600">{t(`admin.org.appearance.appLogoHelp.${place}`)}</p>
+          <FoldedHelp>{t(`admin.org.appearance.appLogoHelp.${place}`)}</FoldedHelp>
         </fieldset>
 
         <label className="flex max-w-xs flex-col gap-1">
@@ -485,7 +483,7 @@ export function OrgAppearance({
               onChange={setAccentColor}
             />
           ) : null}
-          <p className="text-xs text-slate-600">{t('admin.org.appearance.accentHelp')}</p>
+          <FoldedHelp>{t('admin.org.appearance.accentHelp')}</FoldedHelp>
         </fieldset>
 
         <fieldset className="flex flex-col gap-2">

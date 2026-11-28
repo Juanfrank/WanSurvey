@@ -568,7 +568,7 @@ function TwoFactorPolicy() {
           <Link
             to="/admin/users"
             search={{ twoStep: 'required' }}
-            className="self-start text-indigo-700 underline"
+            className="self-start text-indigo-ink-700 underline"
           >
             {t('admin.org.security.pending', { count: pending })}
           </Link>
