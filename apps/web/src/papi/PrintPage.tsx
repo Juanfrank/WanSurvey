@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { Button, PageHeader } from '../routes/ui.js';
 import { QrCode } from './QrCode.js';
+import { chosenFormatLocale } from '../format.js';
 
 interface Forms {
   questionnaire: { id: string; name: string };
@@ -125,6 +126,7 @@ export function PrintPage() {
           <PaperForm
             compiled={f.compiled}
             lang={lang}
+            formatLocale={chosenFormatLocale()}
             formId={c.externalId}
             context={{ case: c.sample, respondent: respondentFromCase(c.sample) }}
           />

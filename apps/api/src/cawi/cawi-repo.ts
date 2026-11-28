@@ -273,6 +273,8 @@ export interface CawiTx extends InterviewsTx {
   ): Promise<{ inv: InvitationView; interview: InterviewRow; lastSeq: number | null } | null>;
   caseStatusOf(caseId: string): Promise<string | null>;
   logo(projectId: string): Promise<{ contentType: string; image: Buffer } | null>;
+  /** The organisation's regional format of dates and numbers (null: the language's). */
+  formatLocale(): Promise<string | null>;
   setInterviewContext(id: string, context: unknown): Promise<void>;
   /** The case's sample for piping, as stored. */
   casePiping(caseId: string): Promise<{ sample: unknown; samplePii: string | null } | null>;
@@ -866,6 +868,15 @@ export class MssqlCawiTx extends MssqlInterviewsTx implements CawiTx {
       .where('project_id', '=', projectId)
       .executeTakeFirst();
     return l ? { contentType: l.content_type, image: l.image } : null;
+  }
+
+  async formatLocale() {
+    const t = await this.mctx
+      .selectFrom('tenants')
+      .select('format_locale')
+      .where('id', '=', this.mten)
+      .executeTakeFirst();
+    return t?.format_locale ?? null;
   }
 
   async setInterviewContext(id: string, context: unknown) {

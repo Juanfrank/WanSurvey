@@ -39,6 +39,8 @@ interface RespondentPayload {
   completion: { message: string; redirectUrl: string };
   /** The project's look: colours, type, corners and logo (project settings). */
   branding?: Branding;
+  /** How dates are written in the form: the organisation's regional format (null: the language's). */
+  formatLocale?: string | null;
 }
 
 const hasState = (s: unknown): s is Partial<InterviewState> =>
@@ -367,6 +369,7 @@ export function RespondentPage({ token }: { token: string }) {
         session={session}
         mode="CAWI"
         lang={payload.interview.language}
+        formatLocale={payload.formatLocale ?? null}
         onChange={onChange}
       />
       {finished ? (

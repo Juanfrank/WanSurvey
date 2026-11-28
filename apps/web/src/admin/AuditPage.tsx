@@ -16,6 +16,7 @@ import {
 } from '../routes/ui.js';
 import { AUDIT_ACTIONS, AUDIT_PRESETS, type AuditPreset } from './audit-actions.js';
 import { actionLabel, describeDetails, type DescribeContext } from './audit-details.js';
+import { wordsLocale } from '../format.js';
 
 interface Entry {
   id: string;
@@ -124,7 +125,10 @@ export function AuditPage() {
     return [...m];
   }, []);
   const area = (a: string) => t(`admin.log.areas.${areaOf(a)}`, { defaultValue: areaOf(a) });
-  const when = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' });
+  const when = new Intl.DateTimeFormat(wordsLocale(i18n.language), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
   const ctx: DescribeContext = {
     t: (k, o) => t(k, o ?? {}),
     name: (id) => names.get(id),

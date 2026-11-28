@@ -38,6 +38,22 @@ describe('piping', () => {
       '12 de octubre de 2026',
     );
   });
+  it('date filter writes figures in the regional format, apart from the language', () => {
+    expect(renderTemplate('{{today | date:"short"}}', scope, { lang: 'en' })).toBe('10/12/26');
+    expect(renderTemplate('{{today | date:"short"}}', scope, { lang: 'en', locale: 'en-GB' })).toBe(
+      '12/10/2026',
+    );
+    expect(renderTemplate('{{today | date:"iso"}}', scope, { lang: 'en', locale: 'en-GB' })).toBe(
+      '2026-10-12',
+    );
+    // A month name stays in the language of the text, whatever the format's language.
+    expect(renderTemplate('{{today | date}}', scope, { lang: 'es', locale: 'en-US' })).toBe(
+      '12 oct 2026',
+    );
+    expect(renderTemplate('{{today | date:"short"}}', scope, { lang: 'es', locale: 'en-US' })).toBe(
+      '10/12/26',
+    );
+  });
   it('roster pipes with i', () => {
     expect(r('{{roster.HH_MEMBERS[i].NAME}} and {{roster.HH_MEMBERS[1].NAME}}')).toBe(
       'Eva and Luis',

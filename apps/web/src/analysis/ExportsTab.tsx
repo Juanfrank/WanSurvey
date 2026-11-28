@@ -6,7 +6,7 @@ import { controlCls } from '../designer/fields.js';
 import { localiseError, useNote } from '../i18n-messages.js';
 import { Button, Drawer, ErrorText, MoreMenu, TableScroll, type MenuEntry } from '../routes/ui.js';
 import { DataFilterFields, type DataFilters } from './ResultsTab.js';
-import { fileSize } from '../format.js';
+import { fileSize, locale } from '../format.js';
 import { useCan } from '../designer/hooks.js';
 
 const FORMATS = ['csv', 'xlsx', 'sav', 'dta', 'codebook', 'sql'] as const;
@@ -97,13 +97,13 @@ export function ExportsTab({ projectId }: { projectId: string }) {
     },
     onError: (e) => setError(localiseError(t, e)),
   });
-  const dateOnly = (iso: string) => new Date(iso).toLocaleDateString(i18n.language);
+  const dateOnly = (iso: string) => new Date(iso).toLocaleDateString(locale(i18n.language));
   const when = (iso: string) =>
-    new Date(iso).toLocaleString(i18n.language, { dateStyle: 'short', timeStyle: 'short' });
+    new Date(iso).toLocaleString(locale(i18n.language), { dateStyle: 'short', timeStyle: 'short' });
   /** The options of an export in words: enough to tell two files apart and to reproduce one. */
   const params = (o: ExportOptions) => {
     const v = versions.data?.find((q) => q.id === o.questionnaireId);
-    const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language);
+    const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(locale(i18n.language));
     return [
       v ? v.name : null,
       o.format === 'csv' || o.format === 'xlsx' || o.format === 'sql'

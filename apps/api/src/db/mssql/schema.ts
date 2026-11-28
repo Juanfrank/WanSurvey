@@ -23,6 +23,8 @@ export interface MssqlSchema {
     settings: JsonText;
     branding: JsonText;
     role_permissions: JsonText;
+    /** Regional format (BCP 47); null follows the language. */
+    format_locale: string | null;
     created_at: Instant;
   };
   users: {

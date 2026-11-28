@@ -14,7 +14,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, apiFull } from '../api.js';
-import { dateTime, number, timeOnly } from '../format.js';
+import { dateTime, locale, number, timeOnly, wordsLocale } from '../format.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { useNote } from '../i18n-messages.js';
@@ -482,7 +482,7 @@ export function CallsTab({
   });
 
   const theirTime = (at: Date, zone: string) =>
-    at.toLocaleString(i18n.language, {
+    at.toLocaleString(wordsLocale(i18n.language), {
       timeZone: zone,
       weekday: 'short',
       hour: '2-digit',
@@ -815,7 +815,7 @@ export function CallsTab({
                 >
                   {callbackDate && !Number.isNaN(callbackDate.getTime())
                     ? t('cati.callbackWhen', {
-                        when: longWhen(callbackDate, tz, i18n.language),
+                        when: longWhen(callbackDate, tz, wordsLocale(i18n.language)),
                         rel: fromNow(callbackDate, now, i18n.language),
                       })
                     : ''}
@@ -1052,7 +1052,7 @@ function Callbacks({
     .map((g) => ({ g, items: rows.filter((c) => group(c) === g) }))
     .filter((x) => x.items.length);
   const fmt = (at: Date, opts: Intl.DateTimeFormatOptions) =>
-    at.toLocaleString(i18n.language, opts);
+    at.toLocaleString(wordsLocale(i18n.language), opts);
 
   return (
     <section aria-labelledby="calls-callbacks" className="flex flex-col gap-3">
@@ -1173,7 +1173,7 @@ export function CallList({ rows }: { rows: CallRow[] }) {
       {rows.map((r) => (
         <li key={r.id}>
           {t('cati.historyRow', {
-            when: new Date(r.startedAt).toLocaleString(i18n.language, {
+            when: new Date(r.startedAt).toLocaleString(locale(i18n.language), {
               dateStyle: 'short',
               timeStyle: 'short',
             }),

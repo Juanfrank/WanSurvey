@@ -14,7 +14,7 @@ import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
 import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError, useNote } from '../i18n-messages.js';
-import { dateTime } from '../format.js';
+import { dateTime, locale } from '../format.js';
 import { Button, Drawer, ErrorText } from '../routes/ui.js';
 import { ImportTab } from './ImportTab.js';
 import { CrossChecks } from './CrossChecks.js';
@@ -169,8 +169,8 @@ export function SamplingTab({ projectId }: { projectId: string }) {
   const census = plan.design.family === 'census';
   const usesFrame = plan.source.kind !== 'field' && plan.source.frameAvailable;
   const pct = (v: number) =>
-    new Intl.NumberFormat(i18n.language, { maximumSignificantDigits: 3 }).format(v);
-  const fmt = (v: number) => new Intl.NumberFormat(i18n.language).format(v);
+    new Intl.NumberFormat(locale(i18n.language), { maximumSignificantDigits: 3 }).format(v);
+  const fmt = (v: number) => new Intl.NumberFormat(locale(i18n.language)).format(v);
   const m = plan.design.method;
 
   return (

@@ -43,7 +43,7 @@ import type { SampleField } from '../designer/vars.js';
 import { FieldLabels } from './FieldLabels.js';
 import { InfoTip } from './samplingControls.js';
 import { useMedia } from '../routes/SideDrawer.js';
-import { dateTime } from '../format.js';
+import { dateTime, locale } from '../format.js';
 import { AssignmentsTab } from './AssignmentsTab.js';
 import { DistributeDialog } from './DistributeDialog.js';
 import { useQuestionnaireScope } from './scope.js';
@@ -1254,7 +1254,7 @@ function SamplingFacts({
     onError: (e) => setNote({ error: e }),
   });
   const n = (x: number | null | undefined, digits: number) =>
-    x == null ? '—' : x.toLocaleString(i18n.language, { maximumFractionDigits: digits });
+    x == null ? '—' : x.toLocaleString(locale(i18n.language), { maximumFractionDigits: digits });
   return (
     <section aria-labelledby="cd-sampling" data-testid="case-sampling">
       <h3 id="cd-sampling" className="mb-1 font-semibold">

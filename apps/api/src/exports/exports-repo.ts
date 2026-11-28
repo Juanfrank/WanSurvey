@@ -35,6 +35,8 @@ export interface ExportRowView {
 }
 
 export interface ExportsTx extends AnalysisTx {
+  /** The organisation's regional format of dates and numbers (null: none chosen). */
+  formatLocale(): Promise<string | null>;
   createExport(v: {
     projectId: string;
     questionnaireId: string;
@@ -124,6 +126,15 @@ export class MssqlExportsTx extends MssqlAnalysisTx implements ExportsTx {
     cstore: CasesStore,
   ) {
     super(metx, met, cstore);
+  }
+
+  async formatLocale() {
+    const t = await this.metx
+      .selectFrom('tenants')
+      .select('format_locale')
+      .where('id', '=', this.met)
+      .executeTakeFirst();
+    return t?.format_locale ?? null;
   }
 
   async createExport(v: Parameters<ExportsTx['createExport']>[0]) {

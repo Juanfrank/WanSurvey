@@ -7,6 +7,7 @@ import { Button, ErrorText } from '../routes/ui.js';
 import { BarTable, fmtNum, fmtPct, Progress } from './charts.js';
 import { filterQuery, UnreviewedNotice, type DataFilters } from './ResultsTab.js';
 import { ToplineItems, type ToplineItem } from './Topline.js';
+import { wordsLocale } from '../format.js';
 
 export interface Summary {
   project: { name: string; code: string };
@@ -44,7 +45,10 @@ function FieldSection({ f, lang }: { f: FieldProgress; lang: string }) {
   const dispositions = Object.entries(f.byDisposition).sort((a, b) => b[1] - a[1]);
   const days = f.byDay.filter((d) => d.completes > 0).slice(-14);
   const date = (d: string) =>
-    new Date(`${d}T12:00:00Z`).toLocaleDateString(lang, { day: 'numeric', month: 'short' });
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(wordsLocale(lang), {
+      day: 'numeric',
+      month: 'short',
+    });
   return (
     <section
       className="flex flex-col gap-4 break-inside-avoid"
@@ -109,7 +113,11 @@ export function SummaryView({ s, readOnly = false }: { s: Summary; readOnly?: bo
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const date = (iso: string) =>
-    new Date(iso).toLocaleDateString(lang, { day: 'numeric', month: 'long', year: 'numeric' });
+    new Date(iso).toLocaleDateString(wordsLocale(lang), {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   return (
     <article
       className="mx-auto flex max-w-4xl flex-col gap-6 print:max-w-none"

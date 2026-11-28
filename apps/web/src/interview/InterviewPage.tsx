@@ -17,6 +17,7 @@ import { api } from '../api.js';
 import type { ReviewComment } from '../review/ReviewPage.js';
 import { ago, AnswersSoFar, Contacts, SampleData } from './side.js';
 import { useInterview, type SaveState } from './useInterview.js';
+import { chosenFormatLocale } from '../format.js';
 
 export { shown } from './side.js';
 
@@ -544,6 +545,7 @@ export function InterviewPage() {
               session={session}
               mode={payload.interview.mode}
               lang={lang}
+              formatLocale={chosenFormatLocale()}
               onChange={() => {
                 // Once the interviewer goes on, where it stopped is no longer news.
                 setResumeSeen(true);

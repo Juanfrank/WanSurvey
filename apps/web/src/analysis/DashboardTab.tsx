@@ -15,6 +15,7 @@ import {
   type PaceState,
   type QuotaState,
 } from './pace.js';
+import { locale, wordsLocale } from '../format.js';
 
 export interface LiveSnapshot {
   at: string;
@@ -139,9 +140,9 @@ export function DashboardTab({ projectId, onGoals }: { projectId: string; onGoal
   });
 
   const time = (iso: string) =>
-    new Date(iso).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
+    new Date(iso).toLocaleTimeString(locale(i18n.language), { hour: '2-digit', minute: '2-digit' });
   const day = (d: string) =>
-    new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, {
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(wordsLocale(i18n.language), {
       day: 'numeric',
       month: 'short',
       timeZone: 'UTC',

@@ -5,6 +5,7 @@ import {
   CUSTOM_ROLES,
   OrgTheme,
   checkAccent,
+  FormatLocale,
   PERMISSIONS,
   RESERVED_PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -48,6 +49,11 @@ const TenantPatch = z.object({
   settings: TenantSettings.optional(),
   /** Merged into the stored branding; `theme` is the organisation's default and accent. */
   branding: z.object({ theme: OrgTheme }).partial().catchall(z.unknown()).optional(),
+  /**
+   * How dates, times and numbers are written (BCP 47, e.g. es-PE, en-GB): separators, the order
+   * of day and month, 24 or 12 hours. Null goes back to following the language.
+   */
+  formatLocale: FormatLocale.nullable().optional(),
 });
 
 const RolesBody = z.object({ overrides: RoleOverrides });
@@ -71,7 +77,7 @@ export class TenantsController {
 
   @Patch()
   @RequirePermission('tenant.manage')
-  @ApiBody({ schema: z.toJSONSchema(TenantPatch) as object })
+  @ApiBody({ schema: z.toJSONSchema(TenantPatch, { io: 'input' }) as object })
   update(
     @Auth() ctx: AuthContext,
     @Body(new ZodPipe(TenantPatch)) body: z.infer<typeof TenantPatch>,

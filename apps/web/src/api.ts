@@ -79,6 +79,8 @@ export interface Me {
   tenants: TenantSummary[];
   /** The organisation's default theme and accent. */
   theme?: OrgTheme;
+  /** How the organisation writes dates and numbers (BCP 47); null or absent: as the language. */
+  formatLocale?: string | null;
   mfaState: 'ok' | 'pending' | 'enroll';
   /** Each role with what it allows in this organisation (its permissions may be customised). */
   memberships: { role: string; projectId: string | null; permissions?: string[] }[];

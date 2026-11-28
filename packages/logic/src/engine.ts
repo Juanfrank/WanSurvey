@@ -331,6 +331,8 @@ export class InterviewSession {
   readonly context: InterviewContext;
   readonly today: string;
   language: string;
+  /** The regional format of piped dates (see `setFormatLocale`); the language's when unset. */
+  formatLocale: string | undefined;
 
   private answers: Answers;
   private stash: Record<string, AnswerValue>;
@@ -604,6 +606,15 @@ export class InterviewSession {
     this.rewalk();
   }
 
+  /**
+   * How piped dates are written: the organisation's regional format (BCP 47), apart from the
+   * language of the text; null writes them the language's way. Texts are piped as they are
+   * read, so nothing is walked again.
+   */
+  setFormatLocale(locale: string | null): void {
+    this.formatLocale = locale ?? undefined;
+  }
+
   // --- validation ------------------------------------------------------------
 
   validate(key: string): ValidationResult {
@@ -767,6 +778,7 @@ export class InterviewSession {
     const blank = this.mode === 'CAWI' ? '' : '____';
     const out = renderTemplate(src, new InterviewScope(this, frames), {
       lang: this.language,
+      ...(this.formatLocale ? { locale: this.formatLocale } : {}),
       placeholder: placeholder ?? (() => blank),
       specialLabel: (k) => this.specialLabel(k as SpecialKind),
     });

@@ -20,6 +20,11 @@ export interface InterviewRunnerProps {
   session: InterviewSession;
   mode: Mode;
   lang: string;
+  /**
+   * How dates are written in the texts (the organisation's regional format, BCP 47), apart from
+   * their language; left out or null, the language's way.
+   */
+  formatLocale?: string | null;
   /** Called after every change, so a host (e.g. the path tracer) can re-render. */
   onChange?(): void;
   /** Respondent page grouping; defaults to one question per page on narrow screens. */
@@ -214,6 +219,8 @@ function Runner(p: InterviewRunnerProps) {
 
   // Questionnaire wording follows the interface language (idempotent, so safe during render).
   if (session.language !== p.lang) session.setLanguage(p.lang);
+  if (session.formatLocale !== (p.formatLocale ?? undefined))
+    session.setFormatLocale(p.formatLocale ?? null);
 
   const status = session.status();
   const currentKey = session.currentKey();

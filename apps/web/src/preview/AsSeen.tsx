@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { sectionsOf } from '../interview/InterviewPage.js';
 import { AnswersSoFar, SampleData } from '../interview/side.js';
 import { Shell } from '../respondent/RespondentPage.js';
+import { chosenFormatLocale } from '../format.js';
 
 const chrome =
   'rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 disabled:opacity-60';
@@ -78,6 +79,7 @@ export function AsSeenFrame({
                 session={session}
                 mode="CAWI"
                 lang={lang}
+                formatLocale={chosenFormatLocale()}
                 onChange={onChange}
                 narrow={narrow}
               />
@@ -142,6 +144,7 @@ export function AsSeenFrame({
             session={session}
             mode={mode}
             lang={lang}
+            formatLocale={chosenFormatLocale()}
             onChange={onChange}
           />
         </section>

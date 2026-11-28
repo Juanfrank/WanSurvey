@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ACCENTS,
+  FORMAT_LOCALES,
   THEME_DEFAULTS,
   accentTokens,
   OPTIONAL_2FA_ROLES,
@@ -13,7 +14,7 @@ import {
 } from '@wansurvey/schema';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api } from '../api.js';
+import { api, type Me } from '../api.js';
 import { CheckField, Hint, inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { InfoTip } from '../cases/samplingControls.js';
@@ -21,12 +22,15 @@ import { Button, Card, ErrorText, Field, PageHeader } from '../routes/ui.js';
 import type { RolesView } from './permissions.js';
 import { useFacts } from '../routes/InfoPages.js';
 import { Link } from '@tanstack/react-router';
+import { locale, setFormatLocale } from '../format.js';
 
 interface Tenant {
   id: string;
   name: string;
   settings: { defaultLanguage?: string; defaultTimezone?: string; twoFactorRoles?: string[] };
   branding?: unknown;
+  /** How dates and numbers are written (BCP 47); null follows the language. */
+  formatLocale?: string | null;
 }
 
 interface Sso {
@@ -106,6 +110,7 @@ export function OrganisationPage() {
       />
       <div className={CARDS}>
         {tenant.data ? <General tenant={tenant.data} /> : <div aria-busy="true" />}
+        {tenant.data ? <RegionalFormat tenant={tenant.data} /> : null}
         {tenant.data ? <Appearance tenant={tenant.data} /> : null}
         <DataProtection />
         {sso.data ? <SsoEditor sso={sso.data} /> : <div aria-busy="true" />}
@@ -257,6 +262,107 @@ function General({ tenant }: { tenant: Tenant }) {
         {save.isError ? <ErrorText>{t('admin.org.error')}</ErrorText> : null}
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={!name.trim() || save.isPending}>
+            {t('admin.org.save')}
+          </Button>
+          <Saved text={saved} />
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/** A moment and a number to show what a regional format looks like. */
+const SAMPLE_MOMENT = new Date(2026, 11, 31, 14, 5);
+const SAMPLE_NUMBER = 1234567.89;
+
+/**
+ * How the organisation writes dates, times and numbers (a BCP 47 locale: separators, the order
+ * of day and month, 24 or 12 hours), with a preview; the interface language stays each person's.
+ */
+function RegionalFormat({ tenant }: { tenant: Tenant }) {
+  const { t, i18n } = useTranslation();
+  const qc = useQueryClient();
+  const [value, setValue] = useState(tenant.formatLocale ?? '');
+  const [saved, setSaved] = useState<string | null>(null);
+  const options = useMemo(() => {
+    const names = new Intl.DisplayNames([i18n.language], { type: 'language' });
+    const list: string[] = [...FORMAT_LOCALES];
+    if (value && !list.includes(value)) list.unshift(value);
+    return list.map((code) => ({
+      code,
+      label: t('admin.org.regional.option', { name: names.of(code) ?? code, code }),
+    }));
+  }, [i18n.language, t, value]);
+  // The preview in the format chosen, or the interface language's when none is.
+  const shown = value || i18n.resolvedLanguage || i18n.language;
+  const save = useMutation({
+    mutationFn: () => api('/tenant', { method: 'PATCH', body: { formatLocale: value || null } }),
+    onSuccess: async () => {
+      // At once, also in the session kept here, so no page renders the old format meanwhile.
+      setFormatLocale(value || null);
+      qc.setQueryData<Me>(['me'], (old) => (old ? { ...old, formatLocale: value || null } : old));
+      setSaved('admin.org.regional.saved');
+      await qc.invalidateQueries({ queryKey: ['tenant'] });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+  useEffect(() => setSaved(null), [value]);
+  return (
+    <Card className="p-5!">
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <CardTitle
+          id="org-regional"
+          title={t('admin.org.regional.title')}
+          info={t('admin.org.regional.info')}
+        />
+        <div className="flex flex-col gap-1">
+          <label htmlFor="org-format-locale" className="text-sm font-medium text-slate-700">
+            {t('admin.org.regional.label')}
+          </label>
+          <select
+            id="org-format-locale"
+            className={`${inputCls} py-2`}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          >
+            <option value="">{t('admin.org.regional.auto')}</option>
+            {options.map((o) => (
+              <option key={o.code} value={o.code}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <dl
+          aria-label={t('admin.org.regional.preview')}
+          data-testid="format-preview"
+          className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-md bg-slate-50 px-3 py-2 text-sm"
+        >
+          <dt className="text-slate-600">{t('admin.org.regional.date')}</dt>
+          <dd className="tabular-nums">
+            {SAMPLE_MOMENT.toLocaleDateString(shown, { dateStyle: 'short' })}
+          </dd>
+          <dt className="text-slate-600">{t('admin.org.regional.time')}</dt>
+          <dd className="tabular-nums">
+            {SAMPLE_MOMENT.toLocaleTimeString(shown, { timeStyle: 'short' })}
+          </dd>
+          <dt className="text-slate-600">{t('admin.org.regional.number')}</dt>
+          <dd className="tabular-nums">
+            {SAMPLE_NUMBER.toLocaleString(shown, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </dd>
+        </dl>
+        {save.isError ? <ErrorText>{t('admin.org.error')}</ErrorText> : null}
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={save.isPending}>
             {t('admin.org.save')}
           </Button>
           <Saved text={saved} />
@@ -652,7 +758,7 @@ function BiFrequency() {
     onSuccess: (r) => setSaved(r.ran ? 'admin.org.bi.refreshed' : 'admin.org.bi.upToDate'),
   });
   const last = setting.data?.lastRunAt
-    ? new Date(setting.data.lastRunAt).toLocaleString(i18n.language)
+    ? new Date(setting.data.lastRunAt).toLocaleString(locale(i18n.language))
     : null;
   return (
     <Card className="p-5!">

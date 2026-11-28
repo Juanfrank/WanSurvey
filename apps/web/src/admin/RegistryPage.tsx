@@ -17,6 +17,7 @@ import {
   TableScroll,
 } from '../routes/ui.js';
 import { parseTable, pick } from './registry-csv.js';
+import { locale } from '../format.js';
 
 const REASONS = ['do_not_contact', 'not_interested', 'complaint', 'deceased', 'other'] as const;
 const CHANNELS = ['CATI', 'CAPI', 'CAWI', 'PAPI'] as const;
@@ -87,7 +88,7 @@ export function RegistryPage() {
     placeholderData: keepPreviousData,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['registry-no-contact'] });
-  const when = (iso: string) => new Date(iso).toLocaleDateString(i18n.language);
+  const when = (iso: string) => new Date(iso).toLocaleDateString(locale(i18n.language));
   const channelsText = (c: string[] | null) => (c ? c.join(', ') : t('admin.registry.allChannels'));
 
   // Add one
