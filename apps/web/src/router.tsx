@@ -23,6 +23,7 @@ const TwoFactorSetupPage = lazyRouteComponent(
   'TwoFactorSetupPage',
 );
 const WaitingPage = lazyRouteComponent(() => import('./routes/WaitingPage.js'), 'WaitingPage');
+const NotFoundPage = lazyRouteComponent(() => import('./routes/NotFoundPage.js'), 'NotFoundPage');
 const passwordPage = (name: 'AcceptInvitationPage' | 'ResetPasswordPage' | 'ForgotPasswordPage') =>
   lazyRouteComponent(() => import('./routes/PasswordPages.js'), name);
 
@@ -35,6 +36,8 @@ const rootRoute = createRootRoute({
   component: Root,
   // Staff pages need the interface's words, also when coming from a respondent's page.
   beforeLoad: ({ location }) => (isRespondentPath(location.pathname) ? undefined : loadCatalogue()),
+  // An address that leads nowhere (see `notFoundMode` below).
+  notFoundComponent: NotFoundPage,
 });
 
 export const loginRoute = createRoute({
@@ -144,6 +147,11 @@ const adminUsersRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'users',
   component: lazyRouteComponent(() => import('./team/TeamPage.js'), 'TeamPage'),
+  // The list's filters given in the address (the links of the administration overview).
+  validateSearch: (s: Record<string, unknown>): { status?: string; twoStep?: string } =>
+    Object.fromEntries(
+      ['status', 'twoStep'].flatMap((k) => (typeof s[k] === 'string' ? [[k, s[k]]] : [])),
+    ),
 });
 const adminTeamsRoute = createRoute({
   getParentRoute: () => adminRoute,
@@ -344,7 +352,8 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
-export const router = createRouter({ routeTree });
+// Every unknown address shows the same page, outside the application's frame.
+export const router = createRouter({ routeTree, notFoundMode: 'root' });
 
 declare module '@tanstack/react-router' {
   interface Register {

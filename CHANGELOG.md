@@ -19,6 +19,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Added
 
+- **Administration, users and activity log**: "See their activity" in each user's actions opens
+  the activity log on that person; Users filters by two-step sign-in, and the counts of the
+  administration overview open Users with their filter on; the account menu offers to turn on
+  two-step verification to whoever has not; administrators see the webhooks and their deliveries,
+  read only; inviting or changing the roles of someone of the client organisation asks a reason
+  on Users too, as on the project's people page; share-outs and lists of cases handed to someone
+  record whose cases they were; the roles dialog has short labels with the role's description
+  under the row; an unknown address shows a translated page with a link home. **Upgrade**:
+  migration `0031` adds indexed columns to the activity log for its project and case filters.
+
 - **Rotation and randomisation of a section's or block's items**: in the editor, "Order of the
   items" shuffles or rotates them per interview (seeded by the interview, so every device and the
   server see the same order); items can be kept in place in the definition (`itemOrder.fixed`), and an optional

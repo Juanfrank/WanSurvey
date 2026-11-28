@@ -129,6 +129,23 @@ describe.skipIf(!configured)('SQL Server: outgoing webhooks', () => {
     );
     expect(stored!.secret_enc).toMatch(/^v1\./);
     expect(stored!.secret_enc).not.toContain(res.body.secret.slice(6));
+    // Who reads the activity log sees the endpoints and their deliveries, and changes nothing.
+    const seen = await admin.agent.get('/api/v1/webhooks');
+    expect(seen.status).toBe(200);
+    const mine = seen.body.find((e: { id: string }) => e.id === res.body.id);
+    // Where it goes, without the path or query (where tokens often are).
+    expect(mine.url).toBe(`${url}/…`);
+    expect(JSON.stringify(seen.body)).not.toContain(res.body.secret);
+    expect((await admin.agent.get(`/api/v1/webhooks/${res.body.id}/deliveries`)).status).toBe(200);
+    for (const [method, path] of [
+      ['patch', `/api/v1/webhooks/${res.body.id}`],
+      ['delete', `/api/v1/webhooks/${res.body.id}`],
+      ['post', `/api/v1/webhooks/${res.body.id}/rotate-secret`],
+      ['post', `/api/v1/webhooks/${res.body.id}/test`],
+    ] as const)
+      expect(
+        (await admin.agent[method](path).set('x-csrf-token', admin.csrf).send({})).status,
+      ).toBe(403);
   });
 
   it('refuses unknown events and addresses that are not addresses', async () => {

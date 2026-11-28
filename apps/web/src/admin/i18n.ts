@@ -139,6 +139,8 @@ export const adminEn = {
     intro:
       'A webhook tells another system, at the address you give, that something happened: an interview was submitted or reviewed, a case changed state, an export is ready. The message carries identifiers only, never names or answers; the system fetches the details through the integration API. Each message is signed (Standard Webhooks) with the secret shown when the webhook is created.',
     add: 'New webhook',
+    readOnly:
+      'You can see the webhooks and their deliveries; whoever manages the integration keys (by default the owner) creates and changes them.',
     actions: 'Actions',
     none: 'No webhooks yet.',
     url: 'Address (https)',
@@ -584,6 +586,8 @@ export const adminEs: typeof adminEn = {
     intro:
       'Un webhook avisa a otro sistema, en la dirección que usted indique, que algo ocurrió: se envió o revisó una entrevista, un caso cambió de estado, una exportación está lista. El mensaje lleva solo identificadores, nunca nombres ni respuestas; el sistema consulta el detalle por la API de integración. Cada mensaje va firmado (Standard Webhooks) con el secreto que se muestra al crear el webhook.',
     add: 'Nuevo webhook',
+    readOnly:
+      'Puede ver los webhooks y sus entregas; quien administra las claves de integración (por defecto, el propietario) los crea y los cambia.',
     actions: 'Acciones',
     none: 'Todavía no hay webhooks.',
     url: 'Dirección (https)',

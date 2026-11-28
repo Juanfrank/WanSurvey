@@ -142,6 +142,11 @@ export interface MssqlSchema {
     user_agent: string | null;
     details: JsonText;
     at: Generated<Date>;
+    /** Computed by the database (0031), in lower case: what the project and case filters read. */
+    target_ref: ColumnType<string | null, never, never>;
+    project_ref: ColumnType<string | null, never, never>;
+    case_ref: ColumnType<string | null, never, never>;
+    case_external_ref: ColumnType<string | null, never, never>;
   };
   questionnaires: {
     id: string;

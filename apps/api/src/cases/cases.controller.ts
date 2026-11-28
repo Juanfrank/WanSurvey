@@ -508,6 +508,8 @@ export class CasesController {
           })
         ).map((r) => r.id),
       );
+      // Whose cases they were, per person (the log answers "who had them before").
+      const from: Record<string, number> = {};
       const n = await this.svc.assign(
         t,
         ctx,
@@ -519,6 +521,7 @@ export class CasesController {
         body.fromUserId
           ? { statuses: ['assigned'], holder: body.fromUserId }
           : { statuses: ['fresh', 'assigned', 'in_progress'], unassigned: body.onlyUnassigned },
+        from,
       );
       await t.audit(
         this.audit.fromContext(ctx, {
@@ -529,7 +532,11 @@ export class CasesController {
             to: body.userId,
             count: n,
             ...(body.filter !== undefined ? { filter: body.filter } : {}),
-            ...(body.fromUserId ? { from: body.fromUserId } : {}),
+            ...(body.fromUserId
+              ? { from: body.fromUserId }
+              : Object.keys(from).length
+                ? { from }
+                : {}),
           },
         }),
       );
@@ -570,15 +577,25 @@ export class CasesController {
       const { movable, rows, free, skipped } = await this.sharePlan(t, projectId, body);
       const hands = deal(movable, new Map(rows.map((r) => [r.userId, r.receive])));
       const perPerson: Record<string, number> = {};
+      const from: Record<string, number> = {};
       let changed = 0;
       for (const [userId, ids] of hands) {
         perPerson[userId] = ids.length;
         if (ids.length)
-          changed += await this.svc.assign(t, ctx, projectId, ids, userId, 'random', {
-            statuses: ['fresh', 'assigned'],
-            // Planned on the free cases: only those still free.
-            unassigned: !body.caseIds,
-          });
+          changed += await this.svc.assign(
+            t,
+            ctx,
+            projectId,
+            ids,
+            userId,
+            'random',
+            {
+              statuses: ['fresh', 'assigned'],
+              // Planned on the free cases: only those still free.
+              unassigned: !body.caseIds,
+            },
+            from,
+          );
       }
       await t.audit(
         this.audit.fromContext(ctx, {
@@ -592,6 +609,7 @@ export class CasesController {
             ...(body.cap ? { cap: body.cap } : {}),
             weights: Object.fromEntries(rows.map((r) => [r.userId, round(r.weight)])),
             perPerson,
+            ...(Object.keys(from).length ? { from } : {}),
             count: changed,
           },
         }),

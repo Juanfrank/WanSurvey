@@ -192,6 +192,49 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   'registry.manage',
 ];
 
+/**
+ * What a role opens to someone of the client organisation: interviews, recordings, cases or
+ * personal data. Giving such a role to an external client asks for a reason (activity log).
+ */
+export const EXTERNAL_SENSITIVE_PERMISSIONS: readonly Permission[] = [
+  'interviews.read_all',
+  'interviews.read_own',
+  'audio.listen',
+  'pii.view',
+  'cases.read_all',
+  'cases.read_assigned',
+  'exports.run',
+];
+
+/** Of the client organisation: client is all they hold for the whole organisation. */
+export function isExternalClient(
+  grants: readonly { role: string; projectId: string | null }[],
+): boolean {
+  const org = grants.filter((g) => g.projectId === null);
+  return org.length > 0 && org.every((g) => g.role === 'client_viewer');
+}
+
+/**
+ * What new roles open to an external client (a person of the client organisation before or
+ * after the change): the sensitive permissions, by `matrix`, of each role they did not hold as
+ * a client (all of them for someone who becomes one).
+ * Empty when they are not external or nothing sensitive is added.
+ */
+export function externalAccessOpened(
+  before: readonly { role: string; projectId: string | null }[],
+  after: readonly { role: string; projectId: string | null }[],
+  matrix: Partial<Record<string, readonly string[]>>,
+): Permission[] {
+  const wasExternal = isExternalClient(before);
+  if (!wasExternal && !isExternalClient(after)) return [];
+  const key = (g: { role: string; projectId: string | null }) =>
+    `${g.role}|${g.projectId?.toLowerCase() ?? ''}`;
+  // Someone of the organisation who becomes a client: every role they keep counts as given now.
+  const had = new Set(wasExternal ? before.map(key) : []);
+  const held = new Set(after.filter((g) => !had.has(key(g))).flatMap((g) => matrix[g.role] ?? []));
+  return EXTERNAL_SENSITIVE_PERMISSIONS.filter((p) => held.has(p));
+}
+
 export function roleHasPermission(
   role: Role,
   permission: Permission,

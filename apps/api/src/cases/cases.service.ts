@@ -145,6 +145,7 @@ export class CasesService {
    * The cases are locked and checked again here, so a share-out planned on an older read does
    * not take a case someone claimed, started or finished meanwhile: only cases still in
    * `only.statuses` (and, with `only.unassigned`, still held by no one) change hands.
+   * `from`, when given, counts the cases taken from each previous holder (for the log).
    */
   async assign(
     tx: CasesTx,
@@ -154,9 +155,11 @@ export class CasesService {
     userId: string | null,
     via: string,
     only: { statuses?: string[]; unassigned?: boolean; holder?: string } = {},
+    from?: Record<string, number>,
   ): Promise<number> {
     if (userId) await this.assertAssignee(tx, projectId, userId);
     const changed = await tx.assign(projectId, caseIds, userId, only);
+    if (from) for (const c of changed) if (c.from) from[c.from] = (from[c.from] ?? 0) + 1;
     await this.events(
       tx,
       ctx.userId,

@@ -11,7 +11,15 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
-import { ROLE_RANK, ROLES, Role, roleMatrix, type Permission } from '@wansurvey/schema';
+import {
+  EXTERNAL_SENSITIVE_PERMISSIONS,
+  isExternalClient,
+  ROLE_RANK,
+  ROLES,
+  Role,
+  roleMatrix,
+  type Permission,
+} from '@wansurvey/schema';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import {
@@ -34,27 +42,10 @@ const PeopleBody = z.object({
   reason: z.string().trim().min(3).max(500).optional(),
 });
 
-/** What makes a project role sensitive for someone from outside the organisation. */
-export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
-  'interviews.read_all',
-  'interviews.read_own',
-  'audio.listen',
-  'pii.view',
-  'cases.read_all',
-  'cases.read_assigned',
-  'exports.run',
-];
-
-/** Of the client organisation: client is all they hold for the whole organisation. */
-function isExternal(grants: { role: string; projectId: string | null }[]): boolean {
-  const org = grants.filter((g) => g.projectId === null);
-  return org.length > 0 && org.every((g) => g.role === 'client_viewer');
-}
-
 /** The sensitive permissions a role holds in this organisation's matrix. */
 export function sensitiveOf(role: Role, overrides?: unknown): Permission[] {
   const held = roleMatrix(overrides)[role];
-  return SENSITIVE_PERMISSIONS.filter((p) => held.includes(p));
+  return EXTERNAL_SENSITIVE_PERMISSIONS.filter((p) => held.includes(p));
 }
 
 /**
@@ -110,7 +101,7 @@ export class ProjectPeopleController {
           id,
           name,
           email,
-          external: isExternal(grants.filter((g) => g.userId === id)),
+          external: isExternalClient(grants.filter((g) => g.userId === id)),
         })),
         grantable,
         // What each role opens: the page warns before giving it to an external client.
@@ -154,7 +145,7 @@ export class ProjectPeopleController {
         throw new ForbiddenException('You cannot manage this user');
       // Someone of the client organisation (nothing above client in the organisation) who is
       // given access to interviews, recordings or personal data: knowingly, and with a reason.
-      const external = isExternal(held);
+      const external = isExternalClient(held);
       const opens = role
         ? sensitiveOf(
             role,

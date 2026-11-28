@@ -43,14 +43,19 @@ export const ADMIN_SECTIONS: readonly {
     menu: ['registry.manage', 'users.manage', 'tenant.manage'],
   },
   { to: '/admin/audit', key: 'audit', group: 'security', permission: ['audit.read'] },
-  // Who reads the activity log also sees the keys, read only.
+  // Who reads the activity log also sees the keys and the webhooks, read only.
   {
     to: '/admin/api-keys',
     key: 'apiKeys',
     group: 'security',
     permission: ['apikeys.manage', 'audit.read'],
   },
-  { to: '/admin/webhooks', key: 'webhooks', group: 'security', permission: ['apikeys.manage'] },
+  {
+    to: '/admin/webhooks',
+    key: 'webhooks',
+    group: 'security',
+    permission: ['apikeys.manage', 'audit.read'],
+  },
 ];
 
 const holds = (permissions: readonly string[], any: readonly string[]) =>

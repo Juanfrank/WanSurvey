@@ -75,6 +75,14 @@ interface KeyRow {
   revokedAt: string | null;
 }
 
+/** A count that needs attention and where it is dealt with (Users opens filtered). */
+interface Tile {
+  key: string;
+  n: number;
+  to: string;
+  search?: { status?: string; twoStep?: string };
+}
+
 /** Keys that end within this many days are pointed out. */
 const KEY_WARNING_DAYS = 15;
 
@@ -103,16 +111,18 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
   const required: Role[] = rolesRequiring2fa(tenant.data?.settings);
   const members = (people.data ?? []).filter((m) => m.status !== 'deactivated');
   const soon = Date.now() + KEY_WARNING_DAYS * 86_400_000;
-  const tiles = [
+  const candidates: (Tile | false | undefined)[] = [
     people.data && {
       key: 'awaiting',
       n: members.filter((m) => m.awaitingRole).length,
       to: '/admin/users',
+      search: { status: 'awaiting' },
     },
     people.data && {
       key: 'invited',
       n: members.filter((m) => m.status === 'invited').length,
       to: '/admin/users',
+      search: { status: 'invited' },
     },
     people.data &&
       tenant.data && {
@@ -124,6 +134,7 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
             m.memberships.some((g) => required.includes(g.role as Role)),
         ).length,
         to: '/admin/users',
+        search: { twoStep: 'required' },
       },
     keys.data && {
       key: 'keysExpiring',
@@ -133,7 +144,8 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
       }).length,
       to: '/admin/api-keys',
     },
-  ].filter((x): x is { key: string; n: number; to: string } => !!x);
+  ];
+  const tiles = candidates.filter((x): x is Tile => !!x);
 
   return (
     <div className="flex flex-col gap-6">
@@ -148,6 +160,8 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
               <li key={tile.key} data-tile={tile.key} data-count={tile.n}>
                 <Link
                   to={tile.to}
+                  // Users opens with the matching filter on, so the list shows these people.
+                  search={tile.search}
                   className="flex h-full flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 shadow-card hover:border-indigo-600"
                 >
                   <span

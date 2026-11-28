@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AuditService } from '../audit/audit.service.js';
-import type { AuthContext } from '../common/auth-context.js';
+import { can, type AuthContext } from '../common/auth-context.js';
 import { decryptField, encryptField } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { Engine } from '../db/engine.js';
@@ -80,6 +80,9 @@ export class WebhooksService implements OnModuleInit {
   // Administration
 
   async list(ctx: AuthContext) {
+    // Who only reads (the activity log's readers) sees where each webhook goes, not its path or
+    // query, which often carry a token (Slack, Teams).
+    const full = can(ctx.memberships, 'apikeys.manage');
     return this.engine.sql.withTenant(ctx.tenantId, async (tx) => {
       const rows = await tx
         .selectFrom('webhook_endpoints')
@@ -95,7 +98,7 @@ export class WebhooksService implements OnModuleInit {
         const mine = counts.rows.filter((c) => c.endpoint_id.toLowerCase() === e.id.toLowerCase());
         return {
           id: e.id.toLowerCase(),
-          url: e.url,
+          url: full ? e.url : maskedUrl(e.url),
           events: JSON.parse(e.events) as string[],
           projectId: e.project_id ? e.project_id.toLowerCase() : null,
           enabled: !!e.enabled,
@@ -488,4 +491,15 @@ export function post(
     req.on('error', reject);
     req.end(body);
   });
+}
+
+/** An address without what may be secret in it: `https://host/…`. */
+export function maskedUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const rest = u.pathname !== '/' || u.search || u.hash;
+    return `${u.protocol}//${u.host}${rest ? '/…' : ''}`;
+  } catch {
+    return '…';
+  }
 }

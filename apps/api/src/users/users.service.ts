@@ -6,7 +6,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ROLE_RANK, type Role } from '@wansurvey/schema';
+import {
+  externalAccessOpened,
+  ROLE_RANK,
+  roleMatrix,
+  type Role,
+  type RoleMatrix,
+} from '@wansurvey/schema';
 import { uuidv7 } from 'uuidv7';
 import { AuditService } from '../audit/audit.service.js';
 import { AUTH_REPO, type AuthRepo } from '../auth/auth-repo.js';
@@ -15,6 +21,7 @@ import { sha256Hex } from '../common/crypto.js';
 import { CONFIG, type AppConfig } from '../config.js';
 import { USERS_REPO, type UsersRepo, type UsersTx } from './users-repo.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
+import { ORG_REPO, type OrgRepo } from '../projects/org-repo.js';
 
 const INVITATION_TTL_HOURS = 7 * 24;
 
@@ -26,7 +33,33 @@ export class UsersService {
     private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(ORG_REPO) private readonly org: OrgRepo,
   ) {}
+
+  /**
+   * Someone of the client organisation given a role that opens interviews, recordings or
+   * personal data: only with a reason. Returns what the activity log keeps of it.
+   */
+  private externalAccess(
+    matrix: RoleMatrix,
+    before: MembershipGrant[],
+    after: MembershipGrant[],
+    reason: string | undefined,
+  ) {
+    const opens = externalAccessOpened(before, after, matrix);
+    if (!opens.length) return {};
+    if (!reason)
+      throw new BadRequestException({
+        code: 'REASON_REQUIRED',
+        message: 'Say why an external client gets access to interviews or personal data',
+      });
+    return { external: true, opens, reason };
+  }
+
+  /** What each role may do in this organisation (read before the change's transaction). */
+  private async matrix(ctx: AuthContext): Promise<RoleMatrix> {
+    return roleMatrix((await this.org.inTenant(ctx.tenantId, (o) => o.tenant()))?.rolePermissions);
+  }
 
   async list(ctx: AuthContext) {
     return this.repo.inTenant(ctx.tenantId, async (t) => {
@@ -81,9 +114,16 @@ export class UsersService {
       idCode?: string;
       languages?: string[];
       memberships: MembershipGrant[];
+      reason?: string;
     },
   ) {
     this.assertCanGrant(ctx, input.memberships);
+    const external = this.externalAccess(
+      await this.matrix(ctx),
+      [],
+      input.memberships,
+      input.reason,
+    );
     // Accounts are global: an e-mail that already has one is linked, not duplicated.
     const existingId = (await this.authRepo.userByEmail(input.email))?.id ?? null;
     const userId = existingId ?? uuidv7();
@@ -111,6 +151,7 @@ export class UsersService {
             email: input.email,
             existingAccount: !!existingId,
             memberships: input.memberships,
+            ...external,
           },
         }),
       );
@@ -204,19 +245,26 @@ export class UsersService {
     });
   }
 
-  async setMemberships(ctx: AuthContext, userId: string, grants: MembershipGrant[]) {
+  async setMemberships(
+    ctx: AuthContext,
+    userId: string,
+    grants: MembershipGrant[],
+    reason?: string,
+  ) {
     if (userId === ctx.userId) throw new ForbiddenException('You cannot change your own roles');
     this.assertCanGrant(ctx, grants);
+    const matrix = await this.matrix(ctx);
     return this.repo.inTenant(ctx.tenantId, async (t) => {
       const before = await this.loadTarget(t, ctx, userId);
       await this.assertProjectsExist(t, grants);
+      const external = this.externalAccess(matrix, before, grants, reason);
       await t.setGrants(userId, grants);
       await t.audit(
         this.audit.fromContext(ctx, {
           action: 'user.role_changed',
           targetType: 'user',
           targetId: userId,
-          details: { before, after: grants },
+          details: { before, after: grants, ...external },
         }),
       );
       return { userId, memberships: grants };

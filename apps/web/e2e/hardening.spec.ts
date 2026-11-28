@@ -1,4 +1,6 @@
 import { expect, test, type Page } from './fixtures.js';
+import { totp } from '../../api/dist/common/crypto.js';
+import { connectDb } from './db.js';
 import {
   expectAccessible,
   login,
@@ -8,6 +10,8 @@ import {
   resultsSection,
   shot,
 } from './helpers.js';
+
+const ADMIN = 'admin@demo.wansurvey.test';
 
 async function openProject(page: Page) {
   await login(page, PM);
@@ -124,6 +128,47 @@ test('at 200% zoom the project pages reflow without scrolling sideways', async (
       await page.evaluate(() => document.documentElement.scrollWidth),
       `${tab} scrolls sideways`,
     ).toBeLessThanOrEqual(640);
+  }
+});
+
+test('at 200% zoom the activity log and the organisation reflow without scrolling sideways', async ({
+  page,
+}) => {
+  // The administrator enrols a second factor on sign-in; the team test enrols it again, so its
+  // two-step settings are put back as they were, before and after, whatever runs first.
+  const db = connectDb();
+  const reset2fa = () =>
+    db.run(
+      'UPDATE users SET totp_enabled = 0, totp_secret_enc = NULL, totp_last_step = NULL WHERE email = ?',
+      [ADMIN],
+    );
+  try {
+    await reset2fa();
+    await page.setViewportSize({ width: 640, height: 450 });
+    await login(page, ADMIN);
+    await page.waitForURL(/\/login\/2fa\/setup/);
+    const secret = (await page.getByTestId('totp-secret').textContent())!.trim();
+    await page.getByLabel('Code').fill(totp(secret));
+    await page.getByRole('button', { name: 'Turn on' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
+    // Users (726 px) and Roles and permissions (903 px) still scroll sideways at this width: see
+    // docs/accessibility.md, Known limits.
+    for (const [path, title] of [
+      ['/admin/audit', 'Activity log'],
+      ['/admin/organisation', 'Organisation'],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+        `${title} scrolls sideways`,
+      ).toBeLessThanOrEqual(640);
+    }
+    await shot(page, 'v2-admin-zoom-200-organisation', { fullPage: false });
+  } finally {
+    await reset2fa();
+    await db.end();
   }
 });
 

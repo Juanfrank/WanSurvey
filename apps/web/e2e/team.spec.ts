@@ -140,6 +140,14 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
     'This row adds nothing: Supervisor · Whole organisation already includes it.',
   );
   await shot(page, 'team-roles');
+  // Each field has a short label; what the role does is a line under the whole row.
+  await expect(
+    dialog.getByTestId('role-row').first().getByText('Role', { exact: true }),
+  ).toBeVisible();
+  await expect(dialog.getByLabel('Role 1', { exact: true })).toHaveAccessibleDescription(
+    /Follows fieldwork/,
+  );
+  await shot(page, 'v2-team-roles-short-labels');
   await dialog.getByRole('button', { name: 'Remove role 3' }).click();
   await expect(dialog.getByTestId('redundant-row')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Save roles' }).click();
@@ -232,6 +240,19 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   ).toBeVisible();
   await expect(pm.page.getByRole('button', { name: 'Invite a user' })).toHaveCount(0);
   await expect(pm.page.getByRole('button', { name: /^Actions for/ })).toHaveCount(0);
+  // Without two-step verification, the account menu offers to turn it on.
+  await pm.page.getByRole('button', { name: /^Account:/ }).click();
+  const enable = pm.page.getByRole('link', { name: 'Turn on two-step verification' });
+  await expect(enable).toHaveAttribute('href', '/login/2fa/setup');
+  await shot(pm.page, 'v2-account-menu-enable-2fa', { fullPage: false });
+  await enable.click();
+  await expect(pm.page.getByTestId('totp-secret')).toBeVisible();
+  // An address that leads nowhere says so, with a way home.
+  await pm.page.goto('/no-such-page');
+  await expect(pm.page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+  await shot(pm.page, 'v2-not-found');
+  await pm.page.getByRole('link', { name: 'Go to the home page' }).click();
+  await expect(pm.page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
   await pm.ctx.close();
 
   // Teams: a field crew led by the supervisor, with Inés in it.
@@ -358,5 +379,63 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
     page.getByRole('heading', { level: 2, name: 'Security and integrations' }),
   ).toBeVisible();
   await shot(page, 'admin-home');
+  await expectAccessible(page);
+
+  // Each count opens Users with its filter on.
+  await page.getByTestId('admin-attention').locator('[data-tile="awaiting"] a').click();
+  await expect(page).toHaveURL(/\/admin\/users\?status=awaiting/);
+  await expect(page.getByLabel('Status')).toHaveValue('awaiting');
+  await expect(team.locator('tbody tr').first()).toHaveAttribute('data-status', 'awaiting');
+  await shot(page, 'v2-admin-tile-awaiting-users');
+  await nav.getByRole('link', { name: 'Administration', exact: true }).click();
+  const no2fa = page.getByTestId('admin-attention').locator('[data-tile="without2fa"]');
+  const missing = Number(await no2fa.getAttribute('data-count'));
+  await no2fa.locator('a').click();
+  await expect(page).toHaveURL(/twoStep=required/);
+  await expect(page.getByLabel('Two-step sign-in')).toHaveValue('required');
+  await expect(team.locator('tbody tr')).toHaveCount(missing);
+  // Everyone active without it, whatever their role.
+  await page.getByLabel('Two-step sign-in').selectOption('off');
+  await expect(page).toHaveURL(/twoStep=off/);
+  await expect(team.locator(`[data-member="interviewer@demo.wansurvey.test"]`)).toBeVisible();
+  await expect(team.locator(`[data-member="${ADMIN}"]`)).toHaveCount(0);
+  await shot(page, 'v2-users-without-2fa-filter');
+  await page.getByLabel('Two-step sign-in').selectOption('');
+
+  // A person's activity, from their actions.
+  await page.getByRole('button', { name: 'Actions for Demo interviewer' }).click();
+  await expect(page.getByRole('menuitem', { name: 'See their activity' })).toBeVisible();
+  await shot(page, 'v2-users-actions-activity', { fullPage: false });
+  await page.getByRole('menuitem', { name: 'See their activity' }).click();
+  await expect(page).toHaveURL(/\/admin\/audit\?actor=/);
+  await expect(page.getByRole('combobox', { name: 'Who' })).toHaveValue(
+    new URL(page.url()).searchParams.get('actor')!,
+  );
+  await shot(page, 'v2-audit-from-user-actions', { fullPage: false });
+
+  // Giving a client a role that opens interviews asks why, also from Users.
+  await nav.getByRole('link', { name: 'Users', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions for Demo client_viewer' }).click();
+  await page.getByRole('menuitem', { name: 'Change roles…' }).click();
+  const client = page.getByRole('dialog', { name: 'Roles of Demo client_viewer' });
+  await client.getByRole('button', { name: 'Add a role' }).click();
+  await client.getByLabel('Role 2', { exact: true }).selectOption({ label: 'Reviewer' });
+  await client
+    .getByLabel('Where 2', { exact: true })
+    .selectOption({ label: 'Household Survey 2026' });
+  const warning = client.getByTestId('external-warning');
+  await expect(warning).toContainText('Listen to interview recordings');
+  await expect(client.getByRole('button', { name: 'Save roles' })).toBeDisabled();
+  await warning.getByRole('textbox').fill('Audits the fieldwork for the client');
+  await expect(client.getByRole('button', { name: 'Save roles' })).toBeEnabled();
+  await shot(page, 'v2-team-roles-external-reason');
+  await client.getByRole('button', { name: 'Cancel' }).click();
+
+  // An administrator sees the webhooks, read only, as the API keys.
+  await nav.getByRole('link', { name: 'Webhooks', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Webhooks' })).toBeVisible();
+  await expect(page.getByText(/You can see the webhooks and their deliveries/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New webhook' })).toHaveCount(0);
+  await shot(page, 'v2-webhooks-read-only');
   await expectAccessible(page);
 });

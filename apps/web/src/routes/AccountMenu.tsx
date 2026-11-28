@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Me } from '../api.js';
@@ -149,6 +150,16 @@ export function AccountMenu({
             ))}
           </select>
         </label>
+        {/* Voluntary for roles that do not require it: the same setup as at sign-in. */}
+        {me.user.totpEnabled ? null : (
+          <Link
+            to="/login/2fa/setup"
+            className="text-sm font-medium text-indigo-ink-700 hover:underline"
+            data-testid="enable-2fa"
+          >
+            {t('app.enable2fa')}
+          </Link>
+        )}
         <Notifications />
         <InfoLinks className="border-t border-slate-200 pt-3" />
       </div>

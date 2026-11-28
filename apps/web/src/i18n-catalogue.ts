@@ -56,6 +56,12 @@ const en = {
     projectStatus: { draft: 'draft', active: 'active', closed: 'closed', archived: 'archived' },
     theme: 'Theme',
     themes: { system: 'As the device', light: 'Light', dark: 'Dark' },
+    enable2fa: 'Turn on two-step verification',
+    notFound: {
+      title: 'Page not found',
+      body: 'This address does not lead to any page. It may have been mistyped, or the page may have moved.',
+      home: 'Go to the home page',
+    },
   },
   login: {
     title: 'Sign in',
@@ -273,6 +279,12 @@ const es: Catalogue = {
     },
     theme: 'Tema',
     themes: { system: 'Como el dispositivo', light: 'Claro', dark: 'Oscuro' },
+    enable2fa: 'Activar la verificación en dos pasos',
+    notFound: {
+      title: 'Página no encontrada',
+      body: 'Esta dirección no lleva a ninguna página. Puede que esté mal escrita o que la página se haya movido.',
+      home: 'Ir a Inicio',
+    },
   },
   login: {
     title: 'Iniciar sesión',

@@ -644,6 +644,19 @@ describe.skipIf(!configured)('SQL Server: cases over HTTP', () => {
       (await post(interviewerS, url, { fromUserId: interviewer2.id, userId: interviewer.id }))
         .status,
     ).toBe(403);
+    // Handing out a list: the log says whose cases they were, per person (the free one and
+    // those already theirs do not count).
+    const all = await post(supervisor, url, { caseIds: ids, userId: interviewer2.id });
+    expect(all.body.changed, JSON.stringify(all.body)).toBe(2);
+    const [entry] = await rows(
+      sql`SELECT TOP 1 details FROM audit_log WHERE action = 'cases.assigned' AND target_id = ${other}
+        ORDER BY at DESC, id DESC`,
+    );
+    expect(JSON.parse(entry!.details as string)).toMatchObject({
+      to: interviewer2.id,
+      count: 2,
+      from: { [interviewer.id]: 1 },
+    });
   });
 
   it('keeps cases inside their tenant', async () => {

@@ -111,4 +111,45 @@ describe.skipIf(!configured)('SQL Server: project people', () => {
     await interviewer.agent.get(`/api/v1/projects/${a}/people`).expect(403);
     expect((await put(interviewer, a, ana.id, 'interviewer')).status).toBe(403);
   });
+  it('the users page asks the same reason, with the same entry in the log', async () => {
+    const eva = await createUser(t.owner, tenant.id, [{ role: 'client_viewer' }]);
+    const roles = (memberships: unknown[], reason?: string) =>
+      admin.agent
+        .put(`/api/v1/users/${eva.id}/memberships`)
+        .set('x-csrf-token', admin.csrf)
+        .send({ memberships, ...(reason ? { reason } : {}) });
+    const client = { role: 'client_viewer', projectId: null };
+    const reviewer = { role: 'reviewer', projectId: a };
+    const bare = await roles([client, reviewer]);
+    expect(bare.status, JSON.stringify(bare.body)).toBe(400);
+    expect(bare.body.code).toBe('REASON_REQUIRED');
+    // Dropping the client role in the same change does not skip the question.
+    expect((await roles([reviewer])).body.code).toBe('REASON_REQUIRED');
+    // A role that opens nothing needs none.
+    expect((await roles([client, { role: 'client_viewer', projectId: a }])).status).toBe(200);
+    expect((await roles([client, reviewer], 'Audits the fieldwork')).status).toBe(200);
+    const audit = await rows(
+      sql`SELECT details FROM audit_log WHERE action = 'user.role_changed' AND target_id = ${eva.id} ORDER BY at, id`,
+    );
+    expect(JSON.parse(audit.at(-1)!.details as string)).toMatchObject({
+      external: true,
+      opens: ['interviews.read_all', 'audio.listen'],
+      reason: 'Audits the fieldwork',
+    });
+    // A role already held asks nothing again.
+    expect((await roles([client, reviewer])).status).toBe(200);
+    // Inviting someone of the client organisation with such a role, too.
+    const invite = (reason?: string) =>
+      admin.agent
+        .post('/api/v1/users/invite')
+        .set('x-csrf-token', admin.csrf)
+        .send({
+          email: `client-${Date.now()}@example.org`,
+          name: 'Client',
+          memberships: [client, reviewer],
+          ...(reason ? { reason } : {}),
+        });
+    expect((await invite()).body.code).toBe('REASON_REQUIRED');
+    expect((await invite('Audits the fieldwork')).status).toBe(201);
+  });
 });

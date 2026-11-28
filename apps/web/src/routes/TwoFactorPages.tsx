@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -63,6 +63,7 @@ export function TwoFactorPage() {
 export function TwoFactorSetupPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const setup = useQuery({
     queryKey: ['2fa-setup'],
     queryFn: () =>
@@ -93,6 +94,8 @@ export function TwoFactorSetupPage() {
         submitLabel={t('twofa.enable')}
         onSubmit={async (code) => {
           await enable.mutateAsync(code);
+          // Turned on from the account menu: the session's account changes with it.
+          await qc.invalidateQueries({ queryKey: ['me'] });
           await navigate({ to: '/' });
         }}
       />
