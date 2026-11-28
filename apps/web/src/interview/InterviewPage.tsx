@@ -1,12 +1,14 @@
 import { PaperMeta } from '../papi/PaperMeta.js';
 import { ScanPanel } from '../papi/ScanPanel.js';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { own, type InterviewSession } from '@wansurvey/logic';
 import { InterviewRunner, ScriptBox } from '@wansurvey/renderer';
 import { DEFAULT_SHORTCUTS, type LocalizedText } from '@wansurvey/schema';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../designer/Dialog.js';
+import { useCan } from '../designer/hooks.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
@@ -100,6 +102,13 @@ export function InterviewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [, setNow] = useState(0);
   const navRef = useRef<HTMLOListElement>(null);
+  // The project's name for the breadcrumb (usually cached from the project page).
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<{ name: string }>(`/projects/${projectId}`),
+    retry: false,
+  });
+  const canCasesAll = useCan('cases.read_all', projectId);
 
   // Clocks in the header.
   useEffect(() => {
@@ -195,8 +204,67 @@ export function InterviewPage() {
     }
   };
 
+  // Where the interview belongs (64): the device page, the paper forms or the calls it was
+  // opened from, else the interviewer's cases.
+  const parent: { label: string; to: string; search: Record<string, string> } = iv.onDevice
+    ? { label: t('device.title'), to: '/projects/$projectId/device', search: {} }
+    : payload.interview.mode === 'PAPI'
+      ? {
+          label: t('cases.tabs.paper'),
+          to: '/projects/$projectId',
+          search: { tab: 'paper', q: payload.interview.questionnaireId },
+        }
+      : payload.interview.mode === 'CATI'
+        ? { label: t('cases.tabs.calls'), to: '/projects/$projectId', search: { tab: 'calls' } }
+        : {
+            label: canCasesAll ? t('cases.tabs.cases') : t('cases.list.mine'),
+            to: '/projects/$projectId',
+            search: { tab: 'cases' },
+          };
+  /** A breadcrumb link that first sends what is still on this device. */
+  const crumb = (label: string, to: string, search: Record<string, string> = {}) => (
+    <Link
+      to={to}
+      params={{ projectId }}
+      search={search}
+      // Only the case is the current page (a fuzzy match would mark every crumb as current).
+      activeOptions={{ exact: true, includeSearch: true }}
+      className="hover:underline"
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        void iv
+          .sync({ force: true })
+          .finally(() => void navigate({ to, params: { projectId }, search }));
+      }}
+    >
+      {label}
+    </Link>
+  );
+
   return (
     <div className="flex flex-col gap-3" onKeyDown={onKeyDown}>
+      <nav aria-label={t('designer.breadcrumb')} className="text-sm text-slate-600">
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>{crumb(t('designer.projects'), '/projects')}</li>
+          {project.data ? (
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true">/</span>
+              {crumb(project.data.name, '/projects/$projectId')}
+            </li>
+          ) : null}
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true">/</span>
+            {crumb(parent.label, parent.to, parent.search)}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true">/</span>
+            <span aria-current="page" className="font-medium text-slate-700">
+              {payload.context.externalId ?? t('interview.case', { id: '' }).trim()}
+            </span>
+          </li>
+        </ol>
+      </nav>
       <header className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <h1 className="text-lg font-semibold">
           {t('interview.case', { id: payload.context.externalId ?? '' })}
@@ -380,6 +448,7 @@ export function InterviewPage() {
                   : null
               }
               count={answered.filter((a) => visited.has(a.key)).length}
+              note={iv.resumed.note}
               lastAnswered={(() => {
                 const current = session.currentKey();
                 const before = answered.filter((a) => visited.has(a.key) && a.key !== current);
@@ -443,9 +512,10 @@ export function InterviewPage() {
         </section>
       </div>
 
-      {/* On a tablet or phone the bar stays at the bottom of the screen, under the thumb. */}
+      {/* On a tablet the bar stays at the bottom of the screen, under the thumb. On a phone's
+          touch screen that place is the runner's Back and Next: this bar follows the question. */}
       <footer
-        className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50/95 px-1 py-2 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 [&_button]:pointer-coarse:min-h-11"
+        className="sticky bottom-0 z-10 max-sm:pointer-coarse:static -mx-1 flex flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50/95 px-1 py-2 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 [&_button]:pointer-coarse:min-h-11"
         data-testid="interview-actions"
       >
         <button type="button" className={smallBtn} onClick={() => setSide((s) => !s)}>
@@ -629,6 +699,7 @@ function ResumeCard({
   where,
   when,
   count,
+  note,
   lastAnswered,
   onJump,
   onDismiss,
@@ -636,6 +707,8 @@ function ResumeCard({
   where: string;
   when: string | null;
   count: number;
+  /** The interviewer's latest note on the interview. */
+  note: string | null;
   lastAnswered: string | null;
   onJump(key: string): void;
   onDismiss(): void;
@@ -652,6 +725,12 @@ function ResumeCard({
         {where} {when ? t('interview.resumed.ago', { when }) : null}{' '}
         {t('interview.resumed.answered', { count })}
       </p>
+      {note ? (
+        <p data-testid="resume-note">
+          <span className="font-medium">{t('interview.resumed.note')}</span>{' '}
+          <q className="whitespace-pre-wrap">{note}</q>
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {lastAnswered ? (
           <button type="button" className={smallBtn} onClick={() => onJump(lastAnswered)}>

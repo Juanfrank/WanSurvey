@@ -470,6 +470,11 @@ function Runner(p: InterviewRunnerProps) {
   const percent = Math.round(status.progress * 100);
   // The phone layout has no room for the shortcut hints, and a phone has no keyboard for them.
   const hintCls = narrow ? 'hidden' : '';
+  // Back and Next within reach of the thumb on a narrow touch screen (171).
+  const thumbCls = narrow
+    ? 'pointer-coarse:sticky pointer-coarse:bottom-0 pointer-coarse:z-10 pointer-coarse:flex-nowrap pointer-coarse:bg-white pointer-coarse:pb-[max(0.75rem,env(safe-area-inset-bottom))] pointer-coarse:pt-3'
+    : '';
+  const thumbBtn = narrow ? 'pointer-coarse:min-h-12 pointer-coarse:flex-1' : '';
 
   return (
     <div
@@ -519,7 +524,13 @@ function Runner(p: InterviewRunnerProps) {
             {respondent
               ? t('done.respondent')
               : status.state === 'ended'
-                ? t('done.ended', { disposition: status.disposition })
+                ? t('done.ended', {
+                    disposition: status.disposition
+                      ? t(`disposition.${status.disposition}`, {
+                          defaultValue: status.disposition,
+                        })
+                      : '',
+                  })
                 : t('done.complete')}
           </p>
           {p.done?.details}
@@ -578,10 +589,15 @@ function Runner(p: InterviewRunnerProps) {
       ) : null}
 
       {!finished ? (
-        <div className="flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-4">
+        // On a phone with a touch screen the bar stays at the bottom, under the thumb, while the
+        // question scrolls above it; it keeps its place in the flow, so nothing ends up beneath.
+        <div
+          className={`flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-4 ${thumbCls}`}
+          data-testid="runner-nav"
+        >
           <button
             type="button"
-            className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 disabled:opacity-40"
+            className={`min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 disabled:opacity-40 ${thumbBtn}`}
             onClick={back}
             disabled={session.path()[0]?.key === currentKey}
             aria-keyshortcuts="Shift+Enter"
@@ -597,7 +613,7 @@ function Runner(p: InterviewRunnerProps) {
           </button>
           <button
             type="button"
-            className="min-h-11 rounded-md bg-indigo-600 px-5 py-2 font-medium text-on-fill hover:bg-indigo-700"
+            className={`min-h-11 rounded-md bg-indigo-600 px-5 py-2 font-medium text-on-fill hover:bg-indigo-700 ${thumbBtn}`}
             onClick={next}
             aria-keyshortcuts={textOnScreen ? 'Control+Enter' : 'Enter'}
           >

@@ -111,9 +111,25 @@ describe.skipIf(!configured)('SQL Server: telephone interviewing over HTTP', () 
     await mk(u!.id, { phone: false });
     await mk(u!.id, { timezone: 'Asia/Tokyo' }); // all day: still eligible
 
+    // The preview says what comes next, and takes nothing: no lock, no call (19).
+    const peek = await get(me!, `/projects/${project}/cati/peek`);
+    expect(peek.status, JSON.stringify(peek.body)).toBe(200);
+    expect(peek.body.next).toMatchObject({ kind: 'new', attempts: 0, at: null });
+    const [free] = await rows(
+      sql`SELECT call_lock_user_id, (SELECT COUNT(*) FROM call_attempts WHERE case_id = ${high}) AS calls
+          FROM cases WHERE id = ${high}`,
+    );
+    expect(free).toMatchObject({ call_lock_user_id: null, calls: 0 });
+    // Someone with no case of theirs is told why.
+    const none = await get(sessions[1]!, `/projects/${project}/cati/peek`);
+    expect(none.body).toMatchObject({ next: null, reason: 'empty' });
+
     const a = await post(me!, `/projects/${project}/cati/next`);
     expect(a.status, JSON.stringify(a.body)).toBe(200);
     expect(a.body.case.id).toBe(high);
+    // With a call open, the preview names it: "Next case" serves it again.
+    const openPeek = await get(me!, `/projects/${project}/cati/peek`);
+    expect(openPeek.body.next).toMatchObject({ kind: 'open', externalId: a.body.case.externalId });
     expect(a.body.phones).toEqual([
       expect.objectContaining({ value: '+51987654321', label: 'Móvil' }),
     ]);
@@ -314,6 +330,9 @@ describe.skipIf(!configured)('SQL Server: telephone interviewing over HTTP', () 
     expect(pin.status, JSON.stringify(pin.body)).toBe(200);
     expect(pin.body).toEqual({ pinned: true });
     expect((await get(me!, `/projects/${project}/cati/callbacks`)).body[0].pinned).toBe(true);
+    const peek = await get(me!, `/projects/${project}/cati/peek`);
+    expect(peek.body.next).toMatchObject({ kind: 'pinned', attempts: 1 });
+    expect(Date.parse(peek.body.next.at)).toBe(Date.parse(tomorrow));
     // Another caller cannot pin a case that is not theirs.
     const theirs = await post(other!, `/projects/${project}/cati/callbacks/${first}/pin`);
     expect(theirs.status).toBe(409);

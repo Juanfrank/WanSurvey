@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { useCan } from '../designer/hooks.js';
+import { DevicesCard } from '../device/DevicesCard.js';
 import { Card } from '../routes/ui.js';
 import { BarTable, DayColumns, fmtNum, fmtPct, Progress } from './charts.js';
 import {
@@ -500,6 +501,8 @@ export function DashboardTab({ projectId }: { projectId: string }) {
               <p className="text-slate-600">{t('analysis.live.noneActive')}</p>
             )}
           </Card>
+          {/* Who holds cases on a device and when it last synchronised (169). */}
+          {canTeam ? <DevicesCard projectId={projectId} at={snap.at} /> : null}
         </div>
       )}
     </div>

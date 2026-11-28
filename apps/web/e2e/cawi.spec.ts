@@ -71,6 +71,10 @@ test('a wave is e-mailed, answered on a phone with a resume, and the funnel show
     useInnerText: true,
   });
   await shot(r, 'respondent-phone');
+  // Back and Next at the bottom of the screen, under the thumb (171).
+  await expect(r.getByTestId('runner-nav')).toHaveCSS('position', 'sticky');
+  await expect(r.getByRole('button', { name: 'Siguiente' })).toBeInViewport();
+  await shot(r, 'v2-cawi-phone-thumb-nav', { fullPage: false });
   await expectAccessible(r);
   // The move to the next page is written on the phone and then sent: wait for the send,
   // since the status already read "saved" before the click.

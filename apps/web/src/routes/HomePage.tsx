@@ -48,7 +48,7 @@ export interface HomeSummary {
   dueCallbacks: { projectId: string; caseId: string; externalId: string | null; at: string }[];
 }
 
-interface Goal {
+export interface Goal {
   userId: string | null;
   target: number;
   completes: number;
@@ -267,7 +267,7 @@ function AdminPending({ members }: { members: Member[] }) {
   );
 }
 
-function GoalBadge({ goal, own }: { goal: Goal; own: boolean }) {
+export function GoalBadge({ goal, own }: { goal: Goal; own: boolean }) {
   const { t } = useTranslation();
   return (
     <span className="inline-flex flex-wrap items-center gap-2 text-sm">

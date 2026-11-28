@@ -122,7 +122,8 @@ test('the preview flags questionnaire problems and runs saved scenarios', async 
   await openPreview(page);
   await press(page, 'Enter');
   for (const v of ['1', '16']) await typeAndEnter(page, v); // screened out
-  await expect(page.getByText('The interview has ended (SCREENED_OUT).')).toBeVisible();
+  await expect(page.getByText('The interview has ended (not eligible).')).toBeVisible();
+  await shot(page, 'v2-preview-ended-disposition', { fullPage: false });
   await page.getByLabel('Scenario name').fill('Under 18 is screened out');
   await page.getByRole('button', { name: 'Save current run' }).click();
   await page.getByRole('button', { name: 'Run', exact: true }).click();

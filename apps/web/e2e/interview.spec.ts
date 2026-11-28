@@ -62,6 +62,19 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await expect(saveStatus(page)).toHaveAttribute('data-status', 'saved', { timeout: 10_000 });
   await shot(page, 'interview-screen');
   await expectAccessible(page);
+  // Where the interview sits: the project, the interviewer's cases and the case (64).
+  const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+  await expect(crumbs).toContainText('Household Survey 2026');
+  await expect(crumbs.getByRole('link', { name: 'My cases' })).toBeVisible();
+  await expect(crumbs.locator('[aria-current="page"]')).toHaveText(caseId);
+  await shot(page, 'v2-interview-breadcrumb', { fullPage: false });
+  // A note before stopping: the card shown when it is taken up again repeats it (176).
+  await page.keyboard.press('Control+m');
+  const noteDialog = page.getByRole('dialog', { name: /^Note on / });
+  await noteDialog.getByLabel('Note').fill('Call back after 5 pm, the respondent is at work');
+  await noteDialog.getByRole('button', { name: 'Add note' }).click();
+  await expect(noteDialog).toBeHidden();
+  await onQuestion(page, 'A3');
 
   // Reload: same question, same answers.
   await page.reload();
@@ -70,7 +83,9 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   // Taken up again: where it stopped; the region from the sample is still to be confirmed.
   await expect(page.getByTestId('resume-card')).toContainText('You stopped at');
   await expect(page.getByTestId('prefilled-answers')).toContainText('E5_REGION');
+  await expect(page.getByTestId('resume-note')).toContainText('Call back after 5 pm');
   await shot(page, 'interview-resumed');
+  await shot(page, 'v2-interview-resume-note', { fullPage: false });
   // The same screen on a phone and a tablet: the question first, the actions at the bottom.
   for (const [name, size] of [
     ['interview-phone', { width: 390, height: 844 }],
@@ -85,6 +100,21 @@ test('an interview autosaves, survives a reload and going offline, and submits',
     await shot(small, name, { fullPage: false });
     await small.close();
   }
+  // On a phone with a touch screen, Back and Next stay at the bottom, under the thumb (171).
+  // (Same browser, so the same device: a touch screen emulated on a page of its own.)
+  const thumb = await context.newPage();
+  await thumb.setViewportSize({ width: 390, height: 844 });
+  const cdp = await context.newCDPSession(thumb);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await thumb.goto(page.url());
+  await expect(thumb.getByTestId('runner')).toBeVisible();
+  await expect.poll(() => thumb.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+  await thumb.getByTestId('resume-card').getByRole('button', { name: 'Continue here' }).click();
+  const bar = thumb.getByTestId('runner-nav');
+  await expect(bar).toHaveCSS('position', 'sticky');
+  await expect(bar.getByRole('button', { name: /^Next/ })).toBeInViewport();
+  await shot(thumb, 'v2-interview-phone-thumb-nav', { fullPage: false });
+  await thumb.close();
   await page.getByTestId('resume-card').getByRole('button', { name: 'Continue here' }).click();
   await expect(page.getByTestId('resume-card')).toBeHidden();
 
@@ -135,6 +165,9 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await page.keyboard.press('Enter');
   // One end card: a summary, submit, and going back to review.
   await expect(page.getByTestId('end-summary')).toContainText('Duration');
+  // The disposition by its name, not its code.
+  await expect(page.getByText('The interview has ended (refusal).')).toBeVisible();
+  await shot(page, 'v2-interview-end-disposition', { fullPage: false });
   await expect(page.getByRole('button', { name: 'Go back to the last question' })).toBeVisible();
   await shot(page, 'interview-end');
   await page.getByRole('button', { name: 'Submit interview' }).click();

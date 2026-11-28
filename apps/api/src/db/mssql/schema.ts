@@ -416,6 +416,13 @@ export interface MssqlSchema {
     last_seq: Generated<number>;
     updated_at: Instant;
   };
+  device_syncs: {
+    tenant_id: string;
+    project_id: string;
+    user_id: string;
+    device_id: string;
+    synced_at: Instant;
+  };
   interview_answer_events: {
     id: string;
     tenant_id: string;

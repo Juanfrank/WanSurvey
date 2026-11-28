@@ -23,6 +23,7 @@ import { CatiService, NextBody, OutcomeBody } from './cati.service.js';
 const PERM = { projectParam: 'projectId' } as const;
 const CONDUCT = 'interviews.conduct';
 const ShiftQuery = z.object({ since: z.iso.datetime({ offset: true }) });
+const PeekQuery = z.object({ questionnaireId: z.uuid().optional() });
 
 /** Telephone interviewing: the call queue, call outcomes and callbacks. */
 @ApiTags('cati')
@@ -57,6 +58,22 @@ export class CatiController {
       return;
     }
     return out;
+  }
+
+  /**
+   * What "Next case" would serve now (a callback due, a new case, a retry), or why nothing
+   * would: read only, nothing is locked or opened (19).
+   */
+  @Get('projects/:projectId/cati/peek')
+  @RequirePermission(CONDUCT, PERM)
+  peek(
+    @Auth() ctx: AuthContext,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(new ZodPipe(PeekQuery)) q: z.infer<typeof PeekQuery>,
+  ) {
+    return this.repo.inTenant(ctx.tenantId, (t) =>
+      this.cati.peek(t, ctx, projectId, q.questionnaireId),
+    );
   }
 
   /** The caller's open call (dialling, or answered with its interview); 204 when none. */

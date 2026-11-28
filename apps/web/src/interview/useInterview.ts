@@ -67,6 +67,8 @@ export interface InterviewPayload {
   };
   lastSeq: number;
   serverTime: string;
+  /** The interviewer's latest note on the interview (absent on a device copy). */
+  lastNote?: { key: string; text: string; at: string } | null;
   /** Opened from this device's copy, with no connection. */
   offline?: boolean;
 }
@@ -216,9 +218,12 @@ export function useInterview(id: string) {
   /** The case is downloaded to this device (offline work). */
   const [onDevice, setOnDevice] = useState(false);
   /** Opened with answers already given: the interview is being taken up again. */
-  const [resumed, setResumed] = useState<{ updatedAt: string | null; serverTime: string } | null>(
-    null,
-  );
+  const [resumed, setResumed] = useState<{
+    updatedAt: string | null;
+    serverTime: string;
+    /** The latest note written on the interview: still on this device, or on the server. */
+    note: string | null;
+  } | null>(null);
   const [, setTick] = useState(0);
   /** Recording of the interview: not asked, waiting for the respondent's answer, on, or stopped. */
   const [audio, setAudio] = useState<'off' | 'ask' | 'recording' | 'declined'>('off');
@@ -410,11 +415,23 @@ export function useInterview(id: string) {
         const fresh = !hasState(state);
         // The server's time of the last change, when its copy is the latest one.
         const ahead = !!local && (!!local.start || local.seq > local.acked);
+        const taken = s.state().visited.length > 0 && s.status().state === 'in_progress';
+        // A note not sent yet is newer than any the server has.
+        const unsent = taken
+          ? (await store.pending(id, 100_000))
+              .map((op) =>
+                op.kind === 'paradata' && op.type === 'note_added' ? op.payload.text : null,
+              )
+              .filter((x): x is string => typeof x === 'string' && !!x)
+              .pop()
+          : undefined;
+        if (cancelled) return;
         setResumed(
-          s.state().visited.length > 0 && s.status().state === 'in_progress'
+          taken
             ? {
                 updatedAt: p.offline || ahead ? null : (p.interview.updatedAt ?? null),
                 serverTime: p.serverTime,
+                note: unsent ?? p.lastNote?.text ?? null,
               }
             : null,
         );

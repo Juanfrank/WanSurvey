@@ -65,6 +65,11 @@ export type SyncItem = z.infer<typeof SyncItem>;
 export const SyncBody = z.object({
   deviceId: DeviceId,
   interviews: z.array(SyncItem).max(50),
+  /**
+   * The project a device's "Sync now" is for: the server notes when that device last
+   * synchronised with it (169). Left out by the background sends of an open interview.
+   */
+  projectId: z.uuid().optional(),
 });
 
 export const SubmitBody = z.object({

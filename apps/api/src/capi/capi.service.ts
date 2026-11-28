@@ -15,6 +15,9 @@ import { DeviceId, type SyncItem } from '../interviews/schemas.js';
 import { closedCode } from '../questionnaires/state.js';
 import { RegistryService } from '../registry/registry.service.js';
 
+/** Days a device's last synchronisation keeps its person on the supervisors' list. */
+const DEVICE_SYNC_DAYS = 14;
+
 export const CheckoutBody = z.strictObject({
   deviceId: DeviceId,
   caseIds: z.array(z.uuid()).min(1).max(200),
@@ -169,6 +172,7 @@ export class CapiService implements OnModuleInit {
         lastSeq,
       });
     }
+    await t.noteDeviceSync(projectId, ctx.userId, body.deviceId);
     return {
       project: { id: projectId, name: projectName },
       settings: {
@@ -206,12 +210,26 @@ export class CapiService implements OnModuleInit {
     ids: string[],
   ) {
     const back = await t.checkIn(projectId, ids, deviceId, ctx.userId);
+    await t.noteDeviceSync(projectId, ctx.userId, deviceId);
     await this.cases.events(
       t,
       ctx.userId,
       back.map((id) => ({ caseId: id, type: 'checked_in', details: { deviceId } })),
     );
     return { checkedIn: back };
+  }
+
+  /**
+   * For supervisors (169): who holds cases on a device, how many, and when their devices last
+   * synchronised with the project; also those who synchronised in the last two weeks.
+   */
+  async devices(t: InterviewsTx, projectId: string) {
+    const rows = await t.devicesOverview(projectId, DEVICE_SYNC_DAYS);
+    return rows.map((r) => ({
+      ...r,
+      checkedOutAt: r.checkedOutAt ? new Date(r.checkedOutAt).toISOString() : null,
+      lastSync: r.lastSync ? new Date(r.lastSync).toISOString() : null,
+    }));
   }
 
   /** A supervisor frees a case from a lost or broken device (D5). Audited. */

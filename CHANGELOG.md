@@ -38,6 +38,17 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 - **Home portfolio**: fieldwork dates and the last interview activity of each project.
 - **Retention on the project overview**: the personal data period and what happens when it ends,
   or a warning when there is none, with tonight's count for who configures the project.
+- **Interview, calls and devices (expert panel, second round)**: on a phone's touch screen, Back
+  and Next stay at the bottom under the thumb, for interviewers and web respondents; the interview
+  screen has a breadcrumb (Projects / project / My cases / case); the card shown when an interview
+  is taken up again repeats the interviewer's last note; the end message names the disposition
+  ("refusal") instead of its code. The Phone calls workspace shows the caller's goal and pace and,
+  while no case is open, what "Next case" would bring (a read-only preview, `GET
+/projects/:id/cati/peek`). The live dashboard lists, for supervisors, the cases each interviewer
+  holds on a device and when it last synchronised (`GET /projects/:id/capi/devices`). The date
+  and duration written on a paper form are checked on the server too (`PAPER_META_INVALID`).
+  **Upgrade**: migration `0031_device_syncs.sql` adds the `device_syncs` table.
+
 - **Rotation and randomisation of a section's or block's items**: in the editor, "Order of the
   items" shuffles or rotates them per interview (seeded by the interview, so every device and the
   server see the same order); items can be kept in place in the definition (`itemOrder.fixed`), and an optional
