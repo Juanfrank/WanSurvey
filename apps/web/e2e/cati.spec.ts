@@ -120,7 +120,7 @@ test('a telephone shift by keyboard: callback, callback served first, answered i
     await shot(page, 'cati-callbacks');
     await expectAccessible(page);
     await shot(page, 'cati-callbacks-rail', { fullPage: false });
-    // It opens over the call area, above the button.
+    // It opens over the call area, below the button (in the title row, it covers nothing).
     await floating.click();
     await expect(floating).toHaveAttribute('aria-expanded', 'true');
     await shot(page, 'cati-callbacks-over', { fullPage: false });

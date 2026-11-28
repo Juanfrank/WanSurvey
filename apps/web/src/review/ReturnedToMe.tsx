@@ -30,16 +30,11 @@ interface OwnQuality {
 }
 
 /**
- * What review says about the caller's work: the interviews sent back to fix and resubmit (R1),
- * and their own quality signals.
+ * What review sent back to the caller to fix and resubmit (R1). Their own quality signals are
+ * `MyQuality`, folded beside the case counts.
  */
 export function ReturnedToMe({ projectId }: { projectId: string }) {
-  return (
-    <>
-      <Returned projectId={projectId} />
-      <MyQuality projectId={projectId} />
-    </>
-  );
+  return <Returned projectId={projectId} />;
 }
 
 function Returned({ projectId }: { projectId: string }) {
@@ -112,8 +107,12 @@ function Returned({ projectId }: { projectId: string }) {
   );
 }
 
-/** The caller's own quality signals, as a reviewer sees them, for early feedback. */
-function MyQuality({ projectId }: { projectId: string }) {
+/**
+ * The caller's own quality signals, as a reviewer sees them, for early feedback. Folded
+ * ("My quality signals ▸") beside the case counts, so that the case list stays near the top;
+ * opened, the figures take the whole width (one column on a phone).
+ */
+export function MyQuality({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
   const q = useQuery({
     queryKey: ['review-mine', projectId],
@@ -122,37 +121,43 @@ function MyQuality({ projectId }: { projectId: string }) {
   const d = q.data;
   if (!d?.submitted) return null;
   const flags = FLAG_KINDS.filter((k) => d.flags[k]);
+  const row =
+    'flex items-baseline justify-between gap-3 sm:justify-start sm:gap-1.5 [&>dd]:whitespace-nowrap';
   return (
-    <section
-      aria-labelledby="my-quality-title"
-      className="flex items-baseline gap-x-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+    <details
+      className="group text-sm open:basis-full open:rounded-lg open:border open:border-slate-200 open:bg-white open:px-3 open:py-2"
       data-testid="my-quality"
     >
-      {/* One line: the title (what it is, on hover and for screen readers) and the figures. */}
-      <h2 id="my-quality-title" className="flex-none font-semibold" title={t('review.mine.help')}>
+      <summary
+        className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-1 py-0.5 font-semibold text-indigo-ink-700 hover:bg-indigo-50 [&::-webkit-details-marker]:hidden"
+        title={t('review.mine.help')}
+      >
         {t('review.mine.title')}
-        <span className="sr-only">. {t('review.mine.help')}</span>
-      </h2>
-      <dl className="flex min-w-0 flex-1 flex-wrap gap-x-4 gap-y-1 [&>div]:flex [&>div]:items-baseline [&>div]:gap-1.5">
-        <div>
+        <span aria-hidden="true" className="text-xs transition-transform group-open:rotate-90">
+          ▸
+        </span>
+      </summary>
+      <p className="mt-1 text-xs text-slate-600">{t('review.mine.help')}</p>
+      <dl className="mt-2 flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:gap-x-5">
+        <div className={row}>
           <dt className="text-xs text-slate-600">{t('review.mine.approved')}</dt>
           <dd className="tabular-nums font-medium" data-key="approved">
             {t('review.mine.ofSubmitted', { n: d.approved, of: d.submitted })}
           </dd>
         </div>
-        <div>
+        <div className={row}>
           <dt className="text-xs text-slate-600">{t('review.mine.returned')}</dt>
           <dd className="tabular-nums font-medium" data-key="returned">
             {d.returned}
           </dd>
         </div>
-        <div>
+        <div className={row}>
           <dt className="text-xs text-slate-600">{t('review.mine.rejected')}</dt>
           <dd className="tabular-nums font-medium" data-key="rejected">
             {d.rejected}
           </dd>
         </div>
-        <div>
+        <div className={row}>
           <dt className="text-xs text-slate-600">{t('review.mine.length')}</dt>
           <dd className="tabular-nums font-medium" data-key="length">
             {d.medianMs === null ? '—' : minutes(d.medianMs)}
@@ -163,14 +168,14 @@ function MyQuality({ projectId }: { projectId: string }) {
             ) : null}
           </dd>
         </div>
-        <div>
+        <div className={row}>
           <dt className="text-xs text-slate-600">{t('review.mine.flagged')}</dt>
-          <dd className="font-medium" data-key="flagged">
+          <dd className="flex flex-wrap justify-end gap-1 font-medium" data-key="flagged">
             <span className="tabular-nums">{d.flagged}</span>
             {flags.map((k) => (
               <span
                 key={k}
-                className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-ink-900"
+                className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-ink-900"
                 data-flag={k}
               >
                 {t(`review.flags.${k}`)} · {d.flags[k]}
@@ -179,6 +184,6 @@ function MyQuality({ projectId }: { projectId: string }) {
           </dd>
         </div>
       </dl>
-    </section>
+    </details>
   );
 }

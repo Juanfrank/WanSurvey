@@ -119,7 +119,8 @@ const en = {
   home: homeEn,
   waiting: {
     title: 'Waiting for access',
-    explain: 'You can sign in, but you cannot work here until an administrator gives you a role.',
+    noRole:
+      'Your account is active, but no role has been assigned to you in {{org}} yet. An administrator of {{org}} has been notified and needs to give you access before you can work here.',
     otherOrgs: 'You also belong to:',
     switch: 'Switch',
   },
@@ -343,8 +344,8 @@ const es: Catalogue = {
   home: homeEs,
   waiting: {
     title: 'Esperando acceso',
-    explain:
-      'Puede iniciar sesión, pero no podrá trabajar aquí hasta que un administrador le asigne un rol.',
+    noRole:
+      'Su cuenta está activa, pero aún no tiene un rol en {{org}}. Ya se avisó a un administrador de {{org}}, que debe darle acceso antes de que pueda trabajar aquí.',
     otherOrgs: 'También pertenece a:',
     switch: 'Cambiar',
   },

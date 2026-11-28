@@ -26,7 +26,6 @@ export const HeaderSlotContext = createContext<HTMLElement | null>(null);
  *       title={<Link to="/projects/$projectId" params={{ projectId }}>{name}</Link>}
  *       icon={<ProjectLogo project={p} className="h-7 w-auto" />}
  *       current={tabLabel(tab)}
- *       aside={<DeviceStatusLink projectId={projectId} />}
  *     />
  *
  * The header is moved (a React portal) into the top row; screen readers and tests still find
@@ -67,14 +66,20 @@ export function PageHeader({
           : 'text-xl font-bold min-[900px]:text-2xl'
       }
     >
-      {title}
+      {/* In a breadcrumb, a long title is cut short ("…") so the breadcrumb keeps one line. */}
+      {parents?.length ? <span className="min-w-0 truncate">{title}</span> : title}
     </h1>
   );
   const body = parents?.length ? (
     <nav aria-label={t('ui.breadcrumb')} className="min-w-0 text-sm text-slate-600">
-      <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+      {/* One line: the steps shrink (their text cut short) instead of wrapping; on a phone only
+          the title and the step after it (the top bar has the way back). */}
+      <ol className="flex min-w-0 items-center gap-x-1.5">
         {parents.map((p, i) => (
-          <li key={i} className="flex items-center gap-1.5">
+          <li
+            key={i}
+            className="flex min-w-0 max-w-[14rem] items-center gap-1.5 whitespace-nowrap max-sm:hidden [&>:first-child]:truncate"
+          >
             {p}
             <span aria-hidden="true">/</span>
           </li>
@@ -85,7 +90,7 @@ export function PageHeader({
           {aside}
         </li>
         {current ? (
-          <li className="flex items-center gap-1.5">
+          <li className="flex min-w-0 flex-none items-center gap-1.5 whitespace-nowrap">
             <span aria-hidden="true">/</span>
             <span aria-current="page" className="font-medium text-slate-700">
               {current}

@@ -91,21 +91,29 @@ export function OverflowTabList({
   items,
   value,
   onSelect,
+  end,
 }: {
   label: string;
   items: OverflowTab[];
   value: string;
   onSelect(value: string): void;
+  /**
+   * Small things at the right end of the row (a status), not counted in the tabs' width.
+   * Under 640 px they get a row of their own above the tabs.
+   */
+  end?: ReactNode;
 }) {
   const { t } = useTranslation();
   const wrap = useRef<HTMLDivElement>(null);
+  /** The part of the row the tabs have (all of it but `end`). */
+  const room = useRef<HTMLDivElement>(null);
   const measure = useRef<HTMLDivElement>(null);
   const narrow = useMedia('(max-width: 639px)');
   const [width, setWidth] = useState(Number.POSITIVE_INFINITY);
   const [sizes, setSizes] = useState<number[]>([]);
 
   useLayoutEffect(() => {
-    const el = wrap.current;
+    const el = room.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const on = () => setWidth(el.clientWidth || Number.POSITIVE_INFINITY);
     on();
@@ -157,51 +165,54 @@ export function OverflowTabList({
   }
   const hidden = items.filter((x) => !shown.includes(x));
 
-  return (
-    <div ref={wrap} className="relative flex min-w-0 items-end gap-x-1 border-b border-slate-200">
-      <Tabs.List
-        aria-label={label}
-        className={`flex min-w-0 gap-1 ${narrow ? 'overflow-x-auto' : ''}`}
-        data-overflow-tabs=""
-      >
-        {shown.map((x) => (
-          <Tabs.Trigger
-            key={x.value}
-            value={x.value}
-            className={`${tabCls} whitespace-nowrap`}
-            onClick={x.onClick}
-          >
-            {x.label}
-          </Tabs.Trigger>
-        ))}
-      </Tabs.List>
-      {hidden.length ? (
-        <MoreMenu
-          label={t('ui.moreSections')}
-          unstyled
-          className="-mb-px inline-flex flex-none items-center gap-1 whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy aria-expanded:text-navy"
-          entries={hidden.map((x) => ({
-            type: 'item' as const,
-            id: x.value,
-            label: x.label,
-            onSelect: () => {
-              x.onClick?.();
-              onSelect(x.value);
-              // The tab picked now shows in the row: the focus goes to it.
-              requestAnimationFrame(() =>
-                wrap.current
-                  ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
-                  ?.focus(),
-              );
-            },
-          }))}
+  const row = (
+    <div ref={wrap} className="relative flex min-w-0 items-end gap-x-3 border-b border-slate-200">
+      <div ref={room} className="flex min-w-0 flex-1 items-end gap-x-1">
+        <Tabs.List
+          aria-label={label}
+          className={`flex min-w-0 gap-1 ${narrow ? 'overflow-x-auto' : ''}`}
+          data-overflow-tabs=""
         >
-          {t('ui.more')}
-          <span aria-hidden="true" className="text-xs">
-            ▾
-          </span>
-        </MoreMenu>
-      ) : null}
+          {shown.map((x) => (
+            <Tabs.Trigger
+              key={x.value}
+              value={x.value}
+              className={`${tabCls} whitespace-nowrap`}
+              onClick={x.onClick}
+            >
+              {x.label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+        {hidden.length ? (
+          <MoreMenu
+            label={t('ui.moreSections')}
+            unstyled
+            className="-mb-px inline-flex flex-none items-center gap-1 whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-navy aria-expanded:text-navy"
+            entries={hidden.map((x) => ({
+              type: 'item' as const,
+              id: x.value,
+              label: x.label,
+              onSelect: () => {
+                x.onClick?.();
+                onSelect(x.value);
+                // The tab picked now shows in the row: the focus goes to it.
+                requestAnimationFrame(() =>
+                  wrap.current
+                    ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+                    ?.focus(),
+                );
+              },
+            }))}
+          >
+            {t('ui.more')}
+            <span aria-hidden="true" className="text-xs">
+              ▾
+            </span>
+          </MoreMenu>
+        ) : null}
+      </div>
+      {end && !narrow ? <div className="mb-1 flex-none self-center">{end}</div> : null}
       {/* A copy of the row out of sight, to know how wide each tab is. */}
       <div
         ref={measure}
@@ -216,5 +227,12 @@ export function OverflowTabList({
         <span className={`${tabCls} flex-none`}>{t('ui.more')} ▾</span>
       </div>
     </div>
+  );
+  // The row keeps its place (a fragment) when `end` moves above it, so it is not remounted.
+  return (
+    <>
+      {end && narrow ? <div className="flex min-w-0 justify-end">{end}</div> : null}
+      {row}
+    </>
   );
 }

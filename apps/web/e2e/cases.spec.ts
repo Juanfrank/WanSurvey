@@ -379,6 +379,8 @@ test('interviewers see their cases automatically; in pool mode the first to take
   await interviewer.getByLabel('Search id or sample data').fill('XHH0007');
   const row = interviewer.locator('tr[data-case="XHH0007"]');
   await expect(row).toBeVisible();
+  // The search has applied (it waits for a pause in typing): only that case is listed.
+  await expect(interviewer.locator('tr[data-case]')).toHaveCount(1);
   await expect(row).not.toContainText('hidden');
   // Their own figures: what to do, not what is left to assign.
   await expect(interviewer.locator('[data-kpi="todo"]')).toBeVisible();

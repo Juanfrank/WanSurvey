@@ -469,6 +469,15 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **Interviewer screens, less crowded**: on a project, "My device" and the connection state
+  ("Online · 0 to send") sit at the right end of the tabs' row (a row of their own on a phone)
+  instead of beside the project's name, so the breadcrumb keeps one line; a long project name is
+  cut short with "…" (whole on hover). In Phone calls, the "Callbacks" button sits at the end of
+  the title row instead of floating over the call's outcomes; its list opens below it. In My
+  cases, "My quality signals" is folded ("My quality signals ▸") at the end of the counts' title,
+  so the list moves up; opened, the figures are one column on a phone. An interview on a phone
+  shows only "‹ Case HH0031" at the top (‹ goes back) and one line of details (respondent,
+  interview time, saved state), so the question shows sooner.
 - **One place for the results summary**: the printable summary (PDF) opens from Results only; the
   duplicate button in Exports is gone (the client links were already only in Results).
 - **«Completar» is now «Cerrar trabajo de campo» (Close fieldwork)** in a questionnaire's actions, its
@@ -568,6 +577,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- **The waiting page speaks the interface's language**: "Your account is active, but no role has
+  been assigned…" was always in English; it is now translated (Spanish too), with the
+  organisation's name.
 - `approvedOnly=false` in the address of the topline, crosstab and summary was read as true.
 - **New projects take the organisation's time zone and language** (Administration > Organisation): the
   new-project form showed and sent the browser's zone (often UTC) and always Spanish.

@@ -11,14 +11,20 @@ export function WaitingPage() {
   const queryClient = useQueryClient();
   if (!me.data) return null;
   const others = me.data.tenants.filter((tn) => tn.id !== me.data!.tenantId);
+  const org = me.data.tenants.find((tn) => tn.id === me.data!.tenantId)?.name;
+  // Said in the interface's language (the server's message is in English): with the
+  // organisation's name when it is known, else the server's words.
+  const message =
+    me.data.access.state === 'no_role' && org
+      ? t('waiting.noRole', { org })
+      : me.data.access.message;
   return (
     <div className="mx-auto max-w-xl">
       <Card>
         <h1 className="mb-3 text-xl font-semibold">{t('waiting.title')}</h1>
-        <p className="mb-3 text-slate-800" data-testid="access-message">
-          {me.data.access.message}
+        <p className="text-slate-800" data-testid="access-message">
+          {message}
         </p>
-        <p className="text-sm text-slate-600">{t('waiting.explain')}</p>
         {others.length ? (
           <div className="mt-5">
             <p className="mb-2 text-sm font-medium">{t('waiting.otherOrgs')}</p>
