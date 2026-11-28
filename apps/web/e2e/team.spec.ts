@@ -221,7 +221,14 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   const forgot = await freshPage(browser);
   await forgot.page.goto('/login');
   await forgot.page.getByRole('link', { name: 'Forgot your password?' }).click();
-  await forgot.page.getByLabel('E-mail', { exact: true }).fill(INES);
+  // Fill again until the form has taken the address (a fill that lands while the page is still
+  // settling can be lost, leaving the button disabled).
+  await expect(async () => {
+    await forgot.page.getByLabel('E-mail', { exact: true }).fill(INES);
+    await expect(forgot.page.getByRole('button', { name: 'Send link' })).toBeEnabled({
+      timeout: 2000,
+    });
+  }).toPass({ timeout: 30_000 });
   await forgot.page.getByRole('button', { name: 'Send link' }).click();
   await expect(forgot.page.getByText(/a link is on its way/)).toBeVisible();
   await expect.poll(() => sentMail().filter((m) => m.to === INES).length).toBe(2);
