@@ -110,7 +110,8 @@ export function InterviewPage() {
     retry: false,
   });
   const canCasesAll = useCan('cases.read_all', projectId);
-  const phone = useMedia('(max-width: 639px)');
+  // Under 1024 px (a tablet or a phone) the breadcrumb is only "‹ Case HH0031".
+  const compact = useMedia('(max-width: 1023px)');
 
   // Clocks in the header.
   useEffect(() => {
@@ -253,29 +254,26 @@ export function InterviewPage() {
   return (
     <div className="flex flex-col gap-3" onKeyDown={onKeyDown}>
       {/* The breadcrumb, with the case as the page's title, on the app's top row. */}
-      {/* On a phone, only "‹ Case HH0031" (the ‹ goes back where it came from), so that the
-          question is reached without scrolling; the whole breadcrumb from 640 px. */}
+      {/* Under 1024 px (a tablet or a phone), only "‹ Case HH0031" (the ‹ goes back where it
+          came from), so that the case id is never cut and the question is reached without
+          scrolling; the whole breadcrumb from 1024 px. */}
       <PageHeader
         parents={
-          phone
+          compact
             ? undefined
             : [
                 crumb(t('designer.projects'), '/projects'),
                 ...(project.data
                   ? [
-                      crumb(
-                        project.data.name,
-                        '/projects/$projectId',
-                        {},
-                        { title: project.data.name },
-                      ),
+                      // Cut short or folded, PageHeader names it in a title.
+                      crumb(project.data.name, '/projects/$projectId'),
                     ]
                   : []),
                 crumb(parent.label, parent.to, parent.search),
               ]
         }
         icon={
-          phone
+          compact
             ? crumb(<span aria-hidden="true">‹</span>, parent.to, parent.search, {
                 className:
                   'grid h-9 w-9 flex-none place-items-center rounded-full text-2xl leading-none text-navy hover:bg-indigo-50',
@@ -291,7 +289,14 @@ export function InterviewPage() {
         }
         aside={
           name ? (
-            <span className="truncate text-base font-normal text-slate-700 max-sm:hidden">
+            <span
+              // Cut short only when there is no room left: in the breadcrumb, after the steps
+              // before the case are folded; beside "‹ Case" (a tablet), in the room left.
+              className={`min-w-0 truncate text-base font-normal text-slate-700 max-sm:hidden ${
+                compact ? 'flex-1 basis-0' : ''
+              }`}
+              title={name}
+            >
               {name}
             </span>
           ) : null
@@ -300,69 +305,80 @@ export function InterviewPage() {
       {/* One slim line, not a card: who, how long, the language and whether it is saved. */}
       {/* On a phone one line: the respondent, the interview's clock (its name for screen
           readers) and whether it is saved; the interviewer and the question's clock from 640 px. */}
+      {/* From 640 px one line: the interviewer's name is cut short first, so that the clocks
+          and "Saved" stay together on it. */}
       <header
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:gap-x-5"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:flex-nowrap sm:gap-x-5"
         data-testid="interview-status"
       >
         {/* On a phone the top row has no room for the respondent's name: it is said here. */}
         {name ? <span className="min-w-0 truncate font-medium sm:hidden">{name}</span> : null}
         {payload.interview.interviewer ? (
-          <span className="text-slate-600 max-sm:hidden">
+          <span
+            className="min-w-0 shrink-[100] truncate text-slate-600 max-sm:hidden"
+            title={t('interview.interviewer', { name: payload.interview.interviewer })}
+          >
             {t('interview.interviewer', { name: payload.interview.interviewer })}
           </span>
         ) : null}
-        <dl className="flex gap-4">
-          <div className="flex items-baseline gap-1.5">
-            <dt className="text-xs text-slate-600 max-sm:sr-only">{t('interview.elapsed')}</dt>
-            <dd className="font-mono" data-testid="elapsed">
-              {clock(iv.clock?.activeMs() ?? 0)}
-            </dd>
-          </div>
-          <div className="flex items-baseline gap-1.5 max-sm:hidden">
-            <dt className="text-xs text-slate-600">{t('interview.onQuestion')}</dt>
-            <dd className="font-mono">{clock(iv.clock?.onQuestionMs() ?? 0)}</dd>
-          </div>
-        </dl>
-        {languages.length > 1 ? (
-          <label className="flex items-center gap-2">
-            <span>{t('interview.language')}</span>
-            <select
-              className="rounded-md border border-slate-300 px-2 py-0.5"
-              value={lang}
-              onChange={(e) => iv.setLanguage(e.target.value)}
-            >
-              {languages.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        {payload.offline ? (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-ink-900">
-            {t('device.offlineCopy')}
-          </span>
-        ) : null}
-        {payload.settings?.capi?.gps === 'start_end' && payload.interview.mode === 'CAPI' ? (
-          <span className="text-xs text-slate-600" title={payload.settings.capi.gpsNotice}>
-            {t('device.gpsOn')}
-          </span>
-        ) : null}
-        {iv.audio === 'recording' ? (
-          <span className="flex items-center gap-2 text-xs" data-testid="recording">
-            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-rose-600" />
-            {t('interview.audio.recording')}
-            <button
-              type="button"
-              className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50"
-              onClick={() => void iv.stopRecording()}
-            >
-              {t('interview.audio.stop')}
-            </button>
-          </span>
-        ) : null}
-        <SaveBadge state={iv.save} />
+        {/* The language, an offline copy, GPS, a recording: they wrap among themselves. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 empty:hidden sm:gap-x-5">
+          {languages.length > 1 ? (
+            <label className="flex items-center gap-2">
+              <span>{t('interview.language')}</span>
+              <select
+                className="rounded-md border border-slate-300 px-2 py-0.5"
+                value={lang}
+                onChange={(e) => iv.setLanguage(e.target.value)}
+              >
+                {languages.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {payload.offline ? (
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-ink-900">
+              {t('device.offlineCopy')}
+            </span>
+          ) : null}
+          {payload.settings?.capi?.gps === 'start_end' && payload.interview.mode === 'CAPI' ? (
+            <span className="text-xs text-slate-600" title={payload.settings.capi.gpsNotice}>
+              {t('device.gpsOn')}
+            </span>
+          ) : null}
+          {iv.audio === 'recording' ? (
+            <span className="flex items-center gap-2 text-xs" data-testid="recording">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-rose-600" />
+              {t('interview.audio.recording')}
+              <button
+                type="button"
+                className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50"
+                onClick={() => void iv.stopRecording()}
+              >
+                {t('interview.audio.stop')}
+              </button>
+            </span>
+          ) : null}
+        </div>
+        {/* The clocks and "Saved" stay together on one line (from 640 px it does not shrink). */}
+        <div className="flex min-w-0 flex-auto items-center gap-x-3 sm:shrink-0 sm:gap-x-5">
+          <dl className="flex gap-4">
+            <div className="flex items-baseline gap-1.5">
+              <dt className="text-xs text-slate-600 max-sm:sr-only">{t('interview.elapsed')}</dt>
+              <dd className="font-mono" data-testid="elapsed">
+                {clock(iv.clock?.activeMs() ?? 0)}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-1.5 max-sm:hidden">
+              <dt className="text-xs text-slate-600">{t('interview.onQuestion')}</dt>
+              <dd className="font-mono">{clock(iv.clock?.onQuestionMs() ?? 0)}</dd>
+            </div>
+          </dl>
+          <SaveBadge state={iv.save} />
+        </div>
       </header>
       {iv.audio === 'ask' ? (
         <Dialog title={t('interview.audio.title')} onClose={() => void iv.answerConsent(false)}>

@@ -318,6 +318,10 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await page.getByRole('menuitem', { name: 'Assign free cases by the rules' }).click();
   await expect(page.getByText(/cases? assigned\./)).toBeVisible();
   await expect(page.locator('[data-kpi="assigned"] [data-n]')).not.toHaveText(String(before));
+  // A wide list scrolls sideways in a named region, with the case id kept in view.
+  await expect(page.getByRole('region', { name: 'Case list', exact: true })).toBeVisible();
+  const idCell = page.getByTestId('cases-table').locator('tbody tr').first().locator('td').nth(1);
+  await expect(idCell).toHaveCSS('position', 'sticky');
   await shot(page, 'cases-kpis');
   await page.getByRole('button', { name: 'Assignment rules' }).click();
   rules = page.getByRole('dialog', { name: 'Assignment rules' });

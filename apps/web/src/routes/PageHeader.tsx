@@ -1,6 +1,16 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+
+/** Below this width (px) a step before the title is folded into "…" rather than cut shorter. */
+const MIN_STEP = 64;
 
 /**
  * Where the page's header goes: the left of the app's top row, with the account menu on the
@@ -63,33 +73,110 @@ export function PageHeader({
 }) {
   const { t } = useTranslation();
   const slot = useContext(HeaderSlotContext);
+  const count = parents?.length ?? 0;
+  // A state, not a ref: the header first renders in place, then again in the top row's slot.
+  const [nav, setNav] = useState<HTMLElement | null>(null);
+  // How many of the first steps are folded into "…" because the breadcrumb has no room.
+  const [fold, setFold] = useState(0);
+  // Bumped when the room or the fonts change: the breadcrumb is measured again.
+  const [room, setRoom] = useState(0);
+  // What the last measure was for (room and words), and with how many steps folded.
+  const basis = useRef('');
+  const measured = useRef(-1);
+  useLayoutEffect(() => {
+    const box = nav?.parentElement;
+    if (!box) return;
+    let width = box.clientWidth;
+    const again = () => setRoom((n) => n + 1);
+    const ro =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            if (box.clientWidth === width) return;
+            width = box.clientWidth;
+            again();
+          });
+    ro?.observe(box);
+    const fonts = typeof document === 'undefined' ? undefined : document.fonts;
+    fonts?.addEventListener('loadingdone', again);
+    return () => {
+      ro?.disconnect();
+      fonts?.removeEventListener('loadingdone', again);
+    };
+  }, [nav]);
+  // After a render: fold one more step while a step before the title is squeezed to a few
+  // letters, or the title (or what is beside it) is cut short. The folded steps' names go in
+  // the "…"'s title; a step cut short gets its whole name in its title. New room or new words
+  // (another language, a name loaded) start again from the whole breadcrumb. It stops by
+  // itself: `fold` only grows up to `count`, and nothing is measured twice for the same state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- measures after renders that change it
+  useLayoutEffect(() => {
+    if (!nav) return;
+    const steps = [...nav.querySelectorAll<HTMLElement>('[data-crumb]')];
+    const main = nav.querySelector('[data-crumb-main]');
+    const text = (li: HTMLElement) => li.firstElementChild?.textContent?.trim() ?? '';
+    const now = `${room}|${nav.parentElement?.clientWidth ?? 0}|${steps.map(text).join('/')}|${main?.textContent ?? ''}`;
+    if (now !== basis.current) {
+      basis.current = now;
+      measured.current = -1;
+      if (fold) {
+        setFold(0);
+        return;
+      }
+    }
+    if (measured.current === fold) return;
+    measured.current = fold;
+    const cut = (el: Element | null) =>
+      !!el && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1;
+    steps.forEach((li, i) => {
+      if (i === fold - 1) li.title = steps.slice(0, fold).map(text).join(' / ');
+      else if (i >= fold && cut(li.firstElementChild)) li.title = text(li);
+      else li.removeAttribute('title');
+    });
+    const squeezed = steps.slice(fold).some((li) => {
+      const el = li.firstElementChild;
+      return !!el && el.clientWidth > 0 && el.clientWidth < Math.min(el.scrollWidth, MIN_STEP);
+    });
+    const mainCut = [...(main?.querySelectorAll('.truncate') ?? [])].some(cut);
+    if ((squeezed || mainCut) && fold < count) setFold(fold + 1);
+  });
   const heading = (
     <h1
       className={
         parents?.length
-          ? 'inline-flex min-w-0 items-center gap-2 text-lg font-bold text-navy'
+          ? // The breadcrumb's last step gives way only when nothing else can: the steps before
+            // it fold first, then what is beside it (a name, shrinking 100 times faster) is cut.
+            'inline-flex min-w-0 items-center gap-2 text-lg font-bold text-navy'
           : 'text-xl font-bold min-[900px]:text-2xl'
       }
     >
-      {/* In a breadcrumb, a long title is cut short ("…") so the breadcrumb keeps one line. */}
       {parents?.length ? <span className="min-w-0 truncate">{title}</span> : title}
     </h1>
   );
   const body = parents?.length ? (
-    <nav aria-label={t('ui.breadcrumb')} className="min-w-0 text-sm text-slate-600">
-      {/* One line: the steps shrink (their text cut short) instead of wrapping; on a phone only
-          the title and the step after it (the top bar has the way back). */}
+    <nav ref={setNav} aria-label={t('ui.breadcrumb')} className="min-w-0 text-sm text-slate-600">
+      {/* One line. Without room, the steps before the title give way first: they are cut short
+          ("Household Su…"), then folded from the first one into one "…" (the link of the last
+          folded step, their names in its title). On a phone only the title and the step after
+          it (the top bar has the way back). */}
       <ol className="flex min-w-0 items-center gap-x-1.5">
         {parents.map((p, i) => (
           <li
             key={i}
-            className="flex min-w-0 max-w-[14rem] items-center gap-1.5 whitespace-nowrap max-sm:hidden [&>:first-child]:truncate"
+            data-crumb={i === fold - 1 ? 'folded' : ''}
+            className={`items-center gap-1.5 whitespace-nowrap max-sm:hidden ${
+              i < fold - 1
+                ? 'hidden'
+                : i === fold - 1
+                  ? "flex flex-none [&>:first-child]:text-[0px] [&>:first-child]:after:text-sm [&>:first-child]:after:content-['…']"
+                  : 'flex min-w-0 max-w-[14rem] shrink-[1000] [&>:first-child]:truncate'
+            }`}
           >
             {p}
             <span aria-hidden="true">/</span>
           </li>
         ))}
-        <li className="flex min-w-0 items-center gap-2">
+        <li className="flex min-w-0 items-center gap-2 [&>h1~*]:shrink-[100]" data-crumb-main="">
           {icon}
           {heading}
           {aside}

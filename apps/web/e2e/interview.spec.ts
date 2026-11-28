@@ -1,6 +1,7 @@
 import { expect, overlaysSettled, test, type Page } from './fixtures.js';
 import {
   expectAccessible,
+  expectWhole,
   login,
   shot,
   pickOrganisation,
@@ -76,6 +77,8 @@ test('an interview autosaves, survives a reload and going offline, and submits',
   await expect(crumbs).toContainText('Household Survey 2026');
   await expect(crumbs.getByRole('link', { name: 'My cases' })).toBeVisible();
   await expect(crumbs.locator('[aria-current="page"]')).toHaveText(`Case ${caseId}`);
+  // The case is never cut short: the steps before it give way first.
+  await expectWhole(crumbs.locator('h1 > span'));
   await shot(page, 'v2-interview-breadcrumb', { fullPage: false });
   // A note before stopping: the card shown when it is taken up again repeats it (176).
   await page.keyboard.press('Control+m');
@@ -106,6 +109,13 @@ test('an interview autosaves, survives a reload and going offline, and submits',
     await expect(small.getByTestId('runner')).toBeVisible();
     await expect(small.getByRole('complementary', { name: 'Case details' })).toBeHidden();
     await expect(small.getByTestId('interview-actions')).toBeInViewport();
+    // Under 1024 px only "‹ Case HH0031", whole; "Saved" on the line of the clocks.
+    await expect(small.getByRole('navigation', { name: 'Breadcrumb' })).toHaveCount(0);
+    await expect(small.getByRole('link', { name: 'Back to My cases' })).toBeVisible();
+    await expectWhole(small.getByRole('heading', { level: 1 }));
+    const clockBox = await small.getByTestId('elapsed').boundingBox();
+    const savedBox = await saveStatus(small).boundingBox();
+    expect(Math.abs((clockBox?.y ?? 0) - (savedBox?.y ?? 99))).toBeLessThan(12);
     await shot(small, name, { fullPage: false });
     await small.close();
   }

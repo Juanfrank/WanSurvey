@@ -202,6 +202,8 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await page.getByRole('combobox', { name: 'Status' }).selectOption('deactivated');
   await closeFilters(page);
   await expect(page.getByText('1 user')).toBeVisible();
+  // One row fits without scrolling sideways: no shade over the "⋯".
+  await expect(page.getByRole('region', { name: 'Users' })).not.toHaveAttribute('data-scrolls');
   await shot(page, 'team-list');
   await page.getByRole('button', { name: 'Remove filter: Status Deactivated' }).click();
   // The message itself undoes it.

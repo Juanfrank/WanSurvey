@@ -270,6 +270,10 @@ test('exports are built by the worker and download with the expected header', as
   const bytes = readFileSync((await zip.path())!);
   expect(bytes.subarray(0, 2).toString()).toBe('PK');
   expect(bytes.toString('utf8')).toContain('_codebook_variables.csv');
+  // The options on one line: the questionnaire and "+N", the whole list in the title.
+  const options = zipped.getByTestId('export-params');
+  await expect(options).toHaveAttribute('title', /codebook \(ZIP\)/);
+  await expect(options.locator('[aria-hidden="true"]')).toContainText(/\+\d/);
   await shot(page, 'v2-exports-codebook-zip');
 });
 

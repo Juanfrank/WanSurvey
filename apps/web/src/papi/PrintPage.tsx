@@ -39,59 +39,53 @@ export function PrintPage() {
       return api<Forms>(`/projects/${projectId}/papi/forms?${q.toString()}`);
     },
   });
-  // The project's name for the breadcrumb (usually cached from the project page).
-  const project = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => api<{ name: string }>(`/projects/${projectId}`),
-    retry: false,
-  });
   const f = forms.data;
   const lang = f?.compiled.questionnaire.defaultLanguage ?? 'es';
   return (
     <div className="flex flex-col gap-4" data-testid="print">
-      {/* On the app's top row, beside the account; none of it is printed. */}
+      {/* As the feedback slips: "← Back", the title and what is printed (one line, cut short)
+          on the account's row; the button in a bar under it. None of it is printed. */}
       <PageHeader
         noPrint
-        parents={[
+        icon={
           <Link
-            key="projects"
-            to="/projects"
-            activeOptions={{ exact: true }}
-            className="hover:underline"
-          >
-            {t('designer.projects')}
-          </Link>,
-          <Link
-            key="project"
             to="/projects/$projectId"
             params={{ projectId }}
-            activeOptions={{ exact: true }}
             search={{ tab: 'paper', ...(search.q ? { q: search.q } : {}) }}
-            className="hover:underline"
+            className="flex-none whitespace-nowrap text-sm text-slate-600 hover:underline"
+            title={t('papi.print.back')}
           >
-            {project.data?.name ?? '…'}
-          </Link>,
-        ]}
-        title={<span aria-current="page">{t('papi.print.title')}</span>}
+            ← {t('feedback.back')}
+          </Link>
+        }
+        title={t('papi.print.title')}
         aside={
           f ? (
-            <span className="text-sm font-normal text-slate-700">
+            <span
+              className="min-w-0 flex-1 basis-0 truncate text-sm font-normal text-slate-700"
+              title={`${f.questionnaire.name} · v${f.version} · ${t('papi.print.count', { count: f.cases.length })}`}
+            >
               {f.questionnaire.name} · v{f.version} ·{' '}
               {t('papi.print.count', { count: f.cases.length })}
             </span>
           ) : null
         }
-        actions={
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => window.print()}
-            disabled={!f?.cases.length}
-          >
-            {t('papi.print.print')}
-          </Button>
-        }
       />
+      <div
+        className="no-print flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-card"
+        data-testid="print-controls"
+      >
+        <span className="min-w-0 flex-1 text-slate-600">{t('papi.print.hint')}</span>
+        <Button
+          type="button"
+          size="sm"
+          className="ml-auto"
+          onClick={() => window.print()}
+          disabled={!f?.cases.length}
+        >
+          {t('papi.print.print')}
+        </Button>
+      </div>
       {f && !f.cases.length ? <p>{t('papi.print.none')}</p> : null}
       {f?.cases.map((c) => (
         <article

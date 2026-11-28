@@ -19,6 +19,7 @@ import {
   Button,
   FilterBar,
   MoreMenu,
+  TableScroll,
   type ActiveFilter,
   type MenuEntry,
   type Tone,
@@ -45,6 +46,10 @@ import { DistributeDialog } from './DistributeDialog.js';
 import { useQuestionnaireScope } from './scope.js';
 
 const MAX_FIELD_COLUMNS = 4;
+/** A column that stays in view while the table scrolls sideways (the case id, its tick box). */
+const stickyCell = 'sticky z-10';
+/** The line on the right of the last sticky column. */
+const stickyEdge = 'shadow-[1px_0_0_rgb(226_232_240)]';
 /**
  * The map view, column picker and rule filter come back later; their code stays. (With the rule
  * filter, "assign every matching case" would go in the list's "More" menu.)
@@ -76,6 +81,8 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
   const canEditCases = useCan('cases.edit', projectId);
   // Interviewers and clerks: their own work list, what to do first at the top.
   const mine = !canReadAll;
+  // The tick box and the case id stay in view while the other columns scroll sideways.
+  const idLeft = canAssign ? 'left-8' : 'left-0';
   const canOwnMetrics = useCan('metrics.own', projectId);
   const me = useMe();
   // Phones get one card per case instead of the wide table.
@@ -680,11 +687,16 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
           ) : null}
         </ul>
       ) : (
-        <div className="relative overflow-x-auto rounded-md border border-slate-200 bg-white">
-          {/* One line per case: cells do not wrap (the table scrolls sideways instead). `relative`:
-              the screen-reader text in it scrolls with it instead of widening the page. */}
+        <TableScroll
+          label={t('cases.list.table')}
+          className="rounded-md border border-slate-200 bg-white"
+        >
+          {/* One line per case: cells do not wrap (the table scrolls sideways, with a shade on
+              the edge that has more, and the case id stays in view). Separate borders: with
+              collapsed ones Chrome lets the cells scrolled under the sticky ones show through;
+              the row lines go on the cells. */}
           <table
-            className="w-full min-w-[40rem] text-sm [&_td]:whitespace-nowrap"
+            className="w-full min-w-[40rem] border-separate border-spacing-0 text-sm [&_td]:whitespace-nowrap [&_tbody_tr+tr>*]:border-t [&_tbody_tr+tr>*]:border-slate-100"
             data-testid="cases-table"
             aria-busy={list.isFetching}
           >
@@ -694,7 +706,10 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
             <thead className="bg-slate-50 text-left text-xs whitespace-nowrap text-slate-600">
               <tr>
                 {canAssign ? (
-                  <th scope="col" className="w-8 px-2 py-2">
+                  <th
+                    scope="col"
+                    className={`${stickyCell} left-0 w-8 min-w-8 bg-slate-50 px-2 py-2`}
+                  >
                     <input
                       type="checkbox"
                       aria-label={t('cases.list.selectPage')}
@@ -709,7 +724,10 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
                     />
                   </th>
                 ) : null}
-                <th scope="col" className="px-2 py-2">
+                <th
+                  scope="col"
+                  className={`${stickyCell} ${idLeft} bg-slate-50 px-2 py-2 ${stickyEdge}`}
+                >
                   {t('cases.list.col.externalId')}
                 </th>
                 <th scope="col" className="px-2 py-2">
@@ -749,15 +767,16 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
                 ) : null}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {rows.map((r, i) => (
                 <tr
                   key={r.id}
-                  className={selected.has(r.id) ? 'bg-indigo-50' : undefined}
+                  // The sticky cells take the row's background (`bg-inherit`).
+                  className={selected.has(r.id) ? 'bg-indigo-50' : 'bg-white'}
                   data-case={r.externalId}
                 >
                   {canAssign ? (
-                    <td className="px-2 py-1.5">
+                    <td className={`${stickyCell} left-0 w-8 min-w-8 bg-inherit px-2 py-1.5`}>
                       <input
                         type="checkbox"
                         aria-label={t('cases.list.select', { id: r.externalId })}
@@ -773,7 +792,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
                       />
                     </td>
                   ) : null}
-                  <td className="px-2 py-1.5">
+                  <td className={`${stickyCell} ${idLeft} bg-inherit px-2 py-1.5 ${stickyEdge}`}>
                     <button
                       type="button"
                       className="font-mono text-indigo-ink-700 underline-offset-2 hover:underline"
@@ -834,7 +853,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
                 : t('cases.list.empty')}
             </p>
           ) : null}
-        </div>
+        </TableScroll>
       )}
       <nav className="flex items-center gap-3 text-sm" aria-label={t('cases.list.title')}>
         <button

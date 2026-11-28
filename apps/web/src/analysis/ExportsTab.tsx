@@ -345,23 +345,35 @@ export function ExportsTab({ projectId }: { projectId: string }) {
                     <td className="whitespace-nowrap px-2.5 py-2">
                       {t(`analysis.exports.formats.${e.options.format}`)}
                     </td>
-                    <td className="min-w-[18rem] px-2.5 py-2" data-testid="export-params">
-                      <ul className="flex flex-wrap gap-1">
-                        {params(e.options).map((x) => (
-                          <li key={x} className={TAG}>
-                            {x}
-                          </li>
-                        ))}
-                        {e.personal ? (
-                          <li
-                            className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-ink-900"
-                            title={t('analysis.exports.personal')}
-                          >
-                            {t('analysis.exports.personalTag')}
-                            <span className="sr-only">: {t('analysis.exports.personal')}</span>
-                          </li>
+                    {/* One line: the first option (the questionnaire) and "+N"; the whole
+                        list in its title and for screen readers. */}
+                    <td
+                      className="whitespace-nowrap px-2.5 py-2"
+                      data-testid="export-params"
+                      title={params(e.options).join(' · ')}
+                    >
+                      <span className="sr-only">{params(e.options).join(', ')}</span>
+                      <span aria-hidden="true" className="inline-flex items-center gap-1">
+                        {params(e.options)
+                          .slice(0, 1)
+                          .map((x) => (
+                            <span key={x} className={`${TAG} max-w-[14rem] truncate`}>
+                              {x}
+                            </span>
+                          ))}
+                        {params(e.options).length > 1 ? (
+                          <span className={TAG}>+{params(e.options).length - 1}</span>
                         ) : null}
-                      </ul>
+                      </span>
+                      {e.personal ? (
+                        <span
+                          className="ml-1 whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-ink-900"
+                          title={t('analysis.exports.personal')}
+                        >
+                          {t('analysis.exports.personalTag')}
+                          <span className="sr-only">: {t('analysis.exports.personal')}</span>
+                        </span>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-2.5 py-2">
                       {t(`analysis.exports.statuses.${e.status}`)}

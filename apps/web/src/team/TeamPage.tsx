@@ -475,7 +475,7 @@ export function TeamPage() {
                         >
                           {first.map((g, i) => (
                             <li key={i} className="flex items-center whitespace-nowrap">
-                              <span className="max-w-[15rem] truncate" title={grantText(g)}>
+                              <span className="max-w-[12rem] truncate" title={grantText(g)}>
                                 <span className="font-medium">{t(`team.roleNames.${g.role}`)}</span>{' '}
                                 <span className="text-slate-600">· {scope(g)}</span>
                               </span>

@@ -44,6 +44,15 @@ breadcrumb's last step is the case, as the `h1` marked `aria-current="page"`, an
 be a header card (timers, language, saved) is one slim line under the row. `noPrint` keeps the
 header out of a printout.
 
+The breadcrumb keeps one line, and its last step (the `h1`, e.g. "Case HH0031") is not cut
+while anything else can give way: the steps before it are cut short first ("Household Su…"),
+then folded from the first one ("Projects") into a single "…" whose title names them; a name
+beside the title (the respondent) is cut short only after that. Do not pass a `title` to a
+parent link: `PageHeader` names a cut or folded step itself. A work screen under ~1024 px uses
+the phone pattern ("‹ Case HH0031"). A page with a back link, a title and one subtitle (print
+forms, print slips) puts "← Back" in `icon`, the subtitle in `aside` with `min-w-0 flex-1
+basis-0 truncate` and its text in `title`, and its button in a bar under the row.
+
 ## Long lists in blocks, side panes as a floating button
 
 - `useShowMore(total)` and `ShowMoreButton` (`routes/ShowMore.tsx`): the first 20 rows and a
