@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ACCENTS, OrgTheme, accentTokens, checkAccent, contrast, orgTheme } from '../src/theme.js';
+import {
+  ACCENTS,
+  OrgTheme,
+  accentTokens,
+  checkAccent,
+  checkTheme,
+  contrast,
+  orgTheme,
+  themeTokens,
+} from '../src/theme.js';
 
 describe('organisation theme', () => {
   it('knows the contrast of two colours as WCAG defines it', () => {
@@ -42,5 +51,41 @@ describe('organisation theme', () => {
     expect(OrgTheme.safeParse({ accent: '#ff00ff' }).success).toBe(false);
     expect(OrgTheme.safeParse({ default: 'sepia' }).success).toBe(false);
     expect(OrgTheme.safeParse({ accent: 'teal', css: 'body{}' }).success).toBe(false);
+  });
+
+  it('takes colours of its own only as #rrggbb, and words from the lists', () => {
+    const full = {
+      default: 'light',
+      accent: 'brand',
+      primary: '#7A1F5C',
+      accentColor: '#ffd400',
+      sidebar: { background: '#ffffff', text: '#20263a' },
+      radius: 'round',
+      appLogo: 'sub',
+    };
+    expect(OrgTheme.parse(full)).toEqual(full);
+    for (const bad of [
+      { primary: '7a1f5c' },
+      { primary: '#7a1f5' },
+      { primary: 'red' },
+      { accentColor: '#fff' },
+      { accentColor: 'url(x)' },
+      { sidebar: { background: '#ffffff' } },
+      { sidebar: { background: '#ffffff', text: '#000000', image: 'x' } },
+      { radius: '3px' },
+      { appLogo: 'hidden' },
+    ])
+      expect(OrgTheme.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+
+  it('checks the side panel and the accent, and leaves the stylesheet alone by default', () => {
+    expect(checkTheme({})).toEqual([]);
+    expect(themeTokens({}, 'light')).toEqual({});
+    expect(checkTheme({ sidebar: { background: '#0a2e7a', text: '#ffffff' } })).toEqual([]);
+    expect(
+      checkTheme({ sidebar: { background: '#777777', text: '#888888' } }).length,
+    ).toBeGreaterThan(0);
+    expect(checkTheme({ accentColor: '#ffd400' })).toEqual([]);
+    expect(themeTokens({ radius: 'square' }, 'dark')['--radius-md']).toBe('2px');
   });
 });

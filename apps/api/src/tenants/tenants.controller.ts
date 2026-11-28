@@ -1,10 +1,27 @@
-import { BadRequestException, Body, Controller, Get, Inject, Patch, Put } from '@nestjs/common';
-import { ApiBody, ApiTags } from '@nestjs/swagger';
 import {
-  ACCENTS,
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  NotFoundException,
+  Patch,
+  PayloadTooLargeException,
+  Put,
+  Res,
+  UnprocessableEntityException,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
+import {
   CUSTOM_ROLES,
   OrgTheme,
-  checkAccent,
+  checkTheme,
   FormatLocale,
   PERMISSIONS,
   RESERVED_PERMISSIONS,
@@ -19,6 +36,10 @@ import { AuditService } from '../audit/audit.service.js';
 import { Auth, RequirePermission, type AuthContext } from '../common/auth-context.js';
 import { DisplayName, ZodPipe } from '../common/zod.js';
 import { ORG_REPO, type OrgRepo } from '../projects/org-repo.js';
+import { LOGO_MAX, orgLogoType, sendLogo } from './org-logo.js';
+
+/** What the organisation's logo shows, for people who cannot see it: always given. */
+const LogoAlt = z.string().trim().min(1).max(200);
 
 /** Organisation-wide defaults; keys left out of a PATCH keep their value. */
 export const TenantSettings = z
@@ -52,9 +73,28 @@ const TenantPatch = z.object({
    * of day and month, 24 or 12 hours. Null goes back to following the language.
    */
   formatLocale: FormatLocale.nullable().optional(),
+  /** The description of the organisation's logo (its alt text), once there is one. */
+  logoAlt: LogoAlt.optional(),
 });
 
 const RolesBody = z.object({ overrides: RoleOverrides });
+
+/** The theme's colours in lower case, as they are kept. */
+function lowerColours(theme: OrgTheme): OrgTheme {
+  return {
+    ...theme,
+    ...(theme.primary ? { primary: theme.primary.toLowerCase() } : {}),
+    ...(theme.accentColor ? { accentColor: theme.accentColor.toLowerCase() } : {}),
+    ...(theme.sidebar
+      ? {
+          sidebar: {
+            background: theme.sidebar.background.toLowerCase(),
+            text: theme.sidebar.text.toLowerCase(),
+          },
+        }
+      : {}),
+  };
+}
 
 const sameSet = (a: readonly Permission[], b: readonly Permission[]) =>
   a.length === b.length && a.every((p) => b.includes(p));
@@ -80,19 +120,25 @@ export class TenantsController {
     @Auth() ctx: AuthContext,
     @Body(new ZodPipe(TenantPatch)) body: z.infer<typeof TenantPatch>,
   ) {
-    // An accent is kept only if it passes the contrast check, in both themes.
-    const accent = body.branding?.theme?.accent;
-    if (accent) {
-      const failures = checkAccent(accent);
-      if (failures.length || !(ACCENTS as readonly string[]).includes(accent))
+    // A theme is kept only if its text stays readable, in both themes (a main colour of the
+    // organisation's own is darkened where needed instead: see `primaryFill`).
+    const theme = body.branding?.theme;
+    if (theme) {
+      const failures = checkTheme(theme);
+      if (failures.length)
         throw new BadRequestException({
-          code: 'ACCENT_CONTRAST',
-          message: 'That colour does not keep the text readable',
+          code: 'THEME_CONTRAST',
+          message: 'Those colours do not keep the text readable',
           failures,
         });
+      // Colours are kept as #rrggbb in lower case, whatever was typed.
+      body.branding!.theme = lowerColours(theme);
     }
     return this.repo.inTenant(ctx.tenantId, async (t) => {
-      const current = body.branding ? ((await t.tenant())?.branding ?? {}) : {};
+      const before = await t.tenant();
+      if (body.logoAlt !== undefined && !before?.logo)
+        throw new ConflictException({ code: 'NO_LOGO', message: 'Upload a logo first' });
+      const current = body.branding ? (before?.branding ?? {}) : {};
       const tenant = await t.updateTenant({
         ...body,
         ...(body.branding ? { branding: { ...current, ...body.branding } } : {}),
@@ -103,6 +149,73 @@ export class TenantsController {
           targetType: 'tenant',
           targetId: ctx.tenantId,
           details: body,
+        }),
+      );
+      return tenant;
+    });
+  }
+
+  /**
+   * Uploads the organisation's logo with its description (multipart: `file` and `alt`),
+   * replacing any other. PNG, JPEG or WebP up to 512 KB, recognised by its bytes; SVG is refused,
+   * as it can carry scripts.
+   */
+  @Put('logo')
+  @RequirePermission('tenant.manage')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: LOGO_MAX } }))
+  uploadLogo(
+    @Auth() ctx: AuthContext,
+    @UploadedFile() file: { buffer: Buffer; size: number } | undefined,
+    @Body() form: { alt?: unknown },
+  ) {
+    if (!file) throw new BadRequestException('Attach the image as "file"');
+    if (file.size > LOGO_MAX) throw new PayloadTooLargeException();
+    const alt = LogoAlt.safeParse(form?.alt);
+    if (!alt.success)
+      throw new BadRequestException({
+        code: 'LOGO_ALT_REQUIRED',
+        message: 'Describe the logo (its text alternative)',
+      });
+    const contentType = orgLogoType(file.buffer);
+    if (!contentType)
+      throw new UnprocessableEntityException({
+        code: 'NOT_AN_IMAGE',
+        message: 'Use a PNG, JPEG or WebP image',
+      });
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const tenant = await t.setTenantLogo({ contentType, image: file.buffer, alt: alt.data });
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'tenant.updated',
+          targetType: 'tenant',
+          targetId: ctx.tenantId,
+          details: { logo: contentType, size: file.size, logoAlt: alt.data },
+        }),
+      );
+      return tenant;
+    });
+  }
+
+  /** The organisation's logo, for everyone who works in it (the side panel shows it). */
+  @Get('logo')
+  async logo(@Auth() ctx: AuthContext, @Res() res: Response) {
+    const logo = await this.repo.inTenant(ctx.tenantId, (t) => t.tenantLogo());
+    if (!logo) throw new NotFoundException('No logo');
+    sendLogo(res, logo, 'private');
+  }
+
+  @Delete('logo')
+  @RequirePermission('tenant.manage')
+  removeLogo(@Auth() ctx: AuthContext) {
+    return this.repo.inTenant(ctx.tenantId, async (t) => {
+      const tenant = await t.removeTenantLogo();
+      await t.audit(
+        this.audit.fromContext(ctx, {
+          action: 'tenant.updated',
+          targetType: 'tenant',
+          targetId: ctx.tenantId,
+          details: { logo: null },
         }),
       );
       return tenant;

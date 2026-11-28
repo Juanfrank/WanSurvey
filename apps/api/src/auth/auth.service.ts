@@ -26,6 +26,7 @@ import {
 import { CONFIG, type AppConfig } from '../config.js';
 import { AUTH_REPO, type AuthRepo, type AuthTx, type TokenPurpose } from './auth-repo.js';
 import { SsoConfigs } from './sso-config.js';
+import { logoUrl } from '../tenants/org-logo.js';
 import { MAILER, type Mailer } from '../mail/mailer.js';
 import { isUuid, type UserTenant } from '../db/common.js';
 import { byCode } from '../common/sort.js';
@@ -389,9 +390,10 @@ export class AuthService {
     const orgName = tenants.find((t) => t.id === ctx.tenantId)?.name ?? 'this organisation';
     // The organisation's look, for everyone who works in it (no permission to read the
     // organisation is needed for that).
-    const { branding, formatLocale } = await this.repo.inTenant(ctx.tenantId, async (t) => ({
+    const { branding, formatLocale, logo } = await this.repo.inTenant(ctx.tenantId, async (t) => ({
       branding: await t.branding(),
       formatLocale: await t.formatLocale(),
+      logo: await t.orgLogo(),
     }));
     const theme = orgTheme(branding);
     return {
@@ -402,6 +404,8 @@ export class AuthService {
       // SINGLE_TENANT: the web app leaves out what is about several organisations.
       singleTenant: this.tenancy.single,
       theme,
+      // The organisation's logo (the side panel draws it as its theme's `appLogo` says).
+      orgLogo: logo ? { url: logoUrl('tenant/logo', logo.updatedAt), alt: logo.alt } : null,
       // How dates and numbers are written in this organisation (null: as the interface language).
       formatLocale,
       // People created by a first Microsoft sign-in have no role until an admin assigns one.

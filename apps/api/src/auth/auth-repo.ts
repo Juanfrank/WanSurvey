@@ -144,6 +144,8 @@ export interface AuthTx extends AccountTx {
   branding(): Promise<unknown>;
   /** The organisation's regional format of dates and numbers (null: the language's); readable by every member. */
   formatLocale(): Promise<string | null>;
+  /** The organisation logo's description and when it changed (null without one); readable by every member. */
+  orgLogo(): Promise<{ alt: string; updatedAt: Date } | null>;
   /** Opens a session; the person's last organisation is set when it differs. */
   openSession(v: NewSession, lastTenantId: string | null): Promise<void>;
   revokeSession(id: string): Promise<void>;
@@ -381,6 +383,14 @@ class MssqlAuthTx implements AuthTx {
   async formatLocale(): Promise<string | null> {
     const r = await this.tx.selectFrom('tenants').select('format_locale').executeTakeFirst();
     return r?.format_locale ?? null;
+  }
+
+  async orgLogo(): Promise<{ alt: string; updatedAt: Date } | null> {
+    const r = await this.tx
+      .selectFrom('tenants')
+      .select(['logo_alt', 'logo_updated_at'])
+      .executeTakeFirst();
+    return r?.logo_updated_at ? { alt: r.logo_alt ?? '', updatedAt: r.logo_updated_at } : null;
   }
 
   async account(userId: string): Promise<Account | null> {

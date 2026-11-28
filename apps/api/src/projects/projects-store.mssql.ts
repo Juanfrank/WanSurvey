@@ -76,6 +76,7 @@ export class ProjectsStore {
       branding?: Record<string, unknown>;
       settings?: Record<string, unknown>;
       formatLocale?: string | null;
+      logoAlt?: string;
     },
   ): Promise<TenantRow | null> {
     const current = await this.tenant(tx, id);
@@ -83,6 +84,8 @@ export class ProjectsStore {
     await tx
       .updateTable('tenants')
       .set({
+        // The description belongs to a logo: without one there is nothing to describe.
+        ...(v.logoAlt !== undefined && current.logo_updated_at ? { logo_alt: v.logoAlt } : {}),
         ...(v.name !== undefined ? { name: v.name } : {}),
         ...(v.branding !== undefined ? { branding: JSON.stringify(v.branding) } : {}),
         ...(v.settings ? { settings: JSON.stringify({ ...current.settings, ...v.settings }) } : {}),
@@ -279,6 +282,52 @@ export class ProjectsStore {
       .where('project_id', '=', projectId)
       .executeTakeFirst();
     return l ? { contentType: l.content_type, image: l.image, updatedAt: l.updated_at } : null;
+  }
+
+  // ─── The organisation's logo ──────────────────────────────────────────────────────
+
+  /** Sets the organisation's logo and its description, replacing any other. */
+  async setTenantLogo(
+    tx: MssqlTx,
+    v: { tenantId: string; contentType: string; image: Buffer; alt: string },
+  ): Promise<void> {
+    const at = new Date();
+    await tx.deleteFrom('tenant_logos').where('tenant_id', '=', v.tenantId).execute();
+    await tx
+      .insertInto('tenant_logos')
+      .values({
+        tenant_id: v.tenantId,
+        content_type: v.contentType,
+        image: v.image,
+        updated_at: at,
+      })
+      .execute();
+    await tx
+      .updateTable('tenants')
+      .set({ logo_updated_at: at, logo_alt: v.alt })
+      .where('id', '=', v.tenantId)
+      .execute();
+  }
+
+  async tenantLogo(
+    tx: MssqlTx,
+    tenantId: string,
+  ): Promise<{ contentType: string; image: Buffer } | null> {
+    const l = await tx
+      .selectFrom('tenant_logos')
+      .select(['content_type', 'image'])
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst();
+    return l ? { contentType: l.content_type, image: l.image } : null;
+  }
+
+  async removeTenantLogo(tx: MssqlTx, tenantId: string): Promise<void> {
+    await tx.deleteFrom('tenant_logos').where('tenant_id', '=', tenantId).execute();
+    await tx
+      .updateTable('tenants')
+      .set({ logo_updated_at: null, logo_alt: null })
+      .where('id', '=', tenantId)
+      .execute();
   }
 
   async removeLogo(tx: MssqlTx, projectId: string): Promise<void> {

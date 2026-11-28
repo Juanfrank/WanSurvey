@@ -24,5 +24,8 @@
   var root = document.documentElement;
   root.setAttribute('data-theme', dark ? 'dark' : 'light');
   var tokens = org && org[dark ? 'dark' : 'light'];
-  if (tokens) for (var k in tokens) root.style.setProperty('--color-' + k, tokens[k]);
+  // A token is a colour (`indigo-600`: --color-indigo-600) unless it names the property itself.
+  if (tokens)
+    for (var k in tokens)
+      root.style.setProperty(k.indexOf('--') === 0 ? k : '--color-' + k, tokens[k]);
 })();

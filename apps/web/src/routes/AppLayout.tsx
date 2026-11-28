@@ -8,7 +8,8 @@ import { AccountMenu } from './AccountMenu.js';
 import { HeaderSlotContext } from './PageHeader.js';
 import { adminMenuGroups } from '../admin/sections.js';
 import { CogIcon, FolderIcon, HomeIcon, MenuIcon } from './icons.js';
-import { LogoMark, LogoName } from './Logo.js';
+import { LogoMark, LogoName, OrgLogoImage, WithWanSurvey } from './Logo.js';
+import { appLogoPlace } from '@wansurvey/schema';
 import { setOrgTheme } from '../org-theme.js';
 import { setFormatLocale } from '../format.js';
 import { useMedia, useStoredFlag } from './SideDrawer.js';
@@ -183,6 +184,11 @@ function SidePanel({ waiting }: { waiting: boolean }) {
   const me = useMe();
   const admin = adminMenuGroups(me.data?.permissions);
   const { pathname } = useLocation();
+  // The organisation's logo, and where WanSurvey's goes: beside it (main) or small at the foot,
+  // with the organisation's logo or name at the top (sub).
+  const orgLogo = me.data?.orgLogo ?? null;
+  const orgName = me.data?.tenants.find((x) => x.id === me.data?.tenantId)?.name ?? '';
+  const place = orgLogo || orgName ? appLogoPlace(me.data?.theme, !!me.data?.singleTenant) : 'main';
   const projects = useQuery({
     queryKey: ['projects', me.data?.tenantId],
     queryFn: () => api<{ id: string; name: string; status: string }[]>('/projects'),
@@ -213,11 +219,11 @@ function SidePanel({ waiting }: { waiting: boolean }) {
         to={to}
         activeOptions={exact || (nested && to !== '/') ? { exact: true } : undefined}
         title={rail ? label : undefined}
-        className={`flex flex-none items-center gap-3 rounded-full border border-on-fill/20 px-3.5 py-1.5 text-sm font-medium text-sidebar hover:bg-on-fill/10 hover:text-on-fill min-[900px]:rounded-lg min-[900px]:border-0 min-[900px]:py-2.5 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:font-semibold [&.active]:text-on-fill ${
+        className={`flex flex-none items-center gap-3 rounded-full border border-sidebar-fg/20 px-3.5 py-1.5 text-sm font-medium text-sidebar hover:bg-sidebar-fg/10 hover:text-sidebar-fg min-[900px]:rounded-lg min-[900px]:border-0 min-[900px]:py-2.5 [&.active]:border-accent [&.active]:bg-accent [&.active]:font-semibold [&.active]:text-on-accent ${
           rail
             ? 'min-[900px]:h-10 min-[900px]:w-10 min-[900px]:justify-center min-[900px]:px-0'
             : ''
-        } ${nested && within ? 'font-semibold text-on-fill' : ''}`}
+        } ${nested && within ? 'font-semibold text-sidebar-fg' : ''}`}
       >
         <span className="hidden min-[900px]:inline">{icon}</span>
         <span className={rail ? 'sr-only' : 'truncate'}>{label}</span>
@@ -225,13 +231,13 @@ function SidePanel({ waiting }: { waiting: boolean }) {
     );
   };
   const subCls =
-    'block truncate rounded-md px-2.5 py-1.5 text-sm text-sidebar hover:bg-on-fill/10 hover:text-on-fill [&.active]:bg-on-fill/15 [&.active]:font-semibold [&.active]:text-on-fill';
+    'block truncate rounded-md px-2.5 py-1.5 text-sm text-sidebar hover:bg-sidebar-fg/10 hover:text-sidebar-fg [&.active]:bg-sidebar-fg/15 [&.active]:font-semibold [&.active]:text-sidebar-fg';
   const shownProjects = (projects.data ?? []).filter((p) => p.status !== 'archived');
   const MAX_PROJECTS = 8;
 
   return (
     <header
-      className={`no-print relative z-30 flex-none bg-navy-fill text-on-fill min-[900px]:transition-[width] min-[900px]:duration-200 ${
+      className={`no-print relative z-30 flex-none bg-navy-fill text-sidebar-fg min-[900px]:transition-[width] min-[900px]:duration-200 ${
         isCompact ? 'min-[900px]:w-18' : 'min-[900px]:w-74'
       }`}
       onMouseEnter={() => setOver(true)}
@@ -247,20 +253,56 @@ function SidePanel({ waiting }: { waiting: boolean }) {
         } ${isCompact && !rail ? 'min-[900px]:shadow-card' : ''}`}
       >
         <div className={`flex items-center gap-2 ${rail ? 'min-[900px]:flex-col' : ''}`}>
-          {/* Named by its own text (WanSurvey, visible or sr-only): no aria-label that could differ
-              from what is shown while the panel's width animates. */}
+          {/* Named by its own text (WanSurvey, the organisation's logo or name, visible or
+              sr-only): no aria-label that could differ from what is shown while the panel's
+              width animates. */}
           <Link
             to="/"
             className={`flex min-w-0 flex-1 items-center gap-2.5 px-1 min-[900px]:px-3 ${
               rail ? 'min-[900px]:flex-none min-[900px]:px-0' : ''
             }`}
+            data-testid="side-logo"
+            data-place={place}
           >
-            <LogoMark onFill className="h-8 w-8 flex-none min-[900px]:h-9 min-[900px]:w-9" />
-            <LogoName
-              onFill
-              className={`truncate text-lg min-[900px]:text-xl ${rail ? 'min-[900px]:sr-only' : ''}`}
-            />
+            {place === 'sub' ? (
+              orgLogo ? (
+                <OrgLogoImage
+                  logo={orgLogo}
+                  className={`h-9 min-[900px]:h-11 ${rail ? 'min-[900px]:h-10 min-[900px]:w-10' : 'max-w-[14rem]'}`}
+                />
+              ) : (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className={`hidden h-9 w-9 flex-none place-items-center rounded-lg bg-accent text-base font-semibold text-on-accent ${rail ? 'min-[900px]:grid' : ''}`}
+                  >
+                    {orgName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span
+                    className={`truncate text-lg font-semibold text-sidebar-fg min-[900px]:text-xl ${rail ? 'min-[900px]:sr-only' : ''}`}
+                  >
+                    {orgName}
+                  </span>
+                </>
+              )
+            ) : (
+              <>
+                <LogoMark onFill className="h-8 w-8 flex-none min-[900px]:h-9 min-[900px]:w-9" />
+                <LogoName
+                  onFill
+                  className={`truncate text-lg min-[900px]:text-xl ${rail ? 'min-[900px]:sr-only' : ''}`}
+                />
+                {orgLogo ? (
+                  <OrgLogoImage
+                    logo={orgLogo}
+                    className={`ml-1 h-8 max-w-[6rem] ${rail ? 'min-[900px]:hidden' : ''}`}
+                  />
+                ) : null}
+              </>
+            )}
           </Link>
+          {/* Below 900 px the panel is a top bar: the sub-logo sits beside the organisation's. */}
+          {place === 'sub' && !wide ? <WithWanSurvey onFill className="flex-none" /> : null}
           {wide ? (
             <button
               type="button"
@@ -271,10 +313,10 @@ function SidePanel({ waiting }: { waiting: boolean }) {
                 setCompact(!compact);
                 setOver(false);
               }}
-              className={`grid h-10 w-10 flex-none place-items-center rounded-lg text-on-fill ${
+              className={`grid h-10 w-10 flex-none place-items-center rounded-lg ${
                 compact
-                  ? 'bg-on-fill/10 hover:bg-on-fill/20'
-                  : 'bg-indigo-600 shadow-[0_0_0_2px_rgb(255_255_255/0.28)] hover:bg-indigo-500 dark:bg-on-fill/15 dark:shadow-none dark:hover:bg-on-fill/25'
+                  ? 'bg-sidebar-fg/10 text-sidebar-fg hover:bg-sidebar-fg/20'
+                  : 'bg-accent text-on-accent ring-2 ring-sidebar-fg/30 hover:ring-sidebar-fg/60 dark:bg-sidebar-fg/15 dark:text-sidebar-fg dark:ring-0 dark:hover:bg-sidebar-fg/25'
               }`}
             >
               <MenuIcon className="h-5 w-5" />
@@ -291,7 +333,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
             {nested && shownProjects.length ? (
               <ul
                 aria-label={t('app.projects')}
-                className="mb-1 ml-[1.375rem] flex flex-col gap-0.5 border-l border-on-fill/15 pl-3"
+                className="mb-1 ml-[1.375rem] flex flex-col gap-0.5 border-l border-sidebar-fg/15 pl-3"
               >
                 {shownProjects.slice(0, MAX_PROJECTS).map((p) => (
                   <li key={p.id}>
@@ -318,7 +360,7 @@ function SidePanel({ waiting }: { waiting: boolean }) {
               <div
                 role="group"
                 aria-label={t('app.admin')}
-                className="ml-[1.375rem] flex flex-col gap-2 border-l border-on-fill/15 pl-3"
+                className="ml-[1.375rem] flex flex-col gap-2 border-l border-sidebar-fg/15 pl-3"
               >
                 {/* The pages in blocks, each under a small heading. */}
                 {admin.map(({ group, sections }) => (
@@ -343,6 +385,14 @@ function SidePanel({ waiting }: { waiting: boolean }) {
               </div>
             ) : null}
           </nav>
+        ) : null}
+        {/* The sub-logo: WanSurvey small at the foot of the panel (only the mark when compact). */}
+        {place === 'sub' ? (
+          <WithWanSurvey
+            onFill
+            markOnly={rail}
+            className={`hidden min-[900px]:mt-auto min-[900px]:flex ${rail ? '' : 'min-[900px]:px-3'}`}
+          />
         ) : null}
       </div>
     </header>

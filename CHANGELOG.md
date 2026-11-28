@@ -17,6 +17,26 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ## [Unreleased]
 
+- **The organisation's look: colours and logo.** Administration › Organisation › Appearance now
+  chooses, besides the default theme: a main colour from the palette or the organisation's own
+  (`#rrggbb`; the whole scale of the interface is made from it, and a colour white text could
+  not be read on is darkened until it can, which the form says), an accent colour (the open page
+  in the side panel), the side panel's background and text (refused when the text would not reach
+  4.5:1), the corners, and the **organisation's logo** (PNG, JPEG or WebP up to 512 KB, recognised
+  by its bytes, with a required description; SVG is refused, as it can carry scripts), with a
+  live preview. A new setting, **WanSurvey logo**, puts the organisation's logo at the top of the
+  side panel and WanSurvey small at its foot ("Sub-logo"), or keeps WanSurvey at the top with the
+  organisation's logo beside it ("Main"). In single-tenant mode the default is Sub-logo (without a
+  logo, the organisation's name is the main one) and the sign-in pages show the organisation's
+  logo and colours; with several organisations the default is Main and the sign-in page keeps
+  WanSurvey's. Everyone keeps their own theme choice. API: `PATCH /tenant` takes the new theme
+  keys in `branding.theme` (`primary`, `accentColor`, `sidebar`, `radius`, `appLogo`; refused
+  with `THEME_CONTRAST` when text would not read) and `logoAlt`; `PUT`/`DELETE /tenant/logo`
+  (`tenant.manage`, audited as `tenant.updated`) and `GET /tenant/logo` (every member);
+  `GET /auth/me` adds `orgLogo`; `GET /public/org-look` (single-tenant only) gives the colours
+  and the logo before signing in. **Upgrade**: migration `0036_tenant_logo` adds the logo
+  (`tenant_logos`, and `logo_alt`, `logo_updated_at` on `tenants`); nothing changes until an
+  organisation chooses.
 - **Regional format of the organisation**: Administration › Organisation › Regional format
   chooses how dates, times and numbers are written (a BCP 47 locale such as es-PE, es-ES, en-US
   or en-GB: decimal and thousands separators, day before or after the month, 24 or 12 hours),

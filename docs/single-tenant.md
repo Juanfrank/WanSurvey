@@ -56,6 +56,18 @@ picker while the mode is still unknown. The web app has no screen
 of its own for creating, listing or switching organisations, so there is no route to redirect: the
 pieces above are the ones it shows.
 
+## The organisation's logo on the sign-in pages
+
+With several organisations the sign-in page cannot know whose it is, so it shows WanSurvey's logo.
+In single-tenant mode it shows the organisation's: `GET /api/v1/public/org-look` (public, 404
+`NOT_SINGLE_TENANT` in the other mode) gives only its colours and its logo's address and
+description, nothing else (no name or settings), and `GET /api/v1/public/org-look/logo` the
+image. The WanSurvey logo is then a **sub-logo** by default ("with WanSurvey", small, under the
+organisation's logo and at the foot of the side panel); without a logo the side panel shows the
+organisation's name at the top. The organisation can keep WanSurvey as the main logo
+(Administration › Organisation › Appearance › WanSurvey logo: Main); in the other mode the default
+is Main.
+
 ## What stays
 
 What belongs to **the organisation** stays as it is: its name, logo and theme, default language and

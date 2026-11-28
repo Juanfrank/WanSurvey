@@ -129,6 +129,7 @@ import { CollabController } from './questionnaires/collab.controller.js';
 import { QuestionnairesController } from './questionnaires/questionnaires.controller.js';
 import { Tenancy } from './tenants/tenancy.js';
 import { TenantsController } from './tenants/tenants.controller.js';
+import { OrgLookController } from './tenants/org-look.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
 import { requestLogOptions } from './common/logging.js';
@@ -199,6 +200,7 @@ export class AppModule {
         SsoSettingsController,
         UsersController,
         TenantsController,
+        OrgLookController,
         AppSettingsController,
         RegistryController,
         ProjectsController,

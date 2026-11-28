@@ -39,14 +39,24 @@ export function themePref(): ThemePref {
   return org === 'light' || org === 'dark' ? org : 'system';
 }
 
-/** CSS variables set on <html> for the accent, so a change of accent can take them off again. */
-let applied: string[] = [];
+/** The custom property of a token: a colour unless it names the property (`--radius-md`). */
+export const tokenVar = (k: string) => (k.startsWith('--') ? k : `--color-${k}`);
+
+/**
+ * CSS variables set on <html> for the organisation's look, so a change can take them off again.
+ * It starts with those `public/theme.js` set before the first paint (the cached look, in either
+ * theme), so a look that changes since then leaves none of the old values behind.
+ */
+let applied: string[] = (() => {
+  const c = orgCache();
+  return c ? [...new Set([...Object.keys(c.light ?? {}), ...Object.keys(c.dark ?? {})])] : [];
+})();
 function applyAccent(dark: boolean) {
   const root = document.documentElement.style;
-  for (const k of applied) root.removeProperty(`--color-${k}`);
+  for (const k of applied) root.removeProperty(tokenVar(k));
   const tokens = orgCache()?.[dark ? 'dark' : 'light'] ?? {};
   applied = Object.keys(tokens);
-  for (const [k, v] of Object.entries(tokens)) root.setProperty(`--color-${k}`, v);
+  for (const [k, v] of Object.entries(tokens)) root.setProperty(tokenVar(k), v);
 }
 
 /** Puts the resolved theme on <html> (`public/theme.js` does the same before the first paint). */

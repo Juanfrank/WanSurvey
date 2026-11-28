@@ -58,9 +58,16 @@ Pages checked with axe in the browser: sign-in and the waiting page, the designe
 | Esc                      | Close a dialog                                                                                                                            |
 | ?                        | Show the shortcuts                                                                                                                        |
 
-## Organisation accent
+## Organisation colours
 
-An organisation can pick an accent from a fixed palette (Administration, Organisation, Appearance). The tokens of each accent are generated for the light and the dark theme, and `checkAccent` (`packages/schema/src/theme.ts`) verifies the 4.5:1 text contrast on every surface; a unit test runs it on the whole palette, and the API refuses an accent that fails. A person's own theme choice always wins over the organisation default, and the respondent pages keep the neutral look.
+An organisation chooses its look in Administration › Organisation › Appearance: a main colour (a palette entry or its own `#rrggbb`), an accent colour, the side panel's background and text, the corners, its logo and where the WanSurvey logo goes. Nothing else reaches the stylesheet: every value is a `#rrggbb` colour or a word from a list, turned into the same custom properties the stylesheet defines (`indigo-*`, `indigo-ink-*`, `navy`, `navy-fill`, `sidebar`, `sidebar-fg`, `accent`, `on-accent`, `--radius-*`) by `themeTokens` (`packages/schema/src/theme.ts`), for the light and the dark theme.
+
+- **Main colour.** The scale (`indigo-50` … `indigo-950`, and the lighter coloured text of the dark theme) is generated from its hue and saturation. If white text on the colour, or the colour as text on white, the ground or the light tints, would fall under 4.5:1 (or its hovered shade under 3:1 with white), the same hue is **darkened** until it passes (`primaryFill`). The settings say so and show the colour used; the stored value is the one chosen.
+- **Accent.** Marks the open page in the side panel; its text is white or black, whichever reads (`textOn`).
+- **Side panel.** Its text must reach 4.5:1 on its background, also on a hovered row and on the open page (the text over 10 % and 15 % of itself); the second text (headings, pages not open) is the text mixed toward the panel while it keeps 4.5:1. A panel that fails is **refused**, in the form and by the API (`THEME_CONTRAST`). In the dark theme the panel keeps its hue but darkens, and its text becomes light if the chosen one no longer reads.
+- `checkTheme` lists every text/background pair a theme creates in both themes; the API refuses a theme with failures, and unit tests run it on the palette and on hundreds of main colours. The axe suite runs with the default colours, and the organisation-look browser test runs it with a colour of the organisation's own, in light and dark.
+
+A person's own theme choice (light, dark, as the device) always wins over the organisation's default, and the respondent pages keep the neutral look.
 
 ## Manual test plan (before each major release)
 

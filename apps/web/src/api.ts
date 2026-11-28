@@ -82,8 +82,10 @@ export interface Me {
    * organisations, or about "the whole installation", is shown.
    */
   singleTenant?: boolean;
-  /** The organisation's default theme and accent. */
+  /** The organisation's default theme and colours, and where the WanSurvey logo goes. */
   theme?: OrgTheme;
+  /** The organisation's logo (its address changes with it) and its description. */
+  orgLogo?: { url: string; alt: string } | null;
   /** How the organisation writes dates and numbers (BCP 47); null or absent: as the language. */
   formatLocale?: string | null;
   mfaState: 'ok' | 'pending' | 'enroll';
@@ -153,6 +155,12 @@ export interface AuthMethods {
   singleTenant?: boolean;
   /** Who must use two-step verification with a password; `admins` only in development and tests. */
   passwordTwoStep?: 'everyone' | 'admins';
+}
+
+/** The look of the one organisation of the installation, before signing in (SINGLE_TENANT only). */
+export interface OrgLook {
+  theme: OrgTheme;
+  logo: { url: string; alt: string } | null;
 }
 
 /** Multipart upload (sample files); same cookies and CSRF header as `api`. */
