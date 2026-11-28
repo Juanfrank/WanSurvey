@@ -1,7 +1,7 @@
 import './sampling-i18n.js';
 import { BulkWithdraw } from './BulkWithdraw.js';
 import { dangerBtn, Misidentified } from './Misidentified.js';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +17,7 @@ import {
   Badge,
   BulkBar,
   Button,
+  Drawer,
   FilterBar,
   MoreMenu,
   TableScroll,
@@ -24,6 +25,7 @@ import {
   type MenuEntry,
   type Tone,
 } from '../routes/ui.js';
+import { ShowMoreButton } from '../routes/ShowMore.js';
 import { CaseMap } from './CaseMap.js';
 import { PersonalData } from './PersonalData.js';
 import { MyQuality, ReturnedToMe } from '../review/ReturnedToMe.js';
@@ -94,7 +96,6 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
   const [search, setSearch] = useState('');
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState<string | undefined>();
-  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lastClicked, setLastClicked] = useState<number | null>(null);
   const [cols, setCols] = useState<string[] | null>(null);
@@ -121,34 +122,27 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
   const [labelsOpen, setLabelsOpen] = useState(false);
   const questionnaire = useQuestionnaireScope();
   const openCase = setOpen;
-  const limit = 25;
+  // Blocks of 20 from the server, added under the list by "Show 20 more".
+  const limit = 20;
 
   useEffect(() => {
     const id = setTimeout(() => setTerm(search.trim()), 300);
     return () => clearTimeout(id);
   }, [search]);
   useEffect(() => {
-    setPage(1);
     setSelected(new Set());
+    setLastClicked(null);
   }, [status, assignedTo, team, quick, term, filter]);
 
-  const list = useQuery({
-    queryKey: [
-      'cases',
-      projectId,
-      questionnaire,
-      status,
-      assignedTo,
-      team,
-      quick,
-      term,
-      filter,
-      page,
-    ],
-    queryFn: () =>
+  // A new filter starts again from the first block (it is another query).
+  const list = useInfiniteQuery({
+    queryKey: ['cases', projectId, questionnaire, status, assignedTo, team, quick, term, filter],
+    queryFn: ({ pageParam: page }) =>
       api<CaseList>(
         `/projects/${projectId}/cases?${qs({ questionnaireId: questionnaire, status, assignedTo, team, quick, q: term, filter, page, limit, sort: mine ? 'todo' : undefined })}`,
       ),
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (all.length * limit < last.total ? all.length + 1 : undefined),
     placeholderData: (prev) => prev,
   });
   const people = useAssignees(projectId, canAssign);
@@ -167,12 +161,21 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
     enabled: mine && canOwnMetrics,
   });
   const goal = myGoal(goals.data ?? [], me.data?.user.id);
-  const data = list.data;
+  // The blocks loaded so far as one list: the figures of the first, the rows of all (a case
+  // that moved between two blocks while they loaded shows once).
+  const data = useMemo<CaseList | undefined>(() => {
+    const pages = list.data?.pages;
+    if (!pages?.length) return undefined;
+    const seen = new Set<string>();
+    const rows = pages
+      .flatMap((p) => p.rows)
+      .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+    return { ...pages[0]!, rows };
+  }, [list.data]);
   const fields = useMemo(() => data?.fields ?? [], [data]);
   const shownNames = cols ?? fields.slice(0, MAX_FIELD_COLUMNS).map((f) => f.name);
   const shownFields = fields.filter((f) => shownNames.includes(f.name));
   const variables = useMemo(() => caseVariables(fields), [fields]);
-  const pages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
   const pool = data?.assignmentMode === 'pool';
 
   const assign = useMutation({
@@ -227,7 +230,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
     const on = !next.has(id);
     if (shift && lastClicked !== null) {
       const [a, b] = [Math.min(lastClicked, i), Math.max(lastClicked, i)];
-      for (let k = a; k <= b; k++) {
+      for (let k = a; k <= Math.min(b, rows.length - 1); k++) {
         if (on) next.add(rows[k]!.id);
         else next.delete(rows[k]!.id);
       }
@@ -235,6 +238,20 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
     else next.delete(id);
     setLastClicked(i);
     setSelected(next);
+  };
+  // "Show 20 more (11 left)" under the list, loading the next block.
+  const left = Math.max(0, (data?.total ?? 0) - rows.length);
+  const more = {
+    shown: rows.length,
+    total: data?.total ?? 0,
+    step: limit,
+    // Not while the previous filter's list stands in for the new one.
+    left: list.hasNextPage && !list.isPlaceholderData ? left : 0,
+    more: () => {
+      // Without cancelling a refetch of the blocks shown (after an assignment, say).
+      if (!list.isFetchingNextPage) void list.fetchNextPage({ cancelRefetch: false });
+    },
+    reset: () => undefined,
   };
   const allOnPage = rows.length > 0 && rows.every((r) => selected.has(r.id));
 
@@ -597,14 +614,18 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
         />
       ) : null}
       {rulesOpen ? (
-        <Dialog title={t('cases.list.rules')} onClose={() => setRulesOpen(false)} wide>
-          <AssignmentsTab projectId={projectId} />
-          <div className="mt-4 flex justify-end">
-            <button type="button" className={smallBtn} onClick={() => setRulesOpen(false)}>
+        <Drawer
+          title={t('cases.list.rules')}
+          onClose={() => setRulesOpen(false)}
+          wide
+          footer={
+            <Button type="button" variant="secondary" onClick={() => setRulesOpen(false)}>
               {t('cases.detail.close')}
-            </button>
-          </div>
-        </Dialog>
+            </Button>
+          }
+        >
+          <AssignmentsTab projectId={projectId} />
+        </Drawer>
       ) : null}
 
       {narrow ? (
@@ -627,6 +648,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
                     className="mt-1"
                     aria-label={t('cases.list.select', { id: r.externalId })}
                     checked={selected.has(r.id)}
+                    disabled={list.isPlaceholderData}
                     onChange={() => toggle(i, false)}
                   />
                 ) : null}
@@ -781,6 +803,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
                         type="checkbox"
                         aria-label={t('cases.list.select', { id: r.externalId })}
                         checked={selected.has(r.id)}
+                        disabled={list.isPlaceholderData}
                         onChange={() => undefined}
                         onClick={(e) => toggle(i, e.shiftKey)}
                         onKeyDown={(e) => {
@@ -855,28 +878,14 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
           ) : null}
         </TableScroll>
       )}
-      <nav className="flex items-center gap-3 text-sm" aria-label={t('cases.list.title')}>
-        <button
-          type="button"
-          className={smallBtn}
-          disabled={page <= 1}
-          onClick={() => setPage(page - 1)}
-        >
-          {t('cases.list.prev')}
-        </button>
-        <span>
-          {t('cases.list.page', { page, pages })} ·{' '}
-          {t('cases.list.total', { count: data?.total ?? 0 })}
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span data-testid="cases-count">
+          {list.hasNextPage
+            ? t('cases.list.shown', { shown: rows.length, count: data?.total ?? 0 })
+            : t('cases.list.total', { count: data?.total ?? 0 })}
         </span>
-        <button
-          type="button"
-          className={smallBtn}
-          disabled={page >= pages}
-          onClick={() => setPage(page + 1)}
-        >
-          {t('cases.list.next')}
-        </button>
-      </nav>
+        <ShowMoreButton more={more} />
+      </div>
       {/* Footnotes of the table. */}
       {!canReadAll && pool ? (
         <p className="text-xs text-slate-600">{t('cases.list.poolNote')}</p>

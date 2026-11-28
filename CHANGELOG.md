@@ -155,6 +155,19 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     preview below 768 px, the questionnaire line and the mode, language, date, quotas, JSON and
     restart controls fold behind "Set up the test ▸" (with the mode, language and checks in the
     line), so the question is on the first screen; the phone frame is as tall as its content.
+  - **Create forms in side panels and long lists in blocks (third audit)**: "+ New project"
+    beside the page title opens the new project's form (name, code, modes) in a side panel with
+    Cancel and Create project at its foot, instead of a block above the list. In Settings →
+    Goals, "+ Add goal" beside the title opens the goal's form in a side panel. The assignment
+    rules open in a side panel instead of a centred dialog, and "+ Add rule" opens the rule's form
+    in a second panel over it (Escape closes that form only). The case list, My cases and the
+    pool come in blocks of 20 with "Show 20 more (N left)" under them (the server's pages of 20,
+    added one under the other) instead of pages of 25; the count under the list reads "20 of 31
+    cases", ticking and the bar of ticked cases work across the blocks shown, and a new filter
+    starts again from the first block. In the questionnaires table, a closed questionnaire's state keeps
+    one line and "→ continues in …" a second one, cut with "…" (whole in its title). Settings → Project status
+    and the logo description of Logo and style keep their help to one line behind an ⓘ that
+    unfolds it.
 
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the

@@ -159,6 +159,9 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
     'A2_AGE La cédula dice 16 años.',
   );
   await expect(iv.getByTestId('my-quality')).toBeVisible();
+  // Their cases come in blocks of 20.
+  await expect(iv.getByTestId('cases-table').locator('tbody tr').first()).toBeVisible();
+  expect(await iv.getByTestId('cases-table').locator('tbody tr').count()).toBeLessThanOrEqual(20);
   await shot(iv, 'returned-to-me');
   await returned.getByRole('button', { name: `Fix ${caseId}` }).click();
   await expect(iv.getByTestId('returned-comments')).toContainText('16 años');
@@ -200,7 +203,8 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await iv.getByLabel('Search id or sample data').fill(caseId);
   const done = iv.locator(`tr[data-case="${caseId}"]`);
   await expect(done.locator('[data-review="approved"]')).toContainText('Review: approved');
-  // The search has applied (it waits for a pause in typing): only that case is listed.
-  await expect(iv.locator('tr[data-case]')).toHaveCount(1);
+  // The search has applied (it waits for a pause in typing): only ids that contain it are
+  // listed (XHH0007, given to the interviewer by the case tests, also contains HH0007).
+  await expect(iv.locator(`tr[data-case]:not([data-case*="${caseId}"])`)).toHaveCount(0);
   await shot(iv, 'v2-my-cases-review');
 });

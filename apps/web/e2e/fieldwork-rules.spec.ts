@@ -69,28 +69,40 @@ test('a deadline for assigned cases, cross-case checks in the plan, and goals pe
   const goals = page.getByTestId('goals');
   const today = new Date().toISOString().slice(0, 10);
   const inAWeek = new Date(Date.now() + 6 * 86_400_000).toISOString().slice(0, 10);
-  await goals
+  // The form of a goal opens in a side panel from "+ Add goal" beside the title.
+  await expect(page.getByLabel('Completes', { exact: true })).toHaveCount(0);
+  await goals.getByRole('button', { name: 'Add goal' }).click();
+  let form = page.getByRole('dialog', { name: 'New goal' });
+  await form
     .getByRole('combobox', { name: 'For', exact: true })
     .selectOption({ label: 'Demo interviewer' });
-  await goals
+  await form
     .getByRole('combobox', { name: 'Frequency', exact: true })
     .selectOption({ label: 'Each business day (Mon–Fri)' });
-  await goals.getByLabel('From').fill(today);
-  await goals.getByLabel('To').fill(inAWeek);
-  await goals.getByLabel('Completes').fill('2');
-  await goals.getByRole('button', { name: 'Add goal' }).click();
+  await form.getByLabel('From').fill(today);
+  await form.getByLabel('To').fill(inAWeek);
+  await form.getByLabel('Completes').fill('2');
+  await shot(page, 'settings-goals-drawer', { fullPage: false });
+  await expectAccessible(page);
+  await form.getByRole('button', { name: 'Add goal' }).click();
+  await expect(form).toHaveCount(0);
   const row = goals.locator('tr[data-goal="Demo interviewer"]');
   await expect(row).toBeVisible();
   await expect(row).toContainText('2 per business day');
   // And one for the whole team, each week.
-  await goals
+  await goals.getByRole('button', { name: 'Add goal' }).click();
+  form = page.getByRole('dialog', { name: 'New goal' });
+  await form
     .getByRole('combobox', { name: 'For', exact: true })
     .selectOption({ label: 'Whole team' });
-  await goals
+  await form
     .getByRole('combobox', { name: 'Frequency', exact: true })
     .selectOption({ label: 'Each week' });
-  await goals.getByLabel('Completes').fill('20');
-  await goals.getByRole('button', { name: 'Add goal' }).click();
+  await form.getByLabel('From').fill(today);
+  await form.getByLabel('To').fill(inAWeek);
+  await form.getByLabel('Completes').fill('20');
+  await form.getByRole('button', { name: 'Add goal' }).click();
+  await expect(form).toHaveCount(0);
   const teamRow = goals.locator('tr[data-goal="Whole team"]');
   await expect(teamRow).toContainText('20 per week');
   await shot(page, 'settings-goals');

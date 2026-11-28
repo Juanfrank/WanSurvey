@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
+import { FoldedHelp } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, ErrorText, QueryState } from '../routes/ui.js';
 
@@ -118,7 +119,7 @@ export function ProjectStatusSection({ project }: { project: Project }) {
       <h3 id="lifecycle-title" className="text-lg font-semibold">
         {t('analysis.lifecycle.title')}
       </h3>
-      <p className="text-slate-600">{t('analysis.lifecycle.help')}</p>
+      <FoldedHelp className="-mt-3 max-w-prose">{t('analysis.lifecycle.help')}</FoldedHelp>
       <p className="font-medium" data-testid="project-status-current">
         {t('analysis.lifecycle.current', { status: t(`analysis.lifecycle.states.${status}`) })}
       </p>
