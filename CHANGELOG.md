@@ -56,9 +56,9 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   on Users too, as on the project's people page; share-outs and lists of cases handed to someone
   record whose cases they were; the roles dialog has short labels with the role's description
   under the row; an unknown address shows a translated page with a link home. **Upgrade**:
-  migration `0031` adds indexed columns to the activity log for its project and case filters.
+  migration `0032` adds indexed columns to the activity log for its project and case filters.
 
-- **Personal web links expire and can be revoked** (migration `0031_cawi_link_expiry`): an
+- **Personal web links expire and can be revoked** (migration `0033_cawi_link_expiry`): an
   outreach can give its links an end date, each link can get its own, and "Revoke" withdraws one
   (both logged). An expired or revoked link tells the respondent so and is no longer sent or
   reminded of. The designer's checks, the editor and the API also gained: options and grid rows
