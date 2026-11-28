@@ -47,6 +47,10 @@ export const cawiEn = {
     channels: { email: 'By e-mail', sms: 'By SMS', links: 'Personal links only' },
     channelHints: {
       email: 'Each case with an e-mail gets its invitation and reminders.',
+      sms: 'Each mobile number gets a short message with its link; messages cost money.',
+      links: 'A link per case; nothing is sent, you hand them out.',
+    },
+    channelTips: {
       sms: 'Each case with a mobile number (+country code) gets a short message with its link, inside the calling hours. Replying BAJA or STOP removes the number. Messages cost money: the cost is shown before sending.',
       links:
         'A link per case, e-mail or not; nothing is sent. Hand them out by SMS, WhatsApp, a letter…',
@@ -83,8 +87,9 @@ export const cawiEn = {
     revokeConfirm:
       'Revoke the link of {{id}}? It will no longer open the survey; its answers so far are kept.',
     revoked: 'The link of {{id}} was revoked.',
+    secretShort: 'Treat these links like passwords.',
     secret:
-      'Treat these links like passwords: whoever has one opens that person’s survey, with their data. Hand each one only to its person; opening this list and downloading it are logged.',
+      'Whoever has one opens that person’s survey, with their data. Hand each one only to its person; opening this list and downloading it are logged.',
     actions: 'Actions',
     reveal: 'Show',
     hide: 'Hide',
@@ -143,9 +148,11 @@ export const cawiEn = {
   builder: {
     title: 'Build the link with questions already answered',
     help: 'Questions that take a link parameter are answered by the link: the answer is recorded, the question is not shown, and the logic follows it. Use it to segment (branch, group, panel) or to bring in what you already know about the person.',
+    helpTerm: 'questions answered by the link',
     loading: 'Reading the questionnaire…',
     notPublished: 'Publish the questionnaire first: the link answers the published version.',
-    none: 'No question of this questionnaire takes a link parameter. In the designer, open a question → Logic → Link parameter, and give it a name.',
+    none: 'No question of this questionnaire takes a link parameter.',
+    noneTip: 'In the designer, open a question → Logic → Link parameter, and give it a name.',
     question: 'Question {{n}}',
     value: 'Value of ?{{param}}',
     pickValue: 'Choose a value',
@@ -247,6 +254,10 @@ export const cawiEs: CawiCatalogue = {
     channels: { email: 'Por correo electrónico', sms: 'Por SMS', links: 'Solo enlaces personales' },
     channelHints: {
       email: 'Cada caso con correo recibe su invitación y recordatorios.',
+      sms: 'Cada celular recibe un mensaje corto con su enlace; tiene costo.',
+      links: 'Un enlace por caso; no se envía nada, usted los reparte.',
+    },
+    channelTips: {
       sms: 'Cada caso con un celular (+código de país) recibe un mensaje corto con su enlace, dentro del horario de llamadas. Responder BAJA o STOP quita el número. Los mensajes cuestan: el costo se muestra antes de enviar.',
       links:
         'Un enlace por caso, tenga o no correo; no se envía nada. Repártalos por SMS, WhatsApp, carta…',
@@ -283,8 +294,9 @@ export const cawiEs: CawiCatalogue = {
     revokeConfirm:
       '¿Revocar el enlace de {{id}}? Ya no abrirá la encuesta; se conservan las respuestas que tenga.',
     revoked: 'Se revocó el enlace de {{id}}.',
+    secretShort: 'Trate estos enlaces como contraseñas.',
     secret:
-      'Trate estos enlaces como contraseñas: quien tenga uno abre la encuesta de esa persona, con sus datos. Entregue cada uno solo a su persona; abrir esta lista y descargarla queda en la bitácora.',
+      'Quien tenga uno abre la encuesta de esa persona, con sus datos. Entregue cada uno solo a su persona; abrir esta lista y descargarla queda en la bitácora.',
     actions: 'Acciones',
     reveal: 'Mostrar',
     hide: 'Ocultar',
@@ -342,9 +354,12 @@ export const cawiEs: CawiCatalogue = {
   builder: {
     title: 'Construir el enlace con preguntas ya respondidas',
     help: 'Las preguntas que aceptan un parámetro en el enlace se responden con él: la respuesta se registra, la pregunta no se muestra y la lógica la sigue. Sirve para segmentar (sede, grupo, panel) o para traer lo que ya se sabe de la persona.',
+    helpTerm: 'preguntas que responde el enlace',
     loading: 'Leyendo el cuestionario…',
     notPublished: 'Publica primero el cuestionario: el enlace responde la versión publicada.',
-    none: 'Ninguna pregunta de este cuestionario acepta un parámetro en el enlace. En el diseñador, abre una pregunta → Lógica → Parámetro del enlace y ponle un nombre.',
+    none: 'Ninguna pregunta de este cuestionario acepta un parámetro en el enlace.',
+    noneTip:
+      'En el diseñador, abre una pregunta → Lógica → Parámetro del enlace y ponle un nombre.',
     question: 'Pregunta {{n}}',
     value: 'Valor de ?{{param}}',
     pickValue: 'Elige un valor',

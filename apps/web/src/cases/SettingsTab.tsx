@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
+import { InfoTip } from './samplingControls.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { subTabCls } from '../routes/tabs.js';
@@ -786,8 +787,17 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                     {t('cases.privacy.retentionHelp')}
                   </FoldedHelp>
                   {form.retention.anonymiseAfterDays === null ? (
-                    <p role="alert" className="max-w-prose font-medium text-amber-ink-900">
-                      {t('cases.privacy.retentionNone')}
+                    <p
+                      role="alert"
+                      className="flex max-w-prose items-center font-medium text-amber-ink-900"
+                    >
+                      {t('cases.privacy.retentionNoneShort')}
+                      <InfoTip
+                        id="retention-none"
+                        term={t('cases.privacy.retentionNoneShort')}
+                        text={t('cases.privacy.retentionNone')}
+                        align="start"
+                      />
                     </p>
                   ) : (
                     <RetentionPreview

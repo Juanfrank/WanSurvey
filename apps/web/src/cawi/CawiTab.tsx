@@ -8,6 +8,7 @@ import { Dialog } from '../designer/Dialog.js';
 import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { LinkBuilder } from './LinkBuilder.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { maskLink } from './linkParams.js';
 import { Button, Drawer, MoreMenu, type MenuEntry } from '../routes/ui.js';
 
@@ -643,6 +644,15 @@ function WavesSection({
                   />
                   <span>
                     <span className="font-medium">{t(`cawi.links.channels.${c}`)}</span>
+                    {c === 'email' ? null : (
+                      <InfoTip
+                        id={`wave-channel-${c}`}
+                        term={t(`cawi.links.channels.${c}`)}
+                        text={t(`cawi.links.channelTips.${c}`)}
+                        // The panel's edges clip the bubble: the SMS (i) sits nearer the left.
+                        align={c === 'sms' ? 'start' : 'center'}
+                      />
+                    )}
                     <span className="block text-xs text-slate-600">
                       {t(`cawi.links.channelHints.${c}`)}
                     </span>
@@ -817,8 +827,14 @@ function WaveLinks({ projectId, wave }: { projectId: string; wave: Wave }) {
   const rows = all.slice(0, limit);
   return (
     <div className="mb-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3" data-testid="wave-links">
-      <p className="text-sm font-medium text-amber-ink-900" role="note">
-        {t('cawi.links.secret')}
+      <p className="flex items-center text-sm font-medium text-amber-ink-900" role="note">
+        {t('cawi.links.secretShort')}
+        <InfoTip
+          id="links-secret"
+          term={t('cawi.links.secretShort')}
+          text={t('cawi.links.secret')}
+          align="start"
+        />
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button

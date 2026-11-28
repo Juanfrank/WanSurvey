@@ -55,7 +55,8 @@ export function Layer({
  *
  * Elsewhere, `text` gives the explanation itself (a page's introduction beside its title, the
  * help of a card beside its heading): `<InfoTip id="users" term={t('team.title')} text={…} />`.
- * `align="start"` opens the bubble from the (i) to the right, for an (i) near the left edge.
+ * `align="start"` opens the bubble from the (i) to the right, for an (i) near the left edge;
+ * `align="end"` opens it to the left, for an (i) near the right edge (of a dialog, say).
  */
 export function InfoTip({
   id,
@@ -66,7 +67,7 @@ export function InfoTip({
   id: string;
   term: string;
   text?: ReactNode;
-  align?: 'center' | 'start';
+  align?: 'center' | 'start' | 'end';
 }) {
   const { t } = useTranslation();
   const tipId = useId();
@@ -117,7 +118,7 @@ export function InfoTip({
         role="tooltip"
         id={tipId}
         hidden={!open}
-        className={`absolute top-full z-30 w-72 max-w-[80vw] pt-1 ${align === 'start' ? '-left-2' : 'left-1/2 -translate-x-1/2'}`}
+        className={`absolute top-full z-30 w-72 max-w-[80vw] pt-1 ${align === 'start' ? '-left-2' : align === 'end' ? '-right-2' : 'left-1/2 -translate-x-1/2'}`}
       >
         <span className="block rounded-lg border border-slate-200 bg-white p-3 text-left text-sm font-normal not-italic leading-relaxed text-slate-700 shadow-lg">
           <span className="block">{text ?? t(`cases.sampling.tips.${id}.text`)}</span>

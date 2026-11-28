@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { controlCls } from '../designer/fields.js';
+import { controlCls, FoldedHelp } from '../designer/fields.js';
 import type { SampleField } from '../designer/vars.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, Drawer } from '../routes/ui.js';
@@ -73,7 +73,7 @@ export function FieldLabels({
           save.mutate();
         }}
       >
-        <p className="text-slate-600">{t('cases.labels.help')}</p>
+        <FoldedHelp>{t('cases.labels.help')}</FoldedHelp>
         <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5">
           {fields.map((f) => (
             <div key={f.name} className="contents">

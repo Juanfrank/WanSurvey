@@ -533,6 +533,18 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **Long help behind an ⓘ on cases, web links, scans and the device** (fourth visual audit):
+  - A case's personal data says "Confidential data · your view is recorded" on one line; why
+    they show and how to treat them are behind its ⓘ, said once (also on the calls screen).
+  - Personal links: "Treat these links like passwords." on one line with an ⓘ; the link
+    builder's explanation is an ⓘ beside its title and its empty state is one line. The SMS
+    and links-only channels of a new wave have a one-line hint and the rest behind an ⓘ.
+  - "Upload scans" opens with "Upload one or more scanned PDFs." and an ⓘ for the rest.
+  - The sample selector: adding units after the selection, the census size and the three
+    sizes are an ⓘ or one folded line (the three sizes were said twice), and the bar of steps
+    keeps to one row on a laptop.
+  - Smaller: the sample variable names, "Share out at random", the device's personal-data
+    note and its download help, and the "no retention period" warning take one line each.
 - **Fewer fixed paragraphs, a one-line interview bar on phones** (third visual audit, H2):
   - Webhooks, API keys and Teams: whoever may only look sees a compact "Read only" badge in the
     page header; who changes them is behind its (i), not in a paragraph under the title.

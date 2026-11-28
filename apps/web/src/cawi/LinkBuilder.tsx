@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import {
   buildQuery,
   paramQuestions,
@@ -212,17 +213,28 @@ export function LinkBuilder({
       aria-labelledby={`${uid}-title`}
       data-testid="link-builder"
     >
-      <h3 id={`${uid}-title`} className="font-semibold">
+      <h3 id={`${uid}-title`} className="flex items-center font-semibold">
         {t('cawi.builder.title')}
+        <InfoTip
+          id="link-builder-help"
+          term={t('cawi.builder.helpTerm')}
+          text={t('cawi.builder.help')}
+          align="start"
+        />
       </h3>
-      <p className="max-w-prose text-slate-600">{t('cawi.builder.help')}</p>
       {detail.isPending || (v !== null && version.isPending) ? (
         <p aria-busy="true">{t('cawi.builder.loading')}</p>
       ) : v === null ? (
         <p className="text-slate-600">{t('cawi.builder.notPublished')}</p>
       ) : questions.length === 0 ? (
-        <p className="text-slate-600" data-testid="builder-none">
-          {t('cawi.builder.none')}
+        <p className="flex items-center text-slate-600" data-testid="builder-none">
+          <span className="min-w-0 truncate">{t('cawi.builder.none')}</span>
+          <InfoTip
+            id="link-builder-none"
+            term={t('cawi.builder.none')}
+            text={t('cawi.builder.noneTip')}
+            align="end"
+          />
         </p>
       ) : (
         <>

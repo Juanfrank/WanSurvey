@@ -163,8 +163,6 @@ export const samplingEn = {
   required: 'Completes required',
   toSelect: 'Units to select',
   toField: 'Cases to manage (with reserves)',
-  decision2:
-    'Three different numbers: the completes the objective needs, the units to select so that they remain after eligibility and non-response, and the cases for the field, with reserves.',
   fpc: 'With finite population correction (N = {{n}}).',
   noFpc: 'Without finite population correction.',
   eligibility: 'Eligibility (who can be in)',
@@ -478,8 +476,6 @@ export const samplingEs: typeof samplingEn = {
   required: 'Entrevistas completas requeridas',
   toSelect: 'Unidades a seleccionar',
   toField: 'Casos a gestionar (con reservas)',
-  decision2:
-    'Tres números distintos: las entrevistas que el objetivo necesita, las unidades a seleccionar para que queden tras la elegibilidad y la no respuesta, y los casos del campo, con reservas.',
   fpc: 'Con corrección por población finita (N = {{n}}).',
   noFpc: 'Sin corrección por población finita.',
   eligibility: 'Elegibilidad (quién puede entrar)',

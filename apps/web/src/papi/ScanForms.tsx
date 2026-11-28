@@ -9,6 +9,7 @@ import { localiseError } from '../i18n-messages.js';
 import { deviceId, keepOnDevice, type InterviewPayload } from '../interview/useInterview.js';
 import { ShowMoreButton, useShowMore } from '../routes/ShowMore.js';
 import { Button, Drawer, FileInput } from '../routes/ui.js';
+import { InfoTip } from '../cases/samplingControls.js';
 
 interface ScanForm {
   id: string;
@@ -149,7 +150,10 @@ export function ScanForms({
               if (files.length) send.mutate();
             }}
           >
-            <p className="text-slate-600">{t('papi.scans.help')}</p>
+            <p className="flex items-center text-slate-600">
+              {t('papi.scans.helpShort')}
+              <InfoTip id="scans-help" term={t('papi.scans.open')} text={t('papi.scans.help')} />
+            </p>
             <FileInput
               key={inputKey}
               label={t('papi.scans.choose')}

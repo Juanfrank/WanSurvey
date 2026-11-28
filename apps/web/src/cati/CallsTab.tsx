@@ -25,6 +25,7 @@ import { PhoneIcon } from '../routes/icons.js';
 import { CallbackReminders } from '../routes/Notifications.js';
 import { SideDrawer, useDrawer } from '../routes/SideDrawer.js';
 import { Button } from '../routes/ui.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import {
   allDay,
   fromNow,
@@ -657,7 +658,15 @@ export function CallsTab({
               <h4 id="calls-sample" className="mb-1 font-semibold">
                 {t('cati.sample')}
               </h4>
-              <p className="mb-1 text-xs text-slate-600">{t('cases.detail.confidential')}</p>
+              <p className="mb-1 flex items-center text-xs text-slate-600">
+                {t('cases.detail.confidentialShort')}
+                <InfoTip
+                  id="calls-confidential"
+                  term={t('cases.detail.confidentialShort')}
+                  text={t('cases.detail.confidential')}
+                  align="start"
+                />
+              </p>
               <dl className="flex flex-wrap gap-x-5 gap-y-1" data-testid="case-sample">
                 {Object.entries(served.case.sample).map(([k, v]) => {
                   const label = served.case.fieldLabels?.[k];

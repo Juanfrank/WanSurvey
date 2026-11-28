@@ -73,8 +73,9 @@ export const casesEn = {
     basisNoneVisit: 'Not declared (nothing can be downloaded)',
     basisMissing:
       'No basis is declared for this channel: the interviewers cannot start. Choose one above.',
+    retentionNoneShort: 'No period: personal data is kept for ever.',
     retentionNone:
-      'No period is set: personal data is kept until someone deletes it. Most data protection laws ask for a period tied to the purpose of the survey.',
+      'Personal data is kept until someone deletes it. Most data protection laws ask for a period tied to the purpose of the survey.',
     noticeTitle: 'Information notice',
     noticeHelp:
       'The notice is part of the questionnaire, as its first question: a consent text and the question that accepts or refuses (add it with the Information notice button of the designer). Translated, previewed, printed on paper and exported like any other item. A refusal ends the interview.',
@@ -327,9 +328,11 @@ export const casesEn = {
     elsewhere: 'The same phone or e-mail is in: {{list}}.',
     elsewhereCases_one: '{{name}} ({{count}} case)',
     elsewhereCases_other: '{{name}} ({{count}} cases)',
-    autoShown: 'Shown because you hold this case. Your first view was recorded.',
+    confidentialShort: 'Confidential data · your view is recorded',
+    autoShown:
+      'Shown because you hold this case; only your first view was recorded. Do not copy or photograph them; use them only for this survey.',
     confidential:
-      'Confidential data: your view is recorded. Do not copy or photograph it; use it only for this survey.',
+      'Your view is recorded in the audit log. Do not copy or photograph these data; use them only for this survey.',
     claim: 'Take this case',
     claimed: 'The case is yours now.',
     release: 'Give the case back',
@@ -783,8 +786,9 @@ export const casesEs: CasesCatalogue = {
     basisNoneVisit: 'Sin declarar (no se puede descargar)',
     basisMissing:
       'No hay base declarada para este canal: los entrevistadores no pueden empezar. Elija una arriba.',
+    retentionNoneShort: 'Sin plazo: los datos se guardan sin límite.',
     retentionNone:
-      'No hay plazo: los datos personales se conservan hasta que alguien los borre. La mayoría de las leyes de protección de datos piden un plazo ligado a la finalidad de la encuesta.',
+      'Los datos personales se conservan hasta que alguien los borre. La mayoría de las leyes de protección de datos piden un plazo ligado a la finalidad de la encuesta.',
     noticeTitle: 'Aviso informativo',
     noticeHelp:
       'El aviso es parte del cuestionario, como su primera pregunta: un texto de consentimiento y la pregunta que acepta o rechaza (agréguelo con el botón Aviso informativo del diseñador). Se traduce, se ve en la vista previa, se imprime en papel y se exporta como cualquier otro elemento. Un rechazo termina la entrevista.',
@@ -1040,9 +1044,11 @@ export const casesEs: CasesCatalogue = {
     elsewhere: 'El mismo teléfono o correo está en: {{list}}.',
     elsewhereCases_one: '{{name}} ({{count}} caso)',
     elsewhereCases_other: '{{name}} ({{count}} casos)',
-    autoShown: 'Se muestran porque usted tiene este caso. Su primera consulta quedó registrada.',
+    confidentialShort: 'Datos confidenciales · su consulta queda registrada',
+    autoShown:
+      'Se muestran porque usted tiene este caso; solo su primera consulta quedó registrada. No los copie ni fotografíe; úselos solo para esta encuesta.',
     confidential:
-      'Datos confidenciales: su consulta queda registrada. No los copie ni fotografíe; úselos solo para esta encuesta.',
+      'Su consulta queda registrada en la bitácora de auditoría. No copie ni fotografíe estos datos; úselos solo para esta encuesta.',
     claim: 'Tomar este caso',
     claimed: 'El caso ahora es suyo.',
     release: 'Devolver el caso',

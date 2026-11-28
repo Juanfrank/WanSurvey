@@ -504,7 +504,7 @@ test('duplicates across projects are flagged; the drawer says where the case com
 
   // The household project adds the same phone under another id (to its census).
   await page.getByRole('tab', { name: 'Sampling selector' }).click();
-  await page.getByRole('button', { name: 'Add units to the sample' }).click();
+  await page.getByRole('button', { name: 'Add units to the sample', exact: true }).click();
   const mine = [
     ['id', 'first_name', 'phone', 'address'],
     [`G${code}-1`, 'Rosa', '987650001', 'Av. Brasil 100, Lima'],

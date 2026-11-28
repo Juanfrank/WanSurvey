@@ -282,7 +282,12 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                 {locked ? t('cases.sampling.addAfter') : t('cases.import.title')}
               </Button>
               {locked ? (
-                <span className="text-xs text-slate-600">{t('cases.sampling.addAfterHelp')}</span>
+                <InfoTip
+                  id="add-after"
+                  term={t('cases.sampling.addAfter')}
+                  text={t('cases.sampling.addAfterHelp')}
+                  align="start"
+                />
               ) : null}
               {d.frame.units && !locked ? (
                 <button
@@ -631,7 +636,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             <InfoTip id="sizes" term={t('cases.sampling.size')} />
           </h3>
           {census ? (
-            <p className="text-sm text-slate-700">{t('cases.sampling.censusSize')}</p>
+            <FoldedHelp className="text-sm">{t('cases.sampling.censusSize')}</FoldedHelp>
           ) : null}
           {/* Two panels on wide screens: what precision is wanted, and what is lost on the way. */}
           <div className="grid gap-4 lg:grid-cols-2">
@@ -816,8 +821,8 @@ export function SamplingTab({ projectId }: { projectId: string }) {
               </div>
             ))}
           </dl>
-          <p className="text-xs text-slate-600">
-            {t('cases.sampling.decision2')}{' '}
+          {/* What the three numbers are is behind the (i) of the size's title. */}
+          <p className="flex items-center text-xs text-slate-600">
             {sizes.fpcApplied && sizes.population
               ? t('cases.sampling.fpc', { n: fmt(sizes.population) })
               : t('cases.sampling.noFpc')}
@@ -1159,15 +1164,15 @@ function StepIndex({ checks }: { checks: PlanCheck[] }) {
   return (
     <nav
       aria-label={t('cases.sampling.index')}
-      className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-sm shadow-sm backdrop-blur"
+      className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-x-2 gap-y-2 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-sm shadow-sm backdrop-blur"
       data-testid="sampling-index"
     >
-      <ol className="flex flex-wrap gap-x-1 gap-y-1">
+      <ol className="flex flex-wrap gap-y-1">
         {(['layer1', 'layer2', 'layer3', 'layer4'] as const).map((k, i) => (
           <li key={k}>
             <a
               href={`#layer-${i + 1}`}
-              className="inline-block rounded-md px-2 py-1 font-medium text-indigo-ink-700 hover:bg-indigo-50"
+              className="inline-block whitespace-nowrap rounded-md px-1 py-1 font-medium text-indigo-ink-700 hover:bg-indigo-50"
             >
               {t(`cases.sampling.${k}`)}
             </a>
@@ -1176,7 +1181,7 @@ function StepIndex({ checks }: { checks: PlanCheck[] }) {
       </ol>
       <a
         href="#sp-checks"
-        className={`ml-auto inline-flex items-center gap-2 rounded-md border px-2.5 py-1 ${tone}`}
+        className={`ml-auto inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 ${tone}`}
         data-testid="checks-summary"
         data-errors={errors}
         data-warnings={warnings}

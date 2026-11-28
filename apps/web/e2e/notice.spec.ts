@@ -25,7 +25,9 @@ test('the information notice is part of the questionnaire: added from the design
   await expect(retention.getByRole('spinbutton')).toHaveValue('365');
   await expect(retention.getByTestId('retention-preview')).toContainText('tonight');
   await retention.getByRole('spinbutton').fill('');
-  await expect(retention.getByRole('alert')).toContainText('No period is set');
+  await expect(retention.getByRole('alert')).toContainText(
+    'No period: personal data is kept for ever.',
+  );
   await page
     .getByLabel('Do not publish a questionnaire that does not open with the information notice')
     .check();

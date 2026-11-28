@@ -41,6 +41,7 @@ import {
 } from './hooks.js';
 import type { SampleField } from '../designer/vars.js';
 import { FieldLabels } from './FieldLabels.js';
+import { InfoTip } from './samplingControls.js';
 import { useMedia } from '../routes/SideDrawer.js';
 import { dateTime } from '../format.js';
 import { AssignmentsTab } from './AssignmentsTab.js';
@@ -1438,13 +1439,19 @@ function CaseDrawer({
               </button>
             ) : null}
           </span>
-        ) : c.pii.auto ? (
-          <span className="ml-auto text-slate-600" data-testid="pii-confidential">
-            {t('cases.detail.autoShown')} {t('cases.detail.confidential')}
-          </span>
-        ) : reveal ? (
-          <span className="ml-auto text-slate-600" data-testid="pii-confidential">
-            {t('cases.detail.confidential')}
+        ) : c.pii.auto || reveal ? (
+          // One line; why they show and the rules for them sit behind the (i).
+          <span
+            className="ml-auto inline-flex items-center text-slate-600"
+            data-testid="pii-confidential"
+          >
+            {t('cases.detail.confidentialShort')}
+            <InfoTip
+              id="pii-confidential"
+              term={t('cases.detail.confidentialShort')}
+              text={t(c.pii.auto ? 'cases.detail.autoShown' : 'cases.detail.confidential')}
+              align="end"
+            />
           </span>
         ) : null}
       </div>

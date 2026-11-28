@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { smallBtn } from '../designer/fields.js';
+import { FoldedHelp, smallBtn } from '../designer/fields.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { dateTime } from '../format.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import {
@@ -422,8 +423,14 @@ export function DevicePage() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-slate-700" data-testid="device-privacy">
-                {t('device.privacy')}
+              <p className="flex items-center text-xs text-slate-700" data-testid="device-privacy">
+                {t('device.privacyShort')}
+                <InfoTip
+                  id="device-privacy"
+                  term={t('device.privacyShort')}
+                  text={t('device.privacy')}
+                  align="start"
+                />
               </p>
             </>
           ) : (
@@ -482,7 +489,7 @@ export function DevicePage() {
           ) : (
             <p className="text-slate-600">{t('device.noneToDownload')}</p>
           )}
-          <p className="text-xs text-slate-600">{t('device.downloadHelp')}</p>
+          <FoldedHelp>{t('device.downloadHelp')}</FoldedHelp>
         </section>
       </Card>
     </div>

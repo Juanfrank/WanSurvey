@@ -30,8 +30,9 @@ export const deviceEn = {
   toSendLabel_other: 'interviews to send',
   syncUnavailable: 'Available when the connection is back.',
   stale: 'The last sync was {{age}}. Connect to send your work and receive changes.',
+  privacyShort: 'These cases contain personal data.',
   privacy:
-    'These cases contain personal data. If this device is lost or stolen, tell your supervisor at once. When you sign out you can give them back and remove them from this device.',
+    'If this device is lost or stolen, tell your supervisor at once. When you sign out you can give them back and remove them from this device.',
   priority: 'Priority',
   due: 'Due',
   overdue: 'Past its deadline ({{date}}): finish it or ask your supervisor',
@@ -147,8 +148,9 @@ export const deviceEs: DeviceCatalogue = {
   syncUnavailable: 'Disponible cuando vuelva la conexión.',
   stale:
     'La última sincronización fue {{age}}. Conéctese para enviar su trabajo y recibir los cambios.',
+  privacyShort: 'Estos casos contienen datos personales.',
   privacy:
-    'Estos casos contienen datos personales. Si pierde el equipo o se lo roban, avise de inmediato a su supervisor. Al cerrar sesión puede devolverlos y borrarlos de este dispositivo.',
+    'Si pierde el equipo o se lo roban, avise de inmediato a su supervisor. Al cerrar sesión puede devolverlos y borrarlos de este dispositivo.',
   priority: 'Prioridad',
   due: 'Vence',
   overdue: 'Plazo vencido ({{date}}): termínelo o consulte a su supervisor',

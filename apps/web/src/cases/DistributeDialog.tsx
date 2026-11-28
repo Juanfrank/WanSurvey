@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
-import { CheckField, NumberField, SelectField } from '../designer/fields.js';
+import { CheckField, FoldedHelp, NumberField, SelectField } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, ErrorText } from '../routes/ui.js';
 import { isFieldWorker, type Assignee } from './hooks.js';
@@ -147,12 +147,12 @@ export function DistributeDialog({
           if (chosen.size) run.mutate();
         }}
       >
-        <p className="text-slate-600">
+        <FoldedHelp className="text-sm">
           {caseIds.length
             ? t('cases.distribute.selected', { count: caseIds.length })
             : t('cases.distribute.free')}{' '}
           {t('cases.distribute.how')}
-        </p>
+        </FoldedHelp>
         <SelectField
           label={t('cases.distribute.method')}
           value={method}
@@ -214,7 +214,7 @@ export function DistributeDialog({
               <summary className="cursor-pointer text-slate-700">
                 {t('cases.distribute.others', { count: others.length })}
               </summary>
-              <p className="mt-1 text-xs text-slate-600">{t('cases.distribute.othersHint')}</p>
+              <FoldedHelp className="mt-1">{t('cases.distribute.othersHint')}</FoldedHelp>
               <div className="mt-1 grid gap-1 sm:grid-cols-2">{others.map((p) => person(p))}</div>
             </details>
           ) : null}
