@@ -4,6 +4,7 @@ import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { useMe } from '../routes/AppLayout.js';
 import { MoreMenu } from '../routes/MoreMenu.js';
 import { useOverflowFit } from '../routes/tabs.js';
@@ -59,7 +60,7 @@ const PILL_GAP = 8;
 /**
  * The sections as pills on one line, on screens without the side panel's list. As the tabs of
  * a project (`OverflowTabList`), the ones that do not fit go in "More ▾"; the open one always
- * shows. Under 640 px the row scrolls sideways instead.
+ * shows, on a phone too.
  */
 function AdminPills({
   links,
@@ -73,8 +74,8 @@ function AdminPills({
   const { room, measure, narrow, shown, hidden } = useOverflowFit(links, current, PILL_GAP);
   return (
     <nav aria-label={t('admin.nav')} className="min-[900px]:hidden">
-      <div ref={room} className={`relative flex min-w-0 gap-2 ${narrow ? '-mx-4' : ''}`}>
-        <div className={`flex min-w-0 gap-2 ${narrow ? 'overflow-x-auto px-4 pb-1' : ''}`}>
+      <div ref={room} className="relative flex min-w-0 gap-2">
+        <div className={`flex min-w-0 gap-2 ${narrow ? 'overflow-x-auto' : ''}`}>
           {shown.map((x) => (
             <Link
               key={x.value}
@@ -219,12 +220,12 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
           </h2>
           <ul className="grid gap-3 sm:grid-cols-2" data-testid="admin-attention">
             {tiles.map((tile) => (
-              <li key={tile.key} data-tile={tile.key} data-count={tile.n}>
+              <li key={tile.key} data-tile={tile.key} data-count={tile.n} className="relative">
                 <Link
                   to={tile.to}
                   // Users opens with the matching filter on, so the list shows these people.
                   search={tile.search}
-                  className="flex h-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-card hover:border-indigo-600"
+                  className={`flex h-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-card hover:border-indigo-600 ${tile.key === 'without2fa' ? 'pr-11' : ''}`}
                 >
                   <span
                     className={`text-2xl font-bold tabular-nums ${tile.n ? 'text-amber-ink-800' : 'text-slate-700'}`}
@@ -235,6 +236,17 @@ function AdminHome({ permissions }: { permissions: readonly string[] }) {
                     {t(`admin.home.tiles.${tile.key}`, { count: tile.n, days: KEY_WARNING_DAYS })}
                   </span>
                 </Link>
+                {/* The fine print behind an ⓘ, beside the link (a button cannot sit inside it). */}
+                {tile.key === 'without2fa' ? (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <InfoTip
+                      id="admin-without2fa"
+                      term={t('admin.home.without2faTerm')}
+                      text={t('admin.home.without2faInfo')}
+                      align="end"
+                    />
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>

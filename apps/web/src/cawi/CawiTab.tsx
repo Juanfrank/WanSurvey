@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { Dialog } from '../designer/Dialog.js';
 import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, useNote } from '../i18n-messages.js';
 import { LinkBuilder } from './LinkBuilder.js';
 import { InfoTip } from '../cases/samplingControls.js';
 import { maskLink } from './linkParams.js';
@@ -119,7 +119,7 @@ function SendingSettings({ project }: { project: Project }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [form, setForm] = useState<CawiSettings>(project.settings.cawi);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   useEffect(() => setForm(project.settings.cawi), [project.settings.cawi]);
   const save = useMutation({
     mutationFn: () =>
@@ -129,9 +129,9 @@ function SendingSettings({ project }: { project: Project }) {
       }),
     onSuccess: (p) => {
       qc.setQueryData(['project', project.id], p);
-      setMessage(t('cawi.settings.saved'));
+      setMessage({ key: 'cawi.settings.saved' });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
   return (
     <form
@@ -139,7 +139,7 @@ function SendingSettings({ project }: { project: Project }) {
       aria-labelledby="cawi-settings"
       onSubmit={(e) => {
         e.preventDefault();
-        setMessage('');
+        setMessage(null);
         save.mutate();
       }}
     >
@@ -240,7 +240,7 @@ function TemplatesSection({ projectId }: { projectId: string }) {
   const current = list.data?.find((x) => x.kind === kind && x.language === language);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const currentKey = current && `${current.kind}/${current.language}`;
   const currentSubject = current?.subject;
   const currentBody = current?.body;
@@ -258,9 +258,9 @@ function TemplatesSection({ projectId }: { projectId: string }) {
       }),
     onSuccess: (rows) => {
       qc.setQueryData(['email-templates', projectId], rows);
-      setMessage(t('cawi.templates.saved'));
+      setMessage({ key: 'cawi.templates.saved' });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
   const example = sample.data?.rows[0];
   const shown = example?.sample ?? {};
@@ -311,7 +311,7 @@ function TemplatesSection({ projectId }: { projectId: string }) {
           className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            setMessage('');
+            setMessage(null);
             save.mutate();
           }}
         >
@@ -388,7 +388,7 @@ function WavesSection({
   const [expires, setExpires] = useState('');
   const [channel, setChannel] = useState<'email' | 'sms' | 'links'>('email');
   const [linksOf, setLinksOf] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   // "New outreach" opens its form in a side panel; it closes once the outreach is made.
   const [creating, setCreating] = useState(false);
   const formId = useId();
@@ -411,7 +411,7 @@ function WavesSection({
         },
       }),
     onSuccess: async () => {
-      setMessage(t('cawi.waves.created'));
+      setMessage({ key: 'cawi.waves.created' });
       setName('');
       setExpires('');
       setCreating(false);
@@ -437,20 +437,26 @@ function WavesSection({
       }),
     onSuccess: async (r, { id }) => {
       if (r.links !== undefined) {
-        setMessage(t('cawi.links.made', { count: r.links }));
+        setMessage({ key: 'cawi.links.made', vars: { count: r.links } });
         setLinksOf(id);
       } else
-        setMessage(
-          `${t('cawi.waves.queued', { count: r.queued })} ${t('cawi.waves.skipped', {
-            noEmail:
-              (r.skipped.noEmail ?? 0) + (r.skipped.noPhone ?? 0) + (r.skipped.badNumber ?? 0),
-            optedOut: r.skipped.optedOut,
-            suppressed: r.skipped.suppressed,
-          })}`,
-        );
+        setMessage({
+          parts: [
+            { key: 'cawi.waves.queued', vars: { count: r.queued } },
+            {
+              key: 'cawi.waves.skipped',
+              vars: {
+                noEmail:
+                  (r.skipped.noEmail ?? 0) + (r.skipped.noPhone ?? 0) + (r.skipped.badNumber ?? 0),
+                optedOut: r.skipped.optedOut,
+                suppressed: r.skipped.suppressed,
+              },
+            },
+          ],
+        });
       await qc.invalidateQueries({ queryKey: ['waves', projectId] });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
 
   /** An SMS wave costs money: what it would do and cost is shown first, and a large one asks twice. */
@@ -467,7 +473,7 @@ function WavesSection({
       if (p.needsConfirmation && !window.confirm(t('cawi.sms.confirmBig', p))) return;
       send.mutate({ id: w.id, confirm: p.needsConfirmation });
     } catch (e) {
-      setMessage(localiseError(t, e));
+      setMessage({ error: e });
     }
   };
 
@@ -578,7 +584,7 @@ function WavesSection({
             className="flex flex-col gap-4 text-sm"
             onSubmit={(e) => {
               e.preventDefault();
-              setMessage('');
+              setMessage(null);
               create.mutate();
             }}
           >

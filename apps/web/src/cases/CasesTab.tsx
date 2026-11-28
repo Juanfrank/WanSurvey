@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { api } from '../api.js';
-import { dispositionLabel, localiseError } from '../i18n-messages.js';
+import { dispositionLabel, useNote } from '../i18n-messages.js';
 import { ConditionBuilder } from '../designer/ConditionBuilder.js';
 import { Dialog } from '../designer/Dialog.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
@@ -114,7 +114,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
     [navigate],
   );
   const [assignee, setAssignee] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const [view, setView] = useState<'list' | 'map'>('list');
   const [how, setHow] = useState<'person' | 'rules' | 'random'>('person');
   // The cases being shared out at random: the selected ones, or [] for every free case.
@@ -186,14 +186,17 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
         body,
       }),
     onSuccess: async (r) => {
-      setMessage(
-        `${t('cases.list.assigned', { count: r.changed })}${r.skipped ? ` ${t('cases.list.skipped', { count: r.skipped })}` : ''}`,
-      );
+      setMessage({
+        parts: [
+          { key: 'cases.list.assigned', vars: { count: r.changed } },
+          r.skipped ? { key: 'cases.list.skipped', vars: { count: r.skipped } } : null,
+        ],
+      });
       setSelected(new Set());
       await qc.invalidateQueries({ queryKey: ['cases', projectId] });
       await qc.invalidateQueries({ queryKey: ['assignees', projectId] });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
   // The given cases (or, with none, every free one) go out by the questionnaire's rules.
   const byRules = useMutation({
@@ -206,13 +209,13 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
         },
       }),
     onSuccess: async (r) => {
-      setMessage(t('cases.rules.applied', { count: r.assigned }));
+      setMessage({ key: 'cases.rules.applied', vars: { count: r.assigned } });
       setSelected(new Set());
       await qc.invalidateQueries({ queryKey: ['cases', projectId] });
       await qc.invalidateQueries({ queryKey: ['assignees', projectId] });
       await qc.invalidateQueries({ queryKey: ['rules', projectId] });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
   const counts = data?.counts ?? {};
   const kpis = caseKpis(data, mine, pool);
@@ -1236,7 +1239,7 @@ function SamplingFacts({
   const { t, i18n } = useTranslation();
   const [reason, setReason] = useState('');
   const [asking, setAsking] = useState(false);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useNote();
   const substitute = useMutation({
     mutationFn: () =>
       api(`/projects/${projectId}/sampling/cases/${caseId}/substitute`, {
@@ -1245,10 +1248,10 @@ function SamplingFacts({
       }),
     onSuccess: async () => {
       setAsking(false);
-      setNote(t('cases.sampling.substituted'));
+      setNote({ key: 'cases.sampling.substituted' });
       await onDone();
     },
-    onError: (e) => setNote(localiseError(t, e)),
+    onError: (e) => setNote({ error: e }),
   });
   const n = (x: number | null | undefined, digits: number) =>
     x == null ? '—' : x.toLocaleString(i18n.language, { maximumFractionDigits: digits });
@@ -1346,7 +1349,7 @@ function CaseDrawer({
   useEffect(() => {
     if (casePriority !== undefined) setPriority(String(casePriority));
   }, [casePriority]);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useNote();
   // Worded when shown, so it follows the language.
   const [reopened, setReopened] = useState<number | null>(null);
   const refresh = async () => {
@@ -1357,19 +1360,18 @@ function CaseDrawer({
     mutationFn: (action: 'claim' | 'release' | 'force-release') =>
       api(`/projects/${projectId}/cases/${caseId}/${action}`, { method: 'POST' }),
     onSuccess: async (_r, action) => {
-      setNote(
-        t(
+      setNote({
+        key:
           action === 'claim'
             ? 'cases.detail.claimed'
             : action === 'release'
               ? 'cases.detail.released'
               : 'cases.detail.deviceReleased',
-        ),
-      );
+      });
       await refresh();
     },
     onError: async (e) => {
-      setNote(localiseError(t, e));
+      setNote({ error: e });
       await refresh();
     },
   });
@@ -1378,13 +1380,13 @@ function CaseDrawer({
     mutationFn: () =>
       api(`/projects/${projectId}/cases/${caseId}/reopen-attempts`, { method: 'POST' }),
     onSuccess: async () => {
-      setNote('');
+      setNote(null);
       setReopened(c?.maxAttempts ?? 0);
       await refresh();
     },
     onError: (e) => {
       setReopened(null);
-      setNote(localiseError(t, e));
+      setNote({ error: e });
     },
   });
   const patch = useMutation({

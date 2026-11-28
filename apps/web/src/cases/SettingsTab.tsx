@@ -13,7 +13,7 @@ import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
 import { InfoTip } from './samplingControls.js';
-import { localiseError } from '../i18n-messages.js';
+import { useNote } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 import { subTabCls } from '../routes/tabs.js';
 import { CleaningEditor } from './CleaningEditor.js';
@@ -67,7 +67,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [form, setForm] = useState<ProjectSettings>(project.settings);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const sampleFields = useSampleFields(project.id);
   useEffect(() => setForm(project.settings), [project.settings]);
   const save = useMutation({
@@ -76,9 +76,9 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
     onSuccess: async (p) => {
       qc.setQueryData(['project', project.id], p);
       await qc.invalidateQueries({ queryKey: ['cases', project.id] });
-      setMessage(t('cases.settings.saved'));
+      setMessage({ key: 'cases.settings.saved' });
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
   const modes: AssignmentMode[] = ['assigned', 'pool'];
   const canWeb =
@@ -117,7 +117,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
         aria-labelledby="settings-title"
         onSubmit={(e) => {
           e.preventDefault();
-          setMessage('');
+          setMessage(null);
           save.mutate();
         }}
       >
@@ -770,18 +770,23 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                     role="group"
                     aria-label={t('cases.privacy.retentionSuggested')}
                   >
-                    <span className="text-slate-600">{t('cases.privacy.retentionSuggested')}</span>
-                    {RETENTION_CHOICES.map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        className={smallBtn}
-                        aria-pressed={form.retention.anonymiseAfterDays === d}
-                        onClick={() => setForm({ ...form, retention: { anonymiseAfterDays: d } })}
-                      >
-                        {t('cases.privacy.retentionChoice', { count: d })}
-                      </button>
-                    ))}
+                    <span className="whitespace-nowrap text-slate-600">
+                      {t('cases.privacy.retentionSuggested')}
+                    </span>
+                    {/* The choices wrap together, never one alone on a line of its own. */}
+                    <span className="flex flex-nowrap gap-2">
+                      {RETENTION_CHOICES.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          className={`${smallBtn} whitespace-nowrap`}
+                          aria-pressed={form.retention.anonymiseAfterDays === d}
+                          onClick={() => setForm({ ...form, retention: { anonymiseAfterDays: d } })}
+                        >
+                          {t('cases.privacy.retentionChoice', { count: d })}
+                        </button>
+                      ))}
+                    </span>
                   </div>
                   <FoldedHelp className="max-w-prose">
                     {t('cases.privacy.retentionHelp')}

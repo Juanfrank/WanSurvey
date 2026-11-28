@@ -397,12 +397,20 @@ function SsoEditor({ sso }: { sso: Sso }) {
           disabled={!enabled}
         />
         {sso.autoProvisionAllowed === false ? null : (
-          <CheckField
-            label={t('admin.org.autoProvision')}
-            checked={enabled && autoProvision}
-            onChange={setAutoProvision}
-            disabled={!enabled}
-          />
+          <div className="flex items-center gap-1">
+            <CheckField
+              label={t('admin.org.autoProvision')}
+              checked={enabled && autoProvision}
+              onChange={setAutoProvision}
+              disabled={!enabled}
+            />
+            <InfoTip
+              id="sso-auto-provision"
+              term={t('admin.org.autoProvision')}
+              text={t('admin.org.autoProvisionInfo')}
+              align="end"
+            />
+          </div>
         )}
         {save.isError ? <ErrorText>{save.error.message || t('admin.org.error')}</ErrorText> : null}
         <div className="flex items-center gap-3">

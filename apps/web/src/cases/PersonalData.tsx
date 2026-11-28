@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, useNote } from '../i18n-messages.js';
 import { ErrorText } from '../routes/ui.js';
 
 /**
@@ -32,7 +32,7 @@ export function PersonalData({
   const [confirming, setConfirming] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState('');
+  const [done, setDone] = useNote();
   const download = useMutation({
     mutationFn: () => api(`/projects/${projectId}/cases/${caseId}/subject-data`),
     onSuccess: (data) => {
@@ -52,7 +52,7 @@ export function PersonalData({
       api(`/projects/${projectId}/cases/${caseId}/erase`, { method: 'POST', body: { note } }),
     onSuccess: async () => {
       setConfirming(false);
-      setDone(t('cases.privacy.erased'));
+      setDone({ key: 'cases.privacy.erased' });
       await qc.invalidateQueries({ queryKey: ['case', caseId] });
     },
     onError: (e) => setError(localiseError(t, e)),

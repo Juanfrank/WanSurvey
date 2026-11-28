@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useScoped } from './scope.js';
 import { api } from '../api.js';
 import { controlCls, inputCls } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, useNote } from '../i18n-messages.js';
 import { Button, ErrorText } from '../routes/ui.js';
 import { Num } from './samplingControls.js';
 import type { Sampling } from './SamplingTab.js';
@@ -29,7 +29,7 @@ export function BatchForm({
   const [confidence, setConfidence] = useState<number>(data.plan.size.confidence);
   const [margin, setMargin] = useState<number>(data.plan.size.margin);
   const [reason, setReason] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useNote();
   const [error, setError] = useState<string | null>(null);
   const suggested = Math.max(
     1,
@@ -47,8 +47,11 @@ export function BatchForm({
     onSuccess: async (r) => {
       setStatus(
         mode === 'replace'
-          ? t('cases.sampling.replaceDone', { added: r.added, withdrawn: r.withdrawn ?? 0 })
-          : t('cases.sampling.batchDone', { count: r.added }),
+          ? {
+              key: 'cases.sampling.replaceDone',
+              vars: { added: r.added, withdrawn: r.withdrawn ?? 0 },
+            }
+          : { key: 'cases.sampling.batchDone', vars: { count: r.added } },
       );
       setReason('');
       setError(null);
@@ -154,7 +157,7 @@ export function ReleaseForm({
   const [count, setCount] = useState(1);
   const [stratum, setStratum] = useState('');
   const [reason, setReason] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useNote();
   const [error, setError] = useState<string | null>(null);
   const release = useMutation({
     mutationFn: () =>
@@ -163,7 +166,7 @@ export function ReleaseForm({
         body: { count, stratum: stratum || null, reason },
       }),
     onSuccess: async (r) => {
-      setStatus(t('cases.sampling.releaseDone', { count: r.released }));
+      setStatus({ key: 'cases.sampling.releaseDone', vars: { count: r.released } });
       setReason('');
       setError(null);
       await onDone();
@@ -232,7 +235,7 @@ export function FieldForm({ projectId, onDone }: { projectId: string; onDone(): 
   const [count, setCount] = useState(10);
   const [prefix, setPrefix] = useState('F');
   const [cell, setCell] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useNote();
   const [error, setError] = useState<string | null>(null);
   const make = useMutation({
     mutationFn: () =>
@@ -241,7 +244,7 @@ export function FieldForm({ projectId, onDone }: { projectId: string; onDone(): 
         body: { count, prefix, ...(cell.trim() ? { cell: cell.trim() } : {}) },
       }),
     onSuccess: async (r) => {
-      setStatus(t('cases.sampling.fieldDone', { count: r.created }));
+      setStatus({ key: 'cases.sampling.fieldDone', vars: { count: r.created } });
       setError(null);
       await onDone();
     },

@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
 import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
-import { dispositionLabel, localiseError } from '../i18n-messages.js';
+import { dispositionLabel, localiseError, useNote } from '../i18n-messages.js';
 import { dateTime } from '../format.js';
 import { Button, Drawer, ErrorText } from '../routes/ui.js';
 import { ImportTab } from './ImportTab.js';
@@ -92,7 +92,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
     queryFn: () => api<Sampling>(scoped(`/projects/${projectId}/sampling`)),
   });
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [importing, setImporting] = useState(false);
@@ -116,7 +116,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
     mutationFn: (p: Plan) =>
       api(scoped(`/projects/${projectId}/sampling`), { method: 'PUT', body: p }),
     onSuccess: async () => {
-      setMessage(t('cases.sampling.saved'));
+      setMessage({ key: 'cases.sampling.saved' });
       setError(null);
       await refresh();
     },

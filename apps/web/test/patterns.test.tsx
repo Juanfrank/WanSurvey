@@ -296,6 +296,49 @@ describe('OverflowTabList', () => {
     // People is still under "More".
     expect(within(list).queryByRole('tab', { name: 'People' })).toBeNull();
   });
+
+  it('folds the tabs that do not fit under "More" on a phone too', () => {
+    // A 390 px phone: each tab (and "More") 100 px wide, 350 px for the row.
+    const restore = [
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(100),
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(350),
+    ];
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('max-width: 639px'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      function PhoneTabs() {
+        const [tab, setTab] = useState('calls');
+        const items = ['calls', 'cases', 'paper', 'results'].map((v) => ({ value: v, label: v }));
+        return (
+          <Tabs.Root value={tab} onValueChange={setTab}>
+            <OverflowTabList label="Project sections" value={tab} onSelect={setTab} items={items} />
+          </Tabs.Root>
+        );
+      }
+      render(<PhoneTabs />);
+      const list = screen.getByRole('tablist', { name: 'Project sections' });
+      expect(
+        within(list)
+          .getAllByRole('tab')
+          .map((x) => x.textContent),
+      ).toEqual(['calls', 'cases']);
+      expect(screen.getByRole('button', { name: 'More sections' })).toBeTruthy();
+    } finally {
+      restore.forEach((r) => r.mockRestore());
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('PageHeader', () => {

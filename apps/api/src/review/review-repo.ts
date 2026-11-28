@@ -16,6 +16,7 @@ import { REVIEW_DEVICE, ReviewStore } from './review-store.mssql.js';
 export interface ReviewQuery {
   status: string[];
   interviewerId?: string;
+  q?: string;
   mode?: string;
   disposition?: string;
   flag?: string;

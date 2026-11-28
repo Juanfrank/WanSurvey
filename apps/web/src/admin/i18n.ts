@@ -28,12 +28,14 @@ export const adminEn = {
       invited_one: 'invitation not accepted yet',
       invited_other: 'invitations not accepted yet',
       without2fa_one:
-        'person whose role requires two-step verification, with no authenticator app set up (a Microsoft sign-in with MFA also counts)',
+        'person whose role requires two-step verification, with no authenticator app set up',
       without2fa_other:
-        'people whose role requires two-step verification, with no authenticator app set up (a Microsoft sign-in with MFA also counts)',
+        'people whose role requires two-step verification, with no authenticator app set up',
       keysExpiring_one: 'API key ends within {{days}} days',
       keysExpiring_other: 'API keys end within {{days}} days',
     },
+    without2faTerm: 'Two-step verification',
+    without2faInfo: 'A Microsoft sign-in with MFA also counts.',
   },
   apiKeysPage: {
     intro:
@@ -434,7 +436,8 @@ export const adminEn = {
     enabled: 'Allow signing in with Microsoft',
     enforce: 'Require it (no password sign-in)',
     autoProvision:
-      'Create the account of anyone from these domains who signs in for the first time (with no role until an administrator assigns one)',
+      'Create the account of anyone from these domains who signs in for the first time',
+    autoProvisionInfo: 'The account has no role until an administrator assigns one.',
     domains: 'Allowed e-mail domains',
     domainsHint: 'Separated by commas, e.g. agency.org. Empty: any domain of the directory.',
     saveSso: 'Save sign-in settings',
@@ -523,12 +526,14 @@ export const adminEs: typeof adminEn = {
       invited_one: 'invitación aún sin aceptar',
       invited_other: 'invitaciones aún sin aceptar',
       without2fa_one:
-        'persona cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada (el ingreso con Microsoft con MFA también vale)',
+        'persona cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada',
       without2fa_other:
-        'personas cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada (el ingreso con Microsoft con MFA también vale)',
+        'personas cuyo rol exige la verificación en dos pasos, sin app de autenticación configurada',
       keysExpiring_one: 'clave de API vence en menos de {{days}} días',
       keysExpiring_other: 'claves de API vencen en menos de {{days}} días',
     },
+    without2faTerm: 'Verificación en dos pasos',
+    without2faInfo: 'El ingreso con Microsoft con MFA también vale.',
   },
   apiKeysPage: {
     intro:
@@ -929,8 +934,8 @@ export const adminEs: typeof adminEn = {
     secretKept: 'Hay un secreto guardado; déjalo vacío para conservarlo.',
     enabled: 'Permitir entrar con Microsoft',
     enforce: 'Exigirlo (sin entrar con contraseña)',
-    autoProvision:
-      'Crear la cuenta de quien ingrese por primera vez desde estos dominios (sin rol hasta que un administrador se lo asigne)',
+    autoProvision: 'Crear la cuenta de quien ingrese por primera vez desde estos dominios',
+    autoProvisionInfo: 'La cuenta queda sin rol hasta que un administrador se lo asigne.',
     domains: 'Dominios de correo permitidos',
     domainsHint:
       'Separados por comas, p. ej. agencia.org. Vacío: cualquier dominio del directorio.',

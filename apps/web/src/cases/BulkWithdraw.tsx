@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, type Note } from '../i18n-messages.js';
 import { Button } from '../routes/ui.js';
 
 /**
@@ -19,7 +19,7 @@ export function BulkWithdraw({
 }: {
   projectId: string;
   ids: string[];
-  onDone(message: string): void;
+  onDone(message: Note): void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -37,7 +37,7 @@ export function BulkWithdraw({
       setOpen(false);
       setReason('');
       setError('');
-      onDone(t('cases.withdraw.done', { count: r.withdrawn, skipped: r.skipped }));
+      onDone({ key: 'cases.withdraw.done', vars: { count: r.withdrawn, skipped: r.skipped } });
       await qc.invalidateQueries({ queryKey: ['cases', projectId] });
     },
     onError: (e) => setError(localiseError(t, e)),

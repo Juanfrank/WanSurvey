@@ -2,6 +2,8 @@
 export const reviewEn = {
   queue: {
     title: 'Interviews to review',
+    search: 'Search by case',
+    noMatch: 'No interview of a case with “{{term}}” under these filters.',
     status: 'Status',
     statuses: {
       'submitted,in_review': 'Waiting for review',
@@ -172,6 +174,8 @@ export type ReviewCatalogue = typeof reviewEn;
 export const reviewEs: ReviewCatalogue = {
   queue: {
     title: 'Entrevistas por revisar',
+    search: 'Buscar por caso',
+    noMatch: 'Ninguna entrevista de un caso con «{{term}}» con estos filtros.',
     status: 'Estado',
     statuses: {
       'submitted,in_review': 'Por revisar',

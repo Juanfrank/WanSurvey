@@ -21,6 +21,8 @@ export interface QueueFilter {
   projectId: string;
   status: string[];
   interviewerId?: string;
+  /** Part of the case's id. */
+  q?: string;
   mode?: string;
   /** Only interviews with this result (COMPLETE, SCREENED_OUT, REFUSAL…). */
   disposition?: string;
@@ -62,7 +64,15 @@ export class ReviewStore {
       ${f.sampled !== undefined ? sql`AND i.sampled = ${f.sampled ? 1 : 0}` : sql``}
       ${f.from ? sql`AND i.submitted_at >= ${`${f.from}T00:00:00Z`}` : sql``}
       ${f.to ? sql`AND i.submitted_at <= ${`${f.to}T23:59:59.999Z`}` : sql``}`;
+    // The case search and the interviewer narrow the rows, not the per-interviewer counts
+    // (a person chosen keeps their name in the list whatever the search).
     const where = sql`${shared}
+      ${
+        f.q
+          ? sql`AND EXISTS (SELECT 1 FROM cases qc WHERE qc.id = i.case_id
+              AND qc.external_id LIKE ${'%' + f.q.replace(/[%_[]/g, (c) => `[${c}]`) + '%'})`
+          : sql``
+      }
       ${f.interviewerId ? sql`AND i.interviewer_id = ${f.interviewerId}` : sql``}`;
     const total = await sql<{
       n: number;

@@ -14,7 +14,13 @@ import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
-import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
+import {
+  dispositionLabel,
+  localiseError,
+  modeLabel,
+  useNote,
+  type Note,
+} from '../i18n-messages.js';
 import { useMe } from '../routes/AppLayout.js';
 import { Button, PageHeader } from '../routes/ui.js';
 import { FlagChips, minutes } from './ReviewTab.js';
@@ -112,7 +118,7 @@ export function ReviewPage() {
   });
   const metricsTeam = useCan('metrics.team', projectId);
   const metricsOwn = useCan('metrics.own', projectId);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const [dialog, setDialog] = useState<To | null>(null);
   const [text, setText] = useState('');
   const [correcting, setCorrecting] = useState<string | null>(null);
@@ -141,11 +147,14 @@ export function ReviewPage() {
     onSuccess: async (_r, v) => {
       setDialog(null);
       setText('');
-      setMessage(t('review.screen.done', { status: t(`interview.status.${v.to}`) }));
+      setMessage({
+        key: 'review.screen.done',
+        vars: { status: { key: `interview.status.${v.to}` } },
+      });
       await qc.invalidateQueries({ queryKey: ['review-queue', projectId] });
       await refresh();
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
 
   useEffect(() => {
@@ -580,7 +589,7 @@ function CorrectDialog({
   compiled: CompiledQuestionnaire;
   variable: string;
   onClose(): void;
-  onDone(message: string): unknown;
+  onDone(message: Note): unknown;
 }) {
   const { t } = useTranslation();
   const name = variable
@@ -626,18 +635,21 @@ function CorrectDialog({
             },
           ).then(
             (r) =>
-              onDone(
-                t('review.screen.corrected', {
-                  cleared: [
-                    r.cleared.length
-                      ? t('review.screen.cleared', { keys: r.cleared.join(', ') })
-                      : '',
-                    r.restored.length
-                      ? t('review.screen.restored', { keys: r.restored.join(', ') })
-                      : '',
-                  ].join(' '),
-                }),
-              ),
+              onDone({
+                key: 'review.screen.corrected',
+                vars: {
+                  cleared: {
+                    parts: [
+                      r.cleared.length
+                        ? { key: 'review.screen.cleared', vars: { keys: r.cleared.join(', ') } }
+                        : null,
+                      r.restored.length
+                        ? { key: 'review.screen.restored', vars: { keys: r.restored.join(', ') } }
+                        : null,
+                    ],
+                  },
+                },
+              }),
             (err: unknown) => setError(localiseError(t, err)),
           );
         }}

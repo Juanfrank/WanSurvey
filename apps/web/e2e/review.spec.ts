@@ -92,9 +92,30 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   ).toBeVisible();
   await shot(sup, 'review-queue');
   await sup.getByRole('button', { name: 'Remove filter: Interviewer Demo interviewer' }).click();
-  // The other filters wait in the Filters panel, beside the Status kept in view.
-  await expect(sup.getByRole('combobox', { name: 'Status' })).toBeVisible();
+  // The search finds a case by part of its id (asked of the server, not of the rows shown).
+  const search = sup.getByRole('searchbox', { name: 'Search by case' });
+  await search.fill(caseId.slice(1));
+  await expect(queued).toBeVisible();
+  const queueRows = sup.getByTestId('review-queue').locator('tbody tr');
+  await expect
+    .poll(async () =>
+      (await queueRows.evaluateAll((rs) => rs.map((r) => r.getAttribute('data-case') ?? ''))).every(
+        (c) => c.includes(caseId.slice(1)),
+      ),
+    )
+    .toBe(true);
+  await search.fill('');
+  await expect(queueRows).toHaveCount(20);
+  // Every filter waits in the Filters panel, the Status too: it gets a chip only when it is
+  // not the queue's own ("Waiting for review").
+  await expect(sup.getByRole('button', { name: /^Remove filter: Status/ })).toHaveCount(0);
   await openFilters(sup);
+  const status = sup.getByRole('combobox', { name: 'Status' });
+  await status.selectOption('approved');
+  await expect(sup.getByRole('button', { name: 'Remove filter: Status Approved' })).toBeVisible();
+  await expect(queued).toHaveCount(0);
+  await status.selectOption('submitted,in_review');
+  await expect(sup.getByRole('button', { name: /^Remove filter: Status/ })).toHaveCount(0);
   await sup.getByRole('combobox', { name: 'Flag' }).selectOption('speeding');
   await expect(sup.getByRole('button', { name: 'Filters · 1' })).toBeVisible();
   await shot(sup, 'p2-review-queue-filters', { fullPage: false });
@@ -103,7 +124,6 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await closeFilters(sup);
   await expect(queued).toBeVisible();
   // The queue shows 20 interviews at a time.
-  const queueRows = sup.getByTestId('review-queue').locator('tbody tr');
   await expect(queueRows).toHaveCount(20);
   await sup.getByRole('button', { name: /^Show \d+ more \(\d+ left\)$/ }).click();
   await expect.poll(() => queueRows.count()).toBeGreaterThan(20);

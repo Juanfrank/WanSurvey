@@ -1,12 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
-import { dispositionLabel, localiseError, modeLabel } from '../i18n-messages.js';
-import { Button, FilterBar, type ActiveFilter } from '../routes/ui.js';
+import { dispositionLabel, localiseError, modeLabel, useNote } from '../i18n-messages.js';
+import { Button, ErrorText, FilterBar, type ActiveFilter } from '../routes/ui.js';
 
 export const FLAG_KINDS = [
   'speeding',
@@ -158,6 +158,13 @@ function Queue({ projectId }: { projectId: string }) {
     result: DISPOSITIONS.includes(raw.result ?? '') ? raw.result : undefined,
   };
   const [status, setStatus] = useState(STATUSES[0]!);
+  // Part of the case's id; asked of the server once typing pauses.
+  const [caseSearch, setCaseSearch] = useState('');
+  const [term, setTerm] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setTerm(caseSearch.trim()), 300);
+    return () => clearTimeout(id);
+  }, [caseSearch]);
   const [flag, setFlag] = useState('');
   const [mode, setMode] = useState('');
   const [disposition, setDispositionState] = useState(search.result ?? '');
@@ -188,6 +195,7 @@ function Queue({ projectId }: { projectId: string }) {
   const table = useRef<HTMLTableSectionElement>(null);
   // Up to 200 at once, shown 20 at a time.
   const params = new URLSearchParams({ status, limit: '200' });
+  if (term) params.set('q', term);
   if (flag) params.set('flag', flag);
   if (mode) params.set('mode', mode);
   if (disposition) params.set('disposition', disposition);
@@ -200,13 +208,18 @@ function Queue({ projectId }: { projectId: string }) {
       api<{ total: number; rows: QueueRow[]; interviewers?: InterviewerCount[] }>(
         `/projects/${projectId}/review/queue?${params.toString()}`,
       ),
+    // The rows in view stay while a new search or filter is asked for.
+    placeholderData: keepPreviousData,
   });
   const rows = q.data?.rows ?? [];
   const people = q.data?.interviewers ?? [];
   // The queue is shown by blocks of 20; a change of filters starts again from the first.
   const [visible, setVisible] = useState(BLOCK);
   const filtersKey = params.toString();
-  useEffect(() => setVisible(BLOCK), [filtersKey]);
+  useEffect(() => {
+    setVisible(BLOCK);
+    setActive(0);
+  }, [filtersKey]);
   const shown = rows.slice(0, visible);
   const open = (id: string) =>
     navigate({
@@ -220,6 +233,17 @@ function Queue({ projectId }: { projectId: string }) {
 
   const selectCls = `${controlCls} w-auto`;
   const chips: ActiveFilter[] = [
+    // The status gets a chip only when it is not the queue's own ("Waiting for review").
+    ...(status !== STATUSES[0]
+      ? [
+          {
+            id: 'status',
+            label: t('review.queue.status'),
+            value: t(`review.queue.statuses.${status}`),
+            onRemove: () => setStatus(STATUSES[0]!),
+          },
+        ]
+      : []),
     ...(flag
       ? [
           {
@@ -291,25 +315,29 @@ function Queue({ projectId }: { projectId: string }) {
         </h2>
         <FilterBar
           className="min-w-0 flex-1"
-          lead={
-            <label className="flex items-center gap-2">
-              <span>{t('review.queue.status')}</span>
-              <select
-                className={selectCls}
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`review.queue.statuses.${s}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          }
+          search={{
+            value: caseSearch,
+            onChange: setCaseSearch,
+            label: t('review.queue.search'),
+            className: 'w-full sm:w-56',
+          }}
           active={chips}
           count={t('review.queue.total', { count: q.data?.total ?? 0 })}
         >
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('review.queue.status')}</span>
+            <select
+              className={selectCls}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {t(`review.queue.statuses.${s}`)}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex flex-col gap-1">
             <span className="font-medium">{t('review.queue.flag')}</span>
             <select className={selectCls} value={flag} onChange={(e) => setFlag(e.target.value)}>
@@ -504,9 +532,13 @@ function Queue({ projectId }: { projectId: string }) {
           ) : null}
           <p className="mt-2 text-xs text-slate-600">{t('review.queue.keys')}</p>
         </div>
-      ) : (
-        <p className="text-slate-600">{t('review.queue.none')}</p>
-      )}
+      ) : q.isSuccess ? (
+        <p className="text-slate-600">
+          {term ? t('review.queue.noMatch', { term }) : t('review.queue.none')}
+        </p>
+      ) : q.isError ? (
+        <ErrorText>{localiseError(t, q.error)}</ErrorText>
+      ) : null}
     </section>
   );
 }
@@ -532,7 +564,7 @@ function Coding({ projectId }: { projectId: string }) {
   useEffect(() => setCodes(detail.data?.codes ?? []), [detail.data?.codes]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [code, setCode] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const refresh = async (d: CodingDetail) => {
     qc.setQueryData(['coding', projectId, current], d);
     await qc.invalidateQueries({ queryKey: ['coding', projectId], exact: true });
@@ -544,7 +576,7 @@ function Coding({ projectId }: { projectId: string }) {
         body: { codes: codes.filter((c) => c.code && c.label.trim()) },
       }),
     onSuccess: refresh,
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
   const assign = useMutation({
     mutationFn: () =>
@@ -556,11 +588,11 @@ function Coding({ projectId }: { projectId: string }) {
         },
       }),
     onSuccess: async (d) => {
-      setMessage(t('review.coding.applied', { count: d.changed }));
+      setMessage({ key: 'review.coding.applied', vars: { count: d.changed } });
       setPicked(new Set());
       await refresh(d);
     },
-    onError: (e) => setMessage(localiseError(t, e)),
+    onError: (e) => setMessage({ error: e }),
   });
 
   return (

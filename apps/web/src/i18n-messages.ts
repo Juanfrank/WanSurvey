@@ -1,5 +1,8 @@
 import type { TFunction } from 'i18next';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiError } from './api.js';
+import { dateTime } from './format.js';
 
 interface WithMsg {
   message?: string;
@@ -45,3 +48,61 @@ export const dispositionLabel = (t: TFunction, code: string) =>
 /** A data-collection mode (CATI, CAPI, CAWI, PAPI) by its everyday name. */
 export const modeLabel = (t: TFunction, mode: string) =>
   t(`analysis.modes.${mode}`, { defaultValue: mode });
+
+/**
+ * A status message ("Settings saved.", "11 personal links made.") kept as its translation key
+ * and values, or as the error it reports, and written out in the interface language each time
+ * it is shown. A message kept as finished text stayed in the language of the moment it was
+ * made: switch the language and it did not follow.
+ *
+ * - `{ key, vars }`: a value of `vars` that is itself a note is written out too (a status name
+ *   inside the sentence, `{ key: 'interview.status.approved' }`).
+ * - `{ error }`: written out with `localiseError`.
+ * - `{ parts }`: sentences one after the other ("12 cases assigned. 3 were skipped.").
+ * - `{ dateTime }`: a moment, in the short date and time of the current language.
+ * - `{ text }`: what has no language (an address to copy by hand).
+ */
+export type Note =
+  | { key: string; vars?: Record<string, unknown> }
+  | { error: unknown }
+  | { text: string }
+  | { dateTime: string | number | Date }
+  | { parts: Note[] }
+  | null;
+
+const NOTE_KINDS = ['key', 'error', 'text', 'dateTime', 'parts'];
+const isNote = (v: unknown): v is Exclude<Note, null> =>
+  !!v && typeof v === 'object' && !(v instanceof Date) && NOTE_KINDS.some((k) => k in v);
+
+/** Writes a `Note` out in the current language ('' for none). */
+export function noteText(t: TFunction, note: Note): string {
+  if (!note) return '';
+  if ('error' in note) return localiseError(t, note.error);
+  if ('text' in note) return note.text;
+  if ('dateTime' in note) return dateTime(note.dateTime);
+  if ('parts' in note)
+    return note.parts
+      .map((p) => noteText(t, p))
+      .filter(Boolean)
+      .join(' ');
+  const vars = Object.fromEntries(
+    Object.entries(note.vars ?? {}).map(([k, v]) => [k, isNote(v) ? noteText(t, v) : v]),
+  );
+  return t(note.key, vars);
+}
+
+/**
+ * `useState` for a status message: `[text, setNote]`, where `text` is drafted at each render
+ * (so it follows the language) and `setNote({ key, vars })`, `setNote({ error })` or
+ * `setNote(null)` changes it.
+ *
+ *   const [message, setMessage] = useNote();
+ *   onSuccess: (r) => setMessage({ key: 'cawi.links.made', vars: { count: r.links } }),
+ *   onError: (e) => setMessage({ error: e }),
+ *   <p role="status">{message}</p>
+ */
+export function useNote(initial: Note = null) {
+  const { t } = useTranslation();
+  const [note, setNote] = useState<Note>(initial);
+  return [noteText(t, note), setNote] as const;
+}

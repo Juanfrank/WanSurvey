@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { CheckField, FoldedHelp, NumberField, SelectField } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, type Note } from '../i18n-messages.js';
 import { Button, ErrorText } from '../routes/ui.js';
 import { isFieldWorker, type Assignee } from './hooks.js';
 
@@ -47,7 +47,7 @@ export function DistributeDialog({
   caseIds: string[];
   people: Assignee[];
   onClose(): void;
-  onDone(message: string): void;
+  onDone(message: Note): void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -107,10 +107,12 @@ export function DistributeDialog({
     onSuccess: async (r) => {
       await qc.invalidateQueries({ queryKey: ['cases', projectId] });
       await qc.invalidateQueries({ queryKey: ['assignees', projectId] });
-      onDone(
-        t('cases.distribute.done', { count: r.changed, people: chosen.size }) +
-          (r.free ? ` ${t('cases.distribute.leftFree', { count: r.free })}` : ''),
-      );
+      onDone({
+        parts: [
+          { key: 'cases.distribute.done', vars: { count: r.changed, people: chosen.size } },
+          r.free ? { key: 'cases.distribute.leftFree', vars: { count: r.free } } : null,
+        ],
+      });
     },
   });
   const all = field.length > 0 && field.every((p) => chosen.has(p.userId));

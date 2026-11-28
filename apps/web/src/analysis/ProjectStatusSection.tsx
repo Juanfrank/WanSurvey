@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { FoldedHelp } from '../designer/fields.js';
-import { localiseError } from '../i18n-messages.js';
+import { localiseError, useNote } from '../i18n-messages.js';
 import { Button, ErrorText, QueryState } from '../routes/ui.js';
 
 type Status = 'draft' | 'active' | 'closed' | 'archived';
@@ -42,7 +42,7 @@ interface Closeout {
 export function ProjectStatusSection({ project }: { project: Project }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useNote();
   const [error, setError] = useState<string | null>(null);
   const status = (project.status in MOVES ? project.status : 'draft') as Status;
   const closeout = useQuery({
@@ -56,12 +56,15 @@ export function ProjectStatusSection({ project }: { project: Project }) {
     onSuccess: async (p) => {
       qc.setQueryData(['project', project.id], p);
       setError(null);
-      setMessage(t('analysis.lifecycle.changed', { status: t(`app.projectStatus.${p.status}`) }));
+      setMessage({
+        key: 'analysis.lifecycle.changed',
+        vars: { status: { key: `app.projectStatus.${p.status}` } },
+      });
       await qc.invalidateQueries({ queryKey: ['projects'] });
       await qc.invalidateQueries({ queryKey: ['closeout', project.id] });
     },
     onError: (e) => {
-      setMessage('');
+      setMessage(null);
       setError(localiseError(t, e));
     },
   });

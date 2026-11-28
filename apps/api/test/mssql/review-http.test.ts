@@ -353,6 +353,17 @@ describe.skipIf(!configured)('SQL Server: answer review over HTTP', () => {
     expect(
       (await sup.agent.get(`/api/v1/projects/${project}/review/queue?disposition=NOPE`)).status,
     ).toBe(400);
+    // By part of the case's id; LIKE wildcards in the text are taken literally.
+    const [cs] = await rows(sql`SELECT external_id FROM cases WHERE id = ${caseId}`);
+    const ext = cs!.external_id as string;
+    const found = await sup.agent.get(
+      `/api/v1/projects/${project}/review/queue?q=${encodeURIComponent(ext.slice(1))}`,
+    );
+    expect(found.body.rows.map((r: { id: string }) => r.id)).toContain(id);
+    for (const r of found.body.rows as { externalId: string | null }[])
+      expect(r.externalId).toContain(ext.slice(1));
+    const none = await sup.agent.get(`/api/v1/projects/${project}/review/queue?q=%25`);
+    expect(none.body.total).toBe(0);
     await post(sup, `/review/interviews/${id}/transition`, {
       to: 'rejected',
       comment: 'Entrevista inventada',
