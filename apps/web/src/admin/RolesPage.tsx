@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
 import { smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { Button, Card, ErrorText, PageHeader } from '../routes/ui.js';
 import { PERMISSION_AREAS, permKey, type RolesView } from './permissions.js';
 
@@ -30,9 +31,10 @@ export function draftChanges(
 }
 
 /**
- * What each role may do in the organisation: a matrix of permissions by role. Owners and
- * administrators keep everything; the other roles can be adjusted, and a role can go back to
- * its defaults.
+ * What each role may do in the organisation: a matrix of permissions by role, grouped by area
+ * in rows that fold (folded, each role's count in the area). The row of role names stays at the
+ * top and the permission names at the left while the matrix scrolls. Owners and administrators
+ * keep everything; the other roles can be adjusted, and a role can go back to its defaults.
  */
 export function RolesPage() {
   const { t } = useTranslation();
@@ -46,6 +48,8 @@ export function RolesPage() {
   const [draft, setDraft] = useState<Record<string, string[]> | null>(null);
   const [saved, setSaved] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // The areas unfolded; folded, an area's row says how many of its permissions each role has.
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
   // How many people hold each role, for the confirmation (only for who may see the people).
   const people = useQuery({
     queryKey: ['team', me.data?.tenantId],
@@ -92,165 +96,254 @@ export function RolesPage() {
     });
   };
 
+  const isOn = (r: RolesView['roles'][number], p: string) =>
+    r.editable ? !!draft?.[r.role]?.includes(p) : r.permissions.includes(p);
+  const allOpen = open.size === PERMISSION_AREAS.length;
+  const flip = (area: string) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(area)) n.delete(area);
+      else n.add(area);
+      return n;
+    });
+
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={t('admin.roles')} />
-      <p className="max-w-3xl text-slate-600">{t('admin.rolesPage.intro')}</p>
-      <p className="flex max-w-3xl items-start gap-2 text-sm text-slate-600">
-        <SensitiveMark />
-        {t('admin.rolesPage.sensitiveLegend')}
-      </p>
-      <Card className="overflow-x-auto">
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={t('admin.roles')}
+        aside={
+          <InfoTip
+            id="roles-intro"
+            term={t('admin.roles')}
+            text={t('admin.rolesPage.intro')}
+            align="start"
+          />
+        }
+      />
+      <Card className="flex flex-col gap-3 p-4!">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={smallBtn}
+            onClick={() =>
+              setOpen(allOpen ? new Set() : new Set(PERMISSION_AREAS.map((a) => a.area)))
+            }
+          >
+            {allOpen ? t('admin.rolesPage.collapseAll') : t('admin.rolesPage.expandAll')}
+          </button>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {unsaved ? (
+              <span className="text-sm font-medium text-amber-ink-800" data-testid="roles-unsaved">
+                {t('admin.rolesPage.unsaved', { count: unsaved })}
+              </span>
+            ) : null}
+            <p role="status" className="text-sm text-emerald-ink-800 empty:hidden">
+              {saved ? t('admin.rolesPage.saved') : null}
+            </p>
+            <button
+              type="button"
+              className={smallBtn}
+              disabled={!data}
+              onClick={() => {
+                setSaved(false);
+                setDraft(
+                  Object.fromEntries(
+                    (data?.roles ?? []).filter((r) => r.editable).map((r) => [r.role, r.defaults]),
+                  ),
+                );
+              }}
+            >
+              {t('admin.rolesPage.reset')}
+            </button>
+            <Button
+              size="sm"
+              disabled={!draft || save.isPending}
+              onClick={() => {
+                setSaved(false);
+                save.reset();
+                setConfirming(true);
+              }}
+            >
+              {t('admin.rolesPage.save')}
+            </Button>
+          </div>
+        </div>
+        {save.isError && !confirming ? <ErrorText>{t('admin.rolesPage.error')}</ErrorText> : null}
         {data && draft ? (
-          <table className="w-full min-w-[56rem] text-left text-sm" data-testid="roles-matrix">
-            <thead>
-              <tr className="border-b border-slate-200 align-bottom">
-                <th className="py-2 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {t('admin.rolesPage.permission')}
-                </th>
-                {data.roles.map((r) => (
-                  <th key={r.role} className="w-28 px-2 py-2 text-center">
-                    <div className="font-semibold">{roleName(r.role)}</div>
-                    {r.editable ? (
-                      <button
-                        type="button"
-                        className="mt-1 text-xs font-medium text-indigo-ink-700 hover:underline disabled:invisible"
-                        aria-label={t('admin.rolesPage.resetRole', { role: roleName(r.role) })}
-                        disabled={
-                          (draft[r.role] ?? []).length === r.defaults.length &&
-                          r.defaults.every((p) => draft[r.role]?.includes(p))
-                        }
-                        onClick={() => {
-                          setSaved(false);
-                          setDraft({ ...draft, [r.role]: r.defaults });
-                        }}
-                      >
-                        {t('admin.rolesPage.resetShort')}
-                      </button>
-                    ) : (
-                      <div className="mt-1 text-xs text-slate-500">
-                        {t('admin.rolesPage.fixed')}
-                      </div>
-                    )}
+          // Scrolls on its own, both ways, so the row of role names stays at the top and the
+          // permission names at the left.
+          <div
+            role="region"
+            aria-label={t('admin.roles')}
+            tabIndex={0}
+            className="relative max-h-[calc(100dvh-11rem)] min-h-64 overflow-auto rounded-md border border-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <table
+              className="w-full min-w-[56rem] border-separate border-spacing-0 text-left text-sm"
+              data-testid="roles-matrix"
+            >
+              <thead>
+                <tr className="align-bottom">
+                  <th className="sticky left-0 top-0 z-30 border-b border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {t('admin.rolesPage.permission')}
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {PERMISSION_AREAS.map(({ area, permissions }) => (
-                <Fragment key={area}>
-                  <tr>
+                  {data.roles.map((r) => (
                     <th
-                      colSpan={data.roles.length + 1}
-                      scope="colgroup"
-                      className="bg-slate-50 px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                      key={r.role}
+                      className="sticky top-0 z-20 w-24 border-b border-slate-200 bg-white px-2 py-2 text-center"
                     >
-                      {t(`admin.permAreas.${area}`)}
+                      <div className="text-xs font-semibold leading-tight">{roleName(r.role)}</div>
+                      {r.editable ? (
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-indigo-ink-700 hover:underline disabled:invisible"
+                          aria-label={t('admin.rolesPage.resetRole', { role: roleName(r.role) })}
+                          disabled={
+                            (draft[r.role] ?? []).length === r.defaults.length &&
+                            r.defaults.every((p) => draft[r.role]?.includes(p))
+                          }
+                          onClick={() => {
+                            setSaved(false);
+                            setDraft({ ...draft, [r.role]: r.defaults });
+                          }}
+                        >
+                          {t('admin.rolesPage.resetShort')}
+                        </button>
+                      ) : (
+                        <div className="text-xs text-slate-500">{t('admin.rolesPage.fixed')}</div>
+                      )}
                     </th>
-                  </tr>
-                  {permissions.map((p) => {
-                    const reserved = data.reserved.includes(p);
-                    return (
-                      <tr key={p} className="border-b border-slate-100" data-permission={p}>
-                        <th scope="row" className="min-w-[15rem] py-1.5 pr-4 font-normal">
-                          <span className="inline-flex items-center gap-1.5">
-                            {t(permKey(p))}
-                            {isSensitive(p) ? <SensitiveMark /> : null}
-                          </span>
-                          {reserved ? (
-                            <span className="block text-xs text-slate-500">
-                              {t('admin.rolesPage.reserved')}
+                  ))}
+                </tr>
+              </thead>
+              {PERMISSION_AREAS.map(({ area, permissions }) => {
+                const shown = open.has(area);
+                const body = `roles-area-${area}`;
+                return (
+                  <Fragment key={area}>
+                    <tbody data-area={area}>
+                      <tr>
+                        <th
+                          scope="row"
+                          className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 p-0"
+                        >
+                          <button
+                            type="button"
+                            aria-expanded={shown}
+                            aria-controls={body}
+                            className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-700 hover:text-indigo-ink-700"
+                            onClick={() => flip(area)}
+                          >
+                            <span aria-hidden="true" className="w-3">
+                              {shown ? '▾' : '▸'}
                             </span>
-                          ) : null}
+                            {t(`admin.permAreas.${area}`)}
+                            <span className="font-normal normal-case tracking-normal text-slate-500">
+                              · {t('admin.rolesPage.areaSize', { count: permissions.length })}
+                            </span>
+                          </button>
                         </th>
                         {data.roles.map((r) => {
-                          const on = r.editable
-                            ? !!draft[r.role]?.includes(p)
-                            : r.permissions.includes(p);
-                          const changed = r.editable && on !== r.defaults.includes(p);
-                          // Every role sees its organisation; reserved ones stay with admins.
-                          const locked = !r.editable || reserved || p === 'tenant.read';
+                          const on = permissions.filter((p) => isOn(r, p)).length;
+                          const changed =
+                            r.editable &&
+                            permissions.some((p) => isOn(r, p) !== r.defaults.includes(p));
                           return (
                             <td
                               key={r.role}
-                              className={`p-0 text-center ${changed ? 'bg-amber-50' : ''}`}
+                              className={`border-b border-slate-200 px-2 py-2 text-center text-xs tabular-nums text-slate-600 ${changed ? 'bg-amber-50' : 'bg-slate-50'}`}
                               title={changed ? t('admin.rolesPage.changed') : undefined}
                             >
-                              {locked && !on ? (
-                                <span className="text-slate-300">
-                                  <span aria-hidden="true">—</span>
-                                  <span className="sr-only">
-                                    {t('admin.rolesPage.notApplicable')}
-                                  </span>
-                                </span>
-                              ) : (
-                                // The whole cell is the target, not only the 16 px box.
-                                <label
-                                  className={`flex min-h-10 min-w-10 items-center justify-center px-2 py-1.5 ${locked ? '' : 'cursor-pointer hover:bg-indigo-50'}`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4"
-                                    checked={on}
-                                    disabled={locked}
-                                    aria-label={`${t('admin.rolesPage.allow', {
-                                      role: roleName(r.role),
-                                      permission: t(permKey(p)),
-                                    })}${changed ? ` (${t('admin.rolesPage.changedShort')})` : ''}`}
-                                    onChange={(e) => toggle(r.role, p, e.target.checked)}
-                                  />
-                                </label>
-                              )}
+                              <span aria-hidden="true">
+                                {on}/{permissions.length}
+                              </span>
+                              <span className="sr-only">
+                                {t('admin.rolesPage.areaCount', {
+                                  role: roleName(r.role),
+                                  on,
+                                  total: permissions.length,
+                                })}
+                              </span>
                             </td>
                           );
                         })}
                       </tr>
-                    );
-                  })}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                    </tbody>
+                    <tbody id={body} hidden={!shown}>
+                      {permissions.map((p) => {
+                        const reserved = data.reserved.includes(p);
+                        return (
+                          <tr key={p} data-permission={p}>
+                            <th
+                              scope="row"
+                              className="sticky left-0 z-10 min-w-[14rem] border-b border-slate-100 bg-white py-1.5 pl-8 pr-4 font-normal"
+                            >
+                              <span className="inline-flex items-center gap-1.5">
+                                {t(permKey(p))}
+                                {isSensitive(p) ? <SensitiveMark /> : null}
+                              </span>
+                              {reserved ? (
+                                <span className="block text-xs text-slate-500">
+                                  {t('admin.rolesPage.reserved')}
+                                </span>
+                              ) : null}
+                            </th>
+                            {data.roles.map((r) => {
+                              const on = isOn(r, p);
+                              const changed = r.editable && on !== r.defaults.includes(p);
+                              // Every role sees its organisation; reserved ones stay with admins.
+                              const locked = !r.editable || reserved || p === 'tenant.read';
+                              return (
+                                <td
+                                  key={r.role}
+                                  className={`border-b border-slate-100 p-0 text-center ${changed ? 'bg-amber-50' : ''}`}
+                                  title={changed ? t('admin.rolesPage.changed') : undefined}
+                                >
+                                  {locked && !on ? (
+                                    <span className="text-slate-300">
+                                      <span aria-hidden="true">—</span>
+                                      <span className="sr-only">
+                                        {t('admin.rolesPage.notApplicable')}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    // The whole cell is the target, not only the 16 px box.
+                                    <label
+                                      className={`flex min-h-10 min-w-10 items-center justify-center px-2 py-1.5 ${locked ? '' : 'cursor-pointer hover:bg-indigo-50'}`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        className="h-4 w-4"
+                                        checked={on}
+                                        disabled={locked}
+                                        aria-label={`${t('admin.rolesPage.allow', {
+                                          role: roleName(r.role),
+                                          permission: t(permKey(p)),
+                                        })}${changed ? ` (${t('admin.rolesPage.changedShort')})` : ''}`}
+                                        onChange={(e) => toggle(r.role, p, e.target.checked)}
+                                      />
+                                    </label>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Fragment>
+                );
+              })}
+            </table>
+          </div>
         ) : (
           <div aria-busy="true" className="h-40" />
         )}
-      </Card>
-      {save.isError && !confirming ? <ErrorText>{t('admin.rolesPage.error')}</ErrorText> : null}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          disabled={!draft || save.isPending}
-          onClick={() => {
-            setSaved(false);
-            save.reset();
-            setConfirming(true);
-          }}
-        >
-          {t('admin.rolesPage.save')}
-        </Button>
-        {unsaved ? (
-          <span className="text-sm font-medium text-amber-ink-800" data-testid="roles-unsaved">
-            {t('admin.rolesPage.unsaved', { count: unsaved })}
-          </span>
-        ) : null}
-        <button
-          type="button"
-          className={smallBtn}
-          disabled={!data}
-          onClick={() => {
-            setSaved(false);
-            setDraft(
-              Object.fromEntries(
-                (data?.roles ?? []).filter((r) => r.editable).map((r) => [r.role, r.defaults]),
-              ),
-            );
-          }}
-        >
-          {t('admin.rolesPage.reset')}
-        </button>
-        <p role="status" className="text-sm text-emerald-ink-800 empty:hidden">
-          {saved ? t('admin.rolesPage.saved') : null}
+        <p className="flex items-start gap-2 text-xs text-slate-600">
+          <SensitiveMark />
+          {t('admin.rolesPage.sensitiveLegend')}
         </p>
-      </div>
+      </Card>
       {confirming ? (
         <Dialog title={t('admin.rolesPage.confirmTitle')} onClose={() => setConfirming(false)}>
           <div className="flex flex-col gap-4" data-testid="roles-confirm">

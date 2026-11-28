@@ -13,7 +13,7 @@ Target: WCAG 2.2 AA on every screen, including the respondent's web survey (spec
 | Designing a questionnaire by keyboard                                                                                                                                                                                                                                                                             | `e2e/designer.spec.ts`                        | CI               |
 | A web respondent by keyboard only, on a phone                                                                                                                                                                                                                                                                     | `e2e/hardening.spec.ts`                       | CI               |
 | Touch targets of at least 44 × 44 px on the respondent's phone screen                                                                                                                                                                                                                                             | `e2e/hardening.spec.ts`                       | CI               |
-| 200% zoom (a 640 px layout): no sideways scrolling on the respondent and project pages                                                                                                                                                                                                                            | `e2e/hardening.spec.ts`                       | CI               |
+| 200% zoom (a 640 px layout): no sideways scrolling on the respondent, project and admin pages                                                                                                                                                                                                                     | `e2e/hardening.spec.ts`                       | CI               |
 | Configurable don't know / refused keys                                                                                                                                                                                                                                                                            | `packages/renderer/test/runner.test.tsx`      | CI               |
 | Every question type as a respondent (1280 and 320 px) and an interviewer sees it: axe before and after answering and with errors shown, no sideways scrolling at 320 px                                                                                                                                           | `e2e/a11y-renderer.spec.ts`                   | CI               |
 | Chosen scale points readable on their colour (4.5:1), ranking focus kept, `aria-invalid`                                                                                                                                                                                                                          | `packages/renderer/test`                      | CI               |
@@ -79,13 +79,13 @@ interface in Spanish and then in English.
 | An interview (CAPI)     | Open an assigned case, answer three questions with digits, record a note, pause                                                               | Question text, then options with their codes; errors read when Next is refused; the note dialog's title                                                                                       |
 
 **Zoom at 200 %** (or a 640 px window): besides the respondent and project pages that
-`e2e/hardening.spec.ts` checks, look at Users, Roles, Activity log and Organisation, and the web
-survey style in project settings. Nothing may need sideways scrolling of the page (a wide table
+`e2e/hardening.spec.ts` checks (including Users, Roles and permissions, Activity log and
+Organisation), look at the other administration pages and the web survey style in project
+settings. Nothing may need sideways scrolling of the page (a wide table
 may scroll inside its own box) and no menu, dialog or sticky bar may cover the focused control.
 
 ## Known limits
 
 - Screen-reader testing in CI is done with the axe rules and the accessibility tree in Playwright, not with a screen reader; the manual plan above covers NVDA and VoiceOver before each major release.
-- At 200 % zoom `e2e/hardening.spec.ts` checks Activity log and Organisation. Users (726 px wide in a 640 px window) and Roles and permissions (903 px) still scroll sideways and are checked by hand (manual plan above) until that is fixed.
 - The case map (Leaflet) is decorative for keyboard users: every case on it is also in the list, with its address.
 - "Go to question" moves by section, then to the question within it; a search by variable or text is in phase 2.

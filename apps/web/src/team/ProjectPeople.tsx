@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { Role } from '@wansurvey/schema';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
 import { Dialog } from '../designer/Dialog.js';
-import { inputCls, smallBtn } from '../designer/fields.js';
+import { inputCls } from '../designer/fields.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { permKey } from '../admin/permissions.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText } from '../routes/ui.js';
+import { Button, Card, Drawer, ErrorText, MoreMenu, TableScroll } from '../routes/ui.js';
 import { RoleGuide } from './RoleGuide.js';
 
 interface People {
@@ -78,8 +79,16 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <h2 className="text-xl font-semibold">{t('team.projectPeople.title')}</h2>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-1">
+          <h2 className="text-xl font-semibold">{t('team.projectPeople.title')}</h2>
+          <InfoTip
+            id="project-people"
+            term={t('team.projectPeople.title')}
+            text={t('team.projectPeople.intro')}
+            align="start"
+          />
+        </div>
         {data?.canManage ? (
           <Button onClick={() => setEditing({})}>{t('team.projectPeople.add')}</Button>
         ) : null}
@@ -92,11 +101,9 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
           </Link>
         ) : null}
       </div>
-      <p className="-mt-2 max-w-3xl text-sm text-slate-600">
-        {t('team.projectPeople.intro')}{' '}
-        {data && !data.canManage ? t('team.projectPeople.readOnly') : ''}
-      </p>
-      <RoleGuide />
+      {data && !data.canManage ? (
+        <p className="-mt-2 text-sm text-slate-600">{t('team.projectPeople.readOnly')}</p>
+      ) : null}
       {notice ? (
         <p
           role="status"
@@ -106,11 +113,11 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
         </p>
       ) : null}
       {save.isError && !editing ? <ErrorText>{errorText(save.error)}</ErrorText> : null}
-      <Card className="overflow-x-auto">
+      <Card className="flex flex-col gap-3 p-4!">
         {data && !data.members.length ? (
           <p className="text-slate-600">{t('team.projectPeople.none')}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <TableScroll label={t('team.projectPeople.title')}>
             <table className="w-full text-left text-sm" aria-busy={people.isLoading}>
               <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -129,40 +136,39 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
                   const mine = data!.grantable.includes(m.role) && m.userId !== me.data?.user.id;
                   return (
                     <tr key={m.userId} data-person={m.email} className="border-b border-slate-100">
-                      <td className="py-2 pr-4">
-                        <div className="font-medium">{m.name}</div>
-                        <div className="text-xs text-slate-500">{m.email}</div>
+                      <td className="whitespace-nowrap py-1.5 pr-4">
+                        <span className="font-medium">{m.name}</span>
+                        <span className="ml-2 text-xs text-slate-500">{m.email}</span>
                       </td>
-                      <td className="py-2 pr-4">
+                      <td className="whitespace-nowrap py-1.5 pr-4">
                         <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-ink-700">
                           {roleName(m.role)}
                         </span>
                       </td>
-                      <td className="py-2 pr-4 text-xs text-slate-600">
+                      <td className="whitespace-nowrap py-1.5 pr-4 text-xs text-slate-600">
                         {m.orgRole ? roleName(m.orgRole) : '—'}
                       </td>
                       {data?.canManage ? (
-                        <td className="py-2">
+                        <td className="py-1 text-right">
                           {mine ? (
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                className={smallBtn}
-                                aria-label={t('team.projectPeople.change', { name: m.name })}
-                                onClick={() => setEditing({ userId: m.userId, role: m.role })}
-                              >
-                                {t('team.projectPeople.changeShort')}
-                              </button>
-                              <button
-                                type="button"
-                                className={smallBtn}
-                                aria-label={t('team.projectPeople.remove', { name: m.name })}
-                                disabled={save.isPending}
-                                onClick={() => setRemoving({ userId: m.userId, name: m.name })}
-                              >
-                                {t('team.projectPeople.removeShort')}
-                              </button>
-                            </div>
+                            <MoreMenu
+                              label={t('team.projectPeople.actionsFor', { name: m.name })}
+                              entries={[
+                                {
+                                  type: 'item',
+                                  id: 'change',
+                                  label: t('team.projectPeople.changeMenu'),
+                                  onSelect: () => setEditing({ userId: m.userId, role: m.role }),
+                                },
+                                {
+                                  type: 'item',
+                                  id: 'remove',
+                                  label: t('team.projectPeople.removeMenu'),
+                                  disabled: save.isPending,
+                                  onSelect: () => setRemoving({ userId: m.userId, name: m.name }),
+                                },
+                              ]}
+                            />
                           ) : null}
                         </td>
                       ) : null}
@@ -171,8 +177,9 @@ export function ProjectPeople({ projectId }: { projectId: string }) {
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         )}
+        <RoleGuide />
       </Card>
       {removing ? (
         <Dialog
@@ -254,16 +261,32 @@ function PersonDialog({
         (!q || `${c.name} ${c.email}`.toLowerCase().includes(q)),
     );
   }, [people, meId, query]);
+  const formId = useId();
   return (
-    <Dialog
+    <Drawer
       title={
         editing
           ? t('team.projectPeople.change', { name: person?.name ?? '' })
           : t('team.projectPeople.add')
       }
       onClose={onClose}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('team.projectPeople.cancel')}
+          </Button>
+          <Button
+            type="submit"
+            form={formId}
+            disabled={!userId || pending || (needsReason && reason.trim().length < 3)}
+          >
+            {t('team.projectPeople.save')}
+          </Button>
+        </>
+      }
     >
       <form
+        id={formId}
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
@@ -350,18 +373,7 @@ function PersonDialog({
         ) : null}
         <RoleGuide roles={people.grantable} />
         {error ? <ErrorText>{error}</ErrorText> : null}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            {t('team.projectPeople.cancel')}
-          </Button>
-          <Button
-            type="submit"
-            disabled={!userId || pending || (needsReason && reason.trim().length < 3)}
-          >
-            {t('team.projectPeople.save')}
-          </Button>
-        </div>
       </form>
-    </Dialog>
+    </Drawer>
   );
 }

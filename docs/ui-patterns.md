@@ -148,6 +148,20 @@ The modal `Dialog` laid out against the right edge (full screen on a phone): foc
 Escape and ✕ close it, focus returns to the button that opened it, named by its title. Use it
 instead of a form card above the list or a form at the bottom of the page.
 
+## Long help: an ⓘ
+
+A page's introduction, or the help of a card, goes behind an ⓘ beside its title instead of a
+paragraph above the content: `InfoTip` (`cases/samplingControls.tsx`) with `text`. Beside a
+page title, pass it as `PageHeader`'s `aside` with `align="start"`. Notices that matter (read
+only, a warning) stay in view, small.
+
+```tsx
+<PageHeader
+  title={t('team.title')}
+  aside={<InfoTip id="team-intro" term={t('team.title')} text={t('team.intro')} align="start" />}
+/>
+```
+
 ## End-to-end tests
 
 `e2e/helpers.ts` has:

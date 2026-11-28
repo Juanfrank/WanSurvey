@@ -5,7 +5,15 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, PageHeader } from '../routes/ui.js';
+import { InfoTip } from '../cases/samplingControls.js';
+import {
+  Button,
+  Card,
+  FilterBar,
+  PageHeader,
+  TableScroll,
+  type ActiveFilter,
+} from '../routes/ui.js';
 import { AUDIT_ACTIONS, AUDIT_PRESETS, type AuditPreset } from './audit-actions.js';
 import { actionLabel, describeDetails, type DescribeContext } from './audit-details.js';
 
@@ -20,7 +28,8 @@ interface Entry {
   at: string;
 }
 
-const PAGE = 50;
+/** Entries per step: the list grows by blocks of 20. */
+const PAGE = 20;
 const areaOf = (action: string) => action.split('.')[0]!;
 const PRESETS = Object.keys(AUDIT_PRESETS) as AuditPreset[];
 const chip =
@@ -28,8 +37,8 @@ const chip =
 
 /**
  * The organisation's activity log, newest first: quick filters (corrections, exports, personal
- * data…), filters by action, person, project, case and dates, pages of 50 with no cap, and each
- * entry's details in words.
+ * data…), filters by action, person, project, case and dates (all in the Filters panel, those
+ * that are on as chips), blocks of 20 with no cap, and each entry's details in words.
  */
 export function AuditPage() {
   const { t, i18n } = useTranslation();
@@ -132,17 +141,6 @@ export function AuditPage() {
       else n.add(id);
       return n;
     });
-  const filtered = !!(preset || action || actor || project || caseRef || from || to);
-  const clear = () => {
-    setPreset('');
-    setAction('');
-    setActor('');
-    setProject('');
-    setCaseRef('');
-    setCaseDraft('');
-    setFrom('');
-    setTo('');
-  };
 
   /** What the entry is about, as a link to it when there is a page for it. */
   const target = (e: Entry): ReactNode => {
@@ -178,9 +176,12 @@ export function AuditPage() {
       );
     return (
       <>
-        <span className="text-slate-500">{kind}</span> {link}
+        {/* One line each, cut short: the project link keeps a line of its own. */}
+        <span className="block truncate">
+          <span className="text-slate-500">{kind}</span> {link}
+        </span>
         {projectId && e.targetType !== 'project' && names.get(projectId) ? (
-          <span className="block">
+          <span className="block truncate">
             <Link
               to="/projects/$projectId"
               params={{ projectId }}
@@ -194,49 +195,147 @@ export function AuditPage() {
     );
   };
 
+  const personName = (id: string) =>
+    people.data?.find((p) => p.id === id)?.name ?? names.get(id.toLowerCase()) ?? id.slice(0, 8);
+  const projectLabel = (id: string) =>
+    projects.data?.find((p) => p.id === id)?.name ?? id.slice(0, 8);
+  const chips: ActiveFilter[] = [
+    ...(preset && !action
+      ? [
+          {
+            id: 'preset',
+            label: t('admin.log.presetsLabel'),
+            value: t(`admin.log.presets.${preset}`),
+            onRemove: () => setPreset(''),
+          },
+        ]
+      : []),
+    ...(action
+      ? [
+          {
+            id: 'action',
+            label: t('admin.log.action'),
+            value: actionLabel(t, action),
+            onRemove: () => setAction(''),
+          },
+        ]
+      : []),
+    ...(actor
+      ? [
+          {
+            id: 'actor',
+            label: t('admin.log.who'),
+            value: personName(actor),
+            onRemove: () => setActor(''),
+          },
+        ]
+      : []),
+    ...(project
+      ? [
+          {
+            id: 'project',
+            label: t('admin.log.project'),
+            value: projectLabel(project),
+            onRemove: () => setProject(''),
+          },
+        ]
+      : []),
+    ...(caseRef
+      ? [
+          {
+            id: 'case',
+            label: t('admin.log.caseRef'),
+            value: caseRef,
+            onRemove: () => {
+              setCaseRef('');
+              setCaseDraft('');
+            },
+          },
+        ]
+      : []),
+    ...(from
+      ? [{ id: 'from', label: t('admin.log.from'), value: from, onRemove: () => setFrom('') }]
+      : []),
+    ...(to ? [{ id: 'to', label: t('admin.log.to'), value: to, onRemove: () => setTo('') }] : []),
+  ];
+  const canExport = !!me.data?.permissions.includes('audit.export');
+
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={t('admin.audit')} />
-      <p className="max-w-3xl text-slate-600">{t('admin.log.intro')}</p>
-      <Card className="flex flex-col gap-4">
-        <div
-          role="group"
-          aria-labelledby="audit-presets"
-          className="flex flex-wrap items-center gap-2"
-          data-testid="audit-presets"
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={t('admin.audit')}
+        aside={
+          <InfoTip
+            id="audit-intro"
+            term={t('admin.audit')}
+            text={t('admin.log.intro')}
+            align="start"
+          />
+        }
+      />
+      <Card className="flex flex-col gap-3 p-4!">
+        <FilterBar
+          active={chips}
+          count={
+            log.data
+              ? entries.length
+                ? // Only what is loaded: with more behind "Show 20 more", say "the latest".
+                  log.hasNextPage
+                  ? t('admin.log.shown', { count: entries.length })
+                  : t('admin.log.count', { count: entries.length })
+                : t('admin.log.none')
+              : undefined
+          }
+          actions={
+            canExport ? (
+              <a
+                className={`${smallBtn} whitespace-nowrap`}
+                data-testid="audit-export"
+                aria-describedby="audit-export-hint"
+                href={`/api/v1/audit-log/export?${exportParams.toString()}`}
+              >
+                {t('admin.log.export')}
+              </a>
+            ) : null
+          }
         >
-          <span id="audit-presets" className="text-sm font-medium text-slate-700">
-            {t('admin.log.presetsLabel')}
-          </span>
-          <button
-            type="button"
-            className={chip}
-            aria-pressed={!preset && !action}
-            onClick={() => {
-              setPreset('');
-              setAction('');
-            }}
+          <div
+            role="group"
+            aria-labelledby="audit-presets"
+            className="flex basis-full flex-wrap items-center gap-2"
+            data-testid="audit-presets"
           >
-            {t('admin.log.presets.all')}
-          </button>
-          {PRESETS.map((p) => (
+            <span id="audit-presets" className="text-sm font-medium text-slate-700">
+              {t('admin.log.presetsLabel')}
+            </span>
             <button
-              key={p}
               type="button"
               className={chip}
-              aria-pressed={preset === p && !action}
-              data-preset={p}
+              aria-pressed={!preset && !action}
               onClick={() => {
-                setPreset(p);
+                setPreset('');
                 setAction('');
               }}
             >
-              {t(`admin.log.presets.${p}`)}
+              {t('admin.log.presets.all')}
             </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-0 sm:min-w-[14rem] flex-col gap-1 text-sm font-medium text-slate-700">
+            {PRESETS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={chip}
+                aria-pressed={preset === p && !action}
+                data-preset={p}
+                onClick={() => {
+                  setPreset(p);
+                  setAction('');
+                }}
+              >
+                {t(`admin.log.presets.${p}`)}
+              </button>
+            ))}
+          </div>
+          <label className="flex min-w-0 flex-col gap-1 text-sm font-medium text-slate-700 sm:min-w-[14rem]">
             {t('admin.log.action')}
             <select
               className={inputCls}
@@ -259,7 +358,7 @@ export function AuditPage() {
             </select>
           </label>
           {people.data ? (
-            <label className="flex min-w-0 sm:min-w-[12rem] flex-col gap-1 text-sm font-medium text-slate-700">
+            <label className="flex min-w-0 flex-col gap-1 text-sm font-medium text-slate-700 sm:min-w-[12rem]">
               {t('admin.log.who')}
               <select className={inputCls} value={actor} onChange={(e) => setActor(e.target.value)}>
                 <option value="">{t('admin.log.anyone')}</option>
@@ -272,7 +371,7 @@ export function AuditPage() {
             </label>
           ) : null}
           {projects.data?.length ? (
-            <label className="flex min-w-0 sm:min-w-[12rem] flex-col gap-1 text-sm font-medium text-slate-700">
+            <label className="flex min-w-0 flex-col gap-1 text-sm font-medium text-slate-700 sm:min-w-[12rem]">
               {t('admin.log.project')}
               <select
                 className={inputCls}
@@ -306,7 +405,6 @@ export function AuditPage() {
                 onBlur={() => setCaseRef(caseDraft.trim())}
               />
             </label>
-
             <Button type="submit" variant="secondary" size="sm" className="mb-1">
               {t('admin.log.apply')}
             </Button>
@@ -329,33 +427,11 @@ export function AuditPage() {
               onChange={(e) => setTo(e.target.value)}
             />
           </label>
-          {filtered ? (
-            <button type="button" className={`${smallBtn} mb-1`} onClick={clear}>
-              {t('admin.log.clear')}
-            </button>
-          ) : null}
-        </div>
-        <p id="audit-case-hint" className="-mt-2 text-xs text-slate-600">
-          {t('admin.log.caseRefHint')}
-        </p>
-        {me.data?.permissions.includes('audit.export') ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <a
-              className={smallBtn}
-              data-testid="audit-export"
-              href={`/api/v1/audit-log/export?${exportParams.toString()}`}
-            >
-              {t('admin.log.export')}
-            </a>
-            <span className="text-xs text-slate-600">{t('admin.log.exportHint')}</span>
-          </div>
-        ) : null}
-        {log.data ? (
-          <p className="text-xs text-slate-600" role="status">
-            {entries.length ? t('admin.log.shown', { count: entries.length }) : t('admin.log.none')}
+          <p id="audit-case-hint" className="basis-full text-xs text-slate-600">
+            {t('admin.log.caseRefHint')}
           </p>
-        ) : null}
-        <div className="overflow-x-auto">
+        </FilterBar>
+        <TableScroll label={t('admin.audit')}>
           <table className="w-full text-left text-sm" aria-busy={log.isLoading}>
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -377,26 +453,34 @@ export function AuditPage() {
                       data-action={e.action}
                       className={`align-top ${isOpen ? '' : 'border-b border-slate-100'}`}
                     >
-                      <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-slate-700">
+                      <td className="whitespace-nowrap py-1.5 pr-4 tabular-nums text-slate-700">
                         {when.format(new Date(e.at))}
                       </td>
-                      <td className="py-2 pr-4">{who(e)}</td>
-                      <td className="py-2 pr-4">
-                        <span className="block font-medium text-slate-800">
+                      <td className="whitespace-nowrap py-1.5 pr-4">{who(e)}</td>
+                      <td className="py-1.5 pr-4">
+                        <span
+                          title={actionLabel(t, e.action)}
+                          className="block max-w-[15rem] truncate whitespace-nowrap font-medium text-slate-800"
+                        >
                           {actionLabel(t, e.action)}
                         </span>
-                        <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                          <span className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+                        <span className="flex items-center gap-2 whitespace-nowrap text-xs text-slate-500">
+                          <span className="rounded-full bg-slate-100 px-2 font-medium text-slate-700">
                             {area(e.action)}
                           </span>
                           <code>{e.action}</code>
                         </span>
                       </td>
-                      <td className="py-2 pr-4 text-xs text-slate-600">{target(e)}</td>
-                      <td className="max-w-md py-2 text-xs text-slate-600">
+                      <td className="py-1.5 pr-4 text-xs text-slate-600">
+                        <div className="w-[11rem]">{target(e)}</div>
+                      </td>
+                      <td className="py-1.5 text-xs text-slate-600">
                         {rows.length ? (
                           <>
-                            <span className="line-clamp-2">
+                            <span
+                              className="block w-[11rem] truncate"
+                              title={rows.map((r) => `${r.label}: ${r.value}`).join(' · ')}
+                            >
                               {rows
                                 .slice(0, 2)
                                 .map((r) => `${r.label}: ${r.value}`)
@@ -404,7 +488,7 @@ export function AuditPage() {
                             </span>
                             <button
                               type="button"
-                              className="mt-1 text-xs font-semibold text-indigo-ink-600 underline"
+                              className="text-xs font-semibold text-indigo-ink-600 underline"
                               aria-expanded={isOpen}
                               aria-controls={panel}
                               aria-label={
@@ -455,7 +539,7 @@ export function AuditPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
         {log.hasNextPage ? (
           <div>
             <Button
@@ -464,9 +548,14 @@ export function AuditPage() {
               disabled={log.isFetchingNextPage}
               onClick={() => void log.fetchNextPage()}
             >
-              {t('admin.log.more')}
+              {t('admin.log.more', { count: PAGE })}
             </Button>
           </div>
+        ) : null}
+        {canExport ? (
+          <p id="audit-export-hint" className="text-xs text-slate-600">
+            {t('admin.log.exportHint')}
+          </p>
         ) : null}
       </Card>
     </div>

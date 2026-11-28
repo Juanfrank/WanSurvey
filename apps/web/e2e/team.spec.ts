@@ -1,6 +1,6 @@
 import { expect, overlaysSettled, test, type Browser, type Page } from './fixtures.js';
 import { totp } from '../../api/dist/common/crypto.js';
-import { expectAccessible, login, PASSWORD, shot } from './helpers.js';
+import { closeFilters, expectAccessible, login, openFilters, PASSWORD, shot } from './helpers.js';
 import { sentMail } from './mail.js';
 
 const ADMIN = 'admin@demo.wansurvey.test';
@@ -154,15 +154,21 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await expect(page.getByText('Roles of Inés Invitada saved.')).toBeVisible();
   await expect(ines).toContainText('Supervisor · Whole organisation');
   await expect(ines).toContainText('Interviewer · in Household Survey 2026');
-  // Who is an interviewer in Household Survey 2026?
+  // Who is an interviewer in Household Survey 2026? The filters are behind "Filters".
+  await openFilters(page);
   await page.getByRole('combobox', { name: /^Role/ }).selectOption({ label: 'Interviewer' });
   await page
     .getByRole('combobox', { name: /^Project/ })
     .selectOption({ label: 'Household Survey 2026' });
   await expect(ines).toBeVisible();
   await expect(team.locator(`[data-member="${ADMIN}"]`)).toHaveCount(0);
-  await page.getByRole('combobox', { name: /^Role/ }).selectOption('');
-  await page.getByRole('combobox', { name: /^Project/ }).selectOption('');
+  await expect(page.getByRole('button', { name: /^Filters · 2/ })).toBeVisible();
+  await shot(page, 'p2-users-filters', { fullPage: false });
+  await closeFilters(page);
+  await expect(page.getByRole('button', { name: 'Remove filter: Role Interviewer' })).toBeVisible();
+  await shot(page, 'p2-users-chips');
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(team.locator(`[data-member="${ADMIN}"]`)).toBeVisible();
 
   // Before deactivating someone with open cases, the dialog lists them to reassign first.
   await page.getByRole('button', { name: 'Actions for Demo interviewer' }).click();
@@ -192,10 +198,12 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   const again = await freshPage(browser);
   await login(again.page, INES);
   await expect(again.page.getByRole('alert')).toBeVisible();
-  await page.getByLabel('Status').selectOption('deactivated');
+  await openFilters(page);
+  await page.getByRole('combobox', { name: 'Status' }).selectOption('deactivated');
+  await closeFilters(page);
   await expect(page.getByText('1 user')).toBeVisible();
   await shot(page, 'team-list');
-  await page.getByLabel('Status').selectOption('');
+  await page.getByRole('button', { name: 'Remove filter: Status Deactivated' }).click();
   // The message itself undoes it.
   await expect(page.getByText('Inés Invitada was deactivated.')).toBeVisible();
   await page.getByRole('button', { name: 'Reactivate', exact: true }).click();
@@ -268,12 +276,19 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await crew.getByRole('button', { name: 'Create team' }).click();
   await expect(page.getByText('Team Cuadrilla Norte created.')).toBeVisible();
   await expect(page.locator('[data-team="Cuadrilla Norte"]')).toContainText('2 members');
+  await expect(page.getByRole('button', { name: 'Actions for Cuadrilla Norte' })).toBeVisible();
   await shot(page, 'admin-teams');
   await expectAccessible(page);
 
   // Roles and permissions: reviewers may also see the dashboard, then back to the defaults.
   await nav.getByRole('link', { name: 'Roles and permissions' }).click();
   const matrix = page.getByTestId('roles-matrix');
+  // The areas are folded, each with how many of its permissions every role has.
+  const results = matrix.getByRole('button', { name: /^Results/ });
+  await expect(results).toHaveAttribute('aria-expanded', 'false');
+  await shot(page, 'p2-roles-folded');
+  await results.click();
+  await matrix.getByRole('button', { name: /^Privacy/ }).click();
   const allow = matrix.getByRole('checkbox', {
     name: 'Reviewer: See the dashboard and results',
   });
@@ -303,6 +318,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await shot(page, 'admin-roles');
   await expectAccessible(page);
   await page.reload();
+  await page.getByRole('button', { name: 'Unfold every area' }).click();
   await expect(allow).toBeChecked();
   await page.getByRole('button', { name: 'Defaults for Reviewer' }).click();
   await page.getByRole('button', { name: 'Save permissions' }).click();
@@ -312,7 +328,14 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
     .click();
   await expect(page.getByText('Permissions saved.')).toBeVisible();
   await page.reload();
+  await page.getByRole('button', { name: 'Unfold every area' }).click();
   await expect(allow).not.toBeChecked();
+  // Unfolded and scrolled, the row of role names stays at the top.
+  await page.getByRole('region', { name: 'Roles and permissions' }).evaluate((el) => {
+    el.scrollTop = 600;
+  });
+  await expect(matrix.getByRole('columnheader', { name: /^Reviewer/ })).toBeInViewport();
+  await shot(page, 'p2-roles-sticky-header', { fullPage: false });
 
   // Where roles are given, a guide says what each one may do.
   await nav.getByRole('link', { name: 'Users', exact: true }).click();
@@ -348,6 +371,7 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
 
   // The activity log has it all.
   await nav.getByRole('link', { name: 'Activity log' }).click();
+  await openFilters(page);
   await page.getByRole('combobox', { name: 'Action' }).selectOption('team.created');
   await expect(page.locator('tr[data-action="team.created"]')).toHaveCount(1);
   // Actions read in words, with the code beside them.
@@ -358,6 +382,11 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await page.getByRole('button', { name: 'Roles and permissions', exact: true }).click();
   await expect(page.locator('tr[data-action="user.invited"]').first()).toBeVisible();
   await expect(page.locator('tr[data-action="team.created"]')).toHaveCount(0);
+  await shot(page, 'p2-audit-filters', { fullPage: false });
+  await closeFilters(page);
+  await expect(
+    page.getByRole('button', { name: 'Remove filter: Quick filters Roles and permissions' }),
+  ).toBeVisible();
   const change = page.locator('tr[data-action="tenant.roles_updated"]').first();
   const toggle = change.getByRole('button', { name: /^View details: Changed role permissions/ });
   const panel = page.locator(`[id="${await toggle.getAttribute('aria-controls')}"]`);
@@ -384,7 +413,9 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   // Each count opens Users with its filter on.
   await page.getByTestId('admin-attention').locator('[data-tile="awaiting"] a').click();
   await expect(page).toHaveURL(/\/admin\/users\?status=awaiting/);
-  await expect(page.getByLabel('Status')).toHaveValue('awaiting');
+  await expect(
+    page.getByRole('button', { name: 'Remove filter: Status Waiting for a role' }),
+  ).toBeVisible();
   await expect(team.locator('tbody tr').first()).toHaveAttribute('data-status', 'awaiting');
   await shot(page, 'v2-admin-tile-awaiting-users');
   await nav.getByRole('link', { name: 'Administration', exact: true }).click();
@@ -392,15 +423,24 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   const missing = Number(await no2fa.getAttribute('data-count'));
   await no2fa.locator('a').click();
   await expect(page).toHaveURL(/twoStep=required/);
-  await expect(page.getByLabel('Two-step sign-in')).toHaveValue('required');
+  await expect(
+    page.getByRole('button', {
+      name: 'Remove filter: Two-step sign-in Required by their role, not set up',
+    }),
+  ).toBeVisible();
   await expect(team.locator('tbody tr')).toHaveCount(missing);
   // Everyone active without it, whatever their role.
-  await page.getByLabel('Two-step sign-in').selectOption('off');
+  await openFilters(page);
+  await page.getByRole('combobox', { name: 'Two-step sign-in' }).selectOption('off');
+  await closeFilters(page);
   await expect(page).toHaveURL(/twoStep=off/);
   await expect(team.locator(`[data-member="interviewer@demo.wansurvey.test"]`)).toBeVisible();
   await expect(team.locator(`[data-member="${ADMIN}"]`)).toHaveCount(0);
   await shot(page, 'v2-users-without-2fa-filter');
-  await page.getByLabel('Two-step sign-in').selectOption('');
+  await page
+    .getByRole('button', { name: 'Remove filter: Two-step sign-in Without two-step verification' })
+    .click();
+  await expect(page).not.toHaveURL(/twoStep=/);
 
   // A person's activity, from their actions.
   await page.getByRole('button', { name: 'Actions for Demo interviewer' }).click();
@@ -408,9 +448,14 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   await shot(page, 'v2-users-actions-activity', { fullPage: false });
   await page.getByRole('menuitem', { name: 'See their activity' }).click();
   await expect(page).toHaveURL(/\/admin\/audit\?actor=/);
+  await expect(
+    page.getByRole('button', { name: 'Remove filter: Who Demo interviewer' }),
+  ).toBeVisible();
+  await openFilters(page);
   await expect(page.getByRole('combobox', { name: 'Who' })).toHaveValue(
     new URL(page.url()).searchParams.get('actor')!,
   );
+  await closeFilters(page);
   await shot(page, 'v2-audit-from-user-actions', { fullPage: false });
 
   // Giving a client a role that opens interviews asks why, also from Users.

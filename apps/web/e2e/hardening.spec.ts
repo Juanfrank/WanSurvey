@@ -133,7 +133,7 @@ test('at 200% zoom the project pages reflow without scrolling sideways', async (
   }
 });
 
-test('at 200% zoom the activity log and the organisation reflow without scrolling sideways', async ({
+test('at 200% zoom the administration pages reflow without scrolling sideways', async ({
   page,
 }) => {
   // The administrator enrols a second factor on sign-in; the team test enrols it again, so its
@@ -153,11 +153,13 @@ test('at 200% zoom the activity log and the organisation reflow without scrollin
     await page.getByLabel('Code').fill(totp(secret));
     await page.getByRole('button', { name: 'Turn on' }).click();
     await expect(page.getByRole('heading', { level: 1, name: /^Welcome/ })).toBeVisible();
-    // Users (726 px) and Roles and permissions (903 px) still scroll sideways at this width: see
-    // docs/accessibility.md, Known limits.
+    // Wide tables (Users, the matrix of Roles and permissions) scroll inside their own region,
+    // not the page.
     for (const [path, title] of [
       ['/admin/audit', 'Activity log'],
       ['/admin/organisation', 'Organisation'],
+      ['/admin/users', 'Users'],
+      ['/admin/roles', 'Roles and permissions'],
     ] as const) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
@@ -166,7 +168,12 @@ test('at 200% zoom the activity log and the organisation reflow without scrollin
         await page.evaluate(() => document.documentElement.scrollWidth),
         `${title} scrolls sideways`,
       ).toBeLessThanOrEqual(640);
+      if (title === 'Users') await shot(page, 'p2-users-zoom-200', { fullPage: false });
+      if (title === 'Roles and permissions')
+        await shot(page, 'p2-roles-zoom-200', { fullPage: false });
     }
+    await page.goto('/admin/organisation');
+    await expect(page.getByRole('heading', { level: 1, name: 'Organisation' })).toBeVisible();
     await shot(page, 'v2-admin-zoom-200-organisation', { fullPage: false });
   } finally {
     await reset2fa();

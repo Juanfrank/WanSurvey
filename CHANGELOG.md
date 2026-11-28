@@ -34,6 +34,22 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     by the rules; share out the free cases) sit on the right; assigning, unassigning and
     withdrawing the ticked cases is in a bar at the bottom; each case takes one line; the note on
     hidden personal data is a footnote under the table.
+  - **Administration and users**: each page's introduction is behind an ⓘ beside its title.
+    **Users**: search, then Status, Two-step sign-in, Role and Project behind "Filters" with
+    chips; "Invite a user" opens a side panel; one line per role (two in view, "+n" for the
+    rest) and the row's actions under "⋯". **Activity log**: the quick filters, action, person,
+    project, case and dates behind "Filters" with chips, the CSV download beside them, one line
+    per entry, and the list grows by 20. **Roles and permissions**: the permissions are grouped
+    by area in rows that fold (folded, each role's count in the area; "Unfold every area"), the
+    row of role names and the permission names stay in view while the matrix scrolls, and Save
+    is above it. **Teams**, **API keys**, **Webhooks** and **People registry**: the create forms
+    (and the registry's look-up and file loads) open in side panels; teams and webhooks are dense
+    tables, scopes and events short labels, secondary actions under "⋯"; the no-contact list goes
+    by pages of 20. **Project people**: adding or changing a role in a side panel, the row's
+    actions under "⋯". **Organisation**: the cards pack in two columns and their long help is
+    behind ⓘ. The administration overview is more compact.
+  - At 200 % zoom (640 px) Users and Roles and permissions no longer scroll the page sideways
+    (their tables scroll in their own box); `e2e/hardening.spec.ts` now checks them.
 
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the

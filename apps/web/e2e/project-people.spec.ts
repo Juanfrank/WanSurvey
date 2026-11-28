@@ -38,8 +38,9 @@ test('the project manager gives someone a role in the project, from the project'
   await shot(page, 'project-people');
   await expectAccessible(page);
 
-  // Back as it was for the other tests.
-  await row.getByRole('button', { name: 'Remove Demo client_viewer from the project' }).click();
+  // Back as it was for the other tests: the row's actions are under "⋯".
+  await row.getByRole('button', { name: 'Actions for Demo client_viewer' }).click();
+  await page.getByRole('menuitem', { name: 'Remove from the project…' }).click();
   const confirm = page.getByRole('dialog', {
     name: 'Remove Demo client_viewer from this project?',
   });

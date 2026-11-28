@@ -1,11 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
-import { Dialog } from '../designer/Dialog.js';
-import { inputCls, smallBtn } from '../designer/fields.js';
+import { InfoTip } from '../cases/samplingControls.js';
+import { inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
-import { Button, Card, ErrorText, Field, QueryState, PageHeader } from '../routes/ui.js';
+import {
+  Button,
+  Card,
+  Drawer,
+  ErrorText,
+  Field,
+  MoreMenu,
+  QueryState,
+  PageHeader,
+  TableScroll,
+} from '../routes/ui.js';
 
 interface Team {
   id: string;
@@ -51,18 +61,24 @@ export function TeamsPage() {
   });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title={t('admin.teams')}
+        aside={
+          <InfoTip
+            id="teams-intro"
+            term={t('admin.teams')}
+            text={t('admin.teamsPage.intro')}
+            align="start"
+          />
+        }
         actions={
           canManage ? (
             <Button onClick={() => setEditing('new')}>{t('admin.teamsPage.add')}</Button>
           ) : null
         }
       />
-      <p className="max-w-3xl text-slate-600">
-        {t('admin.teamsPage.intro')} {canManage ? '' : t('admin.teamsPage.readOnly')}
-      </p>
+      {canManage ? null : <p className="text-sm text-slate-600">{t('admin.teamsPage.readOnly')}</p>}
       <p
         role="status"
         className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-ink-800 empty:hidden"
@@ -76,64 +92,83 @@ export function TeamsPage() {
           <p className="text-slate-600">{t('admin.teamsPage.none')}</p>
         </Card>
       ) : null}
-      <ul className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" aria-busy={teams.isLoading}>
-        {(teams.data ?? []).map((team) => (
-          <li
-            key={team.id}
-            data-team={team.name}
-            className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-card"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="truncate text-lg font-semibold">{team.name}</h2>
-                <p className="text-sm text-slate-600">
-                  {t('admin.teamsPage.leader')}: {team.leaderName ?? t('admin.teamsPage.noLeader')}
-                  {' · '}
-                  {t('admin.teamsPage.count', { count: team.members.length })}
-                </p>
-              </div>
-              {canManage ? (
-                <div className="flex flex-none gap-2">
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    aria-label={t('admin.teamsPage.edit', { name: team.name })}
-                    onClick={() => setEditing(team)}
-                  >
-                    {t('admin.teamsPage.editShort')}
-                  </button>
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    aria-label={t('admin.teamsPage.remove', { name: team.name })}
-                    onClick={() => {
-                      if (window.confirm(t('admin.teamsPage.confirmRemove', { name: team.name })))
-                        remove.mutate(team);
-                    }}
-                  >
-                    {t('admin.teamsPage.removeShort')}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            <ul className="flex flex-wrap gap-1.5" aria-label={t('admin.teamsPage.members')}>
-              {team.members.map((m) => (
-                <li
-                  key={m.userId}
-                  title={m.email}
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    m.userId === team.leaderId
-                      ? 'bg-indigo-50 text-indigo-ink-700'
-                      : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {m.name}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
+      {teams.data?.length ? (
+        <Card className="p-4!">
+          <TableScroll label={t('admin.teams')}>
+            <table
+              className="w-full text-left text-sm [&_td]:whitespace-nowrap"
+              aria-busy={teams.isFetching}
+            >
+              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4 font-semibold">{t('admin.teamsPage.name')}</th>
+                  <th className="py-2 pr-4 font-semibold">{t('admin.teamsPage.leader')}</th>
+                  <th className="py-2 pr-4 text-right font-semibold">
+                    {t('admin.teamsPage.size')}
+                  </th>
+                  <th className="py-2 pr-4 font-semibold">{t('admin.teamsPage.members')}</th>
+                  {canManage ? (
+                    <th className="py-2">
+                      <span className="sr-only">{t('admin.teamsPage.actionsHead')}</span>
+                    </th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {teams.data.map((team) => {
+                  const names = team.members.map((m) => m.name).join(', ');
+                  return (
+                    <tr key={team.id} data-team={team.name} className="border-b border-slate-100">
+                      <td className="py-1.5 pr-4 font-medium" title={team.name}>
+                        <span className="block max-w-[16rem] truncate">{team.name}</span>
+                      </td>
+                      <td className="py-1.5 pr-4">
+                        {team.leaderName ?? (
+                          <span className="text-slate-500">{t('admin.teamsPage.noLeader')}</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-4 text-right tabular-nums">
+                        {t('admin.teamsPage.count', { count: team.members.length })}
+                      </td>
+                      <td className="py-1.5 pr-4 text-slate-600" title={names}>
+                        <span className="block max-w-[28rem] truncate">{names || '—'}</span>
+                      </td>
+                      {canManage ? (
+                        <td className="py-1 text-right">
+                          <MoreMenu
+                            label={t('admin.teamsPage.actionsFor', { name: team.name })}
+                            entries={[
+                              {
+                                type: 'item',
+                                id: 'edit',
+                                label: t('admin.teamsPage.editMenu'),
+                                onSelect: () => setEditing(team),
+                              },
+                              {
+                                type: 'item',
+                                id: 'remove',
+                                label: t('admin.teamsPage.removeMenu'),
+                                onSelect: () => {
+                                  if (
+                                    window.confirm(
+                                      t('admin.teamsPage.confirmRemove', { name: team.name }),
+                                    )
+                                  )
+                                    remove.mutate(team);
+                                },
+                              },
+                            ]}
+                          />
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableScroll>
+        </Card>
+      ) : null}
       {editing ? (
         <TeamDialog
           team={editing === 'new' ? null : editing}
@@ -181,20 +216,31 @@ function TeamDialog({
   });
   const error = save.error;
   const code = error instanceof ApiError ? error.code : undefined;
+  const formId = useId();
   return (
-    <Dialog
+    <Drawer
       title={team ? t('admin.teamsPage.edit', { name: team.name }) : t('admin.teamsPage.add')}
       onClose={onClose}
-      wide
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('admin.teamsPage.cancel')}
+          </Button>
+          <Button type="submit" form={formId} disabled={!name.trim() || save.isPending}>
+            {team ? t('admin.teamsPage.save') : t('admin.teamsPage.create')}
+          </Button>
+        </>
+      }
     >
       <form
+        id={formId}
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
           if (name.trim()) save.mutate();
         }}
       >
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3">
           <Field
             id="team-name"
             label={t('admin.teamsPage.name')}
@@ -239,7 +285,7 @@ function TeamDialog({
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
-          <ul className="grid max-h-64 gap-1 overflow-auto rounded-md border border-slate-200 p-2 sm:grid-cols-2">
+          <ul className="grid max-h-[50vh] gap-1 overflow-auto rounded-md border border-slate-200 p-2">
             {shown.map((p) => (
               <li key={p.id}>
                 <label className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-50">
@@ -270,15 +316,7 @@ function TeamDialog({
                 : t('admin.teamsPage.errors.generic')}
           </ErrorText>
         ) : null}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            {t('admin.teamsPage.cancel')}
-          </Button>
-          <Button type="submit" disabled={!name.trim() || save.isPending}>
-            {team ? t('admin.teamsPage.save') : t('admin.teamsPage.create')}
-          </Button>
-        </div>
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
