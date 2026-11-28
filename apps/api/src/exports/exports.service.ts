@@ -242,8 +242,8 @@ export class ExportsService implements OnModuleInit {
     if (!days) return 0;
     const before = new Date(now.getTime() - days * 86_400_000);
     let n = 0;
-    for (const tenantId of await this.engine.allTenantIds()) {
-      const rows = await this.repo.inTenant(tenantId, (t) => t.expireExports(before));
+    for (const tenantId of await this.engine.allTenantIdsForRetention()) {
+      const rows = await this.repo.inTenantForRetention(tenantId, (t) => t.expireExports(before));
       n += rows.length;
       for (const r of rows) if (r.key) await this.forget(r.key);
     }

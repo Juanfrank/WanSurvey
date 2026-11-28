@@ -108,7 +108,7 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     provider events and SMS replies for it are ignored (except an opt-out, which is still put on
     its suppression list), and the worker sends none of its e-mail or
     SMS waves and reminders, webhooks or web notifications and runs none of its scheduled or queued
-    jobs (expiry, figures, retention and purges). Its data is kept untouched; nothing is stored
+    jobs (expiry, figures), except its retention, which keeps running so that no personal data outlives the period it chose. Its data is otherwise kept untouched; nothing is stored
     about the closure, so without `SINGLE_TENANT` everything opens again with nothing done by hand,
     the waiting mail and jobs included.
 - **Less scrolling on lists and project pages** (first part): shared building blocks for every

@@ -105,6 +105,22 @@ export class MssqlDatabase {
     );
   }
 
+  /**
+   * Only for the retention the organisation set for itself (personal data anonymised or sealed,
+   * recordings and export files deleted when their period ends): it keeps running while the
+   * organisation is closed in single-tenant mode, so being closed never keeps personal data past
+   * its period. Never for anything that sends, or answers a request.
+   */
+  async withTenantForRetention<T>(tenantId: string, fn: (tx: MssqlTx) => Promise<T>): Promise<T> {
+    return this.withTenantForOptOut(tenantId, fn);
+  }
+
+  /** Every organisation whatever the fence, for the retention jobs only (`withTenantForRetention`). */
+  async allTenantIdsForRetention(): Promise<string[]> {
+    const res = await sql<{ tenant_id: string }>`EXEC all_tenant_ids`.execute(this.db);
+    return res.rows.map((r) => r.tenant_id.toLowerCase());
+  }
+
   /** The items whose organisation may be opened here. */
   private async open<T>(items: T[], tenantOf: (item: T) => string | null): Promise<T[]> {
     if (!this.gate) return items;

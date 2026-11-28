@@ -74,6 +74,8 @@ export interface PrivacyTx extends CasesTx {
 
 export interface PrivacyRepo {
   inTenant<T>(tenantId: string, fn: (t: PrivacyTx) => Promise<T>): Promise<T>;
+  /** As `inTenant`, also in an organisation closed in single-tenant mode: retention only. */
+  inTenantForRetention<T>(tenantId: string, fn: (t: PrivacyTx) => Promise<T>): Promise<T>;
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
@@ -406,6 +408,12 @@ export class MssqlPrivacyRepo implements PrivacyRepo {
 
   inTenant<T>(tenantId: string, fn: (t: PrivacyTx) => Promise<T>) {
     return this.engine.sql.withTenant(tenantId, (tx) =>
+      fn(new MssqlPrivacyTx(tx, tenantId, this.cstore)),
+    );
+  }
+
+  inTenantForRetention<T>(tenantId: string, fn: (t: PrivacyTx) => Promise<T>) {
+    return this.engine.sql.withTenantForRetention(tenantId, (tx) =>
       fn(new MssqlPrivacyTx(tx, tenantId, this.cstore)),
     );
   }

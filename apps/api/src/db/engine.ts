@@ -46,6 +46,11 @@ export class Engine implements OnModuleDestroy {
     return this.sql.allTenantIds();
   }
 
+  /** Every organisation, closed ones included: only for the retention jobs. */
+  allTenantIdsForRetention(): Promise<string[]> {
+    return this.sql.allTenantIdsForRetention();
+  }
+
   /** The organisation and id of a live share link, from the hash of its token. */
   shareLinkByHash(hash: string): Promise<{ id: string; tenantId: string } | null> {
     return this.sql.shareLinkByHash(hash);

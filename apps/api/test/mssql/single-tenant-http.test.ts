@@ -12,6 +12,7 @@ import { createMssqlDb } from '../../src/db/mssql/connection.js';
 import { runMssqlMigrations } from '../../src/db/mssql/migrate.js';
 import { JobsService } from '../../src/jobs/jobs.service.js';
 import { MemoryMailer } from '../../src/mail/mailer.js';
+import { PrivacyService } from '../../src/privacy/privacy.service.js';
 import { Tenancy } from '../../src/tenants/tenancy.js';
 import { createQuestionnaire, patch, post, put } from './fixtures.js';
 import {
@@ -482,6 +483,36 @@ describe.skipIf(!configured)('SQL Server: single-tenant mode', () => {
             .send({ email: B.ownerUser.email, password: PASSWORD })
         ).status,
       ).toBe(401);
+    });
+
+    it('the retention a closed organisation set keeps running: closed never means kept longer', async () => {
+      const a = await start(true, first.slug);
+      const b = made.b!;
+      const caseId = randomUUID();
+      await sql`INSERT INTO cases (id, tenant_id, project_id, external_id, sample, status, updated_at)
+                VALUES (${caseId}, ${second.id}, ${b.project}, ${'old-b'}, ${JSON.stringify({ tag: 'old-b' })},
+                        'finalised', DATEADD(day, -40, SYSDATETIMEOFFSET()))`.execute(owner);
+      const before = await sql<{ settings: string }>`
+        SELECT settings FROM projects WHERE id = ${b.project}`.execute(owner);
+      const settings = {
+        ...JSON.parse(before.rows[0]!.settings),
+        retention: { anonymiseAfterDays: 30 },
+      };
+      await sql`UPDATE projects SET settings = ${JSON.stringify(settings)} WHERE id = ${b.project}`.execute(
+        owner,
+      );
+      try {
+        // The second stays closed to everything else, yet its retention runs.
+        expect(await a.get(Engine).opens(second.id)).toBe(false);
+        expect(await a.get(PrivacyService).retentionAll()).toBeGreaterThanOrEqual(1);
+        const row = await sql<{ anonymised_at: Date | null }>`
+          SELECT anonymised_at FROM cases WHERE id = ${caseId}`.execute(owner);
+        expect(row.rows[0]!.anonymised_at).not.toBeNull();
+      } finally {
+        await sql`UPDATE projects SET settings = ${before.rows[0]!.settings} WHERE id = ${b.project}`.execute(
+          owner,
+        );
+      }
     });
 
     it('the worker sends only the served organisation’s mail and runs only its jobs', async () => {

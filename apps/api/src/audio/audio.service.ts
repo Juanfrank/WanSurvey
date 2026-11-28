@@ -296,9 +296,9 @@ export class AudioService implements OnModuleInit {
   /** Nightly: recordings kept longer than their project says, after the interview was decided. */
   async retentionAll(now = new Date()): Promise<number> {
     let n = 0;
-    for (const tenantId of await this.engine.allTenantIds()) {
+    for (const tenantId of await this.engine.allTenantIdsForRetention()) {
       try {
-        n += await this.engine.sql.withTenant(tenantId, async (tx) => {
+        n += await this.engine.sql.withTenantForRetention(tenantId, async (tx) => {
           const projects = await tx.selectFrom('projects').select(['id', 'settings']).execute();
           let m = 0;
           for (const p of projects) {

@@ -88,6 +88,8 @@ export interface ExportsTx extends AnalysisTx {
 
 export interface ExportsRepo {
   inTenant<T>(tenantId: string, fn: (t: ExportsTx) => Promise<T>): Promise<T>;
+  /** As `inTenant`, also in an organisation closed in single-tenant mode: retention only. */
+  inTenantForRetention<T>(tenantId: string, fn: (t: ExportsTx) => Promise<T>): Promise<T>;
 }
 
 // ─── SQL Server ─────────────────────────────────────────────────────────────────────────
@@ -311,6 +313,12 @@ export class MssqlExportsRepo implements ExportsRepo {
 
   inTenant<T>(tenantId: string, fn: (t: ExportsTx) => Promise<T>) {
     return this.engine.sql.withTenant(tenantId, (tx) =>
+      fn(new MssqlExportsTx(tx, tenantId, this.cstore)),
+    );
+  }
+
+  inTenantForRetention<T>(tenantId: string, fn: (t: ExportsTx) => Promise<T>) {
+    return this.engine.sql.withTenantForRetention(tenantId, (tx) =>
       fn(new MssqlExportsTx(tx, tenantId, this.cstore)),
     );
   }

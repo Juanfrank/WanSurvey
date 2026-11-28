@@ -109,8 +109,8 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
 
   async sealAll(): Promise<number> {
     let n = 0;
-    for (const tenantId of await this.engine.allTenantIds())
-      n += await this.repo.inTenant(tenantId, async (t) => {
+    for (const tenantId of await this.engine.allTenantIdsForRetention())
+      n += await this.repo.inTenantForRetention(tenantId, async (t) => {
         let m = 0;
         for (const id of await t.projectIds()) m += await this.sealProject(t, id);
         return m;
@@ -140,9 +140,9 @@ export class PrivacyService implements OnModuleInit, OnApplicationBootstrap {
   /** Nightly: cases finished longer ago than their project keeps personal data. */
   async retentionAll(now = new Date()): Promise<number> {
     let n = 0;
-    for (const tenantId of await this.engine.allTenantIds()) {
+    for (const tenantId of await this.engine.allTenantIdsForRetention()) {
       try {
-        n += await this.repo.inTenant(tenantId, async (t) => {
+        n += await this.repo.inTenantForRetention(tenantId, async (t) => {
           let m = 0;
           for (const projectId of await t.projectIds()) {
             const days = (await this.cases.settings(t, projectId)).retention.anonymiseAfterDays;
