@@ -1,6 +1,6 @@
 import type { CrossCheck } from '@wansurvey/schema/sampling';
 import { useTranslation } from 'react-i18next';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
 
 const CONTACTS = ['phone', 'email'] as const;
 const RESULTS = ['COMPLETE', 'PARTIAL', 'REFUSAL'] as const;
@@ -29,7 +29,7 @@ export function CrossChecks({
   return (
     <fieldset className="flex flex-col gap-3 text-sm" data-testid="cross-checks">
       <legend className="mb-1 font-medium text-slate-700">{t('cases.sampling.cross.title')}</legend>
-      <p className="text-xs text-slate-600">{t('cases.sampling.cross.help')}</p>
+      <FoldedHelp>{t('cases.sampling.cross.help')}</FoldedHelp>
       {value.map((r, i) => (
         <div
           key={i}

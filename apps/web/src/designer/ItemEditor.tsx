@@ -26,6 +26,7 @@ import {
   NumberField,
   SelectField,
   TextField,
+  FoldedHelp,
 } from './fields.js';
 import { ExpressionField, LogicEditor } from './LogicEditor.js';
 import { KindIcon, questionMenu } from './kinds.js';
@@ -192,14 +193,20 @@ function NameField({
           id={inputId}
           value={suffix}
           invalid={!!error}
-          describedBy={`${inputId}-hint${error ? ` ${inputId}-err` : ''}`}
+          describedBy={`${inputId}-root ${inputId}-hint${error ? ` ${inputId}-err` : ''}`}
           onCommit={commit}
         />
       </div>
-      <p id={`${inputId}-hint`} className="text-xs text-slate-600">
+      {/* Where names start, and the warning that this one does not yet: in view. */}
+      <p id={`${inputId}-root`} className="text-xs text-slate-600">
         {t('designer.rootHelp', { root, section: section!.id })}{' '}
-        {!rooted ? t('designer.rootMissing', { root }) : ''} {t('designer.renameHelp')}
+        {!rooted ? (
+          <span className="font-medium text-amber-ink-900">
+            {t('designer.rootMissing', { root })}
+          </span>
+        ) : null}
       </p>
+      <FoldedHelp id={`${inputId}-hint`}>{t('designer.renameHelp')}</FoldedHelp>
       {error ? (
         <p id={`${inputId}-err`} className="text-sm text-red-ink-800">
           {error}
@@ -611,16 +618,18 @@ function SpecialsWhere({ draft, question }: { draft: Draft; question: Question }
     lines.set(key, [...(lines.get(key) ?? []), t(`designer.settings.special.${k}`)]);
   }
   return (
-    <p className="text-xs text-slate-600" data-testid="specials-where">
-      {[...lines]
-        .map(([modes, what]) =>
-          modes
-            ? t('designer.specialsWhere', { modes, what: what.join(', ') })
-            : t('designer.specialsNowhere', { what: what.join(', ') }),
-        )
-        .join(' ')}{' '}
-      {t('designer.specialsWhereHelp')}
-    </p>
+    <FoldedHelp>
+      <span data-testid="specials-where">
+        {[...lines]
+          .map(([modes, what]) =>
+            modes
+              ? t('designer.specialsWhere', { modes, what: what.join(', ') })
+              : t('designer.specialsNowhere', { what: what.join(', ') }),
+          )
+          .join(' ')}{' '}
+        {t('designer.specialsWhereHelp')}
+      </span>
+    </FoldedHelp>
   );
 }
 

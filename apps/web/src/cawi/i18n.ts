@@ -83,7 +83,6 @@ export const cawiEn = {
     revokeConfirm:
       'Revoke the link of {{id}}? It will no longer open the survey; its answers so far are kept.',
     revoked: 'The link of {{id}} was revoked.',
-    more: '…and {{count}} more in the download.',
     secret:
       'Treat these links like passwords: whoever has one opens that person’s survey, with their data. Hand each one only to its person; opening this list and downloading it are logged.',
     actions: 'Actions',
@@ -93,8 +92,19 @@ export const cawiEn = {
     hideOne: 'Hide the link of {{id}}',
     copy: 'Copy',
     copyOne: 'Copy the link of {{id}}',
-    copied: 'Copied',
     copyFailed: 'The link could not be copied: show it and copy it by hand.',
+    copiedOne: 'The link of {{id}} was copied.',
+    /** The button that unfolds the link builder and the parameters typed by hand. */
+    paramsOpen: 'Link parameters',
+    actionsOne: 'Actions for the link of {{id}}',
+    changeExpiry: 'Change the expiry date…',
+    expiryTitle: 'Expiry date of the link of {{id}}',
+    expiryEmpty: 'Leave it empty so the link does not expire.',
+    noExpiry: 'Never',
+    save: 'Save',
+    cancel: 'Cancel',
+    showMore: 'Show 20 more ({{count}} left)',
+    shown: '{{shown}} of {{total}} links',
   },
   waves: {
     title: 'Outreach',
@@ -273,7 +283,6 @@ export const cawiEs: CawiCatalogue = {
     revokeConfirm:
       '¿Revocar el enlace de {{id}}? Ya no abrirá la encuesta; se conservan las respuestas que tenga.',
     revoked: 'Se revocó el enlace de {{id}}.',
-    more: '…y {{count}} más en la descarga.',
     secret:
       'Trate estos enlaces como contraseñas: quien tenga uno abre la encuesta de esa persona, con sus datos. Entregue cada uno solo a su persona; abrir esta lista y descargarla queda en la bitácora.',
     actions: 'Acciones',
@@ -283,8 +292,18 @@ export const cawiEs: CawiCatalogue = {
     hideOne: 'Ocultar el enlace de {{id}}',
     copy: 'Copiar',
     copyOne: 'Copiar el enlace de {{id}}',
-    copied: 'Copiado',
     copyFailed: 'No se pudo copiar el enlace: muéstrelo y cópielo a mano.',
+    copiedOne: 'Se copió el enlace de {{id}}.',
+    paramsOpen: 'Parámetros de los enlaces',
+    actionsOne: 'Acciones del enlace de {{id}}',
+    changeExpiry: 'Cambiar el vencimiento…',
+    expiryTitle: 'Vencimiento del enlace de {{id}}',
+    expiryEmpty: 'Déjelo vacío para que el enlace no venza.',
+    noExpiry: 'Nunca',
+    save: 'Guardar',
+    cancel: 'Cancelar',
+    showMore: 'Mostrar 20 más (quedan {{count}})',
+    shown: '{{shown}} de {{total}} enlaces',
   },
   waves: {
     title: 'Difusión',

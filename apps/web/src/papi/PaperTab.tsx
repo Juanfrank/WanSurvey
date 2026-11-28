@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { number } from '../format.js';
 import { localiseError } from '../i18n-messages.js';
@@ -202,7 +202,7 @@ function PrintForms({
       <h2 id="papi-print" className="text-base font-semibold">
         {t('papi.print.title')}
       </h2>
-      <p className="text-slate-600">{t('papi.print.help')}</p>
+      <FoldedHelp className="max-w-prose">{t('papi.print.help')}</FoldedHelp>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
           <span className="font-medium">{t('papi.print.filter')}</span>
@@ -238,7 +238,7 @@ function PrintForms({
           {t('papi.scans.download')}
         </a>
       </div>
-      <p className="text-xs text-slate-600">{t('papi.scans.downloadHelp')}</p>
+      <FoldedHelp className="max-w-prose">{t('papi.scans.downloadHelp')}</FoldedHelp>
     </form>
   );
 }

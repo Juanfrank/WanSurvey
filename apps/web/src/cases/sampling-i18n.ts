@@ -67,6 +67,7 @@ export const samplingEn = {
     'In a census or a non-probability design, units found later join the frame and the eligible ones become cases at once. In a probability sample they wait in the frame for the next batch. Nothing already selected changes.',
   clearFrame: 'Empty the frame…',
   confirmClear: 'Remove every unit of the frame? (Only possible before selecting.)',
+  importDiscard: 'Close the import? The file read and its column mapping will be lost.',
   families: {
     probability: 'Probability',
     nonprobability: 'Non-probability',
@@ -379,6 +380,7 @@ export const samplingEs: typeof samplingEn = {
     'En un censo o un diseño no probabilístico, las unidades que aparecen después entran al marco y las elegibles pasan a ser casos de inmediato. En una muestra probabilística esperan en el marco al siguiente lote. Lo ya seleccionado no cambia.',
   clearFrame: 'Vaciar el marco…',
   confirmClear: '¿Quitar todas las unidades del marco? (Solo es posible antes de seleccionar.)',
+  importDiscard: '¿Cerrar la importación? Se pierden el archivo leído y la asignación de columnas.',
   families: {
     probability: 'Probabilístico',
     nonprobability: 'No probabilístico',

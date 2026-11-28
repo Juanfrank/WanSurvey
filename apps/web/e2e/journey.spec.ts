@@ -272,17 +272,22 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByRole('tab', { name: 'Cuestionarios', exact: true }).click();
   await page.getByRole('button', { name: 'Acciones de Satisfacción con servicios' }).click();
   await page.getByRole('menuitem', { name: /^Encuesta web/ }).click();
-  await page.getByLabel('Nombre', { exact: true }).fill('Enlaces sede Centro');
-  await page.getByRole('radio', { name: /Solo enlaces personales/ }).check();
-  await page.getByRole('button', { name: 'Crear difusión' }).click();
+  await page.getByRole('button', { name: '+ Nueva difusión' }).click();
+  const newWave = page.getByRole('dialog', { name: 'Nueva difusión' });
+  await newWave.getByLabel('Nombre', { exact: true }).fill('Enlaces sede Centro');
+  await newWave.getByRole('radio', { name: /Solo enlaces personales/ }).check();
+  await newWave.getByRole('button', { name: 'Crear difusión' }).click();
   await page.getByRole('button', { name: 'Generar los enlaces de Enlaces sede Centro' }).click();
   const links = page.getByTestId('wave-links');
+  await links.getByRole('button', { name: /^Parámetros de los enlaces/ }).click();
   await links
     .getByLabel('Otros parámetros para todos los enlaces (avanzado, opcional)')
     .fill('sede=3');
   // The token is cut short until the link is shown, like a password.
   const firstLink = links.locator('[data-link]').first();
-  await firstLink.getByRole('button', { name: /^Mostrar el enlace de / }).click();
+  await firstLink.getByRole('button', { name: /^Acciones del enlace de / }).click();
+  await page.getByRole('menuitem', { name: /^Mostrar el enlace de / }).click();
+  await expect(firstLink).toContainText(/\/s\/[A-Za-z0-9_-]{20,}\?sede=3/);
   const linkText = await firstLink.textContent();
   const url = linkText!.match(/http\S+?\?sede=3/)![0];
   const phone = await newBrowser(browser, true);

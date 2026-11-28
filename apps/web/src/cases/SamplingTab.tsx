@@ -12,10 +12,10 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
-import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, inputCls, smallBtn } from '../designer/fields.js';
 import { dispositionLabel, localiseError } from '../i18n-messages.js';
 import { dateTime } from '../format.js';
-import { Button, ErrorText } from '../routes/ui.js';
+import { Button, Drawer, ErrorText } from '../routes/ui.js';
 import { ImportTab } from './ImportTab.js';
 import { CrossChecks } from './CrossChecks.js';
 import { useSampleFields } from './hooks.js';
@@ -96,6 +96,13 @@ export function SamplingTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [importing, setImporting] = useState(false);
+  // An upload being mapped or checked: closing the panel asks first, since it would be lost.
+  const [importBusy, setImportBusy] = useState(false);
+  const closeImport = () => {
+    if (importBusy && !window.confirm(t('cases.sampling.importDiscard'))) return;
+    setImportBusy(false);
+    setImporting(false);
+  };
   const [sourceLabel, setSourceLabel] = useState('');
   useEffect(() => {
     if (data.data && !plan) setPlan(data.data.plan);
@@ -168,7 +175,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-6" data-testid="sampling">
-      <p className="text-sm text-slate-700">{t('cases.sampling.intro')}</p>
+      <FoldedHelp className="text-sm">{t('cases.sampling.intro')}</FoldedHelp>
       <StepIndex checks={checks} />
 
       {/* Layer 1 */}
@@ -250,7 +257,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             disabled={locked || plan.source.kind === 'field'}
             onChange={(frameAvailable) => setSource({ frameAvailable })}
           />
-          <p className="text-xs text-slate-600 md:col-span-2">{t('cases.sampling.decision1')}</p>
+          <FoldedHelp className="md:col-span-2">{t('cases.sampling.decision1')}</FoldedHelp>
         </div>
         {usesFrame ? (
           <div className="flex flex-col gap-3" data-testid="frame">
@@ -270,47 +277,55 @@ export function SamplingTab({ projectId }: { projectId: string }) {
                 ))}
               </ul>
             ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" aria-haspopup="dialog" onClick={() => setImporting(true)}>
+                {locked ? t('cases.sampling.addAfter') : t('cases.import.title')}
+              </Button>
+              {locked ? (
+                <span className="text-xs text-slate-600">{t('cases.sampling.addAfterHelp')}</span>
+              ) : null}
+              {d.frame.units && !locked ? (
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => window.confirm(t('cases.sampling.confirmClear')) && clear.mutate()}
+                >
+                  {t('cases.sampling.clearFrame')}
+                </button>
+              ) : null}
+            </div>
             {importing ? (
-              <div className="flex flex-col gap-3">
-                <label className="flex max-w-md flex-col gap-1 text-sm">
-                  <span className="font-medium text-slate-700">
-                    {t('cases.sampling.sourceLabel')}
-                  </span>
-                  <input
-                    className={inputCls}
-                    value={sourceLabel}
-                    placeholder={t('cases.sampling.sourceLabelPlaceholder')}
-                    onChange={(e) => setSourceLabel(e.target.value)}
+              <Drawer
+                wide
+                title={locked ? t('cases.sampling.addAfter') : t('cases.import.title')}
+                onClose={closeImport}
+              >
+                <div className="flex flex-col gap-4">
+                  <label className="flex max-w-md flex-col gap-1 text-sm">
+                    <span className="font-medium text-slate-700">
+                      {t('cases.sampling.sourceLabel')}
+                    </span>
+                    <input
+                      className={inputCls}
+                      value={sourceLabel}
+                      placeholder={t('cases.sampling.sourceLabelPlaceholder')}
+                      onChange={(e) => setSourceLabel(e.target.value)}
+                    />
+                  </label>
+                  <ImportTab
+                    inPanel
+                    projectId={projectId}
+                    target="frame"
+                    sourceLabel={sourceLabel}
+                    onBusy={setImportBusy}
+                    onDone={() => {
+                      setImportBusy(false);
+                      setImporting(false);
+                    }}
                   />
-                </label>
-                <ImportTab
-                  projectId={projectId}
-                  target="frame"
-                  sourceLabel={sourceLabel}
-                  onDone={() => setImporting(false)}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" onClick={() => setImporting(true)}>
-                  {locked ? t('cases.sampling.addAfter') : t('cases.import.title')}
-                </Button>
-                {locked ? (
-                  <span className="text-xs text-slate-600">{t('cases.sampling.addAfterHelp')}</span>
-                ) : null}
-                {d.frame.units && !locked ? (
-                  <button
-                    type="button"
-                    className={smallBtn}
-                    onClick={() =>
-                      window.confirm(t('cases.sampling.confirmClear')) && clear.mutate()
-                    }
-                  >
-                    {t('cases.sampling.clearFrame')}
-                  </button>
-                ) : null}
-              </div>
-            )}
+                </div>
+              </Drawer>
+            ) : null}
           </div>
         ) : null}
       </Layer>
@@ -527,11 +542,11 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {t('cases.sampling.quotas')}
             <InfoTip id="quotas" term={t('cases.sampling.quotas')} />
           </h3>
-          <p className="text-xs text-slate-600">
+          <FoldedHelp>
             {probability || census
               ? t('cases.sampling.quotasHelpProb')
               : t('cases.sampling.quotasHelpNonProb')}
-          </p>
+          </FoldedHelp>
           {plan.quotas.map((q, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 text-sm">
@@ -899,7 +914,7 @@ export function SamplingTab({ projectId }: { projectId: string }) {
             {t('cases.sampling.substitution')}
             <InfoTip id="substitution" term={t('cases.sampling.substitution')} />
           </h3>
-          <p className="text-xs text-slate-600">{t('cases.sampling.substitutionHelp')}</p>
+          <FoldedHelp>{t('cases.sampling.substitutionHelp')}</FoldedHelp>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

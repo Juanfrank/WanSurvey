@@ -36,11 +36,62 @@ function Label({ htmlFor, children }: { htmlFor: string; children: ReactNode }) 
   );
 }
 
+/**
+ * Inside it, a long `Hint` (a plain text over `LONG_HINT` characters) shows as one line behind
+ * an (i) that unfolds it (`FoldedHelp`); short hints stay as they are. The designer's editor
+ * sets it, so its fields are not followed by paragraphs of grey text.
+ */
+export const FoldHintsContext = createContext(false);
+const LONG_HINT = 90;
+
 export function Hint({ id, children }: { id?: string; children: ReactNode }) {
+  const fold = useContext(FoldHintsContext);
+  if (fold && typeof children === 'string' && children.length > LONG_HINT)
+    return <FoldedHelp id={id}>{children}</FoldedHelp>;
   return (
     <p id={id} className="text-xs text-slate-600">
       {children}
     </p>
+  );
+}
+
+/**
+ * A long explanation kept to its first line, with an (i) in front: a click (or Enter on it)
+ * unfolds the whole text, another folds it. For screen readers it is a "Help" button followed
+ * by the text, and the text (with `id`) stays a field's `aria-describedby` even while folded. A
+ * disclosure (`details`), so it also opens inside a disabled fieldset (read-only viewers).
+ */
+export function FoldedHelp({
+  id,
+  children,
+  className = '',
+}: {
+  /** Put on the text, for `aria-describedby`. */
+  id?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <details className={`group text-xs text-slate-600 ${className}`} data-folded-help="">
+      <summary className="flex cursor-pointer list-none items-start gap-1.5 rounded hover:text-slate-800 [&::-webkit-details-marker]:hidden">
+        <span
+          aria-hidden="true"
+          className="mt-px inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border border-slate-500 font-serif text-[10px] font-bold italic leading-none text-slate-700"
+        >
+          i
+        </span>
+        {/* What the eye reads: one line, all of it once open. */}
+        <span aria-hidden="true" className="line-clamp-1 min-w-0 group-open:line-clamp-none">
+          {children}
+        </span>
+        <span className="sr-only">{t('designer.moreHelp')}</span>
+      </summary>
+      {/* What screen readers read: the description of a field, and after the button once open. */}
+      <span id={id} className="sr-only">
+        {children}
+      </span>
+    </details>
   );
 }
 
@@ -353,7 +404,10 @@ export function LocalizedField({
       ) : null}
       {hint ? <Hint id={`${id}-hint`}>{hint}</Hint> : null}
       {missing.length && (value?.[shown[0]!] ?? '').trim() ? (
-        <Hint>{t('designer.missingTranslation', { langs: missing.join(', ') })}</Hint>
+        // A warning: never folded.
+        <p className="text-xs text-slate-600">
+          {t('designer.missingTranslation', { langs: missing.join(', ') })}
+        </p>
       ) : null}
     </fieldset>
   );

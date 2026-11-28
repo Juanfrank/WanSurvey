@@ -70,6 +70,24 @@ and each tag marks the commit that closes a stage of the work, with that commit'
   - **Project overview**: the goals are in the dashboard's goals card (with "Set goals in the
     project settings" when there are none) instead of a second table at the bottom; the quota
     note is a footnote of the quota table.
+  - **Web survey and outreach**: "+ New outreach" opens its form in a side panel instead of a
+    form block always open under the outreach. The personal links of an outreach show 20 at a
+    time ("Show 20 more"), each on one line; Show, Copy, Change the expiry date (still editable,
+    one link at a time) and Revoke are in each link's "⋯". The link builder and the parameters
+    for every link wait behind "Link parameters", here and under the open link.
+  - **Designer**: the item's comments open in a side panel from "Comments (n)" in the editor's
+    header, instead of a block under the editor. Long grey help under a field shows as one line
+    with an (i) that unfolds it; short help stays as it was. The project's list of
+    questionnaires keeps each one on a line.
+  - **Sampling selector**: "Import sample" (and "Add units to the sample") opens the import in
+    a wide side panel. The long explanations of the selector are one line with an (i).
+  - **Assignment rules**: the workload table keeps each person on a line; "Move someone's
+    cases" and "+ Add rule" open their forms on request.
+  - **Project settings** (and their web, look, contact, exit reasons and cleaning parts, and
+    the paper forms): long explanations are one line with an (i) that unfolds them.
+  - **People of the project**: "+ Add a user" (and changing a role) opens a side panel; each
+    person takes one line, with Change role and Remove in the row's "⋯"; the introduction is one
+    line with an (i).
 
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the

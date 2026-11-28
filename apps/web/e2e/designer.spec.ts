@@ -468,7 +468,11 @@ test('reviewers comment, editors see who is here, and items go to and from the l
 
   // The supervisor cannot edit but can comment.
   await expect(sup.getByLabel('Question wording (es)')).toBeDisabled();
-  const comments = sup.getByTestId('comments');
+  // The item's comments open in a side panel from the editor's header.
+  await sup.getByRole('button', { name: 'Comments (0)' }).click();
+  const comments = sup
+    .getByRole('dialog', { name: 'Comments on A_CONSENT' })
+    .getByTestId('comments');
   await comments.getByLabel('Add a comment').fill('Please add a "Prefer not to say" option.');
   await comments.getByRole('button', { name: 'Comment', exact: true }).click();
   await expect(comments.locator('[data-thread]')).toContainText('Prefer not to say');
@@ -477,14 +481,20 @@ test('reviewers comment, editors see who is here, and items go to and from the l
   await pm.reload();
   await expect(outlineItem(pm, 'A_CONSENT').getByTestId('comment-badge')).toContainText('1');
   await outlineItem(pm, 'A_CONSENT').click();
-  const thread = pm.getByTestId('comments').locator('[data-thread]');
+  await pm.getByRole('button', { name: 'Comments (1)' }).click();
+  const panel = pm.getByRole('dialog', { name: 'Comments on A_CONSENT' });
+  const thread = panel.getByTestId('comments').locator('[data-thread]');
   await thread.getByRole('button', { name: 'Reply' }).click();
   await thread.getByLabel(/Reply to/).fill('Done.');
   await thread.getByRole('button', { name: 'Reply' }).click();
   await expect(thread).toContainText('Done.');
   await shot(pm, 'designer-comments');
+  await shot(pm, 'p2-designer-comments-panel', { fullPage: false });
   await thread.getByRole('button', { name: 'Resolve' }).click();
   await expect(outlineItem(pm, 'A_CONSENT').getByTestId('comment-badge')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Close' }).click();
+  await expect(panel).toBeHidden();
+  await expect(pm.getByRole('button', { name: 'Comments (0)' })).toBeFocused();
 
   // Save the question to the library, then insert it again: it gets a fresh name. With
   // errors (options without labels) it cannot be saved yet.

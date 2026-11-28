@@ -503,6 +503,7 @@ export const casesEn = {
     },
   },
   rules: {
+    cancel: 'Cancel',
     title: 'Assignments',
     intro:
       'Rules give matching unassigned cases to a person automatically, now and whenever a sample is imported. Rules run oldest first; a quota caps how many cases the person holds.',
@@ -1216,6 +1217,7 @@ export const casesEs: CasesCatalogue = {
     },
   },
   rules: {
+    cancel: 'Cancelar',
     title: 'Asignaciones',
     intro:
       'Las reglas entregan automáticamente los casos sin asignar que cumplen a una persona, ahora y en cada importación. Se aplican de la más antigua a la más reciente; una cuota limita cuántos casos tiene la persona.',

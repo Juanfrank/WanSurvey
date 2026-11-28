@@ -556,8 +556,12 @@ export const designerEn = {
     slider: 'Slider',
     checkbox: 'Checkboxes',
   },
+  /** The (i) that unfolds a long explanation (FoldedHelp), for screen readers. */
+  moreHelp: 'More information',
   comments: {
     title: 'Comments',
+    /** The button that opens the item's comments beside the editor; n: its open threads. */
+    open: 'Comments ({{count}})',
     general: 'Comments on the whole questionnaire',
     onItem: 'Comments on {{id}}',
     none: 'No comments yet.',
@@ -1439,8 +1443,10 @@ export const designerEs: DesignerCatalogue = {
     slider: 'Deslizador',
     checkbox: 'Casillas',
   },
+  moreHelp: 'Más información',
   comments: {
     title: 'Comentarios',
+    open: 'Comentarios ({{count}})',
     general: 'Comentarios sobre todo el cuestionario',
     onItem: 'Comentarios sobre {{id}}',
     none: 'Aún no hay comentarios.',

@@ -289,6 +289,9 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await page.getByRole('button', { name: 'Assignment rules' }).click();
   let rules = page.getByRole('dialog', { name: 'Assignment rules' });
   await expect(rules.getByTestId('rules')).toContainText('Region 1');
+  // The form to add a rule waits behind its button.
+  await expect(page.getByLabel('Rule name')).toHaveCount(0);
+  await rules.getByRole('button', { name: '+ Add rule' }).click();
   await page.getByLabel('Rule name').fill('Region 3 to the clerk');
   await page.getByLabel('Assign to').selectOption({ label: 'Demo clerk' });
   const when = page.getByRole('group', { name: 'Cases where' });
@@ -298,8 +301,13 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await expect(when.getByTestId('condition-summary')).toContainText('sample field "region" is 3');
   await expect(page.getByTestId('rule-preview')).toContainText(/Matches \d+ cases/);
   await page.getByLabel('At most (cases held by the person)').fill('10');
-  await page.getByRole('button', { name: 'Add rule' }).last().click();
+  await shot(page, 'p2-cases-rules-form', { fullPage: false });
+  await rules
+    .getByRole('form', { name: 'Add rule' })
+    .getByRole('button', { name: 'Add rule' })
+    .click();
   await expect(page.getByTestId('rules')).toContainText('Region 3 to the clerk');
+  await expect(rules.getByRole('form', { name: 'Add rule' })).toHaveCount(0);
   await shot(page, 'cases-assignments', { fullPage: false });
   await expectAccessible(page);
   await rules.getByRole('button', { name: 'Close' }).last().click();
@@ -328,6 +336,7 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
     .evaluate((el) => (el.scrollLeft = el.scrollWidth));
   await shot(page, 'v2-cases-workload', { fullPage: false });
   // When someone falls ill, the cases they have not started go to another person at once.
+  await rules.getByRole('button', { name: 'Move someone’s cases' }).click();
   const move = rules.getByRole('form', { name: 'Move someone’s cases' });
   await move.getByLabel('From').selectOption({ label: 'Demo clerk (10 not started)' });
   await move.getByLabel('To').selectOption({ label: 'Demo interviewer' });
@@ -501,6 +510,9 @@ test('duplicates across projects are flagged; the drawer says where the case com
   await expectAccessible(page);
   await page.getByRole('button', { name: 'Load 2 units into the frame' }).click();
   await expect(page.getByTestId('import-done')).toContainText('2 eligible units became cases');
+  // The import is in a side panel: back to the selector, then to the list.
+  await page.getByRole('button', { name: 'Continue with the design' }).click();
+  await expect(page.getByRole('dialog', { name: 'Add units to the sample' })).toBeHidden();
 
   // The case drawer says where else the person is, and where the case comes from.
   await page.getByRole('tab', { name: 'Case list' }).click();

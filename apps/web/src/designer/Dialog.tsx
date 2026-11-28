@@ -25,7 +25,7 @@ export function Dialog({
   wide?: boolean;
   /** Shown under the title; both stay in view while the rest scrolls. */
   header?: ReactNode;
-  /** A panel on the right edge instead of a box in the middle. */
+  /** A panel on the right edge instead of a box in the middle (`wide`: up to 48rem, not 28rem). */
   side?: boolean;
   /** Shows a ✕ button beside the title, named with this text. */
   closeLabel?: string;
@@ -75,7 +75,7 @@ export function Dialog({
   );
   const box = side
     ? // The whole screen on a phone; from 640 px a panel against the right edge.
-      'fixed inset-y-0 right-0 left-auto m-0 flex h-dvh max-h-dvh w-full max-w-none flex-col overflow-hidden border-l border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-900/40 sm:max-w-md'
+      `fixed inset-y-0 right-0 left-auto m-0 flex h-dvh max-h-dvh w-full max-w-none flex-col overflow-hidden border-l border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-900/40 ${wide ? 'sm:max-w-3xl' : 'sm:max-w-md'}`
     : `m-auto max-h-[90vh] w-[calc(100%-2rem)] overflow-auto rounded-xl border border-slate-200 bg-white p-6 shadow-xl backdrop:bg-slate-900/40 ${wide ? 'max-w-3xl' : 'max-w-lg'}`;
   return (
     <dialog

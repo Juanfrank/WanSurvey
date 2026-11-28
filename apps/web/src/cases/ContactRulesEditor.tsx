@@ -1,6 +1,6 @@
 import { CONTACT_CHANNELS, type ContactRules } from '@wansurvey/schema';
 import { useTranslation } from 'react-i18next';
-import { controlCls } from '../designer/fields.js';
+import { controlCls, FoldedHelp } from '../designer/fields.js';
 
 /** The project's rules for contacting people again (ADR 0002): exclusion window and permanence. */
 export function ContactRulesEditor({
@@ -15,7 +15,7 @@ export function ContactRulesEditor({
   return (
     <fieldset className="flex flex-col gap-3" data-testid="contact-rules">
       <legend className="mb-1 font-medium">{t('cases.contactRules.title')}</legend>
-      <p className="max-w-prose text-slate-600">{t('cases.contactRules.help')}</p>
+      <FoldedHelp className="max-w-prose">{t('cases.contactRules.help')}</FoldedHelp>
       <div className="flex flex-wrap gap-4">
         <label className="flex flex-col gap-1">
           <span>{t('cases.contactRules.exclusionDays')}</span>

@@ -1,6 +1,6 @@
 import type { CleaningRule, CleaningSettings } from '@wansurvey/schema';
 import { useTranslation } from 'react-i18next';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
 import { Suggest } from '../designer/Suggest.js';
 import { fieldSuggestions } from '../designer/suggest.js';
 
@@ -54,12 +54,12 @@ export function CleaningEditor({
           />
           {t('cases.cleaning.symbols')}
         </label>
-        <p className="max-w-prose text-slate-600">{t('cases.cleaning.phoneNote')}</p>
+        <FoldedHelp className="max-w-prose">{t('cases.cleaning.phoneNote')}</FoldedHelp>
       </fieldset>
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 font-medium">{t('cases.cleaning.rulesTitle')}</legend>
-        <p className="max-w-prose text-slate-600">{t('cases.cleaning.rulesHelp')}</p>
+        <FoldedHelp className="max-w-prose">{t('cases.cleaning.rulesHelp')}</FoldedHelp>
         <ul className="flex flex-col gap-3">
           {value.rules.map((r, i) => (
             <li key={r.id} className="flex flex-col gap-1 rounded-md border border-slate-200 p-2">
@@ -125,7 +125,7 @@ export function CleaningEditor({
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 font-medium">{t('cases.cleaning.duplicatesTitle')}</legend>
-        <p className="max-w-prose text-slate-600">{t('cases.cleaning.duplicatesHelp')}</p>
+        <FoldedHelp className="max-w-prose">{t('cases.cleaning.duplicatesHelp')}</FoldedHelp>
         <div className="flex flex-wrap gap-3">
           {choices.map((f) => (
             <label key={f} className="flex items-center gap-1">
