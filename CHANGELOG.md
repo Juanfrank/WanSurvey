@@ -520,6 +520,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **Fewer fixed paragraphs, a one-line interview bar on phones** (third visual audit, H2):
+  - Webhooks, API keys and Teams: whoever may only look sees a compact "Read only" badge in the
+    page header; who changes them is behind its (i), not in a paragraph under the title.
+  - The designer's Languages › Translations, the feedback form's designer (what the form is
+    for, what a link parameter does) and its links ("Each face has its own link…") keep their
+    explanations behind an (i) beside the heading or label.
+  - The interview's bar of actions keeps one line under 640 px: Note, Pause and "⋯" with the
+    case details and "Suspend and leave"; "Keyboard shortcuts" is not offered on a phone or a
+    touch screen. Tablets and desktops keep every button in view.
+
 - **Less crowding on Home, analysis, review and administration** (at 1280 px):
   - Home: the project's name and its code keep to one line each, cut with "…"; the headers
     "Team pace", "Callbacks due" and "Working now" are written short (the full name is the title
@@ -645,6 +655,10 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Fixed
 
+- **The side panel follows the window until a choice is saved**: a window that grew from a
+  phone's width to a laptop's kept the compact panel of the phone, which then opened over the
+  page under the pointer (the paper preview's title, mode and tabs were hidden behind it). With
+  nothing chosen it now takes the default of the current width.
 - **Feedback links**: the HTML copied for an e-mail carried React's `className` attribute; it is
   now a plain table, with its labels (and the web page embed's name) escaped.
 - **The waiting page speaks the interface's language**: "Your account is active, but no role has

@@ -152,6 +152,35 @@ export async function shot(page: Page, name: string, opts: { fullPage?: boolean 
   }
 }
 
+/**
+ * A screenshot of something that floats at a fixed place (an open "⋯" menu): `open` opens it
+ * once the interface is in Spanish, so the text switch does not move the rows from under it;
+ * Escape closes it after the picture. Without SCREENSHOTS nothing is done.
+ */
+export async function shotOpen(
+  page: Page,
+  name: string,
+  open: () => Promise<void>,
+  opts: { fullPage?: boolean } = {},
+) {
+  if (!process.env.SCREENSHOTS) return;
+  const html = page.locator('html');
+  const before = (await html.getAttribute('lang')) ?? 'es';
+  const setLang = async (lng: string) => {
+    await page.evaluate(
+      (l) => window.dispatchEvent(new CustomEvent('ws:lang', { detail: l })),
+      lng,
+    );
+    await expect(html).toHaveAttribute('lang', lng);
+    await page.waitForTimeout(150);
+  };
+  if (before !== 'es') await setLang('es');
+  await open();
+  await shot(page, name, opts);
+  await page.keyboard.press('Escape');
+  if (before !== 'es') await setLang(before);
+}
+
 /** Opens a questionnaire's action (web survey, paper forms) from the Questionnaires tab. */
 export async function questionnaireAction(
   page: Page,

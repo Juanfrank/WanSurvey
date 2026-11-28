@@ -28,6 +28,11 @@ test('a face link records the answer; slips print; results count every channel',
   // Its questions: the Likert first, the comment box, and a branch the link can answer.
   const designer = page.getByTestId('feedback-designer');
   await expect(designer.locator('[data-item="LIKERT"]')).toBeVisible();
+  // What the form is for is behind the (i) beside its title, not a paragraph above it.
+  await expect(page.getByText(/A short form: the Likert comes first/)).toBeHidden();
+  await page.getByRole('button', { name: 'About: Edit the questions' }).focus();
+  await expect(page.getByText(/A short form: the Likert comes first/)).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(designer.locator('[data-item="COMENTARIO"]')).toBeVisible();
   await designer.getByRole('button', { name: '+ Single choice' }).click();
   const branch = designer.locator('li').last();
@@ -36,6 +41,11 @@ test('a face link records the answer; slips print; results count every channel',
   await branch.getByLabel(/^Answer 1 of/).fill('Centro');
   await branch.getByLabel(/^Answer 2 of/).fill('Norte');
   await branch.getByLabel('Link parameter (optional)').fill('sede');
+  // What the parameter does waits behind the (i) beside its label.
+  await expect(page.getByText(/answers this question beforehand/)).toBeHidden();
+  await branch.getByRole('button', { name: 'About: Link parameter (optional)' }).focus();
+  await expect(page.getByText(/A link with \?sede=… answers this question/)).toBeVisible();
+  await page.keyboard.press('Escape');
   await designer.getByRole('button', { name: 'Save the questions' }).click();
   await expect(designer.getByRole('status')).toHaveText('Saved as version 2.');
   await expect(designer.getByTestId('feedback-count')).toHaveText(

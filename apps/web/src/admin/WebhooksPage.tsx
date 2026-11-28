@@ -6,6 +6,7 @@ import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { InfoTip } from '../cases/samplingControls.js';
+import { ReadOnlyBadge } from './ReadOnlyBadge.js';
 import {
   Button,
   Card,
@@ -92,12 +93,11 @@ export function WebhooksPage() {
         actions={
           canManage ? (
             <Button onClick={() => setCreating(true)}>{t('admin.webhooksPage.add')}</Button>
-          ) : null
+          ) : (
+            <ReadOnlyBadge id="webhooks-read-only" text={t('admin.webhooksPage.readOnly')} />
+          )
         }
       />
-      {canManage ? null : (
-        <p className="text-sm text-slate-600">{t('admin.webhooksPage.readOnly')}</p>
-      )}
       {act.isError ? <ErrorText>{t('admin.webhooksPage.error')}</ErrorText> : null}
       <QueryState query={list}>{null}</QueryState>
       {list.data && list.data.length === 0 ? (

@@ -22,7 +22,7 @@ import {
   type FeedbackDraft,
   type FeedbackPoint,
 } from '../feedback/FeedbackParts.js';
-import { FeedbackDesigner } from '../feedback/FeedbackDesigner.js';
+import { FeedbackDesigner, FeedbackPanelTip } from '../feedback/FeedbackDesigner.js';
 import { SettingsTab } from '../cases/SettingsTab.js';
 import { ProjectPeople } from '../team/ProjectPeople.js';
 import { CallsTab } from '../cati/CallsTab.js';
@@ -642,6 +642,14 @@ function QuestionnairesSection({
                 })
               : null}
           </h2>
+          {panel.name && (panel.kind === 'feedbackDesign' || panel.kind === 'feedbackLinks') ? (
+            <FeedbackPanelTip
+              kind={panel.kind === 'feedbackDesign' ? 'design' : 'links'}
+              term={t(
+                panel.kind === 'feedbackDesign' ? 'feedback.editQuestions' : 'feedback.links',
+              )}
+            />
+          ) : null}
         </div>
         {panel.kind === 'feedbackDesign' ? (
           <Card>

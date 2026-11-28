@@ -11,7 +11,7 @@ import { Dialog } from '../designer/Dialog.js';
 import { useCan } from '../designer/hooks.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
-import { Button, PageHeader } from '../routes/ui.js';
+import { Button, MoreMenu, PageHeader } from '../routes/ui.js';
 import { useMedia } from '../routes/SideDrawer.js';
 import { api } from '../api.js';
 import type { ReviewComment } from '../review/ReviewPage.js';
@@ -112,6 +112,8 @@ export function InterviewPage() {
   const canCasesAll = useCan('cases.read_all', projectId);
   // Under 1024 px (a tablet or a phone) the breadcrumb is only "‹ Case HH0031".
   const compact = useMedia('(max-width: 1023px)');
+  // Under 640 px (a phone) the bar of actions keeps one line: the rarer ones go under "⋯".
+  const narrow = useMedia('(max-width: 639px)');
 
   // Clocks in the header.
   useEffect(() => {
@@ -193,6 +195,12 @@ export function InterviewPage() {
               search: { tab: 'calls', ...(done ? { notice: 'interview_done' } : {}) },
             })
           : navigate({ to: '/projects/$projectId', params: { projectId } });
+
+  /** Saves what is pending (even offline answers try once more) and leaves. */
+  const suspend = async () => {
+    await iv.sync({ force: true });
+    await leave();
+  };
 
   const submit = async () => {
     setSubmitting(true);
@@ -567,9 +575,11 @@ export function InterviewPage() {
         className="sticky bottom-0 z-10 max-sm:pointer-coarse:static -mx-1 flex flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50/95 px-1 py-2 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 [&_button]:pointer-coarse:min-h-11"
         data-testid="interview-actions"
       >
-        <button type="button" className={smallBtn} onClick={() => setSide((s) => !s)}>
-          {side ? t('interview.hideSide') : t('interview.showSide')}
-        </button>
+        {narrow ? null : (
+          <button type="button" className={smallBtn} onClick={() => setSide((s) => !s)}>
+            {side ? t('interview.hideSide') : t('interview.showSide')}
+          </button>
+        )}
         <button
           type="button"
           className={smallBtn}
@@ -586,25 +596,43 @@ export function InterviewPage() {
         >
           {paused ? t('interview.resume') : t('interview.pause')}
         </button>
-        <button
-          type="button"
-          className={smallBtn}
-          onClick={async () => {
-            await iv.sync({ force: true });
-            await leave();
-          }}
-        >
-          {t('interview.suspend')}
-        </button>
-        {/* Keyboard shortcuts mean nothing on a touch screen. */}
-        <button
-          type="button"
-          className={`${smallBtn} pointer-coarse:hidden`}
-          onClick={() => setHelp(true)}
-          aria-keyshortcuts="?"
-        >
-          {t('interview.help')}
-        </button>
+        {narrow ? (
+          // On a phone the bar keeps one line: the case data and leaving go under "⋯".
+          <MoreMenu
+            label={t('interview.moreActions')}
+            className={smallBtn}
+            unstyled
+            entries={[
+              {
+                type: 'item',
+                id: 'side',
+                label: side ? t('interview.hideSide') : t('interview.showSide'),
+                onSelect: () => setSide((s) => !s),
+              },
+              {
+                type: 'item',
+                id: 'suspend',
+                label: t('interview.suspend'),
+                onSelect: () => void suspend(),
+              },
+            ]}
+          />
+        ) : (
+          <button type="button" className={smallBtn} onClick={() => void suspend()}>
+            {t('interview.suspend')}
+          </button>
+        )}
+        {/* Keyboard shortcuts mean nothing on a touch screen or a phone. */}
+        {narrow ? null : (
+          <button
+            type="button"
+            className={`${smallBtn} pointer-coarse:hidden`}
+            onClick={() => setHelp(true)}
+            aria-keyshortcuts="?"
+          >
+            {t('interview.help')}
+          </button>
+        )}
         <p role="status" aria-live="polite" className="text-sm">
           {message}
         </p>

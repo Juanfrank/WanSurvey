@@ -12,6 +12,8 @@ export const adminEn = {
   webhooks: 'Webhooks',
   peopleRegistry: 'People registry',
   roles: 'Roles and permissions',
+  /** The badge of a page that may be seen but not changed; its (i) says who changes it. */
+  readOnly: 'Read only',
   groups: {
     people: 'People and access',
     organisation: 'Organisation',
@@ -504,6 +506,7 @@ export const adminEs: typeof adminEn = {
   webhooks: 'Webhooks',
   peopleRegistry: 'Registro de personas',
   roles: 'Roles y permisos',
+  readOnly: 'Solo lectura',
   groups: {
     people: 'Personas y acceso',
     organisation: 'Organización',

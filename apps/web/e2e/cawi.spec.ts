@@ -6,6 +6,7 @@ import {
   pickOrganisation,
   questionnaireAction,
   shot,
+  shotOpen,
   gotoTab,
 } from './helpers.js';
 import { sentMail } from './mail.js';
@@ -193,8 +194,23 @@ test('a links-only wave makes a personal link per case, ready to download', asyn
   await expect(second).toContainText('Revoked');
   await links.getByRole('button', { name: `Actions for the link of ${id}` }).click();
   await expect(page.getByRole('menuitem', { name: `Revoke the link of ${id}` })).toBeDisabled();
-  await shot(page, 'p2-cawi-link-row-menu', { fullPage: false });
+  // The menu is this row's: its "⋯" is the one expanded, no other row's.
+  await expect(
+    links.getByRole('button', { name: `Actions for the link of ${id}` }),
+  ).toHaveAttribute('aria-expanded', 'true');
+  await expect(links.locator('[data-more-menu][aria-expanded="true"]')).toHaveCount(1);
   await page.keyboard.press('Escape');
+  // Opened again in Spanish for the picture: switching the text moves the rows, and a menu
+  // opened before would be left where its row used to be.
+  await shotOpen(
+    page,
+    'p2-cawi-link-row-menu',
+    async () => {
+      await second.locator('[data-more-menu]').click();
+      await expect(page.getByRole('menu')).toBeVisible();
+    },
+    { fullPage: false },
+  );
   await shot(page, 'v2-cawi-links-expiry-revoke');
   await expectAccessible(page);
 

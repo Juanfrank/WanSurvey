@@ -485,7 +485,14 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
   // An administrator sees the webhooks, read only, as the API keys.
   await nav.getByRole('link', { name: 'Webhooks', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Webhooks' })).toBeVisible();
+  // "Read only" is a badge beside the title; its (i) says who changes them.
+  await expect(page.getByText('Read only', { exact: true })).toBeVisible();
+  await expect(page.getByText(/You can see the webhooks and their deliveries/)).toBeHidden();
+  await page.getByRole('button', { name: 'About: Read only' }).focus();
   await expect(page.getByText(/You can see the webhooks and their deliveries/)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.mouse.move(0, 700);
+  await expect(page.getByText(/You can see the webhooks and their deliveries/)).toBeHidden();
   await expect(page.getByRole('button', { name: 'New webhook' })).toHaveCount(0);
   await shot(page, 'v2-webhooks-read-only');
   await expectAccessible(page);

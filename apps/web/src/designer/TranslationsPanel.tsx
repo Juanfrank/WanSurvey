@@ -9,6 +9,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Group, smallBtn } from './fields.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import type { Draft } from './tree.js';
 import { FileInput } from '../routes/ui.js';
 
@@ -60,8 +61,17 @@ export function TranslationsPanel({ draft, change }: { draft: Draft; change(next
   };
 
   return (
-    <Group title={t('designer.translations.title')}>
-      <p className="text-sm text-slate-600">{t('designer.translations.intro')}</p>
+    <Group
+      title={t('designer.translations.title')}
+      tip={
+        <InfoTip
+          id="translations-intro"
+          term={t('designer.translations.title')}
+          text={t('designer.translations.intro')}
+          align="start"
+        />
+      }
+    >
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

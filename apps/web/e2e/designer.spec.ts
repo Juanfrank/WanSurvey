@@ -212,6 +212,9 @@ test('design a questionnaire with the keyboard, preview it and publish v1 and v2
 
   // Translations: export the CSV, change a Spanish text, import it back.
   await openSettings(page, 'Languages');
+  // How the round trip works is behind the (i) beside "Translations".
+  await expect(page.getByText(/Send the texts to translators/)).toBeHidden();
+  await expect(page.getByRole('button', { name: 'About: Translations' })).toBeVisible();
   const [csvFile] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Export all texts (CSV)' }).click(),

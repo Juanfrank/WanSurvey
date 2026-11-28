@@ -7,6 +7,7 @@ import { Dialog } from '../designer/Dialog.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import { InfoTip } from '../cases/samplingControls.js';
+import { ReadOnlyBadge } from './ReadOnlyBadge.js';
 import {
   Button,
   Card,
@@ -86,12 +87,11 @@ export function ApiKeysPage() {
         actions={
           canManage ? (
             <Button onClick={() => setCreating(true)}>{t('admin.apiKeysPage.add')}</Button>
-          ) : null
+          ) : (
+            <ReadOnlyBadge id="api-keys-read-only" text={t('admin.apiKeysPage.readOnly')} />
+          )
         }
       />
-      {canManage ? null : (
-        <p className="text-sm text-slate-600">{t('admin.apiKeysPage.readOnly')}</p>
-      )}
       <QueryState query={keys}>{null}</QueryState>
       {keys.data && keys.data.length === 0 ? (
         <Card>

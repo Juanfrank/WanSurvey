@@ -108,7 +108,24 @@ test('an interview autosaves, survives a reload and going offline, and submits',
     await small.goto(page.url());
     await expect(small.getByTestId('runner')).toBeVisible();
     await expect(small.getByRole('complementary', { name: 'Case details' })).toBeHidden();
-    await expect(small.getByTestId('interview-actions')).toBeInViewport();
+    const actionBar = small.getByTestId('interview-actions');
+    await expect(actionBar).toBeInViewport();
+    if (size.width < 640) {
+      // On a phone the bar is one line: Note, Pause and "⋯" with the case data and leaving;
+      // keyboard shortcuts are not offered.
+      await expect(actionBar.getByRole('button', { name: 'Keyboard shortcuts' })).toHaveCount(0);
+      expect((await actionBar.boundingBox())!.height).toBeLessThan(64);
+      await actionBar.getByRole('button', { name: 'More actions of the interview' }).click();
+      const more = small.getByRole('menu', { name: 'More actions of the interview' });
+      await expect(more.getByRole('menuitem', { name: 'Show case details' })).toBeVisible();
+      await expect(more.getByRole('menuitem', { name: 'Suspend and leave' })).toBeVisible();
+      await small.keyboard.press('Escape');
+      await expect(more).toBeHidden();
+    } else {
+      // A tablet keeps every action in view.
+      for (const label of ['Show case details', 'Note', 'Pause', 'Suspend and leave'])
+        await expect(actionBar.getByRole('button', { name: label, exact: true })).toBeVisible();
+    }
     // Under 1024 px only "‹ Case HH0031", whole; "Saved" on the line of the clocks.
     await expect(small.getByRole('navigation', { name: 'Breadcrumb' })).toHaveCount(0);
     await expect(small.getByRole('link', { name: 'Back to My cases' })).toBeVisible();

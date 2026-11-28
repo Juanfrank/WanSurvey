@@ -7,6 +7,7 @@ import {
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, ErrorText } from '../routes/ui.js';
@@ -30,6 +31,26 @@ const blank = (type: ItemType, n: number, lang: string): FeedbackItem => ({
       }
     : {}),
 });
+
+/**
+ * The (i) beside the title of the panel that edits a Likert point's questions or shows its
+ * links: what the panel is for, instead of a paragraph above it.
+ */
+export function FeedbackPanelTip({ kind, term }: { kind: 'design' | 'links'; term: string }) {
+  const { t } = useTranslation();
+  return (
+    <InfoTip
+      id={`feedback-${kind}-help`}
+      term={term}
+      text={
+        kind === 'design'
+          ? t('feedback.design.help', { max: MAX_FEEDBACK_ITEMS })
+          : t('feedback.linksHelp')
+      }
+      align="start"
+    />
+  );
+}
 
 /**
  * The structure of a Likert point (F2), laid out like a short questionnaire: the Likert is
@@ -94,9 +115,6 @@ export function FeedbackDesigner({
         save.mutate();
       }}
     >
-      <p className="text-sm text-slate-600">
-        {t('feedback.design.help', { max: MAX_FEEDBACK_ITEMS })}
-      </p>
       <ol className="flex flex-col gap-3">
         <li
           className="flex flex-col gap-3 rounded-lg border-2 border-indigo-200 bg-indigo-50/40 p-4"
@@ -373,9 +391,21 @@ function ItemEditor({
             })}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="font-medium">{t('feedback.design.param')}</span>
+        {/* A div, not a label around it: the (i) is a button of its own, kept out of the name. */}
+        <div className="flex flex-col gap-1">
+          <span className="inline-flex h-5 items-center font-medium">
+            <label htmlFor={`${id}-param`}>{t('feedback.design.param')}</label>
+            {item.param ? (
+              <InfoTip
+                id={`feedback-param-${item.id}`}
+                term={t('feedback.design.param')}
+                text={t('feedback.design.paramHelp', { param: item.param })}
+                align="start"
+              />
+            ) : null}
+          </span>
           <input
+            id={`${id}-param`}
             className={`${inputCls} w-36 font-mono`}
             value={item.param ?? ''}
             placeholder="sede"
@@ -385,13 +415,8 @@ function ItemEditor({
               })
             }
           />
-        </label>
+        </div>
       </div>
-      {item.param ? (
-        <p className="text-xs text-slate-600">
-          {t('feedback.design.paramHelp', { param: item.param })}
-        </p>
-      ) : null}
     </li>
   );
 }

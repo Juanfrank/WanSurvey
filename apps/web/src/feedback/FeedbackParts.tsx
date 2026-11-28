@@ -193,7 +193,6 @@ export function FeedbackLinks({ point }: { point: FeedbackPoint }) {
   const iframe = feedbackIframeHtml(point);
   return (
     <div className="flex flex-col gap-4 rounded-md bg-slate-50 p-3" data-testid="feedback-links">
-      <p className="text-sm text-slate-600">{t('feedback.linksHelp')}</p>
       <ul className="flex flex-col gap-1.5">
         {scores.map((s) => (
           <li key={s} className="flex flex-wrap items-center gap-2 text-sm">

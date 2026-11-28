@@ -9,12 +9,13 @@ import {
 import { useTranslation } from 'react-i18next';
 import { CloseIcon, PinIcon } from './icons.js';
 
-function readFlag(key: string, fallback: boolean) {
+/** The saved choice, or `null` when nothing is saved. */
+function readFlag(key: string): boolean | null {
   try {
     const v = localStorage.getItem(key);
-    return v === null ? fallback : v === '1';
+    return v === null ? null : v === '1';
   } catch {
-    return fallback;
+    return null;
   }
 }
 
@@ -41,14 +42,18 @@ export function useMedia(query: string) {
   return matches;
 }
 
-/** A boolean remembered on this device (localStorage), with a default when nothing is saved. */
+/**
+ * A boolean remembered on this device (localStorage), with a default when nothing is saved.
+ * Until a choice is saved the default is followed as it changes (a window that grows from a
+ * phone's width to a laptop's gets the laptop's default, not the phone's).
+ */
 export function useStoredFlag(key: string, fallback: boolean) {
-  const [value, setValue] = useState(() => readFlag(key, fallback));
+  const [saved, setSaved] = useState(() => readFlag(key));
   const set = (v: boolean) => {
-    setValue(v);
+    setSaved(v);
     writeFlag(key, v);
   };
-  return [value, set] as const;
+  return [saved ?? fallback, set] as const;
 }
 
 export interface DrawerState {

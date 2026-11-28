@@ -122,6 +122,18 @@ test('respondents on a phone get one question per page; PAPI prints routing as i
   await page.getByTestId('mode').selectOption('PAPI');
   await expect(page.getByText('If Q4 is not “Casado/a” (1) → go to Q6')).toBeVisible();
   await expect(page.getByText('If Q1 is “No” (2) → end the interview (refusal)')).toBeVisible();
+  // Grown from a phone's width, the window gets a laptop's side panel (nothing was chosen):
+  // open, beside the page, and the page starts to its right.
+  const sideRight = await page
+    .getByRole('navigation', { name: 'Main' })
+    .evaluate((n) => n.closest('header')!.getBoundingClientRect().right);
+  expect(sideRight).toBeGreaterThan(200);
+  const mode = (await page.getByTestId('mode').boundingBox())!;
+  expect(mode.x).toBeGreaterThanOrEqual(sideRight);
+  const h1 = (await page
+    .getByRole('heading', { level: 1, name: 'Questionnaire preview' })
+    .boundingBox())!;
+  expect(h1.x).toBeGreaterThanOrEqual(sideRight);
   await shot(page, 'preview-papi');
 });
 

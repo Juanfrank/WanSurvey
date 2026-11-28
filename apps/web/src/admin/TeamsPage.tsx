@@ -3,6 +3,7 @@ import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError } from '../api.js';
 import { InfoTip } from '../cases/samplingControls.js';
+import { ReadOnlyBadge } from './ReadOnlyBadge.js';
 import { inputCls } from '../designer/fields.js';
 import { useMe } from '../routes/AppLayout.js';
 import {
@@ -75,10 +76,11 @@ export function TeamsPage() {
         actions={
           canManage ? (
             <Button onClick={() => setEditing('new')}>{t('admin.teamsPage.add')}</Button>
-          ) : null
+          ) : (
+            <ReadOnlyBadge id="teams-read-only" text={t('admin.teamsPage.readOnly')} />
+          )
         }
       />
-      {canManage ? null : <p className="text-sm text-slate-600">{t('admin.teamsPage.readOnly')}</p>}
       <p
         role="status"
         className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-ink-800 empty:hidden"

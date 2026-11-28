@@ -108,6 +108,7 @@ export const interviewEn = {
   paused: 'Interview paused. The clock is stopped.',
   resume: 'Resume',
   suspend: 'Suspend and leave',
+  moreActions: 'More actions of the interview',
   submit: 'Submit interview',
   submitted: 'Interview submitted ({{disposition}}).',
   shortcutSettings: {
@@ -286,6 +287,7 @@ export const interviewEs: InterviewCatalogue = {
   paused: 'Entrevista en pausa. El reloj está detenido.',
   resume: 'Continuar',
   suspend: 'Suspender y salir',
+  moreActions: 'Más acciones de la entrevista',
   submit: 'Enviar entrevista',
   submitted: 'Entrevista enviada ({{disposition}}).',
   shortcutSettings: {

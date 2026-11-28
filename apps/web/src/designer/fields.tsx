@@ -13,16 +13,32 @@ export const smallBtn =
 
 export function Group({
   title,
+  tip,
   children,
   className = '',
 }: {
   title: ReactNode;
+  /** An (i) after the title, with what the group is for; kept out of the group's name. */
+  tip?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
+  const titleId = useId();
   return (
-    <fieldset className={`flex min-w-0 flex-col gap-3 ${className}`}>
-      <legend className="mb-1 text-sm font-semibold text-slate-800">{title}</legend>
+    <fieldset
+      className={`flex min-w-0 flex-col gap-3 ${className}`}
+      aria-labelledby={tip ? titleId : undefined}
+    >
+      <legend className="mb-1 text-sm font-semibold text-slate-800">
+        {tip ? (
+          <span className="inline-flex items-center">
+            <span id={titleId}>{title}</span>
+            {tip}
+          </span>
+        ) : (
+          title
+        )}
+      </legend>
       {children}
     </fieldset>
   );
