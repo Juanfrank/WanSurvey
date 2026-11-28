@@ -172,23 +172,24 @@ export function FilterBar({
       {active.length ? (
         <ul
           ref={chips}
-          className="flex flex-wrap items-center gap-1.5"
+          className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5"
           aria-label={t('ui.activeFilters')}
         >
           {active.map((f, i) => (
             <li
               key={f.id}
               data-chip={f.id}
-              className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 py-0.5 pl-2.5 pr-1 text-xs font-medium text-indigo-ink-800"
+              // A long chip is cut short (whole in its title), so the count keeps its line.
+              className="inline-flex min-w-0 max-w-[18rem] items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 py-0.5 pl-2.5 pr-1 text-xs font-medium text-indigo-ink-800"
             >
-              <span>
+              <span className="min-w-0 truncate" title={`${f.label}: ${f.value}`}>
                 {f.label}: {f.value}
               </span>
               <button
                 type="button"
                 aria-label={t('ui.removeFilter', { label: f.label, value: f.value })}
                 title={t('ui.removeFilter', { label: f.label, value: f.value })}
-                className="grid h-5 w-5 place-items-center rounded-full hover:bg-indigo-100"
+                className="grid h-5 w-5 flex-none place-items-center rounded-full hover:bg-indigo-100"
                 onClick={() => {
                   f.onRemove();
                   removed(i);

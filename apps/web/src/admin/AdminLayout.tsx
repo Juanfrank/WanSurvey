@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { useMe } from '../routes/AppLayout.js';
+import { MoreMenu } from '../routes/MoreMenu.js';
+import { useOverflowFit } from '../routes/tabs.js';
 import { Card, PageHeader } from '../routes/ui.js';
 import { ADMIN_GROUPS, adminMenuFor, adminSectionsFor } from './sections.js';
 
@@ -29,29 +31,15 @@ export function AdminLayout() {
     if (nothing) void navigate({ to: '/', replace: true });
   }, [nothing, navigate]);
 
+  const links = [
+    { value: '/admin', label: t('admin.home.title') },
+    ...pills.map((s) => ({ value: s.to, label: t(`admin.${s.key}`) })),
+  ];
+  const current = atRoot ? '/admin' : (pills.find((s) => pathname.startsWith(s.to))?.to ?? '');
+
   return (
     <div className="flex flex-col gap-4">
-      <nav
-        aria-label={t('admin.nav')}
-        className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 min-[900px]:hidden"
-      >
-        <Link
-          to="/admin"
-          activeOptions={{ exact: true }}
-          className="flex-none rounded-full border border-slate-300 px-3.5 py-1.5 text-sm font-medium text-slate-700 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:text-on-fill"
-        >
-          {t('admin.home.title')}
-        </Link>
-        {pills.map((s) => (
-          <Link
-            key={s.to}
-            to={s.to}
-            className="flex-none rounded-full border border-slate-300 px-3.5 py-1.5 text-sm font-medium text-slate-700 [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:text-on-fill"
-          >
-            {t(`admin.${s.key}`)}
-          </Link>
-        ))}
-      </nav>
+      <AdminPills links={links} current={current} />
       {atRoot ? (
         me.data && !nothing ? (
           <AdminHome permissions={permissions ?? []} />
@@ -60,6 +48,80 @@ export function AdminLayout() {
         <Outlet />
       )}
     </div>
+  );
+}
+
+const pillCls =
+  'flex-none whitespace-nowrap rounded-full border border-slate-300 px-3.5 py-1.5 text-sm font-medium text-slate-700';
+/** The gap between two pills (gap-2). */
+const PILL_GAP = 8;
+
+/**
+ * The sections as pills on one line, on screens without the side panel's list. As the tabs of
+ * a project (`OverflowTabList`), the ones that do not fit go in "More ▾"; the open one always
+ * shows. Under 640 px the row scrolls sideways instead.
+ */
+function AdminPills({
+  links,
+  current,
+}: {
+  links: { value: string; label: string }[];
+  current: string;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { room, measure, narrow, shown, hidden } = useOverflowFit(links, current, PILL_GAP);
+  return (
+    <nav aria-label={t('admin.nav')} className="min-[900px]:hidden">
+      <div ref={room} className={`relative flex min-w-0 gap-2 ${narrow ? '-mx-4' : ''}`}>
+        <div className={`flex min-w-0 gap-2 ${narrow ? 'overflow-x-auto px-4 pb-1' : ''}`}>
+          {shown.map((x) => (
+            <Link
+              key={x.value}
+              to={x.value}
+              activeOptions={{ exact: x.value === '/admin' }}
+              className={`${pillCls} [&.active]:border-indigo-600 [&.active]:bg-indigo-600 [&.active]:text-on-fill`}
+            >
+              {x.label}
+            </Link>
+          ))}
+        </div>
+        {hidden.length ? (
+          <MoreMenu
+            label={t('ui.moreSections')}
+            unstyled
+            className={`${pillCls} inline-flex items-center gap-1 hover:border-indigo-600 aria-expanded:border-indigo-600`}
+            entries={hidden.map((x) => ({
+              type: 'item' as const,
+              id: x.value,
+              label: x.label,
+              onSelect: () => void navigate({ to: x.value }),
+            }))}
+          >
+            {t('ui.more')}
+            <span aria-hidden="true" className="text-xs">
+              ▾
+            </span>
+          </MoreMenu>
+        ) : null}
+        {/* A copy of the row out of sight, to know how wide each pill is. */}
+        <div
+          ref={measure}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute left-0 top-0 flex h-0 w-max overflow-hidden"
+        >
+          {links.map((x) => (
+            <span key={x.value} className={pillCls}>
+              {x.label}
+            </span>
+          ))}
+          <span className={`${pillCls} inline-flex items-center gap-1`}>
+            {t('ui.more')}
+            <span className="text-xs">▾</span>
+          </span>
+        </div>
+      </div>
+    </nav>
   );
 }
 

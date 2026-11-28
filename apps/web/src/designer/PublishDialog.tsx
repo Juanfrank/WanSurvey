@@ -38,6 +38,8 @@ export function PublishDialog({
   const qc = useQueryClient();
   const [revision, setRevision] = useState<number | null>(null);
   const [check, setCheck] = useState<PublishCheckResult | null>(null);
+  /** The mapping `check` was made with: while it is not the one on screen, a check is pending. */
+  const [checkedMapping, setCheckedMapping] = useState<VersionMapping | null>(null);
   const [mapping, setMapping] = useState<VersionMapping>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,9 +66,14 @@ export function PublishDialog({
           method: 'POST',
           body: { mapping },
         });
-        if (mine === seq.current) setCheck(res);
+        if (mine === seq.current) {
+          setCheck(res);
+          setCheckedMapping(mapping);
+        }
       } catch (e) {
         setError(localiseError(t, e));
+        // Publishing does not wait for a check that failed: the server checks again on publish.
+        if (mine === seq.current) setCheckedMapping(mapping);
       }
     }, 250);
     return () => clearTimeout(timer);
@@ -90,6 +97,7 @@ export function PublishDialog({
     } catch (e) {
       if (e instanceof ApiError && e.code === 'PUBLISH_BLOCKED') {
         setCheck({ ...(e.body.check as PublishCheckResult), draftRevision: revision });
+        setCheckedMapping(mapping);
       } else setError(localiseError(t, e));
     } finally {
       setBusy(false);
@@ -99,6 +107,9 @@ export function PublishDialog({
   const errors = check?.diagnostics.filter((d) => d.severity === 'error') ?? [];
   const failing = check?.scenarios.filter((s) => !s.passed) ?? [];
   const nextVersion = (check?.previousVersion ?? 0) + 1;
+  // Just after a choice in the mapping, the last check's problems may be about the choice before
+  // it ("Choose what happens to A_WORK" once it is chosen): they wait for the new check.
+  const stale = checkedMapping !== mapping;
 
   return (
     <Dialog title={t('designer.publish.title')} onClose={onClose} wide>
@@ -214,9 +225,13 @@ export function PublishDialog({
                     change={b}
                     action={mapping[b.id]}
                     variables={vars}
-                    problems={check.mappingProblems
-                      .filter((p) => p.changeId === b.id)
-                      .map((p) => localiseMapping(t, p))}
+                    problems={
+                      stale
+                        ? []
+                        : check.mappingProblems
+                            .filter((p) => p.changeId === b.id)
+                            .map((p) => localiseMapping(t, p))
+                    }
                     onChange={(a) =>
                       setMapping((m) => {
                         const next = { ...m };
@@ -237,7 +252,7 @@ export function PublishDialog({
           </Button>
           <Button
             type="button"
-            disabled={!check?.ok || busy || !approvedToPublish(approval.data)}
+            disabled={!check?.ok || stale || busy || !approvedToPublish(approval.data)}
             onClick={() => void publish()}
           >
             {t('designer.publish.publishVersion', { version: nextVersion })}

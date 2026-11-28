@@ -283,7 +283,9 @@ export function AuditPage() {
                   log.hasNextPage
                   ? t('admin.log.shown', { count: entries.length })
                   : t('admin.log.count', { count: entries.length })
-                : t('admin.log.none')
+                : chips.length
+                  ? t('admin.log.none')
+                  : t('admin.log.emptyAll')
               : undefined
           }
           actions={
@@ -443,6 +445,13 @@ export function AuditPage() {
               </tr>
             </thead>
             <tbody>
+              {log.data && !entries.length ? (
+                <tr data-testid="audit-empty">
+                  <td colSpan={5} className="py-6 text-center text-slate-600">
+                    {chips.length ? t('admin.log.emptyFiltered') : t('admin.log.emptyAll')}
+                  </td>
+                </tr>
+              ) : null}
               {entries.map((e) => {
                 const rows = describeDetails(e.action, e.details, ctx);
                 const isOpen = open.has(e.id);

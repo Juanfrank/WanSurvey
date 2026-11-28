@@ -572,7 +572,7 @@ export function InterviewPage() {
       {/* On a tablet the bar stays at the bottom of the screen, under the thumb. On a phone's
           touch screen that place is the runner's Back and Next: this bar follows the question. */}
       <footer
-        className="sticky bottom-0 z-10 max-sm:pointer-coarse:static -mx-1 flex flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50/95 px-1 py-2 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 [&_button]:pointer-coarse:min-h-11"
+        className="sticky bottom-0 z-10 max-sm:pointer-coarse:static -mx-4 flex flex-wrap items-center gap-2 border-t border-slate-200 bg-ground px-4 py-2 min-[900px]:max-lg:mr-[calc(-2rem-var(--pane-right,0px))] min-[900px]:max-lg:ml-[calc(-2rem-var(--pane-left,0px))] min-[900px]:max-lg:pr-[calc(2rem+var(--pane-right,0px))] min-[900px]:max-lg:pl-[calc(2rem+var(--pane-left,0px))] lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 [&_button]:pointer-coarse:min-h-11"
         data-testid="interview-actions"
       >
         {narrow ? null : (

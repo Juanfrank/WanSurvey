@@ -458,6 +458,8 @@ export const adminEn = {
     details: 'Details',
     system: 'System',
     none: 'Nothing recorded for these filters.',
+    emptyFiltered: 'No entries match. Remove a filter or widen the dates to see more.',
+    emptyAll: 'Nothing has been recorded yet.',
     more: 'Show {{count}} more',
     export: 'Download as CSV',
     exportHint:
@@ -953,6 +955,8 @@ export const adminEs: typeof adminEn = {
     details: 'Detalles',
     system: 'Sistema',
     none: 'Nada registrado con estos filtros.',
+    emptyFiltered: 'Ninguna entrada coincide. Quite un filtro o amplíe las fechas para ver más.',
+    emptyAll: 'Todavía no hay nada registrado.',
     more: 'Mostrar {{count}} más',
     export: 'Descargar como CSV',
     exportHint:
