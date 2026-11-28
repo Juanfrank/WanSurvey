@@ -680,8 +680,9 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
           ) : null}
         </ul>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
-          {/* One line per case: cells do not wrap (the table scrolls sideways instead). */}
+        <div className="relative overflow-x-auto rounded-md border border-slate-200 bg-white">
+          {/* One line per case: cells do not wrap (the table scrolls sideways instead). `relative`:
+              the screen-reader text in it scrolls with it instead of widening the page. */}
           <table
             className="w-full min-w-[40rem] text-sm [&_td]:whitespace-nowrap"
             data-testid="cases-table"
@@ -690,7 +691,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
             <caption className="sr-only">
               {t('cases.list.title')} · {t('cases.list.total', { count: data?.total ?? 0 })}
             </caption>
-            <thead className="bg-slate-50 text-left text-xs text-slate-600">
+            <thead className="bg-slate-50 text-left text-xs whitespace-nowrap text-slate-600">
               <tr>
                 {canAssign ? (
                   <th scope="col" className="w-8 px-2 py-2">
@@ -722,8 +723,14 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
                     <th scope="col" className="px-2 py-2">
                       {t('cases.list.col.assignedAt')}
                     </th>
-                    <th scope="col" className="px-2 py-2">
-                      {t('cases.list.col.since')}
+                    {/* A short heading (one line); the full one in its title and for screen readers. */}
+                    <th
+                      scope="col"
+                      className="px-2 py-2 whitespace-nowrap"
+                      title={t('cases.list.col.since')}
+                    >
+                      <span aria-hidden="true">{t('cases.list.col.sinceShort')}</span>
+                      <span className="sr-only">{t('cases.list.col.since')}</span>
                     </th>
                   </>
                 ) : null}
@@ -875,7 +882,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
           </label>
           <select
             id="assign-how"
-            className={`${controlCls} h-8 w-auto max-w-[9.5rem] shrink-0 py-0`}
+            className={`${controlCls} h-8 w-auto max-w-[9rem] shrink-0 py-0`}
             value={how}
             onChange={(e) => setHow(e.target.value as 'person' | 'rules' | 'random')}
           >
@@ -890,7 +897,7 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
               </label>
               <select
                 id="assign-to"
-                className={`${controlCls} h-8 w-auto min-w-[8rem] max-w-[9.5rem] shrink-0 py-0`}
+                className={`${controlCls} h-8 w-auto min-w-[10.5rem] max-w-[10.5rem] shrink-0 py-0`}
                 value={assignee}
                 onChange={(e) => setAssignee(e.target.value)}
               >
@@ -1031,9 +1038,10 @@ function StatusCell({ r, own }: { r: CaseRow; own: boolean }) {
         >
           {r.disposition ? dispositionLabel(t, r.disposition) : null}
           {r.review ? (
-            <span data-review={r.review}>
+            <span data-review={r.review} title={t('cases.list.review').replace(/:\s*$/, '')}>
               {r.disposition ? '· ' : ''}
-              {t('cases.list.review')}{' '}
+              {/* Said, not shown: the badge's colour and word tell it on screen. */}
+              <span className="sr-only">{t('cases.list.review')} </span>
               <Badge tone={reviewTone[r.review]}>{t(`cases.list.reviewState.${r.review}`)}</Badge>
             </span>
           ) : null}

@@ -10,7 +10,9 @@ import { CloseIcon } from './icons.js';
  * - It is a named region (`role="region"`, `label`: "3 cases selected"), so screen readers can
  *   jump to it; the visible text (`children` first) says the same.
  * - It keeps its own height free at the end of the list (a spacer where it is placed), so the
- *   last row and the pagination are never under it: put it after the pagination.
+ *   last row and the pagination are never under it: put it after the pagination. If it comes up
+ *   while the end of the list is in view, the page moves up by its height so the pagination
+ *   shows above it.
  * - It sits between the side panel and the right edge (the app's `--side-w`, `--pane-left`,
  *   `--pane-right`), the whole width on a phone; its controls wrap there.
  * - `onClear` adds a ✕ that unticks everything.
@@ -50,6 +52,7 @@ export function BulkBar({
   const { t } = useTranslation();
   const bar = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLSpanElement>(null);
+  const spacer = useRef<HTMLDivElement>(null);
   // Whether the keyboard focus is in the bar (or in a dialog opened from it).
   const focused = useRef(false);
   const [height, setHeight] = useState(0);
@@ -63,6 +66,23 @@ export function BulkBar({
     ro?.observe(el);
     return () => ro?.disconnect();
   }, [shown]);
+  // When the bar comes up over the end of the list (the pagination in view, under it), the page
+  // moves up by the overlap, so what the spacer keeps free is in view at once.
+  const revealed = useRef(false);
+  useEffect(() => {
+    if (!shown) {
+      revealed.current = false;
+      return;
+    }
+    // Wait for this showing's own height (the state may still hold the last showing's), so the
+    // spacer under the list is already that tall.
+    if (revealed.current || !height || height !== bar.current?.offsetHeight) return;
+    revealed.current = true;
+    const end = spacer.current?.getBoundingClientRect().top;
+    if (end === undefined) return;
+    const free = window.innerHeight - (height + 24);
+    if (end > free && end <= window.innerHeight) window.scrollBy({ top: end - free });
+  }, [shown, height]);
   // Followed on the document: removing the focused button fires no event to rely on.
   useEffect(() => {
     if (!shown) return;
@@ -86,7 +106,7 @@ export function BulkBar({
     <>
       {place}
       {/* The bar's height (and its gap from the bottom) kept free under the list. */}
-      <div aria-hidden="true" data-bulk-spacer="" style={{ height: height + 24 }} />
+      <div ref={spacer} aria-hidden="true" data-bulk-spacer="" style={{ height: height + 24 }} />
       <div
         ref={bar}
         role="region"
@@ -94,7 +114,7 @@ export function BulkBar({
         data-bulk-bar=""
         className="no-print fixed inset-x-3 bottom-3 z-30 min-[900px]:left-[calc(var(--side-w,0px)+var(--pane-left,0px)+2rem)] min-[900px]:right-[calc(var(--pane-right,0px)+2rem)]"
       >
-        <div className="mx-auto flex max-w-[100rem] flex-wrap items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-2.5 py-2 text-sm shadow-[0_12px_32px_rgb(15_23_42/0.25)] [&>button]:px-2.5">
+        <div className="mx-auto flex max-w-[100rem] flex-wrap items-center gap-1 rounded-xl border border-indigo-200 bg-white px-2.5 py-2 text-sm shadow-[0_12px_32px_rgb(15_23_42/0.25)] [&>button]:px-2.5">
           {children}
           {onClear ? (
             <button

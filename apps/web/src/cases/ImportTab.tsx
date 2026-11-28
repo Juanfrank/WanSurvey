@@ -250,7 +250,7 @@ export function ImportTab({
             {t('cases.import.piiHelp')}
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[44rem] text-sm" data-testid="mapping-table">
+            <table className="w-full min-w-[36rem] text-sm" data-testid="mapping-table">
               <thead className="text-left text-xs text-slate-600">
                 <tr>
                   <th scope="col" className="py-1 pr-2">
@@ -262,11 +262,9 @@ export function ImportTab({
                   <th scope="col" className="pr-2">
                     {t('cases.import.target')}
                   </th>
+                  {/* The type sits under the field's name, so the table fits the side panel. */}
                   <th scope="col" className="pr-2">
-                    {t('cases.import.field')}
-                  </th>
-                  <th scope="col" className="pr-2">
-                    {t('cases.import.type')}
+                    {t('cases.import.field')} · {t('cases.import.type')}
                   </th>
                   <th scope="col">{t('cases.import.pii')}</th>
                 </tr>
@@ -280,7 +278,7 @@ export function ImportTab({
                       <th scope="row" className="py-1.5 pr-2 text-left font-medium">
                         {h}
                       </th>
-                      <td className="max-w-[14rem] truncate pr-2 text-slate-600">
+                      <td className="max-w-[10rem] truncate pr-2 text-slate-600">
                         {uploaded.preview
                           .slice(0, 3)
                           .map((r) => r[i])
@@ -322,33 +320,31 @@ export function ImportTab({
                           ))}
                         </select>
                       </td>
-                      <td className="pr-2">
+                      <td className="py-1 pr-2">
                         {c.kind === 'sample' ? (
-                          <input
-                            type="text"
-                            className={`${controlCls} w-36 font-mono`}
-                            aria-label={`${t('cases.import.field')}: ${h}`}
-                            value={c.field}
-                            onChange={(e) => setColumn(i, { ...c, field: e.target.value })}
-                          />
-                        ) : null}
-                      </td>
-                      <td className="pr-2">
-                        {c.kind === 'sample' ? (
-                          <select
-                            className={`${controlCls} w-auto`}
-                            aria-label={`${t('cases.import.type')}: ${h}`}
-                            value={c.type}
-                            onChange={(e) =>
-                              setColumn(i, { ...c, type: e.target.value as FieldType })
-                            }
-                          >
-                            {(['text', 'number', 'date', 'code'] as const).map((x) => (
-                              <option key={x} value={x}>
-                                {t(`cases.import.types.${x}`)}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex w-36 flex-col gap-1">
+                            <input
+                              type="text"
+                              className={`${controlCls} font-mono`}
+                              aria-label={`${t('cases.import.field')}: ${h}`}
+                              value={c.field}
+                              onChange={(e) => setColumn(i, { ...c, field: e.target.value })}
+                            />
+                            <select
+                              className={controlCls}
+                              aria-label={`${t('cases.import.type')}: ${h}`}
+                              value={c.type}
+                              onChange={(e) =>
+                                setColumn(i, { ...c, type: e.target.value as FieldType })
+                              }
+                            >
+                              {(['text', 'number', 'date', 'code'] as const).map((x) => (
+                                <option key={x} value={x}>
+                                  {t(`cases.import.types.${x}`)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         ) : null}
                       </td>
                       <td>

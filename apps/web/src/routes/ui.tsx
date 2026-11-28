@@ -389,14 +389,14 @@ export function TableScroll({
       {edges.left ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-3 bg-linear-to-r from-slate-900/10 to-transparent"
+          className="pointer-events-none absolute inset-y-0 left-0 z-20 w-3 bg-linear-to-r from-slate-900/10 to-transparent"
         />
       ) : null}
       {edges.right ? (
         <div
           aria-hidden="true"
           data-testid="scroll-more"
-          className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-[inherit] bg-linear-to-l from-slate-900/20 to-transparent"
+          className="pointer-events-none absolute inset-y-0 right-0 z-20 w-8 rounded-r-[inherit] bg-linear-to-l from-slate-900/20 to-transparent"
         />
       ) : null}
     </div>

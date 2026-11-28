@@ -142,6 +142,7 @@ export const casesEn = {
       mode: 'Mode',
       assignedAt: 'Assigned on',
       since: 'Time since assignment',
+      sinceShort: 'Assigned for',
       action: 'Action',
     },
     kpi: {
@@ -852,6 +853,7 @@ export const casesEs: CasesCatalogue = {
       mode: 'Modo',
       assignedAt: 'Asignado el',
       since: 'Tiempo desde la asignación',
+      sinceShort: 'Antigüedad',
       action: 'Acción',
     },
     kpi: {

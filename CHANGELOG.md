@@ -104,6 +104,21 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     behind ⓘ. The administration overview is more compact.
   - At 200 % zoom (640 px) Users and Roles and permissions no longer scroll the page sideways
     (their tables scroll in their own box); `e2e/hardening.spec.ts` now checks them.
+  - **Cases, sampling and project settings (audit fixes)**: when the bar of actions on the
+    ticked cases comes up over the end of the list, the page moves up so the pagination shows
+    above it, and its person picker is no longer cut short. The case list's headings stay on one
+    line ("Assigned for", with "Time since assignment" in its title) and a finished case's review reads
+    "Complete · approved" (the word "Review" in its title and for screen readers). With more
+    than three questionnaires, the cases' questionnaire picker is a drop-down list instead of
+    pills that wrap. The sample import's column mapping fits the side panel (the type under the
+    field name). In Assignment rules, the workload's person column stays in view while the
+    figures scroll, with their teams under the name. Project settings lay out their blocks in two
+    independent columns (no gaps beside a taller block), and "Exclude people under this age"
+    sits beside its box. **Goals**: the explanation is behind an ⓘ, each goal is one line (the
+    progress as "0/20" with a bar; the current window and the count due by today in its title),
+    the questionnaire column shows only when a goal counts a single questionnaire, and Remove is
+    a ✕. A centred dialog's buttons (`Dialog`'s `footer`) stay at its bottom while the body
+    scrolls: the user's roles dialog uses it, so Cancel and Save roles are always in view.
 
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the

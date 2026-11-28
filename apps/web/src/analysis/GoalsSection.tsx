@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { useAssignees } from '../cases/hooks.js';
-import { controlCls, inputCls, smallBtn } from '../designer/fields.js';
+import { controlCls, inputCls } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, ErrorText } from '../routes/ui.js';
+import { CloseIcon } from '../routes/icons.js';
+import { InfoTip } from '../cases/samplingControls.js';
 
 const FREQUENCIES = ['period', 'daily', 'business_days', 'weekly', 'monthly'] as const;
 type Frequency = (typeof FREQUENCIES)[number];
@@ -108,35 +110,68 @@ export function GoalsSection({
     new Date(`${d}T12:00:00`).toLocaleDateString(i18n.language, { dateStyle: 'medium' });
   const who = (g: Goal) => g.name ?? t('analysis.goals.team');
   const list = goals.data ?? [];
+  // Two dates in the year of the second: "28 nov – 4 dic 2026".
+  const range = (from: string, to: string) =>
+    from.slice(0, 4) === to.slice(0, 4)
+      ? `${new Date(`${from}T12:00:00`).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' })} – ${date(to)}`
+      : `${date(from)} – ${date(to)}`;
+  // The current window of a recurring goal, and how many were due by today.
+  const detail = (g: Goal) =>
+    [
+      g.frequency !== 'period' && g.windowFrom && g.windowTo
+        ? g.windowFrom === g.windowTo
+          ? date(g.windowFrom)
+          : t('analysis.goals.window', { from: date(g.windowFrom), to: date(g.windowTo) })
+        : null,
+      (g.state === 'on_track' || g.state === 'behind') && g.expectedByToday < g.target
+        ? t('analysis.goals.expected', { count: g.expectedByToday })
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  // The questionnaire only matters when some goal counts a single one.
+  const showQ = canSet && list.some((g) => g.questionnaireId);
 
   return (
     <section aria-labelledby="goals-title" className="flex flex-col gap-3" data-testid="goals">
-      <h2 id="goals-title" className="text-lg font-semibold">
-        {t('analysis.goals.title')}
-      </h2>
-      <p className="max-w-4xl text-slate-600">
+      <div className="flex items-center gap-1">
+        <h2 id="goals-title" className="text-lg font-semibold">
+          {t('analysis.goals.title')}
+        </h2>
+        {/* Where the goals are set, the long explanation waits behind an ⓘ. */}
         {manage ? (
-          t('analysis.goals.help')
-        ) : canOpenGoals ? (
-          <>
-            {t('analysis.goals.progressHelpLead')}{' '}
-            <Link
-              to="/projects/$projectId"
-              params={{ projectId }}
-              search={{ tab: 'settings', topic: 'fieldwork' }}
-              className="font-medium text-indigo-ink-700 hover:underline"
-            >
-              {t('analysis.goals.progressHelpLink')}
-            </Link>
-            .
-          </>
-        ) : (
-          t('analysis.goals.progressHelp')
-        )}
-      </p>
+          <InfoTip
+            id="goals-help"
+            term={t('analysis.goals.title')}
+            text={t('analysis.goals.help')}
+            align="start"
+          />
+        ) : null}
+      </div>
+      {manage ? null : (
+        <p className="max-w-4xl text-slate-600">
+          {canOpenGoals ? (
+            <>
+              {t('analysis.goals.progressHelpLead')}{' '}
+              <Link
+                to="/projects/$projectId"
+                params={{ projectId }}
+                search={{ tab: 'settings', topic: 'fieldwork' }}
+                className="font-medium text-indigo-ink-700 hover:underline"
+              >
+                {t('analysis.goals.progressHelpLink')}
+              </Link>
+              .
+            </>
+          ) : (
+            t('analysis.goals.progressHelp')
+          )}
+        </p>
+      )}
       {list.length ? (
-        <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
-          <table className="w-full min-w-[48rem]">
+        <div className="relative overflow-x-auto rounded-md border border-slate-200 bg-white">
+          {/* One line per goal: the details of the progress are in its title. */}
+          <table className="w-full [&_td]:whitespace-nowrap">
             <thead className="bg-slate-50 text-left text-xs text-slate-600">
               <tr>
                 <th scope="col" className="px-2 py-2">
@@ -148,7 +183,7 @@ export function GoalsSection({
                 <th scope="col" className="px-2 py-2">
                   {t('analysis.goals.period')}
                 </th>
-                {canSet ? (
+                {showQ ? (
                   <th scope="col" className="px-2 py-2">
                     {t('analysis.goals.questionnaire')}
                   </th>
@@ -176,14 +211,19 @@ export function GoalsSection({
                   <td className="px-2 py-1.5">
                     {g.target} {t(`analysis.goals.per.${g.frequency}`)}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-1.5">
-                    {date(g.startsOn)} – {date(g.endsOn)}
-                  </td>
-                  {canSet ? <td className="px-2 py-1.5">{qName(g.questionnaireId)}</td> : null}
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-1.5">{range(g.startsOn, g.endsOn)}</td>
+                  {showQ ? (
+                    <td
+                      className="max-w-[10rem] truncate px-2 py-1.5"
+                      title={qName(g.questionnaireId)}
+                    >
+                      {qName(g.questionnaireId)}
+                    </td>
+                  ) : null}
+                  <td className="px-2 py-1.5" title={detail(g) || undefined}>
                     <div className="flex items-center gap-2">
                       <div
-                        className="h-2 w-28 overflow-hidden rounded-full bg-slate-100"
+                        className="h-2 w-12 flex-none overflow-hidden rounded-full bg-slate-100"
                         role="progressbar"
                         aria-label={t('analysis.goals.progressOf', { name: who(g) })}
                         aria-valuemin={0}
@@ -196,26 +236,29 @@ export function GoalsSection({
                         />
                       </div>
                       <span className="tabular-nums" data-testid="goal-count">
-                        {t('analysis.goals.count', { done: g.completes, target: g.target })}
+                        <span aria-hidden="true">
+                          {t('analysis.goals.countShort', { done: g.completes, target: g.target })}
+                        </span>
+                        <span className="sr-only">
+                          {t('analysis.goals.count', { done: g.completes, target: g.target })}
+                        </span>
                       </span>
+                      {/* The current window and the pace, for screen readers (a title for the eye). */}
+                      {detail(g) ? <span className="sr-only">{detail(g)}</span> : null}
                     </div>
-                    <span className="text-xs text-slate-600">
-                      {g.frequency !== 'period' && g.windowFrom && g.windowTo
-                        ? g.windowFrom === g.windowTo
-                          ? date(g.windowFrom)
-                          : t('analysis.goals.window', {
-                              from: date(g.windowFrom),
-                              to: date(g.windowTo),
-                            })
-                        : null}
-                      {(g.state === 'on_track' || g.state === 'behind') &&
-                      g.expectedByToday < g.target
-                        ? ` · ${t('analysis.goals.expected', { count: g.expectedByToday })}`
-                        : null}
-                    </span>
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums" data-testid="goal-total">
-                    {t('analysis.goals.count', { done: g.periodCompletes, target: g.periodTarget })}
+                  <td
+                    className="px-2 py-1.5 tabular-nums"
+                    data-testid="goal-total"
+                    title={t('analysis.goals.count', {
+                      done: g.periodCompletes,
+                      target: g.periodTarget,
+                    })}
+                  >
+                    {t('analysis.goals.countShort', {
+                      done: g.periodCompletes,
+                      target: g.periodTarget,
+                    })}
                   </td>
                   <td className="px-2 py-1.5">
                     <span className={`rounded px-1.5 py-0.5 text-xs ${STATE_CLS[g.state]}`}>
@@ -226,14 +269,17 @@ export function GoalsSection({
                     <td className="px-2 py-1.5 text-right">
                       <button
                         type="button"
-                        className={smallBtn}
+                        className="grid h-7 w-7 place-items-center rounded-full text-slate-600 hover:bg-slate-100 hover:text-red-ink-800"
+                        title={t('analysis.goals.remove')}
                         onClick={() =>
                           window.confirm(t('analysis.goals.confirmRemove', { name: who(g) })) &&
                           remove.mutate(g.id)
                         }
                       >
-                        {t('analysis.goals.remove')}
-                        <span className="sr-only"> {who(g)}</span>
+                        <CloseIcon className="h-4 w-4" />
+                        <span className="sr-only">
+                          {t('analysis.goals.remove')} {who(g)}
+                        </span>
                       </button>
                     </td>
                   ) : null}

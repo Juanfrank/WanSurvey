@@ -29,7 +29,7 @@ export function Dialog({
   side?: boolean;
   /** Shows a ✕ button beside the title, named with this text. */
   closeLabel?: string;
-  /** Kept at the bottom, in view while the rest scrolls (a side panel's buttons). */
+  /** Kept at the bottom, in view while the rest scrolls (the dialog's or panel's buttons). */
   footer?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -117,7 +117,15 @@ export function Dialog({
             heading
           )}
           {children}
-          {footer ? <div className="mt-4 flex flex-wrap justify-end gap-2">{footer}</div> : null}
+          {/* Held at the bottom of the box while a long body scrolls under it. */}
+          {footer ? (
+            <div
+              className="sticky -bottom-6 z-10 -mx-6 mt-4 -mb-6 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white px-6 py-3"
+              data-sticky-footer=""
+            >
+              {footer}
+            </div>
+          ) : null}
         </>
       )}
     </dialog>

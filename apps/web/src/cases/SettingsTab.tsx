@@ -7,7 +7,7 @@ import {
   type ProjectSettings,
 } from '@wansurvey/schema';
 import * as Tabs from '@radix-ui/react-tabs';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import type { Project } from '../designer/ProjectPages.js';
@@ -98,28 +98,43 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
   const [sub, setSub] = useState<string | null>(topic ?? null);
   const current = sub && subs.includes(sub) ? sub : subs[0]!;
   // Each topic saves the whole settings with the same request.
-  const section = (children: ReactNode) => (
-    <form
-      // Two columns on wide screens; the save row runs across.
-      className="grid items-start gap-x-10 gap-y-5 xl:grid-cols-2"
-      aria-labelledby="settings-title"
-      onSubmit={(e) => {
-        e.preventDefault();
-        setMessage('');
-        save.mutate();
-      }}
-    >
-      {children}
-      <div className="flex items-center gap-3 xl:col-span-2">
-        <Button type="submit" disabled={save.isPending}>
-          {t('cases.settings.save')}
-        </Button>
-        <p role="status" aria-live="polite">
-          {message}
-        </p>
-      </div>
-    </form>
-  );
+  const section = (children: ReactNode) => {
+    // Two independent columns on wide screens, the first half of the blocks on the left: each
+    // block goes on under the one above it (no row gaps beside a taller neighbour), and a block
+    // that grows (help unfolded, a row added) never moves to the other column.
+    const blocks = Children.toArray(
+      isValidElement<{ children?: ReactNode }>(children) && children.type === Fragment
+        ? children.props.children
+        : children,
+    );
+    const half = Math.ceil(blocks.length / 2);
+    const column = (items: ReactNode[]) =>
+      items.length ? <div className="flex min-w-0 flex-col gap-5">{items}</div> : null;
+    return (
+      <form
+        className="flex flex-col gap-5"
+        aria-labelledby="settings-title"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setMessage('');
+          save.mutate();
+        }}
+      >
+        <div className="grid items-start gap-x-10 gap-y-5 xl:grid-cols-2">
+          {column(blocks.slice(0, half))}
+          {column(blocks.slice(half))}
+        </div>
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={save.isPending}>
+            {t('cases.settings.save')}
+          </Button>
+          <p role="status" aria-live="polite">
+            {message}
+          </p>
+        </div>
+      </form>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-4 text-sm">
@@ -794,18 +809,22 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                     />
                     {t('cases.privacy.noticeRequired')}
                   </label>
-                  <label className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={form.notice.minAge !== null}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          notice: { ...form.notice, minAge: e.target.checked ? 18 : null },
-                        })
-                      }
-                    />
-                    {t('cases.privacy.minAge')}
+                  {/* The box beside its words (they wrap next to it), then the age. */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 flex-none"
+                        checked={form.notice.minAge !== null}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            notice: { ...form.notice, minAge: e.target.checked ? 18 : null },
+                          })
+                        }
+                      />
+                      <span>{t('cases.privacy.minAge')}</span>
+                    </label>
                     {form.notice.minAge !== null ? (
                       <input
                         type="number"
@@ -825,7 +844,7 @@ export function SettingsTab({ project, topic }: { project: Project; topic?: stri
                         }
                       />
                     ) : null}
-                  </label>
+                  </div>
                   <FoldedHelp className="max-w-prose">{t('cases.privacy.minAgeHelp')}</FoldedHelp>
                 </fieldset>
               </>,
