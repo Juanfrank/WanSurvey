@@ -124,9 +124,14 @@ test('team metrics, topline, crosstab, summary and a client link', async ({ page
   await page.getByLabel('Rows').selectOption('A3_SEX');
   await page.getByLabel('Columns').selectOption('A4_MARITAL');
   await expect(page.getByTestId('crosstab')).toContainText('Total');
+  // The filters wait behind the Filters button; the one that is on shows as a chip.
+  await openFilters(page);
   await page.getByLabel('Mode').first().selectOption('CATI');
   await expect(page.getByTestId('n')).toHaveText('17 complete interviews');
-  await page.getByLabel('Mode').first().selectOption('');
+  await shot(page, 'p2-results-filters', { fullPage: false });
+  await closeFilters(page);
+  await page.getByRole('button', { name: 'Remove filter: Mode Phone' }).click();
+  await expect(page.getByTestId('n')).toHaveText('60 complete interviews');
   await shot(page, 'topline-crosstab');
   await expectAccessible(page);
   // The same crosstab in Excel, beside the CSV.
@@ -158,8 +163,13 @@ test('team metrics, topline, crosstab, summary and a client link', async ({ page
   await page.emulateMedia({ media: 'screen' });
   await page.goBack();
 
-  // A link for the client: a read-only summary without signing in.
+  // A link for the client: a read-only summary without signing in (in a side panel).
+  await page.getByRole('button', { name: 'More tools of the results' }).click();
+  await page.getByRole('menuitem', { name: 'Links for clients' }).click();
+  await expect(page.getByRole('dialog', { name: 'Links for clients' })).toBeVisible();
   await page.getByRole('button', { name: 'Create a link' }).click();
+  await expect(page.getByTestId('share-links')).toBeVisible();
+  await shot(page, 'p2-results-share-drawer', { fullPage: false });
   const url = await page.getByTestId('share-links').getByLabel('URL').first().inputValue();
   const client = await (
     await browser.newContext({ storageState: './e2e/english-ui.json' })
@@ -181,10 +191,19 @@ test('exports are built by the worker and download with the expected header', as
   test.setTimeout(120_000);
   await openProject(page, PM);
   await page.getByRole('tab', { name: 'Exports' }).click();
-  await page.getByLabel('Format').selectOption('sav');
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
-  await page.getByLabel('Format').selectOption('csv');
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  // The list comes first; the form opens in a side panel and closes on exporting.
+  const newExport = page.getByRole('button', { name: 'New export' });
+  const form = page.getByRole('dialog', { name: 'New export' });
+  await newExport.click();
+  await form.getByLabel('Format').selectOption('sav');
+  await shot(page, 'p2-exports-drawer', { fullPage: false });
+  await expectAccessible(page);
+  await form.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(form).toBeHidden();
+  await newExport.click();
+  await form.getByLabel('Format').selectOption('csv');
+  await form.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(form).toBeHidden();
   const list = page.getByTestId('exports-list');
   await expect(list.locator('tr[data-status="done"]')).toHaveCount(2, { timeout: 30_000 });
   await expect(list).toContainText('SPSS (.sav)');
@@ -192,6 +211,14 @@ test('exports are built by the worker and download with the expected header', as
   await expect(page.getByRole('link', { name: 'Results summary (PDF)' })).toHaveCount(0);
   await shot(page, 'exports-list');
   await expectAccessible(page);
+  // Each file: its download button and "⋯" with the rest (export again, copy the link).
+  await list
+    .locator('tr', { hasText: 'SPSS (.sav)' })
+    .getByRole('button', { name: /^More actions for the export of/ })
+    .click();
+  await expect(page.getByRole('menuitem', { name: 'Export again' })).toBeVisible();
+  await shot(page, 'p2-exports-row-menu', { fullPage: false });
+  await page.keyboard.press('Escape');
 
   const download = page.waitForEvent('download');
   await list
@@ -208,9 +235,10 @@ test('exports are built by the worker and download with the expected header', as
   expect(text.trim().split('\r\n').length).toBeGreaterThanOrEqual(61);
 
   // The same table as a query over the analysis model.
-  await page.getByLabel('Format').selectOption('sql');
-  await expect(page.getByText(/one query per sheet of the Excel export/)).toBeVisible();
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await newExport.click();
+  await form.getByLabel('Format').selectOption('sql');
+  await expect(form.getByText(/one query per sheet of the Excel export/)).toBeVisible();
+  await form.getByRole('button', { name: 'Export', exact: true }).click();
   await expect(list.locator('tr[data-status="done"]')).toHaveCount(3, { timeout: 30_000 });
   const sqlDownload = page.waitForEvent('download');
   await list
@@ -223,13 +251,14 @@ test('exports are built by the worker and download with the expected header', as
   expect(sql).toContain('as [A3_SEX]');
 
   // A CSV with its codebook, both in a ZIP.
-  await page.getByLabel('Format').selectOption('csv');
-  await page
+  await newExport.click();
+  await form.getByLabel('Format').selectOption('csv');
+  await form
     .getByLabel('Add the codebook (variables and coded values, as CSV) in a ZIP with the data')
     .check();
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await form.getByRole('button', { name: 'Export', exact: true }).click();
   await expect(list.locator('tr[data-status="done"]')).toHaveCount(4, { timeout: 30_000 });
-  const zipped = list.locator('tr', { hasText: 'with codebook (ZIP)' });
+  const zipped = list.locator('tr', { hasText: 'codebook (ZIP)' });
   await expect(zipped).toHaveCount(1);
   const zipDownload = page.waitForEvent('download');
   await zipped.getByRole('link', { name: /Download/ }).click();
@@ -274,10 +303,15 @@ test('from metrics to one interviewer in the review queue, a team at a time, and
     await resultsSection(page, 'Metrics');
     const rows = page.getByTestId('metrics-row');
     await expect(rows).toHaveCount(5);
+    await openFilters(page);
     await page
       .getByRole('combobox', { name: 'Team', exact: true })
       .selectOption({ label: crewName });
+    await closeFilters(page);
     await expect(rows).toHaveCount(2);
+    await expect(
+      page.getByRole('button', { name: `Remove filter: Team ${crewName}` }),
+    ).toBeVisible();
     await expect(rows.filter({ hasText: 'Carlos Huamán' })).toHaveCount(1);
     // The goals are set in the settings, a link away.
     await expect(page.getByRole('link', { name: 'Project settings → Goals' })).toBeVisible();
@@ -293,7 +327,12 @@ test('from metrics to one interviewer in the review queue, a team at a time, and
       'aria-selected',
       'true',
     );
+    await expect(
+      page.getByRole('button', { name: 'Remove filter: Interviewer Carlos Huamán' }),
+    ).toBeVisible();
+    await openFilters(page);
     await expect(page.getByRole('combobox', { name: 'Interviewer' })).toHaveValue(carlos);
+    await closeFilters(page);
     await expect(page).toHaveURL(/interviewer=/);
     const queue = page.getByTestId('review-queue').locator('tbody tr');
     await expect(queue.first()).toBeVisible();

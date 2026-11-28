@@ -6,7 +6,16 @@ import { api } from '../api.js';
 import { controlCls, smallBtn } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { localiseError } from '../i18n-messages.js';
-import { Button, Card, ErrorText, TableScroll } from '../routes/ui.js';
+import {
+  Button,
+  Card,
+  Drawer,
+  ErrorText,
+  FilterBar,
+  MoreMenu,
+  TableScroll,
+  type ActiveFilter,
+} from '../routes/ui.js';
 import { fmtNum, fmtPct } from './charts.js';
 import { ToplineItems, type ToplineItem } from './Topline.js';
 
@@ -92,8 +101,86 @@ export function UnreviewedNotice({
   );
 }
 
-/** Filters shared by the results, the summary and exports. */
-export function FilterBar({
+/** The data questionnaires (versions) a filter can choose. */
+const useDataQuestionnaires = (projectId: string) =>
+  useQuery({
+    queryKey: ['data-questionnaires', projectId],
+    queryFn: () =>
+      api<{ id: string; name: string; version: number }[]>(
+        `/projects/${projectId}/data/questionnaires`,
+      ),
+  });
+
+/**
+ * The data filters that are on, as chips of a `FilterBar`. `patch` changes some of them from the
+ * latest filters (a state updater), so "Clear filters", which removes every chip at once, keeps
+ * every change.
+ */
+export function useDataFilterChips(
+  projectId: string,
+  value: DataFilters,
+  patch: (p: DataFilters) => void,
+): ActiveFilter[] {
+  const { t, i18n } = useTranslation();
+  const qs = useDataQuestionnaires(projectId);
+  const day = (d: string) =>
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, { timeZone: 'UTC' });
+  const q = qs.data?.find((x) => x.id === value.questionnaireId);
+  // The first questionnaire is the one shown when none is chosen: choosing it narrows nothing.
+  const narrowed = !!value.questionnaireId && value.questionnaireId !== qs.data?.[0]?.id;
+  const [whereVar, whereCodes] = (value.where ?? ':').split(':');
+  const chip = (id: string, label: string, shown: string, off: DataFilters): ActiveFilter => ({
+    id,
+    label,
+    value: shown,
+    onRemove: () => patch(off),
+  });
+  return [
+    ...(narrowed
+      ? [
+          chip(
+            'questionnaire',
+            t('analysis.results.questionnaire'),
+            q ? `${q.name} (v${q.version})` : '…',
+            {
+              questionnaireId: undefined,
+              where: '',
+            },
+          ),
+        ]
+      : []),
+    ...(value.mode
+      ? [
+          chip(
+            'mode',
+            t('analysis.metrics.mode'),
+            t(`analysis.modes.${value.mode}`, { defaultValue: value.mode }),
+            { mode: '' },
+          ),
+        ]
+      : []),
+    ...(value.from
+      ? [chip('from', t('analysis.metrics.from'), day(value.from), { from: '' })]
+      : []),
+    ...(value.to ? [chip('to', t('analysis.metrics.to'), day(value.to), { to: '' })] : []),
+    ...(whereVar && whereCodes
+      ? [chip('where', t('analysis.results.where'), `${whereVar} = ${whereCodes}`, { where: '' })]
+      : []),
+    ...(value.approvedOnly
+      ? [
+          chip('approved', t('analysis.results.review'), t('analysis.results.onlyApproved'), {
+            approvedOnly: false,
+          }),
+        ]
+      : []),
+  ];
+}
+
+/**
+ * The data filters shared by the results, the summary and exports: in the results they sit in
+ * a `FilterBar`'s panel, in the export form as they are.
+ */
+export function DataFilterFields({
   projectId,
   value,
   onChange,
@@ -105,13 +192,7 @@ export function FilterBar({
   variables?: { name: string; label: string }[];
 }) {
   const { t } = useTranslation();
-  const qs = useQuery({
-    queryKey: ['data-questionnaires', projectId],
-    queryFn: () =>
-      api<{ id: string; name: string; version: number }[]>(
-        `/projects/${projectId}/data/questionnaires`,
-      ),
-  });
+  const qs = useDataQuestionnaires(projectId);
   const [whereVar, whereCodes] = (value.where ?? ':').split(':');
   return (
     <fieldset className="flex flex-wrap items-end gap-3">
@@ -228,28 +309,65 @@ export function ResultsTab({ projectId }: { projectId: string }) {
     enabled: !!row && !!col && row !== col,
   });
   const vars = top.data?.variables ?? [];
+  const chips = useDataFilterChips(projectId, filters, (p) => setFilters((f) => ({ ...f, ...p })));
+  // The links for clients open in a side panel.
+  const [sharing, setSharing] = useState(false);
 
   return (
-    <div className="flex flex-col gap-6 text-sm" data-testid="results">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-4 text-sm" data-testid="results">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <h2 className="text-lg font-semibold">{t('analysis.results.title')}</h2>
-        <Link
-          to="/projects/$projectId/summary"
-          params={{ projectId }}
-          search={Object.fromEntries(new URLSearchParams(qs))}
-          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium hover:bg-slate-50"
+        <FilterBar
+          className="min-w-0 flex-1"
+          active={chips}
+          count={
+            top.data ? (
+              <span className="font-medium" data-testid="n">
+                {t('analysis.results.n', { count: top.data.n })}
+                {filters.approvedOnly ? ` · ${t('analysis.results.onlyApproved')}` : ''}
+              </span>
+            ) : undefined
+          }
+          actions={
+            <>
+              <Link
+                to="/projects/$projectId/summary"
+                params={{ projectId }}
+                search={Object.fromEntries(new URLSearchParams(qs))}
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium hover:bg-slate-50"
+              >
+                {t('analysis.results.openSummary')}
+              </Link>
+              {canShare ? (
+                <MoreMenu
+                  label={t('analysis.results.moreTools')}
+                  className="py-1.5"
+                  entries={[
+                    {
+                      type: 'item',
+                      id: 'share',
+                      label: t('analysis.results.share.title'),
+                      onSelect: () => setSharing(true),
+                    },
+                  ]}
+                >
+                  <span aria-hidden="true">⋯</span> {t('ui.more')}
+                </MoreMenu>
+              ) : null}
+            </>
+          }
         >
-          {t('analysis.results.openSummary')}
-        </Link>
+          <DataFilterFields
+            projectId={projectId}
+            value={filters}
+            onChange={setFilters}
+            variables={vars}
+          />
+        </FilterBar>
       </div>
-      <FilterBar projectId={projectId} value={filters} onChange={setFilters} variables={vars} />
       <ErrorText>{top.error ? localiseError(t, top.error) : null}</ErrorText>
       {top.data ? (
         <>
-          <p className="font-medium" aria-live="polite" data-testid="n">
-            {t('analysis.results.n', { count: top.data.n })}
-            {filters.approvedOnly ? ` · ${t('analysis.results.onlyApproved')}` : ''}
-          </p>
           {!filters.approvedOnly ? (
             <UnreviewedNotice
               n={top.data.n}
@@ -296,7 +414,11 @@ export function ResultsTab({ projectId }: { projectId: string }) {
           )}
         </>
       ) : null}
-      {canShare ? <ShareLinks projectId={projectId} /> : null}
+      {sharing ? (
+        <Drawer title={t('analysis.results.share.title')} onClose={() => setSharing(false)}>
+          <ShareLinks projectId={projectId} />
+        </Drawer>
+      ) : null}
     </div>
   );
 }
@@ -536,8 +658,7 @@ function ShareLinks({ projectId }: { projectId: string }) {
   });
   const date = (iso: string) => new Date(iso).toLocaleDateString(i18n.language);
   return (
-    <Card className="flex flex-col gap-3">
-      <h3 className="font-medium">{t('analysis.results.share.title')}</h3>
+    <div className="flex flex-col gap-3 text-sm">
       <p className="text-slate-600">{t('analysis.results.share.help')}</p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
@@ -612,6 +733,6 @@ function ShareLinks({ projectId }: { projectId: string }) {
       ) : (
         <p className="text-slate-600">{t('analysis.results.share.none')}</p>
       )}
-    </Card>
+    </div>
   );
 }

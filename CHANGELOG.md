@@ -34,6 +34,29 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     by the rules; share out the free cases) sit on the right; assigning, unassigning and
     withdrawing the ticked cases is in a bar at the bottom; each case takes one line; the note on
     hidden personal data is a footnote under the table.
+  - **Review queue**: Status stays in view beside the title; flag, mode, result, interviewer,
+    "highest risk first" and "only the random sample" are behind "Filters", with a chip for each
+    one that is on. The interviewer pills are one line that scrolls sideways; the queue shows 20
+    interviews at a time ("Show 20 more (25 left)"). The coding of "other" answers has its own
+    tab under Supervision, with the number of texts still without a code ("“Other” coding ·
+    23"); links can open it with `?tab=coding`.
+  - **Review of an interview**: the breadcrumb is the page title (the review and the case in
+    bold) on the top row; the interview's details and the actions are one slim line, with the
+    A/R keys beside the buttons.
+  - **Metrics**: the period, mode and team are behind "Filters" with chips; the column names fit
+    in two lines and each interviewer in one; the goals come after the table, and the note on
+    ▲ ▼ is a footnote.
+  - **Results**: the questionnaire, mode, dates, "only where" and "approved only" are behind
+    "Filters" with chips, beside the count of interviews; the links for clients open in a side
+    panel from "⋯ More".
+  - **Exports**: the list comes first; "+ New export" opens the form in a side panel that closes
+    on exporting. Each file has a download button with its kind ("⬇ CSV", "⬇ SAV", "⬇ ZIP")
+    and a "⋯" menu (export again, copy the download link); the options are short tags (the
+    defaults, such as all completes, are left out), and the date it is kept until and the number
+    of downloads are one small line.
+  - **Project overview**: the goals are in the dashboard's goals card (with "Set goals in the
+    project settings" when there are none) instead of a second table at the bottom; the quota
+    note is a footnote of the quota table.
 
 - **Case list for field supervision**: quick filters "Due within 48 h", "Overdue" (by the case
   deadline) and "Not tried yet", a team filter, the review state of finished cases, and the

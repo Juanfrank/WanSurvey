@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { controlCls } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
-import { TableScroll } from '../routes/ui.js';
+import { FilterBar, TableScroll, type ActiveFilter } from '../routes/ui.js';
 import { fmtNum, fmtPct } from './charts.js';
 import { GoalsSection } from './GoalsSection.js';
 
@@ -120,6 +120,43 @@ export function MetricsTab({ projectId }: { projectId: string }) {
     }) +
     ' ' +
     t(CONCERN[k] === o ? 'analysis.metrics.outlierCheck' : 'analysis.metrics.outlierFine');
+  const day = (d: string) =>
+    new Date(`${d}T12:00:00Z`).toLocaleDateString(i18n.language, { timeZone: 'UTC' });
+  const chips: ActiveFilter[] = [
+    ...(from
+      ? [
+          {
+            id: 'from',
+            label: t('analysis.metrics.from'),
+            value: day(from),
+            onRemove: () => setFrom(''),
+          },
+        ]
+      : []),
+    ...(to
+      ? [{ id: 'to', label: t('analysis.metrics.to'), value: day(to), onRemove: () => setTo('') }]
+      : []),
+    ...(mode
+      ? [
+          {
+            id: 'mode',
+            label: t('analysis.metrics.mode'),
+            value: t(`analysis.modes.${mode}`),
+            onRemove: () => setMode(''),
+          },
+        ]
+      : []),
+    ...(team
+      ? [
+          {
+            id: 'team',
+            label: t('analysis.metrics.team'),
+            value: team.name,
+            onRemove: () => setTeam(null),
+          },
+        ]
+      : []),
+  ];
   function show(k: Key, v: number | null) {
     return RATES.has(k)
       ? fmtPct(i18n.language, v, 1)
@@ -128,67 +165,72 @@ export function MetricsTab({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="metrics">
-      <GoalsSection projectId={projectId} />
-      <h2 className="text-lg font-semibold">
-        {data.data && !data.data.team ? t('analysis.metrics.mine') : t('analysis.metrics.title')}
-      </h2>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          {t('analysis.metrics.from')}
-          <input
-            type="date"
-            className={controlCls}
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          {t('analysis.metrics.to')}
-          <input
-            type="date"
-            className={controlCls}
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          {t('analysis.metrics.mode')}
-          <select className={controlCls} value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="">{t('analysis.metrics.anyMode')}</option>
-            {(['CATI', 'CAPI', 'CAWI', 'PAPI'] as const).map((m) => (
-              <option key={m} value={m}>
-                {t(`analysis.modes.${m}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {/* Teams of the organisation with people here: one crew or shift at a time. */}
-        {data.data?.teams?.length || teamId ? (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h2 className="text-lg font-semibold">
+          {data.data && !data.data.team ? t('analysis.metrics.mine') : t('analysis.metrics.title')}
+        </h2>
+        <FilterBar
+          className="min-w-0 flex-1"
+          active={chips}
+          count={data.data ? t('analysis.metrics.count', { count: rows.length }) : undefined}
+        >
           <label className="flex flex-col gap-1">
-            {t('analysis.metrics.team')}
-            <select
+            <span className="font-medium">{t('analysis.metrics.from')}</span>
+            <input
+              type="date"
               className={controlCls}
-              value={teamId}
-              onChange={(e) =>
-                setTeam(
-                  e.target.value
-                    ? { id: e.target.value, name: e.target.selectedOptions[0]?.text ?? '' }
-                    : null,
-                )
-              }
-            >
-              <option value="">{t('analysis.metrics.anyTeam')}</option>
-              {[
-                ...(team && !data.data?.teams?.some((x) => x.id === team.id) ? [team] : []),
-                ...(data.data?.teams ?? []),
-              ].map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('analysis.metrics.to')}</span>
+            <input
+              type="date"
+              className={controlCls}
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('analysis.metrics.mode')}</span>
+            <select className={controlCls} value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="">{t('analysis.metrics.anyMode')}</option>
+              {(['CATI', 'CAPI', 'CAWI', 'PAPI'] as const).map((m) => (
+                <option key={m} value={m}>
+                  {t(`analysis.modes.${m}`)}
                 </option>
               ))}
             </select>
           </label>
-        ) : null}
+          {/* Teams of the organisation with people here: one crew or shift at a time. */}
+          {data.data?.teams?.length || teamId ? (
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('analysis.metrics.team')}</span>
+              <select
+                className={controlCls}
+                value={teamId}
+                onChange={(e) =>
+                  setTeam(
+                    e.target.value
+                      ? { id: e.target.value, name: e.target.selectedOptions[0]?.text ?? '' }
+                      : null,
+                  )
+                }
+              >
+                <option value="">{t('analysis.metrics.anyTeam')}</option>
+                {[
+                  ...(team && !data.data?.teams?.some((x) => x.id === team.id) ? [team] : []),
+                  ...(data.data?.teams ?? []),
+                ].map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </FilterBar>
       </div>
       {!rows.length ? (
         <p className="text-slate-600">{data.isLoading ? '…' : t('analysis.metrics.none')}</p>
@@ -211,7 +253,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                     <th
                       key={k}
                       scope="col"
-                      className="w-28 min-w-24 px-2 py-2 text-right align-bottom font-medium"
+                      className="w-[7.5rem] min-w-[7.5rem] px-2 py-2 text-right align-bottom text-xs font-medium leading-tight"
                       aria-sort={
                         sort.key === k ? (sort.desc ? 'descending' : 'ascending') : undefined
                       }
@@ -238,7 +280,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                   <tr key={r.interviewerId} data-testid="metrics-row">
                     <th
                       scope="row"
-                      className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left font-medium"
+                      className="sticky left-0 z-10 whitespace-nowrap bg-white px-3 py-1.5 text-left font-medium"
                     >
                       {data.data?.team && canReview ? (
                         <Link
@@ -285,10 +327,12 @@ export function MetricsTab({ projectId }: { projectId: string }) {
             </table>
           </TableScroll>
           {data.data?.team ? (
-            <p className="text-slate-600">{t('analysis.metrics.outlierNote')}</p>
+            <p className="text-xs text-slate-600">{t('analysis.metrics.outlierNote')}</p>
           ) : null}
         </>
       )}
+      {/* How the goals stand, under the figures (they are set in the project settings). */}
+      <GoalsSection projectId={projectId} />
     </div>
   );
 }

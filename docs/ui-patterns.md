@@ -102,6 +102,8 @@ scrolls sideways.
 ```
 
 - **Search**: always in view; its label is the placeholder and its accessible name.
+- **The filter used most** (the review queue's Status) can stay in view: pass it, with its
+  visible label, as `lead`; it sits before the Filters button and gets no chip.
 - **Filters**: the controls keep their state where it was (the screen's own `useState`, the
   address); the bar only shows and hides them. Each filter that is on gets a chip with a
   "Remove filter: Status Assigned" button; "Filters · 2" says how many are on. The panel floats

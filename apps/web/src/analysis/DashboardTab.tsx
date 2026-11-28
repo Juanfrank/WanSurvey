@@ -101,8 +101,11 @@ interface Risks {
   soonHours: number;
 }
 
-/** The live dashboard (M2): Server-Sent Events, reconnecting on its own. */
-export function DashboardTab({ projectId }: { projectId: string }) {
+/**
+ * The live dashboard (M2): Server-Sent Events, reconnecting on its own. `onGoals` opens where
+ * the goals are set (the project settings), from the goals card.
+ */
+export function DashboardTab({ projectId, onGoals }: { projectId: string; onGoals?: () => void }) {
   const { t, i18n } = useTranslation();
   const [snap, setSnap] = useState<LiveSnapshot | null>(null);
   const [live, setLive] = useState(false);
@@ -311,7 +314,6 @@ export function DashboardTab({ projectId }: { projectId: string }) {
           {quotas.length ? (
             <Card className="flex flex-col gap-2 lg:col-span-2">
               <h3 className="font-medium">{t('analysis.live.quotas')}</h3>
-              <p className="text-slate-600">{t('analysis.live.quotaHelp')}</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm" data-testid="quotas">
                   <thead>
@@ -371,12 +373,16 @@ export function DashboardTab({ projectId }: { projectId: string }) {
                   </tbody>
                 </table>
               </div>
+              <p className="text-xs text-slate-600">{t('analysis.live.quotaHelp')}</p>
             </Card>
           ) : null}
-          {canTeam && goalList.length ? (
+          {canTeam && (goalList.length || onGoals) ? (
             <Card className="flex flex-col gap-2">
               <h3 className="font-medium">{t('analysis.live.goals')}</h3>
-              <ul className="divide-y divide-slate-100" data-testid="dashboard-goals">
+              {goals.isSuccess && !goalList.length ? (
+                <p className="text-slate-600">{t('analysis.goals.none')}</p>
+              ) : null}
+              <ul className="divide-y divide-slate-100 empty:hidden" data-testid="dashboard-goals">
                 {goalList.slice(0, GOALS_SHOWN).map((g) => (
                   <li
                     key={g.id}
@@ -396,9 +402,18 @@ export function DashboardTab({ projectId }: { projectId: string }) {
                   </li>
                 ))}
               </ul>
-              <a className="text-indigo-ink-700 underline" href={href('metrics')}>
-                {t('analysis.live.goalsSeeAll')}
-              </a>
+              <p className="flex flex-wrap gap-x-4 gap-y-1">
+                {goalList.length ? (
+                  <a className="text-indigo-ink-700 underline" href={href('metrics')}>
+                    {t('analysis.live.goalsSeeAll')}
+                  </a>
+                ) : null}
+                {onGoals ? (
+                  <button type="button" className="text-indigo-ink-700 underline" onClick={onGoals}>
+                    {t('analysis.live.setGoals')}
+                  </button>
+                ) : null}
+              </p>
             </Card>
           ) : null}
           {canTeam && risks.data ? (
