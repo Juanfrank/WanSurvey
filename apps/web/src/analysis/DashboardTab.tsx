@@ -249,7 +249,7 @@ export function DashboardTab({ projectId, onGoals }: { projectId: string; onGoal
                     {t(`analysis.live.paceStates.${pace.state}`)}
                   </span>
                 </p>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
                   <div>
                     <dt className="text-xs text-slate-600">{t('analysis.live.expected')}</dt>
                     <dd className="font-semibold tabular-nums" data-testid="pace-expected">

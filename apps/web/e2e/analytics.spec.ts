@@ -124,6 +124,9 @@ test('team metrics, topline, crosstab, summary and a client link', async ({ page
   await page.getByLabel('Rows').selectOption('A3_SEX');
   await page.getByLabel('Columns').selectOption('A4_MARITAL');
   await expect(page.getByTestId('crosstab')).toContainText('Total');
+  // Each cell, the percentage and its count, keeps to one line.
+  const cell = page.getByTestId('crosstab').locator('tbody td').first();
+  expect((await cell.boundingBox())!.height).toBeLessThan(32);
   // The filters wait behind the Filters button; the one that is on shows as a chip.
   await openFilters(page);
   await page.getByLabel('Mode').first().selectOption('CATI');

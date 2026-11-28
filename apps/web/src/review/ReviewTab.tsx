@@ -359,9 +359,14 @@ function Queue({ projectId }: { projectId: string }) {
               {interviewer && !people.some((p) => p.id === interviewer) ? (
                 <option value={interviewer}>{t('review.queue.chosenInterviewer')}</option>
               ) : null}
+              {/* Each person with how many interviews wait and how many have flags. */}
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name ?? '—'}
+                  {[
+                    p.name ?? '—',
+                    t('review.queue.personCount', { count: p.interviews }),
+                    ...(p.flagged ? [t('review.queue.personFlagged', { count: p.flagged })] : []),
+                  ].join(' · ')}
                 </option>
               ))}
             </select>
@@ -386,44 +391,6 @@ function Queue({ projectId }: { projectId: string }) {
           </div>
         </FilterBar>
       </div>
-      {people.length > 1 || interviewer ? (
-        <div className="flex min-w-0 items-center gap-2" data-testid="queue-interviewers">
-          <h3
-            id="queue-people"
-            className="shrink-0 text-sm font-medium"
-            title={t('review.queue.byInterviewerHint')}
-          >
-            {t('review.queue.byInterviewer')}
-          </h3>
-          {/* One line: the people who do not fit are a sideways scroll away. */}
-          <ul
-            aria-labelledby="queue-people"
-            className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto py-0.5"
-          >
-            {people.map((p) => (
-              <li key={p.id} className="shrink-0">
-                <button
-                  type="button"
-                  aria-pressed={interviewer === p.id}
-                  className="whitespace-nowrap rounded-full border border-slate-300 bg-white px-3 py-1 text-left text-xs hover:bg-indigo-50 aria-[pressed=true]:border-indigo-500 aria-[pressed=true]:bg-indigo-100"
-                  data-interviewer={p.id}
-                  onClick={() => setInterviewer(interviewer === p.id ? '' : p.id)}
-                >
-                  <span className="font-medium">{p.name ?? '—'}</span>{' '}
-                  <span className="tabular-nums text-slate-700">
-                    {t('review.queue.personCount', { count: p.interviews })}
-                  </span>
-                  {p.flagged ? (
-                    <span className="ml-1 rounded bg-amber-100 px-1 tabular-nums text-amber-ink-900">
-                      {t('review.queue.personFlagged', { count: p.flagged })}
-                    </span>
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       {rows.length ? (
         <div className="overflow-x-auto">
           <table className="w-full whitespace-nowrap" data-testid="review-queue">

@@ -376,13 +376,12 @@ export function ResultsTab({ projectId }: { projectId: string }) {
             />
           ) : null}
           {top.data.n ? (
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-              <Card className="min-w-0">
-                <ToplineItems items={top.data.items} />
-              </Card>
-              <Card className="flex min-w-0 flex-col gap-3 self-start xl:sticky xl:top-4">
+            // On a wide screen the crosstab is a column beside the questions; narrower (a
+            // 1280 px laptop) it takes the full width above them, so its cells keep one line.
+            <div className="grid gap-6 2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <Card className="flex min-w-0 flex-col gap-3 self-start 2xl:sticky 2xl:top-4 2xl:order-2">
                 <h3 className="font-medium">{t('analysis.results.crosstab')}</h3>
-                <div className="flex flex-col gap-3">
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-1">
                   {(
                     [
                       ['rows', row, setRow],
@@ -407,6 +406,9 @@ export function ResultsTab({ projectId }: { projectId: string }) {
                   ))}
                 </div>
                 {xt.data ? <CrosstabTable x={xt.data} lang={i18n.language} /> : null}
+              </Card>
+              <Card className="min-w-0">
+                <ToplineItems items={top.data.items} />
               </Card>
             </div>
           ) : (
@@ -566,7 +568,7 @@ export function CrosstabTable({ x, lang }: { x: Crosstab; lang: string }) {
                   return (
                     <td
                       key={c.code}
-                      className={`px-2 py-1 text-right tabular-nums ${low(baseOf(i, j)) ? 'text-slate-500' : ''}`}
+                      className={`whitespace-nowrap px-2 py-1 text-right tabular-nums ${low(baseOf(i, j)) ? 'text-slate-500' : ''}`}
                     >
                       {fmtPct(lang, v === null ? null : v / 100)}
                       {star(baseOf(i, j))}{' '}
@@ -574,7 +576,7 @@ export function CrosstabTable({ x, lang }: { x: Crosstab; lang: string }) {
                     </td>
                   );
                 })}
-                <td className="px-2 py-1 text-right tabular-nums">
+                <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">
                   {x.rowTotals[i]}
                   {kind === 'row' ? star(x.rowTotals[i]!) : null}
                 </td>

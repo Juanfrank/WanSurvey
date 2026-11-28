@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { roleHasPermission, type Permission, type Role } from '@wansurvey/schema';
-import type { ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProjectLogo } from './ProjectLogo.js';
 import { api, type Me } from '../api.js';
@@ -402,12 +402,13 @@ function MyDay({
 
 function ProjectName({ p }: { p: ProjectRow }) {
   return (
-    <span className="flex items-center gap-3">
+    <span className="flex min-w-0 items-center gap-3">
       <ProjectLogo project={p} className="h-6 w-auto max-w-[5rem]" />
       <Link
         to="/projects/$projectId"
         params={{ projectId: p.id }}
-        className="text-indigo-ink-700 hover:underline"
+        className="min-w-0 truncate text-indigo-ink-700 hover:underline"
+        title={p.name}
       >
         {p.name}
       </Link>
@@ -454,41 +455,59 @@ function Portfolio({
       {number(value)}
     </Link>
   );
-  const th = 'px-3 py-2 text-right font-medium';
+  const th = 'whitespace-nowrap px-3 py-2 text-right font-medium';
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpen((o) => {
+      const n = new Set(o);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  /** A header written short on screen; the full name is its title and what it is read as. */
+  const short = (full: string, abbr: string) => (
+    <>
+      <span aria-hidden="true">{abbr}</span>
+      <span className="sr-only">{full}</span>
+    </>
+  );
   /** A planned fieldwork date (a calendar day), written short in the reader's language. */
   const day = (d: string) =>
     new Date(`${d}T12:00:00`).toLocaleDateString(i18n.language, { dateStyle: 'medium' });
   return (
-    <div className="overflow-x-auto">
+    // Relative: the headers' screen-reader text (placed absolutely) stays inside the scroller
+    // instead of widening the page on a phone.
+    <div className="relative overflow-x-auto">
       <table className="min-w-full text-sm" data-testid="home-portfolio">
         <thead className="bg-slate-50">
           <tr>
             <th scope="col" className="px-3 py-2 text-left font-medium">
               {t('home.portfolio.project')}
             </th>
-            <th scope="col" className="px-3 py-2 text-left font-medium">
-              {t('home.portfolio.fieldwork')}
-            </th>
             <th scope="col" className={th}>
               {t('home.portfolio.progress')}
             </th>
-            <th scope="col" className="px-3 py-2 text-left font-medium">
-              {t('home.portfolio.pace')}
+            <th
+              scope="col"
+              className="whitespace-nowrap px-3 py-2 text-left font-medium"
+              title={t('home.portfolio.pace')}
+            >
+              {short(t('home.portfolio.pace'), t('home.portfolio.paceShort'))}
             </th>
             <th scope="col" className={th}>
               {t('home.portfolio.unassigned')}
             </th>
-            <th scope="col" className={th}>
-              {t('home.portfolio.callbacksDue')}
+            <th scope="col" className={th} title={t('home.portfolio.callbacksDue')}>
+              {short(t('home.portfolio.callbacksDue'), t('home.portfolio.callbacksDueShort'))}
             </th>
             <th scope="col" className={th}>
               {t('home.portfolio.toReview')}
             </th>
-            <th scope="col" className={th}>
-              {t('home.portfolio.activeNow')}
+            <th scope="col" className={th} title={t('home.portfolio.activeNow')}>
+              {short(t('home.portfolio.activeNow'), t('home.portfolio.activeNowShort'))}
             </th>
-            <th scope="col" className="px-3 py-2 text-left font-medium">
-              {t('home.portfolio.lastActivity')}
+            <th scope="col" className="px-3 py-2">
+              <span className="sr-only">{t('home.portfolio.moreColumn')}</span>
             </th>
           </tr>
         </thead>
@@ -499,85 +518,122 @@ function Portfolio({
             const target = p.settings?.fieldwork?.targetCompletes ?? null;
             const goal = teamGoal(p.id);
             const { startsOn, endsOn } = p.settings?.fieldwork ?? {};
+            const expanded = open.has(p.id);
+            const detailsId = `home-more-${p.id}`;
+            const status = `${p.code} · ${t(`app.projectStatus.${p.status}`, { defaultValue: p.status })}`;
             return (
-              <tr key={p.id}>
-                <td className="px-3 py-2">
-                  <ProjectName p={p} />
-                  <span className="font-mono text-xs text-slate-500">
-                    {p.code} · {t(`app.projectStatus.${p.status}`, { defaultValue: p.status })}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-3 py-2" data-testid="home-fieldwork">
-                  {startsOn || endsOn
-                    ? t('home.portfolio.dates', {
-                        from: startsOn ? day(startsOn) : '…',
-                        to: endsOn ? day(endsOn) : '…',
-                      })
-                    : t('home.portfolio.noDates')}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {f ? (
-                    <>
-                      {target
-                        ? t('home.portfolio.ofTarget', {
-                            done: number(f.completes),
-                            target: number(target),
-                          })
-                        : number(f.completes)}
-                      {target ? (
-                        <span
-                          className="mt-1 block h-1.5 w-24 overflow-hidden rounded bg-slate-200 sm:ml-auto"
-                          aria-hidden
-                        >
+              <Fragment key={p.id}>
+                <tr>
+                  <td className="px-3 py-2">
+                    <div className="max-w-[15rem] whitespace-nowrap">
+                      <ProjectName p={p} />
+                      <span
+                        className="block truncate font-mono text-xs text-slate-500"
+                        title={status}
+                      >
+                        {status}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                    {f ? (
+                      <>
+                        {target
+                          ? t('home.portfolio.ofTarget', {
+                              done: number(f.completes),
+                              target: number(target),
+                            })
+                          : number(f.completes)}
+                        {target ? (
                           <span
-                            className="block h-full bg-indigo-600"
-                            style={{ width: `${Math.min(100, (100 * f.completes) / target)}%` }}
-                          />
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {goal ? <GoalBadge goal={goal} own={false} /> : t('home.portfolio.noGoal')}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {f
-                    ? seesCases(p.id)
-                      ? tab(p, 'cases', f.unassigned)
-                      : number(f.unassigned)
-                    : '—'}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {f ? tab(p, 'dashboard', f.callbacksDue) : '—'}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {s?.review ? (
-                    <>
-                      {tab(p, 'review', s.review.toReview)}
-                      {s.review.tooFast ? (
-                        <span className="block text-xs text-amber-ink-900">
-                          {t('home.portfolio.tooFast', { count: s.review.tooFast })}
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {f ? tab(p, 'dashboard', f.activeNow) : '—'}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2" data-testid="home-last-activity">
-                  {f
-                    ? f.lastActivityAt
-                      ? dateTime(f.lastActivityAt)
-                      : t('home.portfolio.never')
-                    : '—'}
-                </td>
-              </tr>
+                            className="mt-1 block h-1.5 w-24 overflow-hidden rounded bg-slate-200 sm:ml-auto"
+                            aria-hidden
+                          >
+                            <span
+                              className="block h-full bg-indigo-600"
+                              style={{ width: `${Math.min(100, (100 * f.completes) / target)}%` }}
+                            />
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {goal ? <GoalBadge goal={goal} own={false} /> : t('home.portfolio.noGoal')}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {f
+                      ? seesCases(p.id)
+                        ? tab(p, 'cases', f.unassigned)
+                        : number(f.unassigned)
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {f ? tab(p, 'dashboard', f.callbacksDue) : '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                    {s?.review ? (
+                      <>
+                        {tab(p, 'review', s.review.toReview)}
+                        {s.review.tooFast ? (
+                          <span className="block text-xs text-amber-ink-900">
+                            {t('home.portfolio.tooFast', { count: s.review.tooFast })}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {f ? tab(p, 'dashboard', f.activeNow) : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      className="rounded px-2 py-0.5 text-slate-600 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                      aria-expanded={expanded}
+                      aria-controls={expanded ? detailsId : undefined}
+                      aria-label={t('home.portfolio.more', { name: p.name })}
+                      title={t('home.portfolio.more', { name: p.name })}
+                      onClick={() => toggle(p.id)}
+                    >
+                      <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+                    </button>
+                  </td>
+                </tr>
+                {expanded ? (
+                  <tr id={detailsId} className="bg-slate-50">
+                    <td colSpan={8} className="px-3 py-2">
+                      <dl className="flex flex-wrap gap-x-8 gap-y-1">
+                        <div className="flex gap-2">
+                          <dt className="text-slate-600">{t('home.portfolio.fieldwork')}</dt>
+                          <dd className="whitespace-nowrap" data-testid="home-fieldwork">
+                            {startsOn || endsOn
+                              ? t('home.portfolio.dates', {
+                                  from: startsOn ? day(startsOn) : '…',
+                                  to: endsOn ? day(endsOn) : '…',
+                                })
+                              : t('home.portfolio.noDates')}
+                          </dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt className="text-slate-600">{t('home.portfolio.lastActivity')}</dt>
+                          <dd className="whitespace-nowrap" data-testid="home-last-activity">
+                            {f
+                              ? f.lastActivityAt
+                                ? dateTime(f.lastActivityAt)
+                                : t('home.portfolio.never')
+                              : '—'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
           })}
         </tbody>

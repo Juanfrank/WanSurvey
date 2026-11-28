@@ -75,9 +75,13 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await sup.getByRole('tab', { name: 'Supervision', exact: true }).click();
   const queued = sup.getByTestId('review-queue').locator(`tr[data-case="${caseId}"]`);
   await expect(queued).toBeVisible();
-  // The queue by interviewer: choosing the interviewer keeps their interviews only.
-  const people = sup.getByTestId('queue-interviewers');
-  await people.getByRole('button', { name: /^Demo interviewer/ }).click();
+  // The queue by interviewer, in the Filters panel: each person with their count of
+  // interviews; choosing one keeps their interviews only.
+  await openFilters(sup);
+  const people = sup.getByRole('combobox', { name: 'Interviewer' });
+  const demo = people.locator('option', { hasText: /^Demo interviewer · \d+ interviews?/ });
+  await people.selectOption((await demo.getAttribute('value'))!);
+  await closeFilters(sup);
   await expect(queued).toBeVisible();
   await expect(
     sup.getByTestId('review-queue').locator('tbody tr').filter({ hasNotText: 'Demo interviewer' }),
@@ -87,7 +91,7 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
     sup.getByRole('button', { name: 'Remove filter: Interviewer Demo interviewer' }),
   ).toBeVisible();
   await shot(sup, 'review-queue');
-  await people.getByRole('button', { name: /^Demo interviewer/ }).click();
+  await sup.getByRole('button', { name: 'Remove filter: Interviewer Demo interviewer' }).click();
   // The other filters wait in the Filters panel, beside the Status kept in view.
   await expect(sup.getByRole('combobox', { name: 'Status' })).toBeVisible();
   await openFilters(sup);

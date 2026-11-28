@@ -179,7 +179,7 @@ export function RolesPage() {
             className="relative max-h-[calc(100dvh-11rem)] min-h-64 overflow-auto rounded-md border border-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <table
-              className="w-full min-w-[56rem] border-separate border-spacing-0 text-left text-sm"
+              className="w-full min-w-[48rem] border-separate border-spacing-0 text-left text-sm"
               data-testid="roles-matrix"
             >
               <thead>
@@ -190,9 +190,16 @@ export function RolesPage() {
                   {data.roles.map((r) => (
                     <th
                       key={r.role}
-                      className="sticky top-0 z-20 w-24 border-b border-slate-200 bg-white px-2 py-2 text-center"
+                      title={roleName(r.role)}
+                      className="sticky top-0 z-20 whitespace-nowrap border-b border-slate-200 bg-white px-2 py-2 text-center"
                     >
-                      <div className="text-xs font-semibold leading-tight">{roleName(r.role)}</div>
+                      {/* Short on screen, so the header keeps to one line; read in full. */}
+                      <div aria-hidden="true" className="text-xs font-semibold leading-tight">
+                        {t(`admin.rolesPage.roleShort.${r.role}`, {
+                          defaultValue: roleName(r.role),
+                        })}
+                      </div>
+                      <span className="sr-only">{roleName(r.role)}</span>
                       {r.editable ? (
                         <button
                           type="button"

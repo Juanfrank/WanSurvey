@@ -469,6 +469,23 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ### Changed
 
+- **Less crowding on Home, analysis, review and administration** (at 1280 px):
+  - Home: the project's name and its code keep to one line each, cut with "…"; the headers
+    "Team pace", "Callbacks due" and "Working now" are written short (the full name is the title
+    and what a screen reader reads); the fieldwork dates and the last activity fold under each
+    project behind a "▸" ("More on …").
+  - Roles and permissions: the role names in the header are short ("Manager", "Client"), the full
+    name in the title and for screen readers, so every column, Client included, is in view.
+  - Audit log: the Details column takes the width that is left and its summary is cut with "…"
+    inside the cell; the table no longer runs past the card, open entries included.
+  - Review queue: the permanent "By interviewer" row of pills is gone; the Interviewer filter in
+    the Filters panel lists each person with their interviews and flags, and the chip shows who is
+    chosen.
+  - Results: below 1536 px the crosstab takes the full width above the questions (beside them on
+    wider screens), and each cell keeps "% [n]" on one line.
+  - Metrics: what ▲ and ▼ mean is behind an ⓘ beside the title instead of a paragraph under the
+    table.
+  - Overview: the pace figures are in two columns, so their labels fit in at most two lines.
 - **One place for the results summary**: the printable summary (PDF) opens from Results only; the
   duplicate button in Exports is gone (the client links were already only in Results).
 - **«Completar» is now «Cerrar trabajo de campo» (Close fieldwork)** in a questionnaire's actions, its

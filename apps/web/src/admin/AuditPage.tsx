@@ -456,11 +456,18 @@ export function AuditPage() {
                       <td className="whitespace-nowrap py-1.5 pr-4 tabular-nums text-slate-700">
                         {when.format(new Date(e.at))}
                       </td>
-                      <td className="whitespace-nowrap py-1.5 pr-4">{who(e)}</td>
+                      <td className="py-1.5 pr-4">
+                        <span
+                          title={who(e)}
+                          className="block max-w-[10rem] truncate whitespace-nowrap"
+                        >
+                          {who(e)}
+                        </span>
+                      </td>
                       <td className="py-1.5 pr-4">
                         <span
                           title={actionLabel(t, e.action)}
-                          className="block max-w-[15rem] truncate whitespace-nowrap font-medium text-slate-800"
+                          className="block max-w-[13rem] truncate whitespace-nowrap font-medium text-slate-800"
                         >
                           {actionLabel(t, e.action)}
                         </span>
@@ -472,13 +479,15 @@ export function AuditPage() {
                         </span>
                       </td>
                       <td className="py-1.5 pr-4 text-xs text-slate-600">
-                        <div className="w-[11rem]">{target(e)}</div>
+                        <div className="w-[10rem]">{target(e)}</div>
                       </td>
-                      <td className="py-1.5 text-xs text-slate-600">
+                      {/* Takes the width left over (max-w-0 + w-full), so the table fits and
+                          the summary is cut with "…" inside the cell, not by the table's edge. */}
+                      <td className="w-full max-w-0 py-1.5 text-xs text-slate-600">
                         {rows.length ? (
-                          <>
+                          <div className="min-w-[7rem]">
                             <span
-                              className="block w-[11rem] truncate"
+                              className="block truncate"
                               title={rows.map((r) => `${r.label}: ${r.value}`).join(' · ')}
                             >
                               {rows
@@ -503,7 +512,7 @@ export function AuditPage() {
                             >
                               {isOpen ? t('admin.log.hideDetails') : t('admin.log.viewDetails')}
                             </button>
-                          </>
+                          </div>
                         ) : null}
                       </td>
                     </tr>

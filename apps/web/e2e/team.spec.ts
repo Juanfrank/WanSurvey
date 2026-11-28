@@ -335,6 +335,10 @@ test('the team: invite, accept, change roles, deactivate and reactivate; others 
     el.scrollTop = 600;
   });
   await expect(matrix.getByRole('columnheader', { name: /^Reviewer/ })).toBeInViewport();
+  // Short role names keep every column in view, the last one (Client) included.
+  await expect(matrix.getByRole('columnheader', { name: /^Client \(read only\)/ })).toBeInViewport({
+    ratio: 1,
+  });
   await shot(page, 'p2-roles-sticky-header', { fullPage: false });
 
   // Where roles are given, a guide says what each one may do.

@@ -60,12 +60,19 @@ test('home shows a project manager the projects with their fieldwork', async ({ 
   const table = page.getByTestId('home-portfolio');
   await expect(table.getByRole('columnheader', { name: 'Unassigned' })).toBeVisible();
   await expect(table.getByRole('row', { name: /Household Survey 2026/ })).toBeVisible();
+  // Short headers keep their full name; the seldom used figures fold under the row.
+  await expect(table.getByRole('columnheader', { name: 'Team pace' })).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: 'Callbacks due' })).toBeVisible();
+  await expect(table.getByTestId('home-last-activity')).toHaveCount(0);
+  const more = table.getByRole('button', { name: 'More on Household Survey 2026' });
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
   // Each project's fieldwork dates and its last interview activity.
-  await expect(table.getByRole('columnheader', { name: 'Fieldwork' })).toBeVisible();
-  await expect(table.getByRole('columnheader', { name: 'Last activity' })).toBeVisible();
-  await expect(
-    table.getByRole('row', { name: /Household Survey 2026/ }).getByTestId('home-last-activity'),
-  ).not.toHaveText('None yet');
+  await expect(table.getByTestId('home-fieldwork')).toBeVisible();
+  await expect(table.getByTestId('home-last-activity')).not.toHaveText('None yet');
+  await expect(table.getByTestId('home-last-activity')).not.toHaveText('—');
+  await more.click();
   // The preview stays a secondary link for those who design questionnaires.
   await expect(page.getByRole('link', { name: 'Open the preview' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'My day' })).toHaveCount(0);

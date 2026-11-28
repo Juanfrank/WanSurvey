@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { controlCls } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { FilterBar, TableScroll, type ActiveFilter } from '../routes/ui.js';
@@ -166,9 +167,22 @@ export function MetricsTab({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="metrics">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="text-lg font-semibold">
-          {data.data && !data.data.team ? t('analysis.metrics.mine') : t('analysis.metrics.title')}
-        </h2>
+        {/* What the ▲ and ▼ mean is behind an (i) beside the title, not a paragraph. */}
+        <div className="flex items-center gap-1">
+          <h2 className="text-lg font-semibold">
+            {data.data && !data.data.team
+              ? t('analysis.metrics.mine')
+              : t('analysis.metrics.title')}
+          </h2>
+          {data.data?.team ? (
+            <InfoTip
+              id="metrics-outliers"
+              term={t('analysis.metrics.title')}
+              text={t('analysis.metrics.outlierNote')}
+              align="start"
+            />
+          ) : null}
+        </div>
         <FilterBar
           className="min-w-0 flex-1"
           active={chips}
@@ -326,9 +340,6 @@ export function MetricsTab({ projectId }: { projectId: string }) {
               </tbody>
             </table>
           </TableScroll>
-          {data.data?.team ? (
-            <p className="text-xs text-slate-600">{t('analysis.metrics.outlierNote')}</p>
-          ) : null}
         </>
       )}
       {/* How the goals stand, under the figures (they are set in the project settings). */}
