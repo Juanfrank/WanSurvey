@@ -5,13 +5,14 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { own, type InterviewSession } from '@wansurvey/logic';
 import { InterviewRunner, ScriptBox } from '@wansurvey/renderer';
 import { DEFAULT_SHORTCUTS, type LocalizedText } from '@wansurvey/schema';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../designer/Dialog.js';
 import { useCan } from '../designer/hooks.js';
 import { inputCls, smallBtn } from '../designer/fields.js';
 import { localiseError } from '../i18n-messages.js';
 import { Button, PageHeader } from '../routes/ui.js';
+import { useMedia } from '../routes/SideDrawer.js';
 import { api } from '../api.js';
 import type { ReviewComment } from '../review/ReviewPage.js';
 import { ago, AnswersSoFar, Contacts, SampleData } from './side.js';
@@ -109,6 +110,7 @@ export function InterviewPage() {
     retry: false,
   });
   const canCasesAll = useCan('cases.read_all', projectId);
+  const phone = useMedia('(max-width: 639px)');
 
   // Clocks in the header.
   useEffect(() => {
@@ -222,7 +224,12 @@ export function InterviewPage() {
             search: { tab: 'cases' },
           };
   /** A breadcrumb link that first sends what is still on this device. */
-  const crumb = (label: string, to: string, search: Record<string, string> = {}) => (
+  const crumb = (
+    label: ReactNode,
+    to: string,
+    search: Record<string, string> = {},
+    extra: { className?: string; 'aria-label'?: string; title?: string } = {},
+  ) => (
     <Link
       to={to}
       params={{ projectId }}
@@ -230,6 +237,7 @@ export function InterviewPage() {
       // Only the case is the current page (a fuzzy match would mark every crumb as current).
       activeOptions={{ exact: true, includeSearch: true }}
       className="hover:underline"
+      {...extra}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
         e.preventDefault();
@@ -245,12 +253,37 @@ export function InterviewPage() {
   return (
     <div className="flex flex-col gap-3" onKeyDown={onKeyDown}>
       {/* The breadcrumb, with the case as the page's title, on the app's top row. */}
+      {/* On a phone, only "‹ Case HH0031" (the ‹ goes back where it came from), so that the
+          question is reached without scrolling; the whole breadcrumb from 640 px. */}
       <PageHeader
-        parents={[
-          crumb(t('designer.projects'), '/projects'),
-          ...(project.data ? [crumb(project.data.name, '/projects/$projectId')] : []),
-          crumb(parent.label, parent.to, parent.search),
-        ]}
+        parents={
+          phone
+            ? undefined
+            : [
+                crumb(t('designer.projects'), '/projects'),
+                ...(project.data
+                  ? [
+                      crumb(
+                        project.data.name,
+                        '/projects/$projectId',
+                        {},
+                        { title: project.data.name },
+                      ),
+                    ]
+                  : []),
+                crumb(parent.label, parent.to, parent.search),
+              ]
+        }
+        icon={
+          phone
+            ? crumb(<span aria-hidden="true">‹</span>, parent.to, parent.search, {
+                className:
+                  'grid h-9 w-9 flex-none place-items-center rounded-full text-2xl leading-none text-navy hover:bg-indigo-50',
+                'aria-label': t('interview.backTo', { place: parent.label }),
+                title: t('interview.backTo', { place: parent.label }),
+              })
+            : undefined
+        }
         title={
           <span aria-current="page" className="whitespace-nowrap">
             {t('interview.case', { id: payload.context.externalId ?? '' }).trim()}
@@ -265,25 +298,27 @@ export function InterviewPage() {
         }
       />
       {/* One slim line, not a card: who, how long, the language and whether it is saved. */}
+      {/* On a phone one line: the respondent, the interview's clock (its name for screen
+          readers) and whether it is saved; the interviewer and the question's clock from 640 px. */}
       <header
-        className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:gap-x-5"
         data-testid="interview-status"
       >
         {/* On a phone the top row has no room for the respondent's name: it is said here. */}
-        {name ? <span className="font-medium sm:hidden">{name}</span> : null}
+        {name ? <span className="min-w-0 truncate font-medium sm:hidden">{name}</span> : null}
         {payload.interview.interviewer ? (
-          <span className="text-slate-600">
+          <span className="text-slate-600 max-sm:hidden">
             {t('interview.interviewer', { name: payload.interview.interviewer })}
           </span>
         ) : null}
         <dl className="flex gap-4">
           <div className="flex items-baseline gap-1.5">
-            <dt className="text-xs text-slate-600">{t('interview.elapsed')}</dt>
+            <dt className="text-xs text-slate-600 max-sm:sr-only">{t('interview.elapsed')}</dt>
             <dd className="font-mono" data-testid="elapsed">
               {clock(iv.clock?.activeMs() ?? 0)}
             </dd>
           </div>
-          <div className="flex items-baseline gap-1.5">
+          <div className="flex items-baseline gap-1.5 max-sm:hidden">
             <dt className="text-xs text-slate-600">{t('interview.onQuestion')}</dt>
             <dd className="font-mono">{clock(iv.clock?.onQuestionMs() ?? 0)}</dd>
           </div>
@@ -634,7 +669,7 @@ function SaveBadge({ state }: { state: SaveState }) {
     <span
       role="status"
       aria-live="polite"
-      className={`ml-auto text-sm font-medium ${cls[state]}`}
+      className={`ml-auto whitespace-nowrap text-xs font-medium sm:text-sm ${cls[state]}`}
       data-testid="save-status"
       data-status={state}
     >

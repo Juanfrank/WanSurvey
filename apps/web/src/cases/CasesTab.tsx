@@ -25,7 +25,7 @@ import {
 } from '../routes/ui.js';
 import { CaseMap } from './CaseMap.js';
 import { PersonalData } from './PersonalData.js';
-import { ReturnedToMe } from '../review/ReturnedToMe.js';
+import { MyQuality, ReturnedToMe } from '../review/ReturnedToMe.js';
 import { CallHistory, InterviewHistory, StartInterview } from './CaseInterviews.js';
 import { useMe } from '../routes/AppLayout.js';
 import {
@@ -347,13 +347,17 @@ export function CasesTab({ projectId, scoped }: { projectId: string; scoped?: bo
       {canConductHere ? <ReturnedToMe projectId={projectId} /> : null}
       {SHOW_LATER ? viewSwitch : null}
       <section aria-labelledby="case-kpis" className="flex flex-col gap-2">
-        <h2 id="case-kpis" className="text-sm font-semibold text-slate-700">
-          {mine ? t('cases.list.kpi.mineTitle') : t('cases.list.kpi.title')} ·{' '}
-          <span data-testid="kpi-total">{data ? kpiTotal : '…'}</span>
-          {!mine && questionnaire && scoped ? (
-            <span className="ml-2 font-normal text-slate-600">{t('cases.list.kpi.scope')}</span>
-          ) : null}
-        </h2>
+        {/* The interviewer's own quality signals, folded at the end of the title's line. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h2 id="case-kpis" className="text-sm font-semibold text-slate-700">
+            {mine ? t('cases.list.kpi.mineTitle') : t('cases.list.kpi.title')} ·{' '}
+            <span data-testid="kpi-total">{data ? kpiTotal : '…'}</span>
+            {!mine && questionnaire && scoped ? (
+              <span className="ml-2 font-normal text-slate-600">{t('cases.list.kpi.scope')}</span>
+            ) : null}
+          </h2>
+          {canConductHere ? <MyQuality projectId={projectId} /> : null}
+        </div>
         {/* One strip of pills: the name and the figure; what it counts is in the tooltip. */}
         <ul aria-label={t('cases.list.kpi.label')} className="flex flex-wrap gap-2">
           {kpis.map((k) => {

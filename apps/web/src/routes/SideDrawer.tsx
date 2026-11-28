@@ -116,6 +116,7 @@ export function SideDrawer({
   width = '22rem',
   className = '',
   float,
+  docked = false,
   children,
 }: {
   id: string;
@@ -134,6 +135,12 @@ export function SideDrawer({
    * instead of a rail: the content keeps the whole width. The pane opens above the button.
    */
   float?: string;
+  /**
+   * With `float`: the button sits where the drawer is placed in the page (in a header row)
+   * instead of fixed at the bottom right, so it never covers the content; the pane opens
+   * below it.
+   */
+  docked?: boolean;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -267,10 +274,16 @@ export function SideDrawer({
       <aside
         ref={box}
         aria-label={label}
-        className={`no-print fixed bottom-4 z-20 flex flex-col gap-2 ${
+        className={`no-print z-20 flex flex-col gap-2 ${
           side === 'left' ? 'items-start' : 'items-end'
         } ${
-          side === 'left' ? 'left-4 min-[900px]:left-[calc(var(--side-w,0px)+1rem)]' : 'right-4'
+          docked
+            ? 'relative'
+            : `fixed bottom-4 ${
+                side === 'left'
+                  ? 'left-4 min-[900px]:left-[calc(var(--side-w,0px)+1rem)]'
+                  : 'right-4'
+              }`
         }`}
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) drawer.setOpen(false);
@@ -281,7 +294,9 @@ export function SideDrawer({
           ref={pane}
           id={id}
           hidden={!open}
-          className={`flex max-h-[min(36rem,calc(100vh-6rem))] w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-card ${className}`}
+          className={`flex ${docked ? 'max-h-[min(32rem,calc(100vh-12rem))]' : 'max-h-[min(36rem,calc(100vh-6rem))]'} w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-card ${
+            docked ? `absolute top-full mt-2 ${side === 'left' ? 'left-0' : 'right-0'}` : ''
+          } ${className}`}
         >
           <div className="flex items-center justify-end gap-1">
             {pin}

@@ -484,25 +484,64 @@ export function CallsTab({
   const dueCallbacks = (callbacks.data ?? []).filter((c) => new Date(c.at).getTime() <= now).length;
 
   return (
-    <div className="flex flex-col gap-4 pb-14" data-testid="calls">
-      <section aria-labelledby="calls-title" className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 id="calls-title" className="text-lg font-semibold">
-            {t('cati.title')}
-          </h2>
-          {!served ? (
-            <button
-              ref={nextRef}
-              type="button"
-              className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-on-fill hover:bg-indigo-700 disabled:bg-indigo-300"
-              disabled={busy}
-              onClick={() => void next()}
-              aria-keyshortcuts="N"
-            >
-              {t('cati.next')} <kbd className="ml-1 text-xs opacity-80">N</kbd>
-            </button>
-          ) : null}
+    <div className="flex flex-col gap-4" data-testid="calls">
+      {/* The title row: the next case, and the callbacks' button at its right end (in the row,
+          not floating, so that it never covers an outcome or the form's buttons). Outside the
+          section: the callbacks are a landmark of their own. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 id="calls-title" className="text-lg font-semibold">
+          {t('cati.title')}
+        </h2>
+        {!served ? (
+          <button
+            ref={nextRef}
+            type="button"
+            className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-on-fill hover:bg-indigo-700 disabled:bg-indigo-300"
+            disabled={busy}
+            onClick={() => void next()}
+            aria-keyshortcuts="N"
+          >
+            {t('cati.next')} <kbd className="ml-1 text-xs opacity-80">N</kbd>
+          </button>
+        ) : null}
+        <div className="ml-auto">
+          <SideDrawer
+            id="calls-callbacks-drawer"
+            drawer={drawer}
+            side="right"
+            label={t('cati.callbacks')}
+            width="21rem"
+            icon={<PhoneIcon className="h-[18px] w-[18px]" />}
+            badge={dueCallbacks}
+            badgeLabel={`${t('cati.callbacksGroup.overdue')}: ${dueCallbacks}`}
+            float={t('cati.callbacksButton', { count: callbacks.data?.length ?? 0 })}
+            docked
+            className="text-sm"
+          >
+            <CallbackReminders />
+            <Callbacks
+              rows={callbacks.data ?? []}
+              now={now}
+              canCall={!served && !busy}
+              onCall={(c) => {
+                drawer.setOpen(false);
+                void next(false, c.caseId);
+              }}
+              onPin={async (c) => {
+                try {
+                  await api(`/projects/${projectId}/cati/callbacks/${c.caseId}/pin`, {
+                    method: c.pinned ? 'DELETE' : 'POST',
+                  });
+                  await qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
+                } catch (e) {
+                  setMessage(localiseError(t, e));
+                }
+              }}
+            />
+          </SideDrawer>
         </div>
+      </div>
+      <section aria-labelledby="calls-title" className="flex min-w-0 flex-col gap-4">
         <p
           role="status"
           aria-live="polite"
@@ -881,40 +920,6 @@ export function CallsTab({
           {t('cati.shortcuts')}
         </p>
       </section>
-
-      <SideDrawer
-        id="calls-callbacks-drawer"
-        drawer={drawer}
-        side="right"
-        label={t('cati.callbacks')}
-        width="21rem"
-        icon={<PhoneIcon className="h-[18px] w-[18px]" />}
-        badge={dueCallbacks}
-        badgeLabel={`${t('cati.callbacksGroup.overdue')}: ${dueCallbacks}`}
-        float={t('cati.callbacksButton', { count: callbacks.data?.length ?? 0 })}
-        className="text-sm"
-      >
-        <CallbackReminders />
-        <Callbacks
-          rows={callbacks.data ?? []}
-          now={now}
-          canCall={!served && !busy}
-          onCall={(c) => {
-            drawer.setOpen(false);
-            void next(false, c.caseId);
-          }}
-          onPin={async (c) => {
-            try {
-              await api(`/projects/${projectId}/cati/callbacks/${c.caseId}/pin`, {
-                method: c.pinned ? 'DELETE' : 'POST',
-              });
-              await qc.invalidateQueries({ queryKey: ['cati-callbacks', projectId] });
-            } catch (e) {
-              setMessage(localiseError(t, e));
-            }
-          }}
-        />
-      </SideDrawer>
     </div>
   );
 }

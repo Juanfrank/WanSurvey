@@ -101,13 +101,13 @@ describe('screens', () => {
     expect(screen.getByRole('button', { name: 'Sign in with Microsoft' })).toBeTruthy();
   });
 
-  it('sends someone without a role to the waiting page and shows the API message', async () => {
+  it('sends someone without a role to the waiting page and says why in the interface language', async () => {
     mockFetch({ '/auth/me': { body: me('no_role') } });
     const router = renderAt('/');
     await waitFor(() => expect(router.state.location.pathname).toBe('/waiting'));
     expect(await screen.findByTestId('access-message')).toHaveProperty(
       'textContent',
-      'Your account is active, but no role has been assigned to you in Demo Research yet.',
+      'Your account is active, but no role has been assigned to you in Demo Research yet. An administrator of Demo Research has been notified and needs to give you access before you can work here.',
     );
     expect(screen.getByRole('button', { name: 'Switch' })).toBeTruthy(); // other organisation offered
   });

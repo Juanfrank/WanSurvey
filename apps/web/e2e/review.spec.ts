@@ -200,5 +200,7 @@ test('a reviewer returns an interview with a comment, the interviewer fixes it, 
   await iv.getByLabel('Search id or sample data').fill(caseId);
   const done = iv.locator(`tr[data-case="${caseId}"]`);
   await expect(done.locator('[data-review="approved"]')).toContainText('Review: approved');
+  // The search has applied (it waits for a pause in typing): only that case is listed.
+  await expect(iv.locator('tr[data-case]')).toHaveCount(1);
   await shot(iv, 'v2-my-cases-review');
 });

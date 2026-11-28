@@ -1254,6 +1254,8 @@ export function ProjectPage() {
               to="/projects/$projectId"
               params={{ projectId }}
               className="hover:underline"
+              // A long name is cut short ("…"), whole on hover.
+              title={project.data.name}
               onClick={() => {
                 setTab(null);
                 setPanel(null);
@@ -1266,7 +1268,6 @@ export function ProjectPage() {
           )
         }
         current={current ? tabLabel(current) : undefined}
-        aside={canDevice ? <DeviceStatusLink projectId={projectId} /> : null}
       />
       {current ? (
         <Tabs.Root
@@ -1277,10 +1278,12 @@ export function ProjectPage() {
           }}
           className="flex flex-col gap-4"
         >
-          {/* One line: People and the settings (and what does not fit) under "More". */}
+          {/* One line: People and the settings (and what does not fit) under "More"; the
+              device's state at its right end, out of the breadcrumb's line. */}
           <OverflowTabList
             label={t('cases.tabs.label')}
             value={current}
+            end={canDevice ? <DeviceStatusLink projectId={projectId} /> : undefined}
             onSelect={(v) => {
               setTab(v as ProjectTab);
               if (v !== 'questionnaires') setPanel(null);
