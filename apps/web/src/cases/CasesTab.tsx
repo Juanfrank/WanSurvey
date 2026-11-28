@@ -1399,31 +1399,40 @@ function CaseDrawer({
   const header = c ? (
     <div className="flex flex-col gap-2 text-sm" data-testid="case-header">
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={c.status} />
-        {c.disposition ? (
-          <span data-testid="case-disposition">
-            ·{' '}
-            {t(`analysis.dispositionLabels.${c.disposition}`, {
-              defaultValue: c.disposition,
-            })}
-          </span>
-        ) : null}
-        {c.attempts ? (
-          <span data-testid="case-attempts">
-            ·{' '}
-            {c.maxAttempts
-              ? t('cases.detail.attemptsOf', { count: c.attempts, max: c.maxAttempts })
-              : t('cases.detail.attempts', { count: c.attempts })}
-          </span>
-        ) : null}
-        {c.assignedName ? (
-          <span>
-            · {c.assignedName}
-            {c.assignedAt
-              ? ` · ${t('cases.list.assignedOn', { date: dateTime(c.assignedAt), age: assignedAge(t, c.assignedAt) })}`
-              : ''}
-          </span>
-        ) : null}
+        {/* Each item ends with its own "·" (the next one follows it), so a wrapped line never
+            starts with a separator. */}
+        {[
+          <StatusBadge key="status" status={c.status} />,
+          c.disposition ? (
+            <span key="disposition" data-testid="case-disposition">
+              {t(`analysis.dispositionLabels.${c.disposition}`, {
+                defaultValue: c.disposition,
+              })}
+            </span>
+          ) : null,
+          c.attempts ? (
+            <span key="attempts" data-testid="case-attempts">
+              {c.maxAttempts
+                ? t('cases.detail.attemptsOf', { count: c.attempts, max: c.maxAttempts })
+                : t('cases.detail.attempts', { count: c.attempts })}
+            </span>
+          ) : null,
+          c.assignedName ? (
+            <span key="assigned">
+              {c.assignedName}
+              {c.assignedAt
+                ? ` · ${t('cases.list.assignedOn', { date: dateTime(c.assignedAt), age: assignedAge(t, c.assignedAt) })}`
+                : ''}
+            </span>
+          ) : null,
+        ]
+          .filter(Boolean)
+          .map((item, i, all) => (
+            <span key={i} className="inline-flex items-center gap-2">
+              {item}
+              {i < all.length - 1 ? <span aria-hidden="true">·</span> : null}
+            </span>
+          ))}
         {c.pii.masked ? (
           <span className="ml-auto flex items-center gap-2">
             <span className="text-slate-600">{t('cases.detail.masked')}</span>

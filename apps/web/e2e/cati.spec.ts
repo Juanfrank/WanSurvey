@@ -188,7 +188,7 @@ test('a supervisor sees the attempts used against the limit and reopens an exhau
     await page.getByRole('button', { name: `Open case ${id}`, exact: true }).click();
     const drawer = page.getByRole('dialog', { name: `Case ${id}` });
     await expect(drawer.getByTestId('case-attempts')).toHaveText(
-      `· ${max} attempts of ${max} allowed`,
+      `${max} attempts of ${max} allowed`,
     );
     const reopen = drawer.getByRole('button', { name: `Reopen with ${max} new attempts` });
     await expect(reopen).toBeVisible();

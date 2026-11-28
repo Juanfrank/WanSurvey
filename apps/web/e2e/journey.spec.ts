@@ -261,7 +261,7 @@ test('a project from scratch: questionnaire, sample, calls, a web link, results 
   await page.getByLabel('Buscar id o datos de muestra').fill(exhausted);
   await page.getByRole('button', { name: `Abrir el caso ${exhausted}`, exact: true }).click();
   const drawer = page.getByRole('dialog', { name: `Caso ${exhausted}` });
-  await expect(drawer.getByTestId('case-disposition')).toHaveText('· Sin contacto');
+  await expect(drawer.getByTestId('case-disposition')).toHaveText('Sin contacto');
   await expect(drawer).toContainText('1 intento');
   await expect(drawer.getByTestId('call-history')).toContainText('No contesta');
   await expect(drawer).toContainText('Seleccionado en la muestra');
