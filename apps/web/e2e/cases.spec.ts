@@ -128,7 +128,7 @@ test('sampling selector: load a frame from Excel, see the problems, select a cen
 
   await page.getByRole('tab', { name: 'Case list' }).click();
   await page.getByLabel('Search id or sample data').fill('XHH');
-  await expect(page.getByText('Page 1 of 1 · 10 cases')).toBeVisible();
+  await expect(page.getByTestId('cases-count')).toHaveText('10 cases');
 });
 
 test('bulk-assign cases; the clerk sees only theirs, with the personal data of their cases', async ({
@@ -137,9 +137,19 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
 }) => {
   await openProject(page);
   await page.getByRole('tab', { name: 'Cases' }).click();
+  // A long list comes in blocks of 20, with "Show 20 more" under it; a ticked case of the
+  // second block brings the bar of the ticked cases.
+  const all = page.getByTestId('cases-table').locator('tbody tr');
+  await expect(all).toHaveCount(20);
+  await expect(page.getByTestId('cases-count')).toHaveText(/^20 of \d+ cases$/);
+  await page.getByRole('button', { name: /^Show \d+ more \(\d+ left\)$/ }).click();
+  await expect.poll(() => all.count()).toBeGreaterThan(20);
+  await all.nth(20).getByRole('checkbox').check();
+  await expect(page.getByRole('region', { name: '1 case selected' })).toBeVisible();
   await page.getByLabel('Search id or sample data').fill('XHH000');
+  await expect(page.getByRole('region', { name: '1 case selected' })).toHaveCount(0);
   // XHH0005 was left out of the import (bad e-mail).
-  await expect(page.getByText('Page 1 of 1 · 8 cases')).toBeVisible();
+  await expect(page.getByTestId('cases-count')).toHaveText('8 cases');
   await page.getByLabel('Select case XHH0002').check();
   await page.getByLabel('Select case XHH0006', { exact: true }).click({ modifiers: ['Shift'] });
   await expect(page.getByText('4 selected')).toBeVisible();
@@ -207,7 +217,7 @@ test('bulk-assign cases; the clerk sees only theirs, with the personal data of t
     await expect(quick.getByRole('button', { name: 'Due within 48 h' })).toBeVisible();
     await expect(quick.getByRole('button', { name: 'Overdue' })).toBeVisible();
     await quick.getByRole('button', { name: 'Not tried yet' }).click();
-    await expect(page.getByText('Page 1 of 1 · 4 cases')).toBeVisible();
+    await expect(page.getByTestId('cases-count')).toHaveText('4 cases');
     await expect(page.locator('tr[data-case="XHH0003"]')).toContainText('Demo clerk');
     // What is on shows as chips beside the Filters button.
     await expect(page.getByRole('button', { name: 'Filters · 2' })).toBeVisible();
@@ -302,10 +312,9 @@ test('an assignment rule gives matching unassigned cases to a person', async ({ 
   await expect(page.getByTestId('rule-preview')).toContainText(/Matches \d+ cases/);
   await page.getByLabel('At most (cases held by the person)').fill('10');
   await shot(page, 'p2-cases-rules-form', { fullPage: false });
-  await rules
-    .getByRole('form', { name: 'Add rule' })
-    .getByRole('button', { name: 'Add rule' })
-    .click();
+  // The rule's form is a side panel over the rules', Cancel and Add rule at its foot.
+  const ruleForm = page.getByRole('dialog', { name: 'Add rule' });
+  await ruleForm.getByRole('button', { name: 'Add rule', exact: true }).click();
   await expect(page.getByTestId('rules')).toContainText('Region 3 to the clerk');
   await expect(rules.getByRole('form', { name: 'Add rule' })).toHaveCount(0);
   await shot(page, 'cases-assignments', { fullPage: false });

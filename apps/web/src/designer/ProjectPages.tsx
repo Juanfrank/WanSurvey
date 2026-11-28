@@ -83,8 +83,11 @@ export function ProjectsPage() {
       <PageHeader
         title={t('designer.projects')}
         actions={
-          canCreate && !creating ? (
-            <Button onClick={() => setCreating(true)}>{t('designer.newProject.open')}</Button>
+          canCreate ? (
+            <Button onClick={() => setCreating(true)}>
+              <span aria-hidden="true">+ </span>
+              {t('designer.newProject.open')}
+            </Button>
           ) : null
         }
       />
@@ -163,18 +166,37 @@ function NewProjectForm({ onCancel }: { onCancel: () => void }) {
     },
   });
   const codeOk = /^[A-Za-z0-9_-]{1,32}$/.test(code);
+  const formId = 'new-project-form';
   return (
-    <Card>
+    <Drawer
+      title={t('designer.newProject.title')}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            {t('designer.newProject.cancel')}
+          </Button>
+          <Button
+            type="submit"
+            form={formId}
+            busy={create.isPending}
+            disabled={waiting || !name.trim() || !codeOk || !modes.length}
+          >
+            {t('designer.newProject.create')}
+          </Button>
+        </>
+      }
+    >
       <form
+        id={formId}
         className="flex flex-col gap-4"
         aria-label={t('designer.newProject.title')}
         onSubmit={(e) => {
           e.preventDefault();
-          if (name.trim() && codeOk && modes.length) create.mutate();
+          if (name.trim() && codeOk && modes.length && !create.isPending) create.mutate();
         }}
       >
-        <h2 className="text-lg font-semibold">{t('designer.newProject.title')}</h2>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid gap-4">
           <Field
             id="new-project-name"
             label={t('designer.newProject.name')}
@@ -235,19 +257,8 @@ function NewProjectForm({ onCancel }: { onCancel: () => void }) {
               : t('designer.newProject.failed')}
           </ErrorText>
         )}
-        <div className="flex gap-2">
-          <Button
-            type="submit"
-            disabled={create.isPending || waiting || !name.trim() || !codeOk || !modes.length}
-          >
-            {t('designer.newProject.create')}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            {t('designer.newProject.cancel')}
-          </Button>
-        </div>
       </form>
-    </Card>
+    </Drawer>
   );
 }
 
@@ -723,28 +734,40 @@ function QuestionnairesSection({
                       {q.latestVersion ? `v${q.latestVersion.version}` : '—'}
                     </td>
                     <td data-testid="q-state" className="min-w-[12rem] whitespace-normal">
-                      {q.state !== 'active' ? (
-                        <span
-                          className={`mr-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            q.state === 'completed'
-                              ? 'bg-emerald-100 text-emerald-ink-900'
-                              : 'bg-slate-200 text-slate-800'
-                          }`}
-                        >
-                          {t(`designer.qActions.states.${q.state}`)}
-                        </span>
-                      ) : null}
-                      {q.latestVersion
-                        ? t(`designer.versions.${q.latestVersion.status}`)
-                        : t('designer.unpublished')}
-                      {q.state === 'completed' && q.successorId ? (
-                        <span className="block text-xs text-slate-600">
-                          →{' '}
-                          {t('designer.qActions.continuesIn', {
-                            name: list.data?.find((x) => x.id === q.successorId)?.name ?? '…',
-                          })}
-                        </span>
-                      ) : null}
+                      {/* The state on one line; the successor, if any, on a second one. */}
+                      <span className="whitespace-nowrap">
+                        {q.state !== 'active' ? (
+                          <span
+                            className={`mr-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              q.state === 'completed'
+                                ? 'bg-emerald-100 text-emerald-ink-900'
+                                : 'bg-slate-200 text-slate-800'
+                            }`}
+                          >
+                            {t(`designer.qActions.states.${q.state}`)}
+                          </span>
+                        ) : null}
+                        {q.latestVersion
+                          ? t(`designer.versions.${q.latestVersion.status}`)
+                          : t('designer.unpublished')}
+                      </span>
+                      {q.state === 'completed' && q.successorId
+                        ? (() => {
+                            // One line, cut with "…": the whole text is in the title.
+                            const next = t('designer.qActions.continuesIn', {
+                              name: list.data?.find((x) => x.id === q.successorId)?.name ?? '…',
+                            });
+                            return (
+                              <span
+                                className="block max-w-[14rem] truncate text-xs text-slate-600"
+                                title={next}
+                                data-testid="q-continues"
+                              >
+                                → {next}
+                              </span>
+                            );
+                          })()
+                        : null}
                     </td>
                     <td>{dateTime(q.updatedAt)}</td>
                     <td className="text-right">

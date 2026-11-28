@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { describeCondition, tryParse } from '@wansurvey/logic';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type HTMLAttributes,
+  type SyntheticEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api } from '../api.js';
@@ -9,7 +16,7 @@ import { ConditionBuilder } from '../designer/ConditionBuilder.js';
 import { controlCls, FoldedHelp, NumberField, smallBtn, TextField } from '../designer/fields.js';
 import type { Project } from '../designer/ProjectPages.js';
 import { caseVariables } from '../designer/vars.js';
-import { Button, Card, ErrorText, TableScroll } from '../routes/ui.js';
+import { Button, Card, Drawer, ErrorText, TableScroll } from '../routes/ui.js';
 import { STATUSES, useAssignees, useSampleFields } from './hooks.js';
 import { dateTime } from '../format.js';
 
@@ -25,6 +32,11 @@ interface Rule {
   unassigned: number;
   assignedToUser: number;
 }
+
+/** `onCancel`, which React's types give only to dialogs, to stop a nested dialog's cancel. */
+const stopCancel = {
+  onCancel: (e: SyntheticEvent) => e.stopPropagation(),
+} as HTMLAttributes<HTMLDivElement>;
 
 /** The workload's first column, held at the left edge while the table scrolls sideways. */
 const stickyCol = 'sticky left-0 z-10 bg-white shadow-[1px_0_0_rgb(226_232_240)]';
@@ -59,6 +71,11 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
   // The two long forms (move someone's cases, add a rule) wait behind a button each.
   const [moving, setMoving] = useState(false);
   const [adding, setAdding] = useState(false);
+  const formId = useId();
+  const closeAdding = () => {
+    setAdding(false);
+    setError(null);
+  };
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ['rules', projectId] });
@@ -406,8 +423,10 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
           <Button
             type="button"
             className="ml-auto"
-            aria-expanded={adding}
-            onClick={() => setAdding((a) => !a)}
+            onClick={() => {
+              setError(null);
+              setAdding(true);
+            }}
           >
             + {t('cases.rules.add')}
           </Button>
@@ -415,61 +434,76 @@ export function AssignmentsTab({ projectId }: { projectId: string }) {
       </Card>
 
       {adding ? (
-        <Card>
-          <form
-            aria-label={t('cases.rules.add')}
-            className="flex max-w-3xl flex-col gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (userId && filter) create.mutate();
-            }}
-          >
-            <div className="grid gap-3 sm:grid-cols-3">
-              <TextField label={t('cases.rules.name')} value={name} onChange={setName} />
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">{t('cases.rules.who')}</span>
-                <select
-                  className={controlCls}
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
+        // A side panel over the rules' panel. React passes a dialog's cancel (Escape) on to the
+        // dialogs around it: it stops here, so Escape closes this form and not the rules too.
+        <div {...stopCancel}>
+          <Drawer
+            title={t('cases.rules.add')}
+            onClose={closeAdding}
+            footer={
+              <>
+                <Button type="button" variant="secondary" onClick={closeAdding}>
+                  {t('cases.rules.cancel')}
+                </Button>
+                <Button
+                  type="submit"
+                  form={formId}
+                  busy={create.isPending}
+                  disabled={!userId || !filter}
                 >
-                  <option value="">{t('cases.list.pickPerson')}</option>
-                  {(people.data ?? []).map((p) => (
-                    <option key={p.userId} value={p.userId}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <NumberField
-                label={t('cases.rules.quota')}
-                integer
-                value={quota}
-                onChange={setQuota}
+                  {t('cases.rules.add')}
+                </Button>
+              </>
+            }
+          >
+            <form
+              id={formId}
+              aria-label={t('cases.rules.add')}
+              className="flex flex-col gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (userId && filter && !create.isPending) create.mutate();
+              }}
+            >
+              <div className="grid gap-3">
+                <TextField label={t('cases.rules.name')} value={name} onChange={setName} />
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-slate-700">{t('cases.rules.who')}</span>
+                  <select
+                    className={controlCls}
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                  >
+                    <option value="">{t('cases.list.pickPerson')}</option>
+                    {(people.data ?? []).map((p) => (
+                      <option key={p.userId} value={p.userId}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <NumberField
+                  label={t('cases.rules.quota')}
+                  integer
+                  value={quota}
+                  onChange={setQuota}
+                />
+              </div>
+              <ConditionBuilder
+                label={t('cases.rules.when')}
+                value={filter}
+                variables={variables}
+                onChange={setFilter}
               />
-            </div>
-            <ConditionBuilder
-              label={t('cases.rules.when')}
-              value={filter}
-              variables={variables}
-              onChange={setFilter}
-            />
-            {preview ? (
-              <p className="text-sm" data-testid="rule-preview">
-                {t('cases.rules.preview', preview)}
-              </p>
-            ) : null}
-            <ErrorText>{error}</ErrorText>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={!userId || !filter || create.isPending}>
-                {t('cases.rules.add')}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setAdding(false)}>
-                {t('cases.rules.cancel')}
-              </Button>
-            </div>
-          </form>
-        </Card>
+              {preview ? (
+                <p className="text-sm" data-testid="rule-preview">
+                  {t('cases.rules.preview', preview)}
+                </p>
+              ) : null}
+              <ErrorText>{error}</ErrorText>
+            </form>
+          </Drawer>
+        </div>
       ) : null}
     </div>
   );

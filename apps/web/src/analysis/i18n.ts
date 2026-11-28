@@ -166,6 +166,7 @@ export const analysisEn = {
     to: 'To',
     target: 'Completes',
     add: 'Add goal',
+    cancel: 'Cancel',
   },
   retention: {
     title: 'Personal data retention',
@@ -591,6 +592,7 @@ export const analysisEs: typeof analysisEn = {
     to: 'Hasta',
     target: 'Completas',
     add: 'Agregar meta',
+    cancel: 'Cancelar',
   },
   retention: {
     title: 'Conservación de datos personales',

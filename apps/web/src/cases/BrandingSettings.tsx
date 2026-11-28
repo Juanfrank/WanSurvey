@@ -203,10 +203,11 @@ export function BrandingSettings({ project }: { project: Project }) {
             aria-describedby="look-logo-alt-help"
             onChange={(e) => set({ logoAlt: e.target.value })}
           />
-          <span id="look-logo-alt-help" className="text-slate-600">
-            {t('cases.look.logoAltHelp')}
-          </span>
         </label>
+        {/* Out of the label: the folded help is a button of its own. */}
+        <FoldedHelp id="look-logo-alt-help" className="-mt-2 max-w-xl">
+          {t('cases.look.logoAltHelp')}
+        </FoldedHelp>
         <div role="status" className="empty:hidden">
           {problems.length ? (
             <ul className="list-disc pl-5 text-amber-ink-800" data-testid="look-problems">

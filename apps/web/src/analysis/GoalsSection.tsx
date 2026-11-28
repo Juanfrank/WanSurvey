@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api.js';
 import { useAssignees } from '../cases/hooks.js';
 import { controlCls, inputCls } from '../designer/fields.js';
 import { useCan } from '../designer/hooks.js';
 import { localiseError } from '../i18n-messages.js';
-import { Button, ErrorText } from '../routes/ui.js';
+import { Button, Drawer, ErrorText } from '../routes/ui.js';
 import { CloseIcon } from '../routes/icons.js';
 import { InfoTip } from '../cases/samplingControls.js';
 
@@ -73,15 +73,23 @@ export function GoalsSection({
     enabled: canSet,
   });
   const today = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({
+  const blank = {
     userId: '',
     frequency: 'daily' as Frequency,
     questionnaireId: '',
     startsOn: today,
     endsOn: today,
     target: 10,
-  });
+  };
+  const [form, setForm] = useState(blank);
   const [error, setError] = useState<string | null>(null);
+  // The form of a new goal opens in a side panel from "+ Add goal" beside the title.
+  const [adding, setAdding] = useState(false);
+  const formId = useId();
+  const closeAdding = () => {
+    setAdding(false);
+    setError(null);
+  };
   const refresh = () => qc.invalidateQueries({ queryKey: ['goals', projectId] });
   const create = useMutation({
     mutationFn: () =>
@@ -96,6 +104,9 @@ export function GoalsSection({
       }),
     onSuccess: async () => {
       setError(null);
+      setAdding(false);
+      // The next goal starts from a blank form, not a copy of this one.
+      setForm(blank);
       await refresh();
     },
     onError: (e) => setError(localiseError(t, e)),
@@ -146,6 +157,12 @@ export function GoalsSection({
             text={t('analysis.goals.help')}
             align="start"
           />
+        ) : null}
+        {canSet ? (
+          <Button size="sm" className="ml-auto" onClick={() => setAdding(true)}>
+            <span aria-hidden="true">+ </span>
+            {t('analysis.goals.add')}
+          </Button>
         ) : null}
       </div>
       {manage ? null : (
@@ -291,97 +308,110 @@ export function GoalsSection({
       ) : (
         <p className="text-slate-600">{t('analysis.goals.none')}</p>
       )}
-      {canSet ? (
-        <form
-          className="flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"
-          aria-label={t('analysis.goals.new')}
-          onSubmit={(e) => {
-            e.preventDefault();
-            create.mutate();
-          }}
+      {canSet && adding ? (
+        <Drawer
+          title={t('analysis.goals.new')}
+          onClose={closeAdding}
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={closeAdding}>
+                {t('analysis.goals.cancel')}
+              </Button>
+              <Button type="submit" form={formId} busy={create.isPending} disabled={!form.userId}>
+                {t('analysis.goals.add')}
+              </Button>
+            </>
+          }
         >
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('analysis.goals.person')}</span>
-            <select
-              className={`${controlCls} w-auto`}
-              value={form.userId}
-              required
-              onChange={(e) => setForm({ ...form, userId: e.target.value })}
-            >
-              <option value="">{t('cases.list.pickPerson')}</option>
-              <option value="team">{t('analysis.goals.team')}</option>
-              {(people.data ?? []).map((p) => (
-                <option key={p.userId} value={p.userId}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('analysis.goals.frequency')}</span>
-            <select
-              className={`${controlCls} w-auto`}
-              value={form.frequency}
-              onChange={(e) => setForm({ ...form, frequency: e.target.value as Frequency })}
-            >
-              {FREQUENCIES.map((f) => (
-                <option key={f} value={f}>
-                  {t(`analysis.goals.frequencies.${f}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('analysis.goals.target')}</span>
-            <input
-              type="number"
-              min={1}
-              className={`${controlCls} w-24`}
-              value={form.target}
-              onChange={(e) => setForm({ ...form, target: Math.max(1, Number(e.target.value)) })}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('analysis.goals.from')}</span>
-            <input
-              type="date"
-              className={inputCls}
-              value={form.startsOn}
-              required
-              onChange={(e) => setForm({ ...form, startsOn: e.target.value })}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('analysis.goals.to')}</span>
-            <input
-              type="date"
-              className={inputCls}
-              value={form.endsOn}
-              min={form.startsOn}
-              required
-              onChange={(e) => setForm({ ...form, endsOn: e.target.value })}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-medium">{t('analysis.goals.questionnaire')}</span>
-            <select
-              className={`${controlCls} w-auto`}
-              value={form.questionnaireId}
-              onChange={(e) => setForm({ ...form, questionnaireId: e.target.value })}
-            >
-              <option value="">{t('analysis.goals.anyQ')}</option>
-              {(questionnaires.data ?? []).map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button type="submit" size="sm" disabled={!form.userId || create.isPending}>
-            {t('analysis.goals.add')}
-          </Button>
-          <ErrorText>{error}</ErrorText>
-        </form>
+          <form
+            id={formId}
+            className="flex flex-col gap-3"
+            aria-label={t('analysis.goals.new')}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!create.isPending) create.mutate();
+            }}
+          >
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('analysis.goals.person')}</span>
+              <select
+                className={controlCls}
+                value={form.userId}
+                required
+                onChange={(e) => setForm({ ...form, userId: e.target.value })}
+              >
+                <option value="">{t('cases.list.pickPerson')}</option>
+                <option value="team">{t('analysis.goals.team')}</option>
+                {(people.data ?? []).map((p) => (
+                  <option key={p.userId} value={p.userId}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('analysis.goals.frequency')}</span>
+              <select
+                className={controlCls}
+                value={form.frequency}
+                onChange={(e) => setForm({ ...form, frequency: e.target.value as Frequency })}
+              >
+                {FREQUENCIES.map((f) => (
+                  <option key={f} value={f}>
+                    {t(`analysis.goals.frequencies.${f}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('analysis.goals.target')}</span>
+              <input
+                type="number"
+                min={1}
+                className={`${controlCls} w-24`}
+                value={form.target}
+                onChange={(e) => setForm({ ...form, target: Math.max(1, Number(e.target.value)) })}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('analysis.goals.from')}</span>
+              <input
+                type="date"
+                className={inputCls}
+                value={form.startsOn}
+                required
+                onChange={(e) => setForm({ ...form, startsOn: e.target.value })}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('analysis.goals.to')}</span>
+              <input
+                type="date"
+                className={inputCls}
+                value={form.endsOn}
+                min={form.startsOn}
+                required
+                onChange={(e) => setForm({ ...form, endsOn: e.target.value })}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('analysis.goals.questionnaire')}</span>
+              <select
+                className={controlCls}
+                value={form.questionnaireId}
+                onChange={(e) => setForm({ ...form, questionnaireId: e.target.value })}
+              >
+                <option value="">{t('analysis.goals.anyQ')}</option>
+                {(questionnaires.data ?? []).map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <ErrorText>{error}</ErrorText>
+          </form>
+        </Drawer>
       ) : null}
     </section>
   );

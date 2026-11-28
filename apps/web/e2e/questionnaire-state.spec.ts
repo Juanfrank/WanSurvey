@@ -46,6 +46,12 @@ test('a questionnaire is disabled, enabled again, and completed with a continuat
   await dialog.getByRole('button', { name: 'Close fieldwork', exact: true }).click();
   await expect(row.getByTestId('q-state')).toContainText('Fieldwork closed');
   await expect(row.getByTestId('q-state')).toContainText('continues in Household questionnaire');
+  // The successor keeps one line, cut with "…", the whole of it in its title.
+  const next = row.getByTestId('q-continues');
+  await expect(next).toHaveAttribute('title', 'continues in Household questionnaire');
+  expect((await next.boundingBox())!.height).toBeLessThanOrEqual(20);
+  // The state and the successor: two lines at most (three, with the row's padding, are ~74 px).
+  expect((await row.getByTestId('q-state').boundingBox())!.height).toBeLessThanOrEqual(60);
   await shot(page, 'questionnaire-states');
   await expectAccessible(page);
 
