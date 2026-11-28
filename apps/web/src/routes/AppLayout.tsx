@@ -230,9 +230,10 @@ function SidePanel({ waiting }: { waiting: boolean }) {
         } ${isCompact && !rail ? 'min-[900px]:shadow-card' : ''}`}
       >
         <div className={`flex items-center gap-2 ${rail ? 'min-[900px]:flex-col' : ''}`}>
+          {/* Named by its own text (WanSurvey, visible or sr-only): no aria-label that could differ
+              from what is shown while the panel's width animates. */}
           <Link
             to="/"
-            aria-label={t('app.name')}
             className={`flex min-w-0 flex-1 items-center gap-2.5 px-1 min-[900px]:px-3 ${
               rail ? 'min-[900px]:flex-none min-[900px]:px-0' : ''
             }`}
