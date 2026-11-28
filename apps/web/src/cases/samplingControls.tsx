@@ -179,12 +179,22 @@ export function Choice<T extends string>({
               />
               <span>
                 <span className="block font-medium">{o.label}</span>
-                {o.hint ? <span className="block text-xs text-slate-600">{o.hint}</span> : null}
+                {/* One line; the whole hint stays in the text (screen readers read it) and in
+                    the (i) beside the card. */}
+                {o.hint ? (
+                  <span className="line-clamp-1 text-xs text-slate-600" title={o.hint}>
+                    {o.hint}
+                  </span>
+                ) : null}
               </span>
             </label>
-            {o.tip ? (
+            {o.tip || o.hint ? (
               <span className="absolute right-1.5 top-1.5">
-                <InfoTip id={o.tip} term={o.label} />
+                {o.tip ? (
+                  <InfoTip id={o.tip} term={o.label} align="end" />
+                ) : (
+                  <InfoTip id={`choice-${o.value}`} term={o.label} text={o.hint} align="end" />
+                )}
               </span>
             ) : null}
           </div>

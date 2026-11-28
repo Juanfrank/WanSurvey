@@ -192,7 +192,7 @@ export function PageHeader({
       </ol>
     </nav>
   ) : (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
       {icon}
       {heading}
       {aside}

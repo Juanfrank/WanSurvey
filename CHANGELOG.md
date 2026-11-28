@@ -17,6 +17,8 @@ and each tag marks the commit that closes a stage of the work, with that commit'
 
 ## [Unreleased]
 
+- The option cards of the sampling plan show their description on one line (all of it in the ⓘ), the personal-columns note of an import folds to one line, and a page title keeps its ⓘ close so its buttons fit on the account row.
+
 ### Added
 
 - **Less scrolling on lists and project pages** (first part): shared building blocks for every

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuestionnaireScope, useScoped } from './scope.js';
 import { api, upload } from '../api.js';
 import { localiseError } from '../i18n-messages.js';
-import { controlCls, smallBtn } from '../designer/fields.js';
+import { controlCls, FoldedHelp, smallBtn } from '../designer/fields.js';
 import { Button, Card, ErrorText, FileInput } from '../routes/ui.js';
 import { dateTime } from '../format.js';
 
@@ -246,9 +246,9 @@ export function ImportTab({
       {uploaded && mapping && !summary ? (
         <Box className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">{t('cases.import.stepMap')}</h2>
-          <p className="text-sm text-slate-600" data-testid="pii-help">
-            {t('cases.import.piiHelp')}
-          </p>
+          <div data-testid="pii-help">
+            <FoldedHelp className="text-sm">{t('cases.import.piiHelp')}</FoldedHelp>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[36rem] text-sm" data-testid="mapping-table">
               <thead className="text-left text-xs text-slate-600">
