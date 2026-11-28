@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { useCan } from '../designer/hooks.js';
 import { DevicesCard } from '../device/DevicesCard.js';
 import { Card } from '../routes/ui.js';
+import { InfoTip } from '../cases/samplingControls.js';
 import { BarTable, DayColumns, fmtNum, fmtPct, Progress } from './charts.js';
 import {
   fieldPace,
@@ -313,7 +314,16 @@ export function DashboardTab({ projectId, onGoals }: { projectId: string; onGoal
           </Card>
           {quotas.length ? (
             <Card className="flex flex-col gap-2 lg:col-span-2">
-              <h3 className="font-medium">{t('analysis.live.quotas')}</h3>
+              {/* How the target is read, behind an ⓘ beside the title (not a paragraph). */}
+              <h3 className="flex items-center gap-1 font-medium">
+                {t('analysis.live.quotas')}
+                <InfoTip
+                  id="live-quotas"
+                  term={t('analysis.live.quotas')}
+                  text={t('analysis.live.quotaHelp')}
+                  align="start"
+                />
+              </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm" data-testid="quotas">
                   <thead>
@@ -373,7 +383,6 @@ export function DashboardTab({ projectId, onGoals }: { projectId: string; onGoal
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-slate-600">{t('analysis.live.quotaHelp')}</p>
             </Card>
           ) : null}
           {canTeam && (goalList.length || onGoals) ? (

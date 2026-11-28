@@ -121,6 +121,11 @@ export async function expectAccessible(page: Page, include?: string) {
   expect(violations).toEqual([]);
 }
 
+/** The element shows all of its text: not cut short with "…" (nor overflowing its box). */
+export async function expectWhole(target: Locator) {
+  await expect.poll(() => target.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+}
+
 /**
  * A full-page screenshot when SCREENSHOTS is set. Pictures are always of the Spanish
  * interface: the language is switched for the picture only, then put back.

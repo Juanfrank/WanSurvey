@@ -55,6 +55,16 @@ and each tag marks the commit that closes a stage of the work, with that commit'
     the account; the interview's timers, language and "Saved" are one slim line instead of a
     card, so the question starts near the top. On a paper form, the date and duration written
     on it are one line and the cut-out of a scanned form sits right above its question.
+  - **Breadcrumbs keep the page's name whole**: the last step (e.g. "Case HH0031") is not cut
+    short any more; the steps before it are cut first, then folded from "Projects" into one "…"
+    whose tooltip names them, and the respondent's name beside the case is cut only after that.
+    Under 1024 px the interview shows "‹ Case HH0031" (as on a phone), and "Saved on this
+    device" stays on the line of the timers. **Print forms** looks like Print slips: "← Back",
+    the title and a one-line subtitle on the account's row, "Print" in a bar under it.
+  - **Tables that fit**: the case list scrolls sideways with a shade on the edge that has more
+    and the case id kept in view; an export's options are one line (the questionnaire and
+    "+N", all of them in the tooltip and for screen readers); the Users table fits at 1280 px
+    without scrolling; the dashboard's Quotas card explains its target behind an ⓘ.
   - **Calls**: "My callbacks" is folded into a floating "Callbacks (n)" button (amber when some
     are due) that opens the list over the calls; the script and the outcomes get the whole
     width. It can still be kept open as a column. The keyboard keys are a footnote.

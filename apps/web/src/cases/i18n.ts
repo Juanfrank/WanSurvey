@@ -89,6 +89,7 @@ export const casesEn = {
   list: {
     title: 'Cases',
     mine: 'My cases',
+    table: 'Case list',
     total_one: '{{count}} case',
     total_other: '{{count}} cases',
     search: 'Search id or sample data',
@@ -799,6 +800,7 @@ export const casesEs: CasesCatalogue = {
   list: {
     title: 'Casos',
     mine: 'Mis casos',
+    table: 'Lista de casos',
     total_one: '{{count}} caso',
     total_other: '{{count}} casos',
     search: 'Buscar id o datos de muestra',

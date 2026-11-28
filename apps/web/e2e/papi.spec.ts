@@ -6,6 +6,7 @@ import {
   PASSWORD,
   PM,
   expectAccessible,
+  expectWhole,
   login,
   pickOrganisation,
   paperTab,
@@ -117,6 +118,12 @@ test('print forms with QR codes, key them twice, and resolve the difference', as
     await expect(forms.first().locator('[data-band="start"]')).toContainText(/\w/);
     await expect(forms.first().locator('[data-special]').first()).toBeVisible();
     await expect(forms.first()).toContainText('Q1');
+    // As the slips: "← Back" and the title on the account's row, "Print" in the bar.
+    await expect(pm.getByRole('link', { name: '← Back' })).toBeVisible();
+    await expectWhole(pm.getByRole('heading', { level: 1, name: 'Print forms' }));
+    await expect(
+      pm.getByTestId('print-controls').getByRole('button', { name: 'Print' }),
+    ).toBeEnabled();
     await shot(pm, 'paper-form-qr');
     await expectAccessible(pm);
 
